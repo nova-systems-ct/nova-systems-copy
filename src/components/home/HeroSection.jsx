@@ -4,127 +4,122 @@ import { ChevronRight, Phone, Clock, AlertTriangle } from "lucide-react";
 
 const HERO_BG = "https://media.base44.com/images/public/6a1b4bf7edab14ff13a1d1b4/e901e94e6_3BAD4B54-E1F4-43FC-8513-433DA42CDB7B.png";
 
-const GOLD = "linear-gradient(135deg, #b8860b 0%, #d4a017 20%, #f5c842 45%, #ffd700 60%, #d4a017 80%, #b8860b 100%)";
-const GOLD_SOLID = "#d4a017";
+// 14k orange-gold — rich, warm, not bright yellow
+const G1 = "#8B5E00";
+const G2 = "#B07D1A";
+const G3 = "#C8901F";
+const G4 = "#A06818";
+const GOLD_GRADIENT = `linear-gradient(135deg, ${G1} 0%, ${G2} 25%, ${G3} 55%, ${G2} 80%, ${G1} 100%)`;
+const GOLD_MID = "#B07D1A";
 
 export default function HeroSection() {
   return (
     <section className="relative min-h-screen flex items-center overflow-hidden bg-black">
 
-      {/* Full background image on the right */}
+      {/* Background image — covers right ~70% */}
       <div className="absolute inset-0">
-        <div className="absolute right-0 top-0 bottom-0 w-[68%]">
+        <div className="absolute right-0 top-0 bottom-0 w-[72%]">
           <img
             src={HERO_BG}
             alt="Data matrix"
             className="w-full h-full object-cover object-left"
           />
-          {/* Fade from left */}
-          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/40 to-transparent" />
-          {/* top/bottom vignette */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/60" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/35 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/55" />
         </div>
-        {/* Solid black left panel */}
-        <div className="absolute left-0 top-0 bottom-0 w-[36%] bg-black" />
 
-        {/* Diagonal gold divider — thick multi-tone */}
+        {/* Solid left panel */}
+        <div className="absolute left-0 top-0 bottom-0 w-[32%] bg-black" />
+
+        {/* Diagonal gold divider — shifted more right, more angle */}
         <div
           className="absolute top-0 bottom-0"
           style={{
-            left: "32%",
-            width: "3px",
-            background: "linear-gradient(to bottom, transparent 0%, #7a5c00 5%, #b8860b 15%, #d4a017 30%, #f5c842 50%, #d4a017 70%, #b8860b 85%, #7a5c00 95%, transparent 100%)",
-            transform: "skewX(-4deg)",
-            filter: "drop-shadow(0 0 8px #d4a017) drop-shadow(0 0 20px #b8860b80)",
-          }}
-        />
-        {/* Glow halo on the divider */}
-        <div
-          className="absolute top-0 bottom-0"
-          style={{
-            left: "31.5%",
-            width: "12px",
-            background: "linear-gradient(to bottom, transparent 0%, #b8860b15 15%, #d4a01730 50%, #b8860b15 85%, transparent 100%)",
-            transform: "skewX(-4deg)",
-            filter: "blur(4px)",
+            left: "38%",
+            width: "2px",
+            background: `linear-gradient(to bottom, transparent 0%, ${G1} 8%, ${G2} 25%, ${G3} 50%, ${G2} 75%, ${G1} 92%, transparent 100%)`,
+            transform: "skewX(-8deg)",
+            filter: `drop-shadow(0 0 6px ${GOLD_MID}60)`,
           }}
         />
       </div>
 
-      {/* LEFT CONTENT */}
-      <div className="relative w-full max-w-7xl mx-auto px-8 md:px-14 py-32 flex items-center min-h-screen">
-        <div className="w-full md:w-[42%]">
-          {/* Label */}
-          <p className="text-[11px] tracking-[0.28em] uppercase mb-6 flex items-center gap-3 text-white/60">
+      {/* CONTENT */}
+      <div className="relative w-full max-w-7xl mx-auto px-8 md:px-14 py-28 flex items-center min-h-screen">
+
+        {/* LEFT — text block */}
+        <div className="w-full md:w-[44%]">
+          <p
+            className="text-[10px] tracking-[0.3em] uppercase mb-6 flex items-center gap-3"
+            style={{ color: GOLD_MID }}
+          >
             NOVA SYSTEMS
             <span
               className="inline-block h-px w-10"
-              style={{ background: GOLD }}
+              style={{ background: GOLD_GRADIENT }}
             />
           </p>
 
-          {/* Headline — 3 lines, takes screen */}
-          <h1 className="font-bold leading-[0.9] tracking-tight text-white" style={{ fontSize: "clamp(3rem, 6vw, 6rem)" }}>
-            Stop losing<br />
-            revenue.<br />
-            <span className="text-[0.65em] text-white/70 font-semibold">opportunities.</span>
+          <h1
+            className="font-black leading-[0.88] tracking-tight text-white"
+            style={{ fontSize: "clamp(3.5rem, 7vw, 7rem)" }}
+          >
+            Stop losing<br />revenue
           </h1>
 
           <p className="text-white/50 mt-7 text-base leading-relaxed max-w-xs">
             Most businesses lose opportunities<br />without ever seeing where.
           </p>
 
-          {/* Gold gradient button */}
           <Link
             to="/solutions"
-            className="inline-flex items-center gap-3 mt-10 px-8 py-4 text-xs font-bold tracking-[0.18em] uppercase transition-all hover:opacity-90 active:scale-95"
+            className="inline-flex items-center gap-3 mt-10 px-8 py-4 text-xs font-bold tracking-[0.18em] uppercase transition-opacity hover:opacity-80"
             style={{
-              background: GOLD,
+              background: GOLD_GRADIENT,
               color: "#0a0800",
-              boxShadow: "0 0 20px #d4a01740, 0 4px 24px #b8860b30",
             }}
           >
             SEE NOVA PULSE IN ACTION <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
 
-        {/* ALERT CARDS — sideways V shape across the image */}
-        {/* Card 1 — top right (tip of V) */}
+        {/* ALERT CARDS — spread across center of the image in a wide V */}
+        {/* Card 1 — top center-right */}
         <div
           className="hidden md:block absolute"
-          style={{ top: "14%", right: "22%" }}
+          style={{ top: "18%", left: "52%" }}
         >
           <AlertCard
             icon={<Phone className="w-4 h-4" />}
             label="MISSED CALL"
             sub="Potential Lead Lost"
-            gold={GOLD_SOLID}
+            gold={GOLD_MID}
           />
         </div>
 
-        {/* Card 2 — middle, pulled left toward center (middle of V) */}
+        {/* Card 2 — middle, pulled further right (widest point of V) */}
         <div
           className="hidden md:block absolute"
-          style={{ top: "44%", right: "36%" }}
+          style={{ top: "46%", left: "62%" }}
         >
           <AlertCard
             icon={<Clock className="w-4 h-4" />}
             label="NO RESPONSE"
             sub="Opportunity Lost"
-            gold={GOLD_SOLID}
+            gold={GOLD_MID}
           />
         </div>
 
-        {/* Card 3 — bottom right (other tip of V) */}
+        {/* Card 3 — bottom center-right (closing the V) */}
         <div
           className="hidden md:block absolute"
-          style={{ bottom: "12%", right: "18%" }}
+          style={{ bottom: "14%", left: "50%" }}
         >
           <AlertCard
             icon={<AlertTriangle className="w-4 h-4" />}
             label="SLOW FOLLOW-UP"
             sub="Revenue Leak"
-            gold={GOLD_SOLID}
+            gold={GOLD_MID}
             highlight
           />
         </div>
@@ -138,17 +133,17 @@ function AlertCard({ icon, label, sub, gold, highlight }) {
     <div
       className="flex items-center gap-3 px-4 py-3 rounded backdrop-blur-md"
       style={{
-        background: "rgba(8,6,0,0.78)",
-        border: `1px solid ${highlight ? gold + "80" : "rgba(255,255,255,0.1)"}`,
-        minWidth: "200px",
-        boxShadow: highlight ? `0 0 16px ${gold}30` : "none",
+        background: "rgba(6,4,0,0.80)",
+        border: `1px solid ${highlight ? gold + "70" : "rgba(255,255,255,0.08)"}`,
+        minWidth: "210px",
+        boxShadow: highlight ? `0 0 18px ${gold}25` : "none",
       }}
     >
       <div
         className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
         style={{
           background: `${gold}18`,
-          border: `1px solid ${gold}50`,
+          border: `1px solid ${gold}45`,
           color: gold,
         }}
       >
@@ -156,12 +151,11 @@ function AlertCard({ icon, label, sub, gold, highlight }) {
       </div>
       <div>
         <p
-          className="text-[10px] font-bold uppercase tracking-wider"
-          style={{ color: highlight ? gold : "#ffffff" }}
+          className="text-[10px] font-bold uppercase tracking-wider text-white"
         >
           {label}
         </p>
-        <p className="text-[10px] text-white/50 mt-0.5">{sub}</p>
+        <p className="text-[10px] text-white/45 mt-0.5">{sub}</p>
       </div>
     </div>
   );
