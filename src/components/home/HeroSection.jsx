@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 
-const HERO_BG = "https://media.base44.com/images/public/user_6955f8132de0845ff4cba0e3/ecfe53e16_3BAD4B54-E1F4-43FC-8513-433DA42CDB7B.png";
+const HERO_BG = "https://media.base44.com/images/public/6a1b4bf7edab14ff13a1d1b4/5ce63b6e7_5BB7F137-2CEE-4D95-964A-FAF382522DEA.png";
 
 export default function HeroSection() {
   return (
