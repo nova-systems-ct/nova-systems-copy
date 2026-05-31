@@ -5,20 +5,20 @@ import HeroSection from "@/components/home/HeroSection";
 import TrustedBySection from "@/components/home/TrustedBySection";
 import ProblemSection from "@/components/home/ProblemSection";
 import SolutionSection from "@/components/home/SolutionSection";
-import ResultsSection from "@/components/home/ResultsSection";
-import CTASection from "@/components/home/CTASection";
+import PricingSection from "@/components/home/PricingSection";
+import ContactSection from "@/components/home/ContactSection";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-black">
       <Navbar />
       <main className="pt-16">
         <HeroSection />
         <TrustedBySection />
         <ProblemSection />
         <SolutionSection />
-        <ResultsSection />
-        <CTASection />
+        <PricingSection />
+        <ContactSection />
       </main>
       <Footer />
     </div>
