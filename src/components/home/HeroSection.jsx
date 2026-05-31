@@ -103,15 +103,18 @@ export default function HeroSection() {
         </Link>
       </div>
 
-      {/* ALERT CARDS — larger, stacked on the image */}
+      {/* ALERT CARDS — zigzag, centered vertically in the image panel */}
       <div className="absolute inset-0" style={{ zIndex: 35, pointerEvents: "none" }}>
-        <div className="hidden md:block absolute" style={{ top: "17%", left: "58%" }}>
+        {/* Card 1 — upper-right zigzag position */}
+        <div className="hidden md:block absolute" style={{ top: "28%", left: "63%" }}>
           <AlertCard icon={<Phone className="w-4 h-4" />} label="MISSED CALL" sub="Potential Lead Lost" gold={GOLD} />
         </div>
-        <div className="hidden md:block absolute" style={{ top: "43%", left: "55%" }}>
+        {/* Card 2 — middle, shifted left in zigzag */}
+        <div className="hidden md:block absolute" style={{ top: "45%", left: "54%" }}>
           <AlertCard icon={<Clock className="w-4 h-4" />} label="NO RESPONSE" sub="Opportunity Lost" gold={GOLD} />
         </div>
-        <div className="hidden md:block absolute" style={{ top: "64%", left: "57%" }}>
+        {/* Card 3 — lower-right zigzag position */}
+        <div className="hidden md:block absolute" style={{ top: "62%", left: "62%" }}>
           <AlertCard icon={<AlertTriangle className="w-4 h-4" />} label="SLOW FOLLOW-UP" sub="Revenue Leak" gold={GOLD} highlight />
         </div>
       </div>
