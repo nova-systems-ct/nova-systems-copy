@@ -238,13 +238,15 @@ export default function Resources() {
             <p className="text-sm mb-8 max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
               Book a free 30-minute call and we'll run a live revenue leak audit on your business.
             </p>
-            <Link
-              to="/pricing"
+            <a
+              href="mailto:hello@nova-systems.app?subject=Nova%20Systems%20Revenue%20Audit"
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center gap-2 px-8 py-4 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
               style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
             >
               BOOK A FREE AUDIT <ChevronRight className="w-4 h-4" />
-            </Link>
+            </a>
           </div>
         </section>
 

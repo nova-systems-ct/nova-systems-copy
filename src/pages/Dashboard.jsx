@@ -97,8 +97,8 @@ function Sidebar({ mobile, onClose }) {
         {/* Logo */}
         <div className="flex items-center gap-2.5 px-5 py-5 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
           <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-            <rect width="32" height="32" rx="7" fill={GOLD} />
-            <text x="16" y="23" textAnchor="middle" fontFamily="'Arial Black',Arial,sans-serif" fontWeight="900" fontSize="20" fill="#0a0800">N</text>
+            <rect x="1" y="1" width="30" height="30" rx="4" stroke={GOLD} strokeWidth="1.5" fill="none" />
+            <text x="16" y="23" textAnchor="middle" fontFamily="'Arial Black',Arial,sans-serif" fontWeight="900" fontSize="18" fill={GOLD}>N</text>
           </svg>
           <div>
             <p className="text-[10px] font-black tracking-[0.18em] uppercase leading-none" style={{ color: GOLD }}>NOVA</p>

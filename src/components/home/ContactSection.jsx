@@ -1,20 +1,36 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const MAILTO = "mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request";
 
 export default function ContactSection() {
   const [form, setForm] = useState({ name: "", email: "", company: "", phone: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setSending(true);
+    try {
+      await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, to: "hello@nova-systems.app" }),
+      });
+    } catch {
+      // fallback: open mailto if fetch fails
+      const body = encodeURIComponent(
+        `Name: ${form.name}\nEmail: ${form.email}\nCompany: ${form.company}\nPhone: ${form.phone}\n\n${form.message}`
+      );
+      window.open(`mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request&body=${body}`, "_blank");
+    }
+    setSending(false);
     setSubmitted(true);
   };
 
   return (
     <section className="py-24 px-6 bg-black relative overflow-hidden">
-      {/* Gold glow bottom */}
       <div
         className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] pointer-events-none"
         style={{ background: `radial-gradient(ellipse at bottom, ${GOLD}10 0%, transparent 70%)` }}
@@ -34,7 +50,7 @@ export default function ContactSection() {
               }}>losing revenue?</span>
             </h2>
             <p className="mt-5 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.4)" }}>
-              Book a demo and see how NOVA Pulse can help your team close more deals.
+              Book a demo and see how Nova Pulse can help your team close more deals.
             </p>
             <div className="mt-8 space-y-3">
               {["No obligation", "Personalized demo", "See ROI in real conversations"].map((item) => (
@@ -47,9 +63,20 @@ export default function ContactSection() {
                 </div>
               ))}
             </div>
+            <div className="mt-8">
+              <a
+                href={MAILTO}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 px-6 py-3 text-[11px] font-bold tracking-[0.2em] uppercase transition-all hover:opacity-85"
+                style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
+              >
+                TALK TO ISAAC
+              </a>
+            </div>
           </div>
 
-          {/* Right â€” Form */}
+          {/* Right - Form */}
           <div
             className="rounded-2xl p-8"
             style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)" }}
@@ -66,64 +93,49 @@ export default function ContactSection() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <input
-                    required
-                    placeholder="Full Name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none transition-all bg-transparent"
+                  <input required placeholder="Full Name"
+                    value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none bg-transparent"
                     style={{ border: "1px solid rgba(255,255,255,0.1)" }}
                     onFocus={(e) => e.target.style.borderColor = `${GOLD}60`}
                     onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.1)"}
                   />
-                  <input
-                    required
-                    type="email"
-                    placeholder="Work Email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none transition-all bg-transparent"
+                  <input required type="email" placeholder="Work Email"
+                    value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none bg-transparent"
                     style={{ border: "1px solid rgba(255,255,255,0.1)" }}
                     onFocus={(e) => e.target.style.borderColor = `${GOLD}60`}
                     onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.1)"}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <input
-                    placeholder="Company Name"
-                    value={form.company}
-                    onChange={(e) => setForm({ ...form, company: e.target.value })}
-                    className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none transition-all bg-transparent"
+                  <input placeholder="Company Name"
+                    value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })}
+                    className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none bg-transparent"
                     style={{ border: "1px solid rgba(255,255,255,0.1)" }}
                     onFocus={(e) => e.target.style.borderColor = `${GOLD}60`}
                     onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.1)"}
                   />
-                  <input
-                    placeholder="Phone Number"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none transition-all bg-transparent"
+                  <input placeholder="Phone Number"
+                    value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none bg-transparent"
                     style={{ border: "1px solid rgba(255,255,255,0.1)" }}
                     onFocus={(e) => e.target.style.borderColor = `${GOLD}60`}
                     onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.1)"}
                   />
                 </div>
-                <textarea
-                  rows={4}
-                  placeholder="Tell us about your team..."
-                  value={form.message}
-                  onChange={(e) => setForm({ ...form, message: e.target.value })}
-                  className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none transition-all bg-transparent resize-none"
+                <textarea rows={4} placeholder="Tell us about your team..."
+                  value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })}
+                  className="w-full px-4 py-3 text-sm text-white placeholder-white/25 rounded-lg outline-none bg-transparent resize-none"
                   style={{ border: "1px solid rgba(255,255,255,0.1)" }}
                   onFocus={(e) => e.target.style.borderColor = `${GOLD}60`}
                   onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.1)"}
                 />
-                <button
-                  type="submit"
+                <button type="submit" disabled={sending}
                   className="w-full py-4 text-[11px] font-bold tracking-[0.2em] uppercase transition-all hover:opacity-85"
                   style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
                 >
-                  BOOK MY DEMO
+                  {sending ? "SENDING..." : "BOOK MY DEMO"}
                 </button>
               </form>
             )}

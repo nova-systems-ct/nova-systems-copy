@@ -200,13 +200,15 @@ export default function Company() {
             <p className="text-sm mb-10" style={{ color: "rgba(255,255,255,0.4)" }}>
               Book a free 30-minute call with Isaac and see exactly where your business is losing revenue.
             </p>
-            <Link
-              to="/pricing"
+            <a
+              href="mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request"
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center gap-2 px-8 py-4 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
               style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
             >
               BOOK A FREE DEMO <ChevronRight className="w-4 h-4" />
-            </Link>
+            </a>
           </div>
         </section>
 

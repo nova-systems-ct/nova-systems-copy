@@ -182,7 +182,10 @@ export default function Pricing() {
                   ))}
                 </div>
 
-                <button
+                <a
+                  href="mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request"
+                  target="_blank"
+                  rel="noreferrer"
                   className="w-full py-3.5 text-[10px] font-bold tracking-[0.18em] uppercase transition-all hover:opacity-85 flex items-center justify-center gap-2"
                   style={plan.popular
                     ? { background: GOLD_GRADIENT, color: "#0a0800" }
@@ -190,7 +193,7 @@ export default function Pricing() {
                   }
                 >
                   {plan.cta} <ArrowRight className="w-3 h-3" />
-                </button>
+                </a>
                 <p className="text-[10px] text-center mt-2" style={{ color: "rgba(255,255,255,0.2)" }}>
                   {plan.price ? "No contracts. Cancel anytime." : "Custom terms available."}
                 </p>
@@ -250,18 +253,24 @@ export default function Pricing() {
                 </p>
               </div>
               <div className="flex items-center gap-4 flex-shrink-0">
-                <button
+                <a
+                  href="mailto:hello@nova-systems.app?subject=Talk%20to%20Isaac%20-%20Nova%20Systems"
+                  target="_blank"
+                  rel="noreferrer"
                   className="px-6 py-3 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
-                  style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
+                  style={{ background: GOLD_GRADIENT, color: "#0a0800", display: "inline-block" }}
                 >
                   TALK TO ISAAC
-                </button>
-                <button
+                </a>
+                <a
+                  href="mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request"
+                  target="_blank"
+                  rel="noreferrer"
                   className="px-6 py-3 text-[11px] font-bold tracking-[0.15em] uppercase"
-                  style={{ border: `1px solid ${GOLD}50`, color: GOLD }}
+                  style={{ border: `1px solid ${GOLD}50`, color: GOLD, display: "inline-block" }}
                 >
                   BOOK A DEMO
-                </button>
+                </a>
               </div>
             </div>
           </div>

@@ -9,7 +9,7 @@ import video4 from "@/assets/video 4.mp4";
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#C8921A";
 const GOLD_DARK = "#8a6200";
-const VIDEOS = [video1, video2, video3, video4];
+const VIDEOS = [video1, video2];
 
 const MSG1 = "Hey! Sorry we missed your call. Lock in your booking slot here: [Link]";
 const MSG2 = "Awesome, just booked for 3:00 PM!";
@@ -185,7 +185,7 @@ export default function HeroSection() {
             ref={videoRef}
             muted
             playsInline
-            onEnded={() => setVidIdx((i) => (i + 1) % 4)}
+            onEnded={() => setVidIdx((i) => (i + 1) % 2)}
             className="absolute inset-0 w-full h-full object-cover"
           />
           <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.60)" }} />

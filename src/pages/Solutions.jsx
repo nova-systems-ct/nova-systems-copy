@@ -182,13 +182,15 @@ export default function Solutions() {
               Book a 30-minute call and we'll show you exactly where your revenue is leaking and how to fix it.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link
-                to="/pricing"
+              <a
+                href="mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request"
+                target="_blank"
+                rel="noreferrer"
                 className="inline-flex items-center gap-2 px-8 py-4 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
                 style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
               >
                 BOOK A FREE DEMO <ChevronRight className="w-4 h-4" />
-              </Link>
+              </a>
               <Link
                 to="/company"
                 className="inline-flex items-center gap-2 px-8 py-4 text-[11px] font-bold tracking-[0.15em] uppercase"
