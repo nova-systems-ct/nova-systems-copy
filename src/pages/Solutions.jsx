@@ -4,8 +4,8 @@ import Footer from "@/components/Footer";
 import { Link } from "react-router-dom";
 import { ChevronRight, Search, Radar, BarChart3, Bell, Zap, Brain, Shield, Plug } from "lucide-react";
 
-const SOLUTIONS_BG = "https://media.base44.com/images/public/user_6955f8132de0845ff4cba0e3/51da0f3b9_319F7C48-3E15-46E8-98BC-5ABC5609A8C0.png";
-const GLOBE_IMG = "https://media.base44.com/images/public/user_6955f8132de0845ff4cba0e3/7321296d4_0C8AEAC4-C897-4A64-B1D4-2D20D468699B.png";
+const HERO_GRADIENT = "radial-gradient(ellipse at 25% 55%, rgba(212,160,48,0.10) 0%, transparent 65%), radial-gradient(ellipse at 75% 20%, rgba(212,160,48,0.05) 0%, transparent 55%)";
+const GLOBE_GRADIENT = "radial-gradient(ellipse at 50% 50%, rgba(212,160,48,0.08) 0%, transparent 70%)";
 
 const processSteps = [
   { num: "01", title: "Capture", desc: "We capture and analyze calls, chats, and emails across your business.", icon: Search },
@@ -38,10 +38,7 @@ export default function Solutions() {
       <main className="pt-16">
         {/* Hero */}
         <section className="relative min-h-[60vh] flex items-center overflow-hidden">
-          <div className="absolute inset-0">
-            <img src={SOLUTIONS_BG} alt="Background" className="w-full h-full object-cover opacity-50" />
-            <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
-          </div>
+          <div className="absolute inset-0" style={{ background: HERO_GRADIENT }} />
           <div className="relative max-w-7xl mx-auto px-6 py-32">
             <p className="text-xs tracking-[0.25em] uppercase text-primary mb-4">
               WHAT WE DO <span className="inline-block w-8 h-px bg-primary ml-2 align-middle" />
@@ -134,10 +131,7 @@ export default function Solutions() {
 
         {/* Globe Section */}
         <section className="relative py-20 px-6 overflow-hidden">
-          <div className="absolute inset-0">
-            <img src={GLOBE_IMG} alt="Global network" className="w-full h-full object-cover opacity-40" />
-            <div className="absolute inset-0 bg-background/70" />
-          </div>
+          <div className="absolute inset-0" style={{ background: GLOBE_GRADIENT }} />
           <div className="relative max-w-5xl mx-auto text-center">
             <p className="text-xs tracking-[0.25em] uppercase text-primary mb-4">WHO WE HELP</p>
             <h2 className="text-3xl md:text-4xl font-bold text-foreground">

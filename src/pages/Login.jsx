@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { authClient } from "@/api/client";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, Target, Bell, Zap, BarChart3, ShieldCheck } from "lucide-react";
 
 const GOLD = "#D4AF37";
@@ -25,7 +25,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await base44.auth.loginViaEmailPassword(email, password);
+      await authClient.auth.loginViaEmailPassword(email, password);
       window.location.href = "/";
     } catch (err) {
       setError(err.message || "Invalid email or password");
@@ -34,8 +34,8 @@ export default function Login() {
     }
   };
 
-  const handleGoogle = () => base44.auth.loginWithProvider("google", "/");
-  const handleMicrosoft = () => base44.auth.loginWithProvider("microsoft", "/");
+  const handleGoogle = () => authClient.auth.loginWithProvider("google", "/");
+  const handleMicrosoft = () => authClient.auth.loginWithProvider("microsoft", "/");
 
   return (
     <div className="min-h-screen flex" style={{ background: "#050505" }}>

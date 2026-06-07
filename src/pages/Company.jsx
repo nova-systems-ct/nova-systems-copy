@@ -4,7 +4,7 @@ import Footer from "@/components/Footer";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 
-const COMPANY_BG = "https://media.base44.com/images/public/user_6955f8132de0845ff4cba0e3/7321296d4_0C8AEAC4-C897-4A64-B1D4-2D20D468699B.png";
+const HERO_GRADIENT = "radial-gradient(ellipse at 30% 60%, rgba(212,160,48,0.10) 0%, transparent 65%), radial-gradient(ellipse at 80% 20%, rgba(212,160,48,0.05) 0%, transparent 55%)";
 
 export default function Company() {
   return (
@@ -13,10 +13,7 @@ export default function Company() {
       <main className="pt-16">
         {/* Hero */}
         <section className="relative min-h-[60vh] flex items-center overflow-hidden">
-          <div className="absolute inset-0">
-            <img src={COMPANY_BG} alt="Global network" className="w-full h-full object-cover opacity-40" />
-            <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
-          </div>
+          <div className="absolute inset-0" style={{ background: HERO_GRADIENT }} />
           <div className="relative max-w-7xl mx-auto px-6 py-32">
             <p className="text-xs tracking-[0.25em] uppercase text-primary mb-4">
               WHO WE'RE FOR <span className="inline-block w-8 h-px bg-primary ml-2 align-middle" />

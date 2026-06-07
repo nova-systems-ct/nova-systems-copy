@@ -4,7 +4,7 @@ import Footer from "@/components/Footer";
 import { Link } from "react-router-dom";
 import { Check, Minus, ChevronRight } from "lucide-react";
 
-const PRICING_BG = "https://media.base44.com/images/public/user_6955f8132de0845ff4cba0e3/4194fce08_174A8915-BB96-4710-8D0C-E6B1337C78C2.png";
+const HERO_GRADIENT = "radial-gradient(ellipse at 50% 80%, rgba(212,160,48,0.10) 0%, transparent 65%), radial-gradient(ellipse at 80% 10%, rgba(212,160,48,0.05) 0%, transparent 55%)";
 
 const plans = [
   {
@@ -54,10 +54,7 @@ export default function Pricing() {
       <main className="pt-16">
         {/* Hero */}
         <section className="relative min-h-[50vh] flex items-center overflow-hidden">
-          <div className="absolute inset-0">
-            <img src={PRICING_BG} alt="Background" className="w-full h-full object-cover opacity-40" />
-            <div className="absolute inset-0 bg-gradient-to-b from-background via-background/80 to-background" />
-          </div>
+          <div className="absolute inset-0" style={{ background: HERO_GRADIENT }} />
           <div className="relative max-w-7xl mx-auto px-6 py-32">
             <p className="text-xs tracking-[0.25em] uppercase text-primary mb-4">
               PRICING <span className="inline-block w-8 h-px bg-primary ml-2 align-middle" />

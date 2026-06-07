@@ -1,5 +1,4 @@
-// Stub — Base44 removed. Auth pages render but won't process real credentials.
-export const base44 = {
+export const authClient = {
   auth: {
     me: async () => null,
     loginViaEmailPassword: async () => { throw new Error('Auth not configured') },
@@ -7,7 +6,11 @@ export const base44 = {
     logout: () => {},
     redirectToLogin: () => {},
     requestPasswordReset: async () => {},
+    resetPasswordRequest: async () => {},
     resetPassword: async () => {},
     register: async () => { throw new Error('Auth not configured') },
+    verifyOtp: async () => { throw new Error('Auth not configured') },
+    resendOtp: async () => {},
+    setToken: () => {},
   },
 };
