@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import video1 from "@/assets/video1.mp4";
-import video2 from "@/assets/video2.mp4";
-import video3 from "@/assets/video3.mp4";
+import video1 from "@/assets/Video 1.mp4";
+import video2 from "@/assets/video 2.mp4";
+import video3 from "@/assets/video 3.mp4";
 
 const GOLD = "#D4A030";
 
