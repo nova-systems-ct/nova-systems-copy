@@ -64,8 +64,8 @@ export default function Footer() {
             <div className="space-y-3">
               {[
                 { Icon: Mail, text: "hello@novasystems.ai" },
-                { Icon: Phone, text: "+1 (800) 000-0000" },
-                { Icon: MapPin, text: "Miami, FL" },
+                { Icon: Phone, text: "+1 (860) 000-0000" },
+                { Icon: MapPin, text: "Connecticut, USA" },
               ].map(({ Icon, text }) => (
                 <div key={text} className="flex items-center gap-2.5">
                   <Icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: GOLD }} />

@@ -2,175 +2,204 @@ import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Link } from "react-router-dom";
-import { ChevronRight, Search, Radar, BarChart3, Bell, Zap, Brain, Shield, Plug } from "lucide-react";
+import { ChevronRight, Activity, Wrench, Globe, Phone, Check, ArrowRight } from "lucide-react";
 
-const HERO_GRADIENT = "radial-gradient(ellipse at 25% 55%, rgba(212,160,48,0.10) 0%, transparent 65%), radial-gradient(ellipse at 75% 20%, rgba(212,160,48,0.05) 0%, transparent 55%)";
-const GLOBE_GRADIENT = "radial-gradient(ellipse at 50% 50%, rgba(212,160,48,0.08) 0%, transparent 70%)";
+const GOLD = "#D4A030";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #F0C040 55%, ${GOLD} 80%, #8a6200 100%)`;
 
-const processSteps = [
-  { num: "01", title: "Capture", desc: "We capture and analyze calls, chats, and emails across your business.", icon: Search },
-  { num: "02", title: "Detect", desc: "AI detects missed opportunities, risks, and patterns.", icon: Radar },
-  { num: "03", title: "Analyze", desc: "We surface actionable insights and point out what matters most.", icon: BarChart3 },
-  { num: "04", title: "Alert", desc: "Your team gets instant alerts so nothing slips through the cracks.", icon: Bell },
-  { num: "05", title: "Improve", desc: "Teams take action, fix gaps, and close more consistently.", icon: Zap },
-];
-
-const aiFeatures = [
-  { title: "AI Conversation Intelligence", desc: "Understand customer conversations, fix your biggest errors and things you miss.", icon: Brain },
-  { title: "Real-Time Insights", desc: "See what's happening now and take action before opportunities are lost.", icon: BarChart3 },
-  { title: "Enterprise Security", desc: "Bank-grade encryption, role-based access, and compliance-ready.", icon: Shield },
-  { title: "Seamless Integrations", desc: "Works with your CRM, phone systems, and business tools.", icon: Plug },
-];
-
-const teams = [
-  { title: "Sales Teams", desc: "Find missed opportunities, improve win rates, and close more deals." },
-  { title: "Customer Success", desc: "Proactively solve issues, reduce churn, and grow existing accounts." },
-  { title: "Support Teams", desc: "Resolve issues faster and turn every interaction into loyalty." },
-  { title: "Revenue Leaders", desc: "Get visibility into performance, forecast with confidence, and drive predictable growth." },
-  { title: "Compliance & Legal", desc: "Ensure policies are followed and reduce risk with complete conversation visibility." },
-  { title: "Any Industry", desc: "From financial services to healthcare, SaaS to home services — NOVA works wherever conversations happen." },
+const services = [
+  {
+    icon: Activity,
+    tag: "01 — NOVA PULSE",
+    title: "Revenue Monitoring & Lead Intelligence",
+    headline: "See every leak before revenue walks out the door.",
+    desc: "Nova Pulse is our real-time revenue intelligence platform. It tracks every inbound call, lead, and follow-up across your business — and alerts you the moment an opportunity is at risk. No more discovering missed calls three days later. No more guessing why your close rate dropped.",
+    features: [
+      "Real-time call & lead tracking",
+      "Automated missed-opportunity alerts",
+      "Follow-up delay detection",
+      "Conversion funnel visibility",
+      "Weekly revenue leak reports",
+      "Dashboard with live KPIs",
+    ],
+    result: "Clients recover an average of 35% more revenue within 90 days.",
+  },
+  {
+    icon: Wrench,
+    tag: "02 — CUSTOM SYSTEMS",
+    title: "Business Automation & CRM Infrastructure",
+    headline: "Stop running your business on spreadsheets and sticky notes.",
+    desc: "We build the operational backbone your business needs to scale. Custom CRM pipelines, automated follow-up sequences, booking integrations, internal workflows — all designed around how your specific business works. Not a generic template. Your system.",
+    features: [
+      "Custom CRM build & configuration",
+      "Automated follow-up sequences",
+      "Booking & scheduling integrations",
+      "Lead routing & assignment rules",
+      "Internal workflow automation",
+      "Team onboarding & training",
+    ],
+    result: "Our clients save 15+ hours per week on manual tasks after implementation.",
+  },
+  {
+    icon: Globe,
+    tag: "03 — WEB INFRASTRUCTURE",
+    title: "High-Converting Local Business Websites",
+    headline: "Your website should be generating revenue, not just sitting there.",
+    desc: "We build fast, mobile-first websites for local businesses that are designed to convert visitors into leads. Every site includes embedded call tracking, contact capture, Google Business integration, and SEO foundations — so your online presence actually works for you.",
+    features: [
+      "Mobile-first responsive design",
+      "Embedded call tracking",
+      "Lead capture & contact forms",
+      "Google Business integration",
+      "Local SEO foundations",
+      "Speed-optimized (Core Web Vitals)",
+    ],
+    result: "Our websites generate 2–4x more leads from the same traffic.",
+  },
+  {
+    icon: Phone,
+    tag: "04 — AI CALL HANDLING",
+    title: "24/7 AI Inbound Call Response",
+    headline: "Answer every call. Book every appointment. Even at 2am.",
+    desc: "Our AI attendant picks up every inbound call, qualifies the lead, and books an appointment — then passes a full summary to your team. No more voicemail black holes. No more leads lost to after-hours calls. Your business never stops responding.",
+    features: [
+      "24/7 AI inbound call answering",
+      "Lead qualification scripting",
+      "Automatic appointment booking",
+      "SMS follow-up after every call",
+      "Full call transcripts",
+      "CRM handoff with context",
+    ],
+    result: "100% of calls answered. After-hours leads converted at the same rate as business hours.",
+  },
 ];
 
 export default function Solutions() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-black">
       <Navbar />
       <main className="pt-16">
+
         {/* Hero */}
-        <section className="relative min-h-[60vh] flex items-center overflow-hidden">
-          <div className="absolute inset-0" style={{ background: HERO_GRADIENT }} />
-          <div className="relative max-w-7xl mx-auto px-6 py-32">
-            <p className="text-xs tracking-[0.25em] uppercase text-primary mb-4">
-              WHAT WE DO <span className="inline-block w-8 h-px bg-primary ml-2 align-middle" />
+        <section className="relative py-28 px-6 overflow-hidden">
+          <div className="absolute inset-0" style={{
+            background: "radial-gradient(ellipse at 30% 50%, rgba(212,160,48,0.09) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(212,160,48,0.04) 0%, transparent 55%)"
+          }} />
+          <div className="max-w-4xl mx-auto relative">
+            <p className="text-[9px] tracking-[0.35em] uppercase mb-6" style={{ color: GOLD }}>
+              SOLUTIONS <span className="inline-block w-8 h-px align-middle ml-2" style={{ background: GOLD }} />
             </p>
-            <h1 className="text-4xl md:text-6xl font-bold leading-tight text-foreground max-w-xl">
-              We find the leaks draining your revenue.
+            <h1 className="text-5xl md:text-7xl font-black text-white leading-[0.9] tracking-tight mb-6">
+              Built to make<br />
+              <span style={{
+                background: `linear-gradient(90deg, ${GOLD} 0%, #F0C040 50%, ${GOLD} 100%)`,
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}>local businesses<br />unstoppable.</span>
             </h1>
-            <p className="text-muted-foreground mt-6 text-sm max-w-md leading-relaxed">
-              NOVA Systems uses AI-powered conversation intelligence to surface revenue leaks, close gaps, and help your team win more.
+            <p className="text-base leading-relaxed max-w-xl" style={{ color: "rgba(255,255,255,0.45)" }}>
+              Four core services. One mission: stop revenue from leaking out of your business and start capturing every opportunity you're currently missing.
             </p>
           </div>
         </section>
 
-        {/* Our Process */}
-        <section className="py-20 px-6 bg-background">
-          <div className="max-w-5xl mx-auto text-center">
-            <p className="text-xs tracking-[0.25em] uppercase text-primary mb-4">OUR PROCESS</p>
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              From conversation to conversion.
-            </h2>
-            <p className="text-sm text-muted-foreground mt-3 max-w-md mx-auto">
-              We turn every customer interaction into clear insights and real revenue impact.
-            </p>
+        {/* Services */}
+        {services.map((s, i) => (
+          <section
+            key={s.tag}
+            className="py-20 px-6 border-t"
+            style={{ borderColor: "rgba(255,255,255,0.06)", background: i % 2 === 1 ? "rgba(255,255,255,0.012)" : "transparent" }}
+          >
+            <div className="max-w-5xl mx-auto">
+              <div className={`grid md:grid-cols-2 gap-14 items-start ${i % 2 === 1 ? "md:grid-flow-dense" : ""}`}>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-6 mt-14">
-              {processSteps.map((step) => (
-                <div key={step.num} className="flex flex-col items-center text-center">
-                  <div className="w-14 h-14 rounded-full border border-primary/30 flex items-center justify-center mb-4">
-                    <step.icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <p className="text-xs text-primary font-semibold">{step.num}</p>
-                  <h3 className="text-sm font-bold text-foreground mt-1">{step.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{step.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* AI Features */}
-        <section className="py-20 px-6 bg-card border-y border-border/50">
-          <div className="max-w-5xl mx-auto text-center">
-            <p className="text-xs tracking-[0.25em] uppercase text-primary mb-4">POWERED BY AI. BUILT FOR REVENUE.</p>
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Intelligence that drives results.
-            </h2>
-            <p className="text-sm text-muted-foreground mt-3 max-w-lg mx-auto">
-              NOVA Pulse analyzes 100% of conversations so you can focus your team on what moves the needle.
-            </p>
-
-            <div className="grid md:grid-cols-2 gap-6 mt-12 text-left">
-              {aiFeatures.map((f) => (
-                <div key={f.title} className="bg-background border border-border rounded-xl p-6">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-lg border border-primary/30 flex items-center justify-center flex-shrink-0">
-                      <f.icon className="w-5 h-5 text-primary" />
+                {/* Text side */}
+                <div className={i % 2 === 1 ? "md:col-start-2" : ""}>
+                  <div className="flex items-center gap-3 mb-5">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: `${GOLD}12`, border: `1px solid ${GOLD}35` }}
+                    >
+                      <s.icon className="w-5 h-5" style={{ color: GOLD }} />
                     </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-primary">{f.title}</h3>
-                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{f.desc}</p>
-                    </div>
+                    <p className="text-[9px] tracking-[0.25em] uppercase font-bold" style={{ color: GOLD }}>{s.tag}</p>
+                  </div>
+                  <h2 className="text-2xl md:text-3xl font-black text-white mb-3">{s.title}</h2>
+                  <p className="text-base font-semibold mb-4" style={{ color: GOLD }}>"{s.headline}"</p>
+                  <p className="text-sm leading-relaxed mb-8" style={{ color: "rgba(255,255,255,0.4)" }}>{s.desc}</p>
+
+                  <div
+                    className="inline-flex items-start gap-3 p-4 rounded-xl mb-8"
+                    style={{ background: `${GOLD}08`, border: `1px solid ${GOLD}22` }}
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0" style={{ background: GOLD }} />
+                    <p className="text-xs font-semibold leading-relaxed" style={{ color: GOLD }}>{s.result}</p>
+                  </div>
+
+                  <Link
+                    to="/pricing"
+                    className="inline-flex items-center gap-2 px-6 py-3 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
+                    style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
+                  >
+                    GET STARTED <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+
+                {/* Features side */}
+                <div className={`rounded-xl p-8 ${i % 2 === 1 ? "md:col-start-1" : ""}`}
+                  style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}
+                >
+                  <p className="text-[9px] tracking-[0.25em] uppercase font-bold mb-6" style={{ color: "rgba(255,255,255,0.3)" }}>
+                    WHAT'S INCLUDED
+                  </p>
+                  <div className="space-y-4">
+                    {s.features.map((f) => (
+                      <div key={f} className="flex items-center gap-3">
+                        <div
+                          className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{ background: `${GOLD}15`, border: `1px solid ${GOLD}40` }}
+                        >
+                          <Check className="w-3 h-3" style={{ color: GOLD }} />
+                        </div>
+                        <span className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>{f}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        ))}
 
-        {/* CTA Banner */}
-        <section className="py-12 px-6 bg-card border-b border-border/50">
-          <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-            <div>
-              <h3 className="text-xl md:text-2xl font-bold text-foreground">
-                Turn every conversation into revenue.
-              </h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                See how NOVA Systems can help you plug leaks and grow your business.
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link to="/pricing" className="px-6 py-3 bg-primary text-primary-foreground text-xs font-semibold tracking-wider uppercase hover:bg-primary/90 transition-all">
-                BOOK A DEMO
-              </Link>
-              <Link to="/solutions" className="inline-flex items-center gap-1 text-xs font-semibold tracking-wider uppercase text-foreground hover:text-primary transition-colors">
-                SEE HOW IT WORKS <ChevronRight className="w-4 h-4" />
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* Globe Section */}
-        <section className="relative py-20 px-6 overflow-hidden">
-          <div className="absolute inset-0" style={{ background: GLOBE_GRADIENT }} />
-          <div className="relative max-w-5xl mx-auto text-center">
-            <p className="text-xs tracking-[0.25em] uppercase text-primary mb-4">WHO WE HELP</p>
-            <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-              Every team. Every industry.
+        {/* CTA */}
+        <section className="py-20 px-6 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+          <div className="max-w-4xl mx-auto text-center">
+            <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>READY TO START</p>
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-4">
+              Stop leaving money on the table.
             </h2>
-            <p className="text-sm text-muted-foreground mt-3 max-w-md mx-auto">
-              If your team talks to customers, NOVA Pulse can help you win more.
+            <p className="text-sm mb-10 max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
+              Book a 30-minute call and we'll show you exactly where your revenue is leaking and how to fix it.
             </p>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mt-12">
-              {teams.map((t) => (
-                <div key={t.title} className="bg-card/80 backdrop-blur-sm border border-border rounded-xl p-5 text-left">
-                  <h3 className="text-sm font-semibold text-primary">{t.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{t.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Bottom CTA */}
-        <section className="py-16 px-6 bg-background border-t border-border/50">
-          <div className="max-w-5xl mx-auto text-center">
-            <h2 className="text-2xl md:text-3xl font-bold text-foreground">
-              Built for your industry. Focused on your revenue.
-            </h2>
-            <p className="text-sm text-muted-foreground mt-2">
-              No matter your business, NOVA helps you stop losing revenue and start growing it.
-            </p>
-            <div className="flex items-center justify-center gap-4 mt-8">
-              <Link to="/pricing" className="px-6 py-3 bg-primary text-primary-foreground text-xs font-semibold tracking-wider uppercase hover:bg-primary/90 transition-all">
-                BOOK A DEMO
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Link
+                to="/pricing"
+                className="inline-flex items-center gap-2 px-8 py-4 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
+                style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
+              >
+                BOOK A FREE DEMO <ChevronRight className="w-4 h-4" />
               </Link>
-              <Link to="/solutions" className="inline-flex items-center gap-1 text-xs font-semibold tracking-wider uppercase text-foreground hover:text-primary transition-colors">
-                SEE HOW IT WORKS <ChevronRight className="w-4 h-4" />
+              <Link
+                to="/company"
+                className="inline-flex items-center gap-2 px-8 py-4 text-[11px] font-bold tracking-[0.15em] uppercase"
+                style={{ border: `1px solid ${GOLD}50`, color: GOLD }}
+              >
+                ABOUT NOVA SYSTEMS
               </Link>
             </div>
           </div>
         </section>
+
       </main>
       <Footer />
     </div>

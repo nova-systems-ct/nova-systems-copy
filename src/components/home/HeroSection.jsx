@@ -180,7 +180,7 @@ export default function HeroSection() {
             onEnded={() => setVidIdx((i) => (i + 1) % 4)}
             className="absolute inset-0 w-full h-full object-cover"
           />
-          <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.52)" }} />
+          <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.60)" }} />
           <div className="absolute inset-0" style={{ background: "linear-gradient(to right, rgba(0,0,0,0.45) 0%, transparent 30%)" }} />
           <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 65%, rgba(0,0,0,0.6) 100%)" }} />
         </div>

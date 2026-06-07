@@ -8,6 +8,9 @@ import Home from './pages/Home';
 import Solutions from './pages/Solutions';
 import Pricing from './pages/Pricing';
 import Company from './pages/Company';
+import Resources from './pages/Resources';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
 
 function App() {
   return (
@@ -19,6 +22,9 @@ function App() {
           <Route path="/solutions" element={<Solutions />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/company" element={<Company />} />
+          <Route path="/resources" element={<Resources />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="*" element={<PageNotFound />} />
         </Routes>
       </Router>

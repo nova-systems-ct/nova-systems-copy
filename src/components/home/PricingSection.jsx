@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Check } from "lucide-react";
+import { Check, ArrowRight } from "lucide-react";
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #F0C040 55%, ${GOLD} 80%, #8a6200 100%)`;
@@ -7,24 +7,50 @@ const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #F0C040 
 const plans = [
   {
     name: "STARTER",
-    price: { monthly: 49, annual: 39 },
-    desc: "For small teams getting started.",
-    features: ["1 User", "Up to 5,000 tracked leads", "Real-time monitoring", "Instant alerts", "Email support"],
+    price: { monthly: 497, annual: 398 },
+    desc: "Perfect for local businesses ready to stop losing leads.",
+    features: [
+      "Nova Pulse revenue monitoring",
+      "Up to 500 tracked leads/mo",
+      "Missed call alerts",
+      "Basic lead capture automation",
+      "Monthly performance report",
+      "Email support",
+    ],
     popular: false,
+    cta: "GET STARTED",
   },
   {
     name: "GROWTH",
-    price: { monthly: 129, annual: 103 },
-    desc: "For growing businesses focused on recovery.",
-    features: ["5 Users", "Up to 25,000 tracked leads", "Real-time monitoring", "Instant alerts", "Performance insights", "Priority support"],
+    price: { monthly: 997, annual: 798 },
+    desc: "For growing operations that need full-stack infrastructure.",
+    features: [
+      "Everything in Starter",
+      "Unlimited lead tracking",
+      "AI call handling & SMS follow-up",
+      "Custom CRM integration",
+      "Weekly strategy calls",
+      "Priority support",
+      "Dashboard access",
+    ],
     popular: true,
+    cta: "BOOK A DEMO",
   },
   {
     name: "ENTERPRISE",
-    price: { monthly: 299, annual: 239 },
-    desc: "For large teams with advanced needs.",
-    features: ["Unlimited Users", "Unlimited tracked leads", "Real-time monitoring", "Instant alerts", "Performance insights", "Recover lost revenue", "Dedicated account manager", "24/7 priority support"],
+    price: null,
+    desc: "Full operational infrastructure built for your business.",
+    features: [
+      "Everything in Growth",
+      "Custom website build",
+      "Dedicated account manager",
+      "Custom automation workflows",
+      "Multi-location support",
+      "White-label reporting",
+      "24/7 priority support",
+    ],
     popular: false,
+    cta: "GET A QUOTE",
   },
 ];
 
@@ -42,9 +68,10 @@ export default function PricingSection() {
         <div className="text-center mb-12">
           <p className="text-[9px] tracking-[0.35em] uppercase mb-4" style={{ color: GOLD }}>PRICING</p>
           <h2 className="text-4xl md:text-5xl font-black text-white">Simple. Transparent. Scalable.</h2>
-          <p className="mt-3 text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>Choose the plan that fits your team.</p>
+          <p className="mt-3 text-sm max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
+            Choose the plan that fits your business and start recovering lost revenue today.
+          </p>
 
-          {/* Toggle */}
           <div className="flex items-center justify-center gap-3 mt-8">
             <span className="text-xs" style={{ color: !annual ? "white" : "rgba(255,255,255,0.4)" }}>Monthly</span>
             <button
@@ -90,13 +117,23 @@ export default function PricingSection() {
               )}
               <p className="text-[10px] tracking-[0.25em] uppercase font-bold mb-1" style={{ color: GOLD }}>{plan.name}</p>
               <p className="text-[11px] mb-5" style={{ color: "rgba(255,255,255,0.38)" }}>{plan.desc}</p>
+
               <div className="mb-1">
-                <span className="text-5xl font-black text-white">${annual ? plan.price.annual : plan.price.monthly}</span>
-                <span className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.38)" }}>/mo</span>
+                {plan.price ? (
+                  <>
+                    <span className="text-5xl font-black text-white">
+                      ${annual ? plan.price.annual : plan.price.monthly}
+                    </span>
+                    <span className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.38)" }}>/mo</span>
+                  </>
+                ) : (
+                  <span className="text-4xl font-black text-white">Custom</span>
+                )}
               </div>
               <p className="text-[10px] mb-7" style={{ color: "rgba(255,255,255,0.28)" }}>
-                {annual ? "Billed annually" : "Billed monthly"}
+                {plan.price ? (annual ? "Billed annually" : "Billed monthly") : "Tailored to your operation"}
               </p>
+
               <div className="space-y-3 flex-1 mb-8">
                 {plan.features.map((f) => (
                   <div key={f} className="flex items-center gap-2.5">
@@ -105,14 +142,15 @@ export default function PricingSection() {
                   </div>
                 ))}
               </div>
+
               <button
-                className="w-full py-3.5 text-[10px] font-bold tracking-[0.18em] uppercase transition-all hover:opacity-85"
+                className="w-full py-3.5 text-[10px] font-bold tracking-[0.18em] uppercase transition-all hover:opacity-85 flex items-center justify-center gap-2"
                 style={plan.popular
                   ? { background: GOLD_GRADIENT, color: "#0a0800" }
                   : { border: `1px solid ${GOLD}50`, color: GOLD, background: "transparent" }
                 }
               >
-                {plan.popular ? "BOOK A DEMO" : "GET STARTED"}
+                {plan.cta} <ArrowRight className="w-3 h-3" />
               </button>
             </div>
           ))}
