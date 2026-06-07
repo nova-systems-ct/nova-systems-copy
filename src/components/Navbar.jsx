@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 
@@ -60,17 +60,15 @@ export default function Navbar() {
           >
             LOG IN
           </Link>
-          <a
-            href="mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request"
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            to="/book-demo"
             className="inline-flex items-center px-5 py-2 text-xs font-semibold tracking-wider uppercase transition-all hover:opacity-85"
             style={{ border: `1px solid ${GOLD}`, color: GOLD }}
             onMouseEnter={(e) => { e.currentTarget.style.background = GOLD; e.currentTarget.style.color = "#0a0800"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = GOLD; }}
           >
             BOOK A DEMO
-          </a>
+          </Link>
         </div>
 
         <button
@@ -102,16 +100,14 @@ export default function Navbar() {
           >
             LOG IN
           </Link>
-          <a
-            href="mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request"
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            to="/book-demo"
             onClick={() => setMobileOpen(false)}
             className="block text-center px-5 py-3 text-xs font-semibold tracking-wider uppercase mt-1"
             style={{ border: `1px solid ${GOLD}`, color: GOLD }}
           >
             BOOK A DEMO
-          </a>
+          </Link>
         </div>
       )}
     </nav>

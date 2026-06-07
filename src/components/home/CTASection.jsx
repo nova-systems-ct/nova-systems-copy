@@ -18,15 +18,13 @@ export default function CTASection() {
           </p>
         </div>
         <div className="flex items-center gap-5 flex-shrink-0">
-          <a
-            href="mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request"
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            to="/book-demo"
             className="px-7 py-4 text-[11px] font-bold tracking-[0.15em] uppercase transition-opacity hover:opacity-85"
             style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
           >
             BOOK A DEMO
-          </a>
+          </Link>
           <Link
             to="/solutions"
             className="inline-flex items-center gap-1 text-[11px] font-semibold tracking-wider uppercase text-white/60 hover:text-white transition-colors"

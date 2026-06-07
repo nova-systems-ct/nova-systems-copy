@@ -2,14 +2,13 @@
 import { Link } from "react-router-dom";
 import { ChevronRight, Phone, Clock, AlertTriangle } from "lucide-react";
 import video1 from "@/assets/Video 1.mp4";
-import video2 from "@/assets/video 2.mp4";
 import video3 from "@/assets/video 3.mp4";
 import video4 from "@/assets/video 4.mp4";
 
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#C8921A";
 const GOLD_DARK = "#8a6200";
-const VIDEOS = [video1, video2];
+const VIDEOS = [video3, video1, video4];
 
 const MSG1 = "Hey! Sorry we missed your call. Lock in your booking slot here: [Link]";
 const MSG2 = "Awesome, just booked for 3:00 PM!";
@@ -185,7 +184,7 @@ export default function HeroSection() {
             ref={videoRef}
             muted
             playsInline
-            onEnded={() => setVidIdx((i) => (i + 1) % 2)}
+            onEnded={() => setVidIdx((i) => (i + 1) % 3)}
             className="absolute inset-0 w-full h-full object-cover"
           />
           <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.60)" }} />

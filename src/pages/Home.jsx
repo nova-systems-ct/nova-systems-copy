@@ -6,7 +6,6 @@ import HeroSection from "@/components/home/HeroSection";
 import TrustedBySection from "@/components/home/TrustedBySection";
 import ProblemSection from "@/components/home/ProblemSection";
 import SolutionSection from "@/components/home/SolutionSection";
-import ROISection from "@/components/home/ROISection";
 import PricingSection from "@/components/home/PricingSection";
 import ContactSection from "@/components/home/ContactSection";
 
@@ -19,8 +18,7 @@ export default function Home() {
         <FadeUp><TrustedBySection /></FadeUp>
         <FadeUp><ProblemSection /></FadeUp>
         <FadeUp><SolutionSection /></FadeUp>
-        <FadeUp><ROISection /></FadeUp>
-        <FadeUp><PricingSection /></FadeUp>
+<FadeUp><PricingSection /></FadeUp>
         <FadeUp><ContactSection /></FadeUp>
       </main>
       <Footer />
