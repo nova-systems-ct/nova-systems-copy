@@ -1,10 +1,10 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Check, Minus, ArrowRight } from "lucide-react";
 
 const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #F0C040 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const plans = [
   {
@@ -94,7 +94,7 @@ export default function Pricing() {
             <h1 className="text-5xl md:text-6xl font-black text-white leading-[0.95] mb-5">
               Simple pricing.<br />
               <span style={{
-                background: `linear-gradient(90deg, ${GOLD} 0%, #F0C040 50%, ${GOLD} 100%)`,
+                background: `linear-gradient(90deg, ${GOLD} 0%, #C8921A 50%, ${GOLD} 100%)`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
               }}>Powerful impact.</span>
@@ -272,3 +272,4 @@ export default function Pricing() {
     </div>
   );
 }
+

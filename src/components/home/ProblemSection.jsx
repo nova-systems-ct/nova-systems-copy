@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Phone, Clock, Eye } from "lucide-react";
 
 const GOLD = "#D4A030";
@@ -13,7 +13,7 @@ const problems = [
   {
     icon: Clock,
     title: "Slow follow-up is costing you deals daily.",
-    desc: "The window to win is minutes — not hours. Most teams respond in hours.",
+    desc: "The window to win is minutes â€” not hours. Most teams respond in hours.",
   },
   {
     icon: Eye,
@@ -38,7 +38,7 @@ export default function ProblemSection() {
         <h2 className="text-4xl md:text-6xl font-black text-white leading-[0.95] tracking-tight">
           Revenue is walking<br />
           <span style={{
-            background: `linear-gradient(90deg, ${GOLD} 0%, #F0C040 50%, ${GOLD} 100%)`,
+            background: `linear-gradient(90deg, ${GOLD} 0%, #C8921A 50%, ${GOLD} 100%)`,
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
           }}>out your door.</span>

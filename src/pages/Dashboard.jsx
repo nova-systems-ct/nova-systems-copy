@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip,
@@ -10,10 +10,10 @@ import {
 } from "lucide-react";
 
 const GOLD = "#D4A030";
-const GOLD_BRIGHT = "#F0C040";
+const GOLD_BRIGHT = "#C8921A";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, #8a6200 100%)`;
 
-// ── Fake data ─────────────────────────────────────────────────────────────────
+// â”€â”€ Fake data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const leadFlowData = [
   { day: "May 8", incoming: 42, contacted: 31, converted: 9 },
   { day: "May 9", incoming: 58, contacted: 44, converted: 14 },
@@ -27,33 +27,33 @@ const leadFlowData = [
 
 const channelData = [
   { name: "Phone", value: 45, color: GOLD },
-  { name: "Email", value: 32, color: "#F0C040" },
+  { name: "Email", value: 32, color: "#C8921A" },
   { name: "Web Form", value: 15, color: "#B8860B" },
   { name: "Other", value: 8, color: "#6B5000" },
 ];
 
 const recentAlerts = [
-  { type: "missed_call", icon: Phone, msg: "3 missed calls — +1 (860) 234-5511", time: "2 min ago", sev: "high" },
+  { type: "missed_call", icon: Phone, msg: "3 missed calls â€” +1 (860) 234-5511", time: "2 min ago", sev: "high" },
   { type: "followup", icon: Clock, msg: "Email opened, no follow-up in 24hrs", time: "18 min ago", sev: "med" },
   { type: "missed_call", icon: Phone, msg: "2 missed calls after hours", time: "1 hr ago", sev: "high" },
-  { type: "delay", icon: AlertTriangle, msg: "High-value lead not contacted — $3,200", time: "2 hrs ago", sev: "high" },
+  { type: "delay", icon: AlertTriangle, msg: "High-value lead not contacted â€” $3,200", time: "2 hrs ago", sev: "high" },
   { type: "followup", icon: Clock, msg: "Workflow automation failed for lead #4821", time: "3 hrs ago", sev: "med" },
 ];
 
 const recentActivity = [
   { icon: Star, msg: "New lead from web form: Sarah M.", time: "5 min ago" },
-  { icon: Phone, msg: "AI attendant booked appt — Tom R. · 3:00 PM", time: "12 min ago" },
-  { icon: TrendingUp, msg: "Lead converted: Eastside HVAC — $4,200", time: "41 min ago" },
+  { icon: Phone, msg: "AI attendant booked appt â€” Tom R. Â· 3:00 PM", time: "12 min ago" },
+  { icon: TrendingUp, msg: "Lead converted: Eastside HVAC â€” $4,200", time: "41 min ago" },
   { icon: MessageSquare, msg: "SMS follow-up sent to 14 leads", time: "1 hr ago" },
   { icon: CheckSquare, msg: "Task completed: Follow up with Pinnacle", time: "2 hrs ago" },
 ];
 
 const tasks = [
   { label: "Follow up with 3 missed calls", priority: "high" },
-  { label: "Review lead report — May 15", priority: "med" },
+  { label: "Review lead report â€” May 15", priority: "med" },
   { label: "Call back Sarah M. (web form)", priority: "high" },
   { label: "Check automation workflow #7", priority: "med" },
-  { label: "Update CRM — Johnson account", priority: "low" },
+  { label: "Update CRM â€” Johnson account", priority: "low" },
 ];
 
 const navItems = [
@@ -82,7 +82,7 @@ const CHART_TOOLTIP_STYLE = {
   labelStyle: { color: GOLD, fontWeight: 700 },
 };
 
-// ── Sidebar ───────────────────────────────────────────────────────────────────
+// â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Sidebar({ mobile, onClose }) {
   return (
     <aside
@@ -155,7 +155,7 @@ function Sidebar({ mobile, onClose }) {
   );
 }
 
-// ── Main dashboard ────────────────────────────────────────────────────────────
+// â”€â”€ Main dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function Dashboard() {
   const [mobileNav, setMobileNav] = useState(false);
 
@@ -164,7 +164,7 @@ export default function Dashboard() {
       <Sidebar />
       {mobileNav && <Sidebar mobile onClose={() => setMobileNav(false)} />}
 
-      {/* ── Main content ── */}
+      {/* â”€â”€ Main content â”€â”€ */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
         {/* Top bar */}
@@ -188,13 +188,13 @@ export default function Dashboard() {
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.35)" }}
             >
               <Search className="w-3.5 h-3.5" />
-              <span>Search…</span>
+              <span>Searchâ€¦</span>
             </div>
             <div
               className="flex items-center gap-1 px-3 py-2 rounded-lg text-[10px] font-medium"
               style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(255,255,255,0.5)" }}
             >
-              May 8 – May 15, 2025 <ChevronDown className="w-3 h-3 ml-1" />
+              May 8 â€“ May 15, 2025 <ChevronDown className="w-3 h-3 ml-1" />
             </div>
             <div className="relative">
               <Bell className="w-5 h-5" style={{ color: "rgba(255,255,255,0.4)" }} />
@@ -258,7 +258,7 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-sm font-bold text-white">Lead Flow</p>
-                  <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>Incoming · Contacted · Converted</p>
+                  <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.3)" }}>Incoming Â· Contacted Â· Converted</p>
                 </div>
                 <div
                   className="text-[9px] px-2 py-1 rounded"
@@ -407,7 +407,7 @@ export default function Dashboard() {
               >
                 <p className="text-[9px] tracking-[0.2em] uppercase mb-1" style={{ color: "rgba(255,255,255,0.3)" }}>Avg Response Time</p>
                 <p className="text-2xl font-black" style={{ color: GOLD }}>18m 42s</p>
-                <p className="text-[9px]" style={{ color: "rgba(255,255,255,0.25)" }}>↓ 6.2% vs last week</p>
+                <p className="text-[9px]" style={{ color: "rgba(255,255,255,0.25)" }}>â†“ 6.2% vs last week</p>
               </div>
             </div>
 
@@ -459,3 +459,4 @@ export default function Dashboard() {
     </div>
   );
 }
+

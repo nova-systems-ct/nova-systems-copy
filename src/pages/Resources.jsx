@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Link } from "react-router-dom";
 import { BookOpen, FileText, TrendingUp, ChevronRight, ArrowRight, Clock } from "lucide-react";
 
 const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #F0C040 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const categories = ["All", "Revenue Leaks", "Case Studies", "Guides", "Automation"];
 
@@ -14,7 +14,7 @@ const posts = [
     category: "Case Studies",
     tag: "CASE STUDY",
     title: "How a Connecticut HVAC Company Recovered $84K in One Quarter",
-    excerpt: "Pinnacle Heating & Cooling was answering roughly 60% of inbound calls. The other 40% were gone. Nova Systems deployed AI call handling and Nova Pulse monitoring — and the results changed everything.",
+    excerpt: "Pinnacle Heating & Cooling was answering roughly 60% of inbound calls. The other 40% were gone. Nova Systems deployed AI call handling and Nova Pulse monitoring â€” and the results changed everything.",
     readTime: "6 min read",
     result: "+$84,000 revenue recovered",
     featured: true,
@@ -32,7 +32,7 @@ const posts = [
     category: "Guides",
     tag: "GUIDE",
     title: "The Local Business Revenue Leak Audit: A 10-Point Checklist",
-    excerpt: "Before you can fix a revenue leak, you need to know where it is. This 10-point checklist walks through every point of failure in the typical local business sales process — from first contact to closed deal.",
+    excerpt: "Before you can fix a revenue leak, you need to know where it is. This 10-point checklist walks through every point of failure in the typical local business sales process â€” from first contact to closed deal.",
     readTime: "8 min read",
     result: null,
     featured: false,
@@ -41,7 +41,7 @@ const posts = [
     category: "Revenue Leaks",
     tag: "REVENUE LEAKS",
     title: "Why Local Service Businesses Lose 30% of Revenue to Slow Follow-Up",
-    excerpt: "Leads contacted within 5 minutes are 21x more likely to convert than those contacted after 30 minutes. Most local businesses respond in hours — or not at all. Here's what's actually happening and how to fix it.",
+    excerpt: "Leads contacted within 5 minutes are 21x more likely to convert than those contacted after 30 minutes. Most local businesses respond in hours â€” or not at all. Here's what's actually happening and how to fix it.",
     readTime: "5 min read",
     result: null,
     featured: false,
@@ -50,7 +50,7 @@ const posts = [
     category: "Case Studies",
     tag: "CASE STUDY",
     title: "Luxe Realty: From 22% to 67% Lead Conversion in 60 Days",
-    excerpt: "Luxe Realty had a lead problem — not a traffic problem. Leads were coming in but follow-up was inconsistent and manual. Nova Systems rebuilt their CRM pipeline and automated every touchpoint.",
+    excerpt: "Luxe Realty had a lead problem â€” not a traffic problem. Leads were coming in but follow-up was inconsistent and manual. Nova Systems rebuilt their CRM pipeline and automated every touchpoint.",
     readTime: "7 min read",
     result: "22% to 67% conversion rate",
     featured: false,
@@ -59,7 +59,7 @@ const posts = [
     category: "Automation",
     tag: "AUTOMATION",
     title: "5 Follow-Up Automations Every Local Business Needs Right Now",
-    excerpt: "Manual follow-up is killing your close rate. Here are the five automation workflows that Nova Systems implements for every client — and how to build them for your specific business.",
+    excerpt: "Manual follow-up is killing your close rate. Here are the five automation workflows that Nova Systems implements for every client â€” and how to build them for your specific business.",
     readTime: "6 min read",
     result: null,
     featured: false,
@@ -68,7 +68,7 @@ const posts = [
     category: "Revenue Leaks",
     tag: "REVENUE LEAKS",
     title: "5 Signs Your Business Is Losing Revenue Without Knowing It",
-    excerpt: "Revenue leaks are invisible by design. By the time you notice your close rate is down, the leads are already gone. These five warning signs appear before the revenue disappears — here's how to spot them.",
+    excerpt: "Revenue leaks are invisible by design. By the time you notice your close rate is down, the leads are already gone. These five warning signs appear before the revenue disappears â€” here's how to spot them.",
     readTime: "4 min read",
     result: null,
     featured: false,
@@ -77,7 +77,7 @@ const posts = [
     category: "Guides",
     tag: "GUIDE",
     title: "How to Choose the Right CRM for a Local Service Business",
-    excerpt: "Most CRMs are built for enterprise sales teams — not for HVAC companies, med spas, or law firms. This guide breaks down what matters for local service businesses and how to avoid expensive implementation mistakes.",
+    excerpt: "Most CRMs are built for enterprise sales teams â€” not for HVAC companies, med spas, or law firms. This guide breaks down what matters for local service businesses and how to avoid expensive implementation mistakes.",
     readTime: "9 min read",
     result: null,
     featured: false,
@@ -109,7 +109,7 @@ export default function Resources() {
             <h1 className="text-5xl md:text-6xl font-black text-white leading-[0.95] mb-5">
               Stop guessing.<br />
               <span style={{
-                background: `linear-gradient(90deg, ${GOLD} 0%, #F0C040 50%, ${GOLD} 100%)`,
+                background: `linear-gradient(90deg, ${GOLD} 0%, #C8921A 50%, ${GOLD} 100%)`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
               }}>Start knowing.</span>
@@ -175,7 +175,7 @@ export default function Resources() {
                     style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                     <p className="text-[9px] tracking-[0.25em] uppercase mb-4" style={{ color: "rgba(255,255,255,0.3)" }}>KEY RESULT</p>
                     <p className="text-3xl font-black mb-2" style={{ color: GOLD }}>{featured.result}</p>
-                    <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>Pinnacle Heating &amp; Cooling · Q1 2025</p>
+                    <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>Pinnacle Heating &amp; Cooling Â· Q1 2025</p>
                   </div>
                 </div>
               </div>
@@ -188,7 +188,7 @@ export default function Resources() {
           <div className="max-w-6xl mx-auto">
             {activeCategory !== "All" && (
               <p className="text-[9px] tracking-[0.35em] uppercase mb-8" style={{ color: GOLD }}>
-                {activeCategory.toUpperCase()} — {filtered.length} ARTICLE{filtered.length !== 1 ? "S" : ""}
+                {activeCategory.toUpperCase()} â€” {filtered.length} ARTICLE{filtered.length !== 1 ? "S" : ""}
               </p>
             )}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -253,3 +253,4 @@ export default function Resources() {
     </div>
   );
 }
+

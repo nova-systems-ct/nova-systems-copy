@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 
 const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #F0C040 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 export default function ContactSection() {
   const [form, setForm] = useState({ name: "", email: "", company: "", phone: "", message: "" });
@@ -28,7 +28,7 @@ export default function ContactSection() {
             <h2 className="text-4xl md:text-5xl font-black text-white leading-[0.95]">
               Ready to stop<br />
               <span style={{
-                background: `linear-gradient(90deg, ${GOLD} 0%, #F0C040 50%, ${GOLD} 100%)`,
+                background: `linear-gradient(90deg, ${GOLD} 0%, #C8921A 50%, ${GOLD} 100%)`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
               }}>losing revenue?</span>
@@ -49,7 +49,7 @@ export default function ContactSection() {
             </div>
           </div>
 
-          {/* Right — Form */}
+          {/* Right â€” Form */}
           <div
             className="rounded-2xl p-8"
             style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)" }}

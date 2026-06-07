@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 
 const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #F0C040 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 function useCountUp(target) {
   const [count, setCount] = useState(target);
@@ -130,7 +130,7 @@ export default function ROISection() {
                 className="mt-8 inline-block px-8 py-3 text-[11px] font-bold tracking-[0.2em] uppercase transition-opacity hover:opacity-85"
                 style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
               >
-                Start Recovering Revenue →
+                Start Recovering Revenue â†’
               </a>
             </div>
 
@@ -140,3 +140,4 @@ export default function ROISection() {
     </section>
   );
 }
+
