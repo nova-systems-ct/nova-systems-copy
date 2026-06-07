@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
+import video1 from "@/assets/video1.mp4";
+import video2 from "@/assets/video2.mp4";
+import video3 from "@/assets/video3.mp4";
 
 const GOLD = "#D4A030";
 
 const heroes = [
   {
-    title: "AI-Powered Justice",
+    title: "AI-Powered Lead Capture",
     description: "Automated lead capture & intelligent routing",
-    video: "https://media.base44.com/videos/public/6a24aabbc0ee04468cc256aa/299432cd4_Now_make_a_animated_justice_by.mp4"
+    video: video1
   },
   {
-    title: "Animated Workflows",
+    title: "Seamless Automation",
     description: "Seamless customer engagement automation",
-    video: "https://media.base44.com/videos/public/6a24aabbc0ee04468cc256aa/2d3e41e63_I_need_to_animate_these_into_f.mp4"
+    video: video2
   },
   {
     title: "Real-Time Response",
     description: "Instant notifications and response tracking",
-    video: "https://media.base44.com/videos/public/6a24aabbc0ee04468cc256aa/350952731_Untitled.mp4"
-  }
+    video: video3
+  },
 ];
 
 export default function AnimatedHeroesSection() {
