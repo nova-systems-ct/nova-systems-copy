@@ -1,63 +1,23 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, Phone, Clock, AlertTriangle } from "lucide-react";
+import video1 from "@/assets/video1.mp4";
+import video2 from "@/assets/video2.mp4";
+import video3 from "@/assets/video3.mp4";
 
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#F0C040";
 const GOLD_DARK = "#8a6200";
+const VIDEOS = [video1, video2, video3];
 
 const MSG1 = "Hey! Sorry we missed your call. Lock in your booking slot here: [Link]";
 const MSG2 = "Awesome, just booked for 3:00 PM!";
-
-// ── Canvas matrix animation ──────────────────────────────────────────────────
-function MatrixCanvas() {
-  const ref = useRef(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let animId;
-    const chars = "01アウエカキクケコ0110バイナリ001100";
-    const fs = 13;
-    let cols, drops;
-
-    function init() {
-      canvas.width = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
-      cols = Math.floor(canvas.width / fs);
-      drops = Array.from({ length: cols }, () => -(Math.random() * 40));
-    }
-
-    init();
-    const ro = new ResizeObserver(init);
-    ro.observe(canvas);
-
-    function draw() {
-      ctx.fillStyle = "rgba(0,0,0,0.05)";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.font = `${fs}px 'Courier New',monospace`;
-      for (let i = 0; i < drops.length; i++) {
-        const c = chars[Math.floor(Math.random() * chars.length)];
-        ctx.fillStyle = `rgba(212,160,48,${(Math.random() * 0.32 + 0.05).toFixed(2)})`;
-        ctx.fillText(c, i * fs, drops[i] * fs);
-        if (drops[i] * fs > canvas.height && Math.random() > 0.974) drops[i] = 0;
-        drops[i] += 0.5;
-      }
-      animId = requestAnimationFrame(draw);
-    }
-
-    draw();
-    return () => { cancelAnimationFrame(animId); ro.disconnect(); };
-  }, []);
-
-  return <canvas ref={ref} className="absolute inset-0 w-full h-full" />;
-}
 
 // ── iPhone notification popup ────────────────────────────────────────────────
 function PhoneNotification({ visible }) {
   const [t1, setT1] = useState("");
   const [t2, setT2] = useState("");
-  const [phase, setPhase] = useState(0); // 0=typing msg1 | 1=pause | 2=typing msg2
+  const [phase, setPhase] = useState(0);
 
   useEffect(() => {
     if (!visible) { setT1(""); setT2(""); setPhase(0); return; }
@@ -105,7 +65,6 @@ function PhoneNotification({ visible }) {
           boxShadow: "0 24px 64px rgba(0,0,0,0.75)",
         }}
       >
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
           <div
             style={{
@@ -124,7 +83,6 @@ function PhoneNotification({ visible }) {
           <div style={{ marginLeft: "auto", fontSize: 10, color: "rgba(255,255,255,0.2)" }}>9:41 AM</div>
         </div>
 
-        {/* Bubbles */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {t1 && (
             <div
@@ -199,6 +157,7 @@ function AlertCard({ icon, label, sub, gold, highlight, onMouseEnter, onMouseLea
 // ── Main export ──────────────────────────────────────────────────────────────
 export default function HeroSection() {
   const [notifVisible, setNotifVisible] = useState(false);
+  const [vidIdx, setVidIdx] = useState(0);
 
   return (
     <>
@@ -206,17 +165,26 @@ export default function HeroSection() {
 
       <section className="relative h-screen overflow-hidden bg-black">
 
-        {/* RIGHT panel — canvas replaces static image, same clip-path */}
+        {/* RIGHT panel — looping video background, cycles video1 → video2 → video3 → video1 */}
         <div
           className="absolute inset-0"
           style={{ zIndex: 5, clipPath: "polygon(62% 0%, 100% 0%, 100% 100%, 40% 100%)" }}
         >
-          <MatrixCanvas />
+          <video
+            key={vidIdx}
+            src={VIDEOS[vidIdx]}
+            autoPlay
+            muted
+            playsInline
+            onEnded={() => setVidIdx((i) => (i + 1) % 3)}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+          <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.52)" }} />
           <div className="absolute inset-0" style={{ background: "linear-gradient(to right, rgba(0,0,0,0.45) 0%, transparent 30%)" }} />
           <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 65%, rgba(0,0,0,0.6) 100%)" }} />
         </div>
 
-        {/* Gold top-edge line on the image panel */}
+        {/* Gold top-edge line */}
         <div
           className="absolute top-0"
           style={{
@@ -288,7 +256,7 @@ export default function HeroSection() {
           </Link>
         </div>
 
-        {/* ALERT CARDS — zigzag, hover triggers notification */}
+        {/* ALERT CARDS — hover triggers iPhone notification */}
         <div className="absolute inset-0" style={{ zIndex: 35, pointerEvents: "none" }}>
           <div className="hidden md:block absolute" style={{ top: "28%", left: "63%" }}>
             <AlertCard
