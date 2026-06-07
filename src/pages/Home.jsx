@@ -3,6 +3,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeUp from "@/components/FadeUp";
 import HeroSection from "@/components/home/HeroSection";
+import AnimatedHeroesSection from "@/components/home/AnimatedHeroesSection";
 import TrustedBySection from "@/components/home/TrustedBySection";
 import ProblemSection from "@/components/home/ProblemSection";
 import SolutionSection from "@/components/home/SolutionSection";
@@ -16,6 +17,7 @@ export default function Home() {
       <Navbar />
       <main className="pt-16">
         <HeroSection />
+        <FadeUp><AnimatedHeroesSection /></FadeUp>
         <FadeUp><TrustedBySection /></FadeUp>
         <FadeUp><ProblemSection /></FadeUp>
         <FadeUp><SolutionSection /></FadeUp>
