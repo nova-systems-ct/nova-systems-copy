@@ -1,8 +1,8 @@
 ﻿import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { Link } from "react-router-dom";
-import { ChevronRight, Activity, Wrench, Globe, Phone, Check, ArrowRight } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ChevronRight, Activity, Wrench, Globe, Phone, Check, ArrowRight, ArrowLeft } from "lucide-react";
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
@@ -75,6 +75,7 @@ const services = [
 ];
 
 export default function Solutions() {
+  const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-black">
       <Navbar />
@@ -86,6 +87,11 @@ export default function Solutions() {
             background: "radial-gradient(ellipse at 30% 50%, rgba(212,160,48,0.09) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(212,160,48,0.04) 0%, transparent 55%)"
           }} />
           <div className="max-w-4xl mx-auto relative">
+            <button onClick={() => navigate(-1)}
+              className="flex items-center gap-2 mb-10 text-xs transition-colors hover:text-white"
+              style={{ color: "rgba(255,255,255,0.35)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+              <ArrowLeft className="w-4 h-4" /> Back
+            </button>
             <p className="text-[9px] tracking-[0.35em] uppercase mb-6" style={{ color: GOLD }}>
               SOLUTIONS <span className="inline-block w-8 h-px align-middle ml-2" style={{ background: GOLD }} />
             </p>
@@ -137,7 +143,7 @@ export default function Solutions() {
                   </div>
 
                   <Link
-                    to="/pricing"
+                    to="/register"
                     className="inline-flex items-center gap-2 px-6 py-3 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
                     style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
                   >
@@ -182,15 +188,13 @@ export default function Solutions() {
               Book a 30-minute call and we'll show you exactly where your revenue is leaking and how to fix it.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <a
-                href="mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request"
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                to="/book-demo"
                 className="inline-flex items-center gap-2 px-8 py-4 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
                 style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
               >
                 BOOK A FREE DEMO <ChevronRight className="w-4 h-4" />
-              </a>
+              </Link>
               <Link
                 to="/company"
                 className="inline-flex items-center gap-2 px-8 py-4 text-[11px] font-bold tracking-[0.15em] uppercase"

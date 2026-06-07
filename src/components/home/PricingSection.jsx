@@ -1,4 +1,5 @@
 ﻿import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { Check, ArrowRight } from "lucide-react";
 
 const GOLD = "#D4A030";
@@ -143,7 +144,8 @@ export default function PricingSection() {
                 ))}
               </div>
 
-              <button
+              <Link
+                to={plan.cta === "GET STARTED" ? "/register" : "/book-demo"}
                 className="w-full py-3.5 text-[10px] font-bold tracking-[0.18em] uppercase transition-all hover:opacity-85 flex items-center justify-center gap-2"
                 style={plan.popular
                   ? { background: GOLD_GRADIENT, color: "#0a0800" }
@@ -151,7 +153,7 @@ export default function PricingSection() {
                 }
               >
                 {plan.cta} <ArrowRight className="w-3 h-3" />
-              </button>
+              </Link>
             </div>
           ))}
         </div>
