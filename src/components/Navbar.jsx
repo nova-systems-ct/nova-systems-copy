@@ -57,15 +57,26 @@ export default function Navbar() {
           ))}
         </div>
 
-        <Link
-          to="/pricing"
-          className="hidden md:inline-flex items-center px-5 py-2 text-xs font-semibold tracking-wider uppercase transition-all hover:opacity-85"
-          style={{ border: `1px solid ${GOLD}`, color: GOLD }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = GOLD; e.currentTarget.style.color = "#0a0800"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = GOLD; }}
-        >
-          BOOK A DEMO
-        </Link>
+        <div className="hidden md:flex items-center gap-3">
+          <Link
+            to="/login"
+            className="text-xs font-semibold tracking-wider uppercase transition-colors"
+            style={{ color: "rgba(255,255,255,0.45)" }}
+            onMouseEnter={(e) => e.target.style.color = "white"}
+            onMouseLeave={(e) => e.target.style.color = "rgba(255,255,255,0.45)"}
+          >
+            LOG IN
+          </Link>
+          <Link
+            to="/pricing"
+            className="inline-flex items-center px-5 py-2 text-xs font-semibold tracking-wider uppercase transition-all hover:opacity-85"
+            style={{ border: `1px solid ${GOLD}`, color: GOLD }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = GOLD; e.currentTarget.style.color = "#0a0800"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = GOLD; }}
+          >
+            BOOK A DEMO
+          </Link>
+        </div>
 
         <button
           className="md:hidden text-white/70"
@@ -89,9 +100,17 @@ export default function Navbar() {
             </Link>
           ))}
           <Link
+            to="/login"
+            onClick={() => setMobileOpen(false)}
+            className="block py-2 text-sm text-center"
+            style={{ color: "rgba(255,255,255,0.45)" }}
+          >
+            LOG IN
+          </Link>
+          <Link
             to="/pricing"
             onClick={() => setMobileOpen(false)}
-            className="block text-center px-5 py-3 text-xs font-semibold tracking-wider uppercase mt-3"
+            className="block text-center px-5 py-3 text-xs font-semibold tracking-wider uppercase mt-1"
             style={{ border: `1px solid ${GOLD}`, color: GOLD }}
           >
             BOOK A DEMO

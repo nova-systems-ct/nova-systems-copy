@@ -1,17 +1,17 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight, Activity, Bell, Wrench, Globe } from "lucide-react";
 
 const GOLD = "#D4A030";
-const GOLD_BRIGHT = "#F0C040";
+const GOLD_BRIGHT = "#C8921A";
 const GOLD_DARK = "#8a6200";
 const GOLD_GRADIENT = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 
 const features = [
-  { icon: Activity, label: "Track Every Lead", sub: "See every call, contact, and opportunity in real time." },
-  { icon: Bell, label: "Smart Alerts", sub: "Get notified the moment revenue is at risk." },
-  { icon: Wrench, label: "Automate Workflows", sub: "Follow-ups, booking, CRM — all on autopilot." },
-  { icon: Globe, label: "Drive Revenue", sub: "Convert more of the leads you're already getting." },
+  { icon: Activity, label: "TRACK EVERY LEAD", sub: "See every call, contact, and opportunity in real time." },
+  { icon: Bell, label: "SMART ALERTS", sub: "Get notified the moment revenue is at risk." },
+  { icon: Wrench, label: "AUTOMATE WORKFLOWS", sub: "Follow-ups, booking, CRM - all on autopilot." },
+  { icon: Globe, label: "DRIVE REVENUE", sub: "Convert more of the leads you're already getting." },
 ];
 
 export default function Login() {
@@ -36,7 +36,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex" style={{ background: "#080600" }}>
 
-      {/* ── LEFT PANEL ─────────────────────────────────────────────────────── */}
+      {/* â"€â"€ LEFT PANEL â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <div className="hidden lg:flex lg:w-3/5 relative flex-col justify-between p-14 overflow-hidden">
 
         {/* Gold network background glow */}
@@ -45,44 +45,36 @@ export default function Login() {
             position: "absolute", inset: 0,
             background: "radial-gradient(ellipse at 30% 40%, rgba(212,160,48,0.12) 0%, transparent 60%), radial-gradient(ellipse at 80% 80%, rgba(212,160,48,0.06) 0%, transparent 50%)",
           }} />
-          {/* Grid lines */}
-          <svg className="absolute inset-0 w-full h-full opacity-[0.04]" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-                <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#D4A030" strokeWidth="0.5" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
+            {/* Dense node network - matches img1 left panel */}
+          <svg className="absolute inset-0 w-full h-full" style={{ opacity: 0.14 }}>
+            {/* Connection lines */}
+            {[
+              ["10%","12%","28%","8%"], ["28%","8%","48%","20%"], ["48%","20%","66%","5%"],
+              ["66%","5%","82%","18%"], ["82%","18%","92%","38%"], ["92%","38%","78%","52%"],
+              ["78%","52%","60%","42%"], ["60%","42%","42%","55%"], ["42%","55%","22%","45%"],
+              ["22%","45%","10%","62%"], ["10%","62%","18%","78%"], ["18%","78%","35%","85%"],
+              ["35%","85%","55%","80%"], ["55%","80%","72%","88%"], ["72%","88%","88%","72%"],
+              ["88%","72%","92%","38%"], ["48%","20%","60%","42%"], ["28%","8%","22%","45%"],
+              ["60%","42%","55%","80%"], ["42%","55%","35%","85%"], ["78%","52%","72%","88%"],
+              ["10%","12%","22%","45%"], ["66%","5%","78%","52%"],
+            ].map(([x1,y1,x2,y2], i) => (
+              <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={GOLD} strokeWidth="0.6" />
+            ))}
           </svg>
           {/* Node dots */}
           {[
-            [20, 15], [45, 30], [70, 10], [85, 45], [30, 60],
-            [60, 70], [15, 80], [75, 85], [50, 50], [90, 20],
-          ].map(([x, y], i) => (
-            <div
-              key={i}
-              className="absolute rounded-full"
-              style={{
-                left: `${x}%`, top: `${y}%`,
-                width: i % 3 === 0 ? 6 : 4,
-                height: i % 3 === 0 ? 6 : 4,
-                background: GOLD,
-                opacity: 0.25 + (i % 4) * 0.1,
-                transform: "translate(-50%,-50%)",
-              }}
-            />
+            [10,12,8],[28,8,6],[48,20,7],[66,5,5],[82,18,6],
+            [92,38,5],[78,52,8],[60,42,6],[42,55,7],[22,45,5],
+            [10,62,6],[18,78,5],[35,85,7],[55,80,6],[72,88,5],
+            [88,72,6],[50,33,4],[35,65,4],[70,65,4],
+          ].map(([x, y, sz], i) => (
+            <div key={i} className="absolute rounded-full" style={{
+              left: `${x}%`, top: `${y}%`, width: sz, height: sz,
+              background: GOLD, opacity: 0.18 + (i % 5) * 0.07,
+              transform: "translate(-50%,-50%)",
+              boxShadow: i % 4 === 0 ? `0 0 6px ${GOLD}55` : "none",
+            }} />
           ))}
-          {/* Connection lines */}
-          <svg className="absolute inset-0 w-full h-full" style={{ opacity: 0.06 }}>
-            <line x1="20%" y1="15%" x2="45%" y2="30%" stroke={GOLD} strokeWidth="0.8" />
-            <line x1="45%" y1="30%" x2="70%" y2="10%" stroke={GOLD} strokeWidth="0.8" />
-            <line x1="45%" y1="30%" x2="50%" y2="50%" stroke={GOLD} strokeWidth="0.8" />
-            <line x1="70%" y1="10%" x2="85%" y2="45%" stroke={GOLD} strokeWidth="0.8" />
-            <line x1="50%" y1="50%" x2="60%" y2="70%" stroke={GOLD} strokeWidth="0.8" />
-            <line x1="30%" y1="60%" x2="50%" y2="50%" stroke={GOLD} strokeWidth="0.8" />
-            <line x1="15%" y1="80%" x2="30%" y2="60%" stroke={GOLD} strokeWidth="0.8" />
-            <line x1="60%" y1="70%" x2="75%" y2="85%" stroke={GOLD} strokeWidth="0.8" />
-          </svg>
         </div>
 
         {/* Logo */}
@@ -122,8 +114,8 @@ export default function Login() {
                   <Icon className="w-4 h-4" style={{ color: GOLD }} />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white">{label}</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{sub}</p>
+                  <p className="text-[10px] font-black tracking-[0.18em] text-white">{label}</p>
+                  <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.32)" }}>{sub}</p>
                 </div>
               </div>
             ))}
@@ -139,7 +131,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* ── RIGHT PANEL ────────────────────────────────────────────────────── */}
+      {/* â"€â"€ RIGHT PANEL â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€ */}
       <div
         className="flex-1 flex flex-col justify-center px-8 md:px-14 py-14 relative"
         style={{ background: "rgba(255,255,255,0.025)", borderLeft: "1px solid rgba(255,255,255,0.07)" }}
@@ -154,7 +146,10 @@ export default function Login() {
         </div>
 
         <div className="max-w-sm w-full mx-auto">
-          <p className="text-[9px] tracking-[0.35em] uppercase mb-3" style={{ color: GOLD }}>WELCOME BACK</p>
+          <div className="flex items-center gap-3 mb-5">
+            <p className="text-[9px] tracking-[0.35em] uppercase whitespace-nowrap" style={{ color: GOLD }}>WELCOME BACK</p>
+            <div className="flex-1 h-px" style={{ background: `linear-gradient(to right, ${GOLD}60, transparent)` }} />
+          </div>
           <h2 className="text-2xl font-black text-white mb-2">Log in to Nova Systems</h2>
           <p className="text-xs mb-8 leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
             Access your dashboard and take control of your operational intelligence.
@@ -280,7 +275,7 @@ export default function Login() {
           <p className="text-center mt-8 text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>
             Don't have an account?{" "}
             <Link to="/pricing" className="font-semibold transition-colors hover:opacity-80" style={{ color: GOLD }}>
-              Book a demo →
+              Book a demo â†'
             </Link>
           </p>
         </div>
@@ -288,3 +283,4 @@ export default function Login() {
     </div>
   );
 }
+
