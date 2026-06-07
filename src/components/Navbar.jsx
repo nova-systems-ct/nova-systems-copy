@@ -23,10 +23,22 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <Link
           to="/"
-          className="text-sm font-bold tracking-[0.2em] uppercase"
-          style={{ color: GOLD }}
+          className="flex items-center gap-3"
         >
-          NOVA SYSTEMS
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="7" fill={GOLD} />
+            <text
+              x="16" y="23"
+              textAnchor="middle"
+              fontFamily="'Arial Black', Arial, sans-serif"
+              fontWeight="900"
+              fontSize="20"
+              fill="#0a0800"
+            >N</text>
+          </svg>
+          <span className="text-sm font-bold tracking-[0.2em] uppercase" style={{ color: GOLD }}>
+            NOVA SYSTEMS
+          </span>
         </Link>
 
         {/* Desktop */}
