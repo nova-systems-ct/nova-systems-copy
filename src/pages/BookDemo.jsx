@@ -70,7 +70,7 @@ ${form.message}
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: "hello@nova-systems.app",
+          to: "Isaac_0427@icloud.com",
           replyTo: form.email,
           subject: `Demo Request: ${form.name} - ${form.business}`,
           body,
@@ -80,7 +80,7 @@ ${form.message}
       });
     } catch {
       const encoded = encodeURIComponent(body);
-      window.open(`mailto:hello@nova-systems.app?subject=Demo%20Request%3A%20${encodeURIComponent(form.name)}&body=${encoded}`, "_blank");
+      window.open(`mailto:Isaac_0427@icloud.com?subject=Demo%20Request%3A%20${encodeURIComponent(form.name)}&body=${encoded}`, "_blank");
     }
     setLoading(false);
     setDone(true);

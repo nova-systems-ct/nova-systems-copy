@@ -35,7 +35,7 @@ export default function Register() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: "hello@nova-systems.app",
+          to: "Isaac_0427@icloud.com",
           subject: `New Registration: ${form.name} - ${form.business}`,
           body: `New account created:\nName: ${form.name}\nBusiness: ${form.business}\nEmail: ${form.email}\nPhone: ${form.phone}`,
           confirmTo: form.email,

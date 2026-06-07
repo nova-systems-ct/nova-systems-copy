@@ -53,7 +53,7 @@ export default function ChatBot() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        to: "hello@nova-systems.app",
+        to: "Isaac_0427@icloud.com",
         subject: `Nova Chat Lead: ${d.name || "Unknown"}`,
         body: `Chat Lead:\nName: ${d.name || "-"}\nBusiness: ${d.business || "-"}\nChallenge: ${d.challenge || "-"}\nAvailable: ${d.day || "-"}\nEmail: ${d.email || "-"}`,
       }),

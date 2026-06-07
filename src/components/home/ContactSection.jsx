@@ -2,7 +2,7 @@ import React, { useState } from "react";
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
-const MAILTO = "mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request";
+const MAILTO = "mailto:Isaac_0427@icloud.com?subject=Nova%20Systems%20Demo%20Request";
 
 export default function ContactSection() {
   const [form, setForm] = useState({ name: "", email: "", company: "", phone: "", message: "" });
@@ -16,14 +16,14 @@ export default function ContactSection() {
       await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, to: "hello@nova-systems.app" }),
+        body: JSON.stringify({ ...form, to: "Isaac_0427@icloud.com" }),
       });
     } catch {
       // fallback: open mailto if fetch fails
       const body = encodeURIComponent(
         `Name: ${form.name}\nEmail: ${form.email}\nCompany: ${form.company}\nPhone: ${form.phone}\n\n${form.message}`
       );
-      window.open(`mailto:hello@nova-systems.app?subject=Nova%20Systems%20Demo%20Request&body=${body}`, "_blank");
+      window.open(`mailto:Isaac_0427@icloud.com?subject=Nova%20Systems%20Demo%20Request&body=${body}`, "_blank");
     }
     setSending(false);
     setSubmitted(true);
