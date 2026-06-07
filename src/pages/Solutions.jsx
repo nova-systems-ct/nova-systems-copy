@@ -10,10 +10,10 @@ const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 
 const services = [
   {
     icon: Activity,
-    tag: "01 â€” NOVA PULSE",
+    tag: "01  -  NOVA PULSE",
     title: "Revenue Monitoring & Lead Intelligence",
     headline: "See every leak before revenue walks out the door.",
-    desc: "Nova Pulse is our real-time revenue intelligence platform. It tracks every inbound call, lead, and follow-up across your business â€” and alerts you the moment an opportunity is at risk. No more discovering missed calls three days later. No more guessing why your close rate dropped.",
+    desc: "Nova Pulse tracks every call, lead, and follow-up in real time - and alerts you the moment an opportunity is at risk.",
     features: [
       "Real-time call & lead tracking",
       "Automated missed-opportunity alerts",
@@ -26,10 +26,10 @@ const services = [
   },
   {
     icon: Wrench,
-    tag: "02 â€” CUSTOM SYSTEMS",
+    tag: "02  -  CUSTOM SYSTEMS",
     title: "Business Automation & CRM Infrastructure",
     headline: "Stop running your business on spreadsheets and sticky notes.",
-    desc: "We build the operational backbone your business needs to scale. Custom CRM pipelines, automated follow-up sequences, booking integrations, internal workflows â€” all designed around how your specific business works. Not a generic template. Your system.",
+    desc: "Custom CRM pipelines, automated follow-up, and booking integrations - all built around how your specific business works.",
     features: [
       "Custom CRM build & configuration",
       "Automated follow-up sequences",
@@ -42,10 +42,10 @@ const services = [
   },
   {
     icon: Globe,
-    tag: "03 â€” WEB INFRASTRUCTURE",
+    tag: "03  -  WEB INFRASTRUCTURE",
     title: "High-Converting Local Business Websites",
     headline: "Your website should be generating revenue, not just sitting there.",
-    desc: "We build fast, mobile-first websites for local businesses that are designed to convert visitors into leads. Every site includes embedded call tracking, contact capture, Google Business integration, and SEO foundations â€” so your online presence actually works for you.",
+    desc: "Fast, mobile-first sites with embedded call tracking, lead capture, and local SEO foundations - so your site generates revenue, not just traffic.",
     features: [
       "Mobile-first responsive design",
       "Embedded call tracking",
@@ -54,14 +54,14 @@ const services = [
       "Local SEO foundations",
       "Speed-optimized (Core Web Vitals)",
     ],
-    result: "Our websites generate 2â€“4x more leads from the same traffic.",
+    result: "Our websites generate 2 - 4x more leads from the same traffic.",
   },
   {
     icon: Phone,
-    tag: "04 â€” AI CALL HANDLING",
+    tag: "04  -  AI CALL HANDLING",
     title: "24/7 AI Inbound Call Response",
     headline: "Answer every call. Book every appointment. Even at 2am.",
-    desc: "Our AI attendant picks up every inbound call, qualifies the lead, and books an appointment â€” then passes a full summary to your team. No more voicemail black holes. No more leads lost to after-hours calls. Your business never stops responding.",
+    desc: "Our AI answers every call, qualifies the lead, and books an appointment - then hands off to your team with full context, 24/7.",
     features: [
       "24/7 AI inbound call answering",
       "Lead qualification scripting",

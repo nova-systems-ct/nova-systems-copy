@@ -1,38 +1,109 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Activity, Wrench, Globe, Phone } from "lucide-react";
 
 const GOLD = "#D4A030";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const services = [
   {
     icon: Activity,
     tag: "NOVA PULSE",
     title: "Revenue Leak Detection",
-    desc: "Real-time monitoring of every call, lead, and follow-up. Nova Pulse tracks what your team misses and alerts you before revenue walks out the door.",
-    stats: "Avg. 35% revenue recovery in 90 days",
+    desc: "Real-time tracking of every call, lead, and follow-up - with instant alerts before revenue walks out the door.",
+    stat: "35%",
+    statLabel: "avg revenue recovered in 90 days",
   },
   {
     icon: Wrench,
     tag: "CUSTOM SYSTEMS",
     title: "Business Automation",
-    desc: "We build the systems your business needs — CRM pipelines, automated follow-up sequences, booking integrations, and operational workflows tailored to how you work.",
-    stats: "Save 15+ hours per week on manual tasks",
+    desc: "Custom CRM pipelines and automated follow-up built around how your business actually works - not a template.",
+    stat: "15+",
+    statLabel: "hours saved per week",
   },
   {
     icon: Globe,
     tag: "WEB INFRASTRUCTURE",
     title: "High-Converting Websites",
-    desc: "Built for local businesses that need to dominate their market. Fast, mobile-first, SEO-optimized websites with embedded lead capture and call tracking.",
-    stats: "2–4x more leads from existing traffic",
+    desc: "Fast, mobile-first sites with lead capture, call tracking, and local SEO built in from day one.",
+    stat: "4x",
+    statLabel: "more leads from existing traffic",
   },
   {
     icon: Phone,
     tag: "AI CALL HANDLING",
     title: "24/7 AI Call Response",
-    desc: "Never miss another call. Our AI attendant answers, qualifies, and books appointments around the clock — then hands off to your team with full context.",
-    stats: "Answer 100% of calls, even after hours",
+    desc: "Our AI answers, qualifies, and books appointments around the clock - then hands off to your team with full context.",
+    stat: "100%",
+    statLabel: "of calls answered, even after hours",
   },
 ];
+
+function FlipCard({ service }) {
+  const Icon = service.icon;
+  return (
+    <div className="flip-card">
+      <div className="flip-card-inner">
+        <div
+          className="flip-card-face"
+          style={{
+            background: "rgba(255,255,255,0.025)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: 12, padding: 28,
+            display: "flex", flexDirection: "column", justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: `${GOLD}12`, border: `1px solid ${GOLD}35`,
+            }}>
+              <Icon style={{ width: 20, height: 20, color: GOLD }} />
+            </div>
+            <div>
+              <p style={{ fontSize: 9, letterSpacing: "0.25em", textTransform: "uppercase", fontWeight: 700, color: GOLD, margin: 0 }}>{service.tag}</p>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: "#fff", margin: "3px 0 0" }}>{service.title}</h3>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+            <div>
+              <p style={{ fontSize: 38, fontWeight: 900, color: GOLD, lineHeight: 1, margin: 0 }}>{service.stat}</p>
+              <p style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 3 }}>{service.statLabel}</p>
+            </div>
+            <p style={{ fontSize: 9, letterSpacing: "0.08em", color: "rgba(255,255,255,0.18)" }}>hover to explore →</p>
+          </div>
+        </div>
+
+        <div
+          className="flip-card-face flip-card-back"
+          style={{
+            background: `${GOLD}10`, border: `1px solid ${GOLD}40`,
+            borderRadius: 12, padding: 28,
+            display: "flex", flexDirection: "column", justifyContent: "space-between",
+          }}
+        >
+          <div>
+            <p style={{ fontSize: 9, letterSpacing: "0.25em", textTransform: "uppercase", fontWeight: 700, color: GOLD, marginBottom: 14 }}>{service.tag}</p>
+            <p style={{ fontSize: 14, color: "rgba(255,255,255,0.8)", lineHeight: 1.65 }}>{service.desc}</p>
+          </div>
+          <Link
+            to="/solutions"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase",
+              padding: "10px 18px", background: GOLD_GRADIENT, color: "#0a0800",
+              textDecoration: "none", alignSelf: "flex-start",
+            }}
+          >
+            LEARN MORE →
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function SolutionSection() {
   return (
@@ -41,63 +112,33 @@ export default function SolutionSection() {
         className="absolute inset-0 pointer-events-none"
         style={{ background: "radial-gradient(ellipse at 50% 60%, rgba(212,160,48,0.05) 0%, transparent 65%)" }}
       />
-
       <div className="max-w-6xl mx-auto relative">
         <div className="text-center mb-14">
-          <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>
-            WHAT WE DO
-          </p>
+          <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>WHAT WE DO</p>
           <h2 className="text-4xl md:text-5xl font-black text-white">
-            Operational infrastructure<br />for local businesses.
+            Four systems.<br />One goal: more revenue.
           </h2>
-          <p className="mt-4 text-sm max-w-lg mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
-            Nova Systems builds the revenue engine behind your business — from lead capture to customer conversion.
-          </p>
         </div>
-
         <div className="grid md:grid-cols-2 gap-5">
-          {services.map((s) => (
-            <div
-              key={s.tag}
-              className="relative rounded-xl p-8 group transition-all duration-300 hover:scale-[1.015]"
-              style={{
-                background: "rgba(255,255,255,0.025)",
-                border: "1px solid rgba(255,255,255,0.07)",
-              }}
-            >
-              <div className="absolute top-0 left-0 w-10 h-10 pointer-events-none" style={{
-                background: `linear-gradient(135deg, ${GOLD}30 0%, transparent 60%)`,
-                borderTopLeftRadius: "12px",
-              }} />
-
-              <div className="flex items-start gap-5">
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: `${GOLD}12`, border: `1px solid ${GOLD}35` }}
-                >
-                  <s.icon className="w-5 h-5" style={{ color: GOLD }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[9px] tracking-[0.25em] uppercase font-bold mb-1" style={{ color: GOLD }}>
-                    {s.tag}
-                  </p>
-                  <h3 className="text-base font-bold text-white mb-2">{s.title}</h3>
-                  <p className="text-xs leading-relaxed mb-4" style={{ color: "rgba(255,255,255,0.38)" }}>
-                    {s.desc}
-                  </p>
-                  <div
-                    className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                    style={{ background: `${GOLD}10`, border: `1px solid ${GOLD}25` }}
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: GOLD }} />
-                    <span className="text-[10px] font-semibold" style={{ color: GOLD }}>{s.stats}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+          {services.map((s) => <FlipCard key={s.tag} service={s} />)}
         </div>
       </div>
+
+      <style>{`
+        .flip-card { perspective: 1000px; height: 210px; }
+        .flip-card-inner {
+          position: relative; width: 100%; height: 100%;
+          transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+          transform-style: preserve-3d;
+        }
+        .flip-card:hover .flip-card-inner { transform: rotateY(180deg); }
+        .flip-card-face {
+          position: absolute; inset: 0;
+          -webkit-backface-visibility: hidden;
+          backface-visibility: hidden;
+        }
+        .flip-card-back { transform: rotateY(180deg); }
+      `}</style>
     </section>
   );
 }

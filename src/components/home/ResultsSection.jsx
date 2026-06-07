@@ -43,7 +43,7 @@ export default function ResultsSection() {
             <p className="text-sm text-white/50 italic leading-relaxed mt-2">
               NOVA Pulse gave us the visibility we never had. We found leaks we didn't even know existed.
             </p>
-            <p className="text-sm text-white mt-4 font-medium">– Jason M.</p>
+            <p className="text-sm text-white mt-4 font-medium">- Jason M.</p>
             <p className="text-xs text-white/35">CEO, Summit Financial</p>
           </div>
         </div>

@@ -1,8 +1,49 @@
-﻿import React from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronRight, MapPin, Target, Eye, Users, ArrowLeft } from "lucide-react";
+
+function useCountUp(target, duration = 1800) {
+  const [count, setCount] = useState(0);
+  const ref = useRef(null);
+  const triggered = useRef(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting || triggered.current) return;
+      triggered.current = true;
+      obs.disconnect();
+      const start = performance.now();
+      const tick = (now) => {
+        const t = Math.min((now - start) / duration, 1);
+        const ease = 1 - Math.pow(1 - t, 3);
+        setCount(Math.round(ease * target));
+        if (t < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }, { threshold: 0.5 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [target, duration]);
+  return [count, ref];
+}
+
+function StatCard({ label, target, suffix, prefix, sub }) {
+  const [count, ref] = useCountUp(target);
+  return (
+    <div ref={ref}
+      className="flex items-center justify-between rounded-xl px-6 py-4"
+      style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
+      <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>{label}</span>
+      <div className="text-right">
+        <p className="text-lg font-black" style={{ color: "#D4A030" }}>{prefix || ""}{count}{suffix}</p>
+        <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>{sub}</p>
+      </div>
+    </div>
+  );
+}
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
@@ -21,7 +62,7 @@ const values = [
   {
     icon: Users,
     title: "Local Business First",
-    desc: "We're built for local service businesses â€” HVAC, legal, healthcare, home services, auto â€” not enterprise SaaS companies.",
+    desc: "We're built for local service businesses - HVAC, legal, healthcare, home services, auto - not enterprise SaaS companies.",
   },
 ];
 
@@ -56,7 +97,7 @@ export default function Company() {
               for real businesses.
             </h1>
             <p className="text-base leading-relaxed max-w-xl" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Nova Systems is a Connecticut-based company that builds revenue infrastructure for local businesses â€” not Fortune 500s. We find your revenue leaks, fix your systems, and make sure every lead that finds you becomes a customer.
+              Nova Systems is a Connecticut-based company that builds revenue infrastructure for local businesses - not Fortune 500s. We find your revenue leaks, fix your systems, and make sure every lead that finds you becomes a customer.
             </p>
             <div className="flex items-center gap-2 mt-6" style={{ color: "rgba(255,255,255,0.3)" }}>
               <MapPin className="w-3.5 h-3.5" style={{ color: GOLD }} />
@@ -73,13 +114,10 @@ export default function Company() {
                 <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>FOUNDED BY</p>
                 <h2 className="text-3xl md:text-4xl font-black text-white mb-5">Isaac Nova</h2>
                 <p className="text-sm leading-relaxed mb-5" style={{ color: "rgba(255,255,255,0.45)" }}>
-                  Isaac Nova founded Nova Systems after watching local businesses he cared about bleed revenue from problems they didn't even know they had. A missed call here. A follow-up dropped there. A website that loaded too slow and cost them a booking.
-                </p>
-                <p className="text-sm leading-relaxed mb-5" style={{ color: "rgba(255,255,255,0.45)" }}>
-                  He built Nova Systems to solve exactly that â€” an operational infrastructure company that gives local businesses the same lead capture, automation, and revenue intelligence tools that enterprise companies use, but built and priced for the real world.
+                  Isaac built Nova Systems after watching local businesses bleed revenue from problems they didn't even know they had - missed calls, dropped follow-ups, websites that cost them bookings.
                 </p>
                 <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
-                  Based in Connecticut. Obsessed with results. Every system we build is backed by a commitment to your revenue growth.
+                  Based in Connecticut. Every system we build is backed by a commitment to your revenue growth.
                 </p>
               </div>
 
@@ -121,8 +159,8 @@ export default function Company() {
             <h2 className="text-3xl md:text-5xl font-black text-white mb-6">
               Eliminate revenue leaks<br />for every local business.
             </h2>
-            <p className="text-base leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
-              Local businesses are the backbone of every community. They deserve the same competitive infrastructure as billion-dollar companies. We're here to level the playing field â€” one recovered lead at a time.
+            <p className="text-base leading-relaxed max-w-xl mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
+              Local businesses deserve the same infrastructure as billion-dollar companies. We're here to level the playing field.
             </p>
           </div>
         </section>
@@ -161,7 +199,7 @@ export default function Company() {
                 <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>WHO WE SERVE</p>
                 <h2 className="text-3xl font-black text-white mb-5">Built for local service businesses.</h2>
                 <p className="text-sm leading-relaxed mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
-                  We specialize in local businesses where every lead matters â€” because a missed call isn't just an inconvenience, it's hundreds or thousands of dollars walking to your competitor.
+                  We specialize in local businesses where every lead matters - because a missed call isn't just an inconvenience, it's hundreds or thousands of dollars walking to your competitor.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   {["HVAC & Home Services", "Legal & Law Firms", "Healthcare & Med Spas", "Auto Dealers & Shops", "Real Estate", "Contractors & Builders"].map((industry) => (
@@ -174,24 +212,10 @@ export default function Company() {
               </div>
 
               <div className="space-y-4">
-                {[
-                  { label: "Average Revenue Recovered", value: "35%", sub: "in the first 90 days" },
-                  { label: "Calls Answered", value: "100%", sub: "with AI call handling" },
-                  { label: "Hours Saved Weekly", value: "15+", sub: "per team through automation" },
-                  { label: "Lead Conversion Lift", value: "2â€“4x", sub: "from web infrastructure upgrades" },
-                ].map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="flex items-center justify-between rounded-xl px-6 py-4"
-                    style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}
-                  >
-                    <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>{stat.label}</span>
-                    <div className="text-right">
-                      <p className="text-lg font-black" style={{ color: GOLD }}>{stat.value}</p>
-                      <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>{stat.sub}</p>
-                    </div>
-                  </div>
-                ))}
+                <StatCard label="Revenue Recovered" target={35} suffix="%" sub="in the first 90 days" />
+                <StatCard label="Calls Answered" target={100} suffix="%" sub="with AI call handling" />
+                <StatCard label="Hours Saved Weekly" target={15} suffix="+" sub="per team through automation" />
+                <StatCard label="Lead Conversion Lift" target={4} suffix="x" sub="from web infrastructure upgrades" />
               </div>
             </div>
           </div>

@@ -1,19 +1,18 @@
 ﻿import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, Phone, Clock, AlertTriangle } from "lucide-react";
-import video1 from "@/assets/Video 1.mp4";
 import video3 from "@/assets/video 3.mp4";
 import video4 from "@/assets/video 4.mp4";
 
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#C8921A";
 const GOLD_DARK = "#8a6200";
-const VIDEOS = [video3, video1, video4];
+const VIDEOS = [video3, video4];
 
 const MSG1 = "Hey! Sorry we missed your call. Lock in your booking slot here: [Link]";
 const MSG2 = "Awesome, just booked for 3:00 PM!";
 
-// â”€â”€ iPhone notification popup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ iPhone notification popup â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 function PhoneNotification({ visible }) {
   const [t1, setT1] = useState("");
   const [t2, setT2] = useState("");
@@ -116,7 +115,7 @@ function PhoneNotification({ visible }) {
   );
 }
 
-// â”€â”€ Alert card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Alert card â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 function AlertCard({ icon, label, sub, gold, highlight, onMouseEnter, onMouseLeave }) {
   return (
     <div
@@ -154,7 +153,7 @@ function AlertCard({ icon, label, sub, gold, highlight, onMouseEnter, onMouseLea
   );
 }
 
-// â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Main export â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 export default function HeroSection() {
   const [notifVisible, setNotifVisible] = useState(false);
   const [vidIdx, setVidIdx] = useState(0);
@@ -175,7 +174,7 @@ export default function HeroSection() {
 
       <section className="relative h-screen overflow-hidden bg-black">
 
-        {/* RIGHT panel â€” looping video background, cycles video1 â†’ video2 â†’ video3 â†’ video1 */}
+        {/* RIGHT panel - looping video background, cycles video1 â†’ video2 â†’ video3 â†’ video1 */}
         <div
           className="absolute inset-0"
           style={{ zIndex: 5, clipPath: "polygon(62% 0%, 100% 0%, 100% 100%, 40% 100%)" }}
@@ -184,7 +183,7 @@ export default function HeroSection() {
             ref={videoRef}
             muted
             playsInline
-            onEnded={() => setVidIdx((i) => (i + 1) % 3)}
+            onEnded={() => setVidIdx((i) => (i + 1) % 2)}
             className="absolute inset-0 w-full h-full object-cover"
           />
           <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.60)" }} />
@@ -264,7 +263,7 @@ export default function HeroSection() {
           </Link>
         </div>
 
-        {/* ALERT CARDS â€” hover triggers iPhone notification */}
+        {/* ALERT CARDS - hover triggers iPhone notification */}
         <div className="absolute inset-0" style={{ zIndex: 35, pointerEvents: "none" }}>
           <div className="hidden md:block absolute" style={{ top: "28%", left: "63%" }}>
             <AlertCard

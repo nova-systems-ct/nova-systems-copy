@@ -116,7 +116,7 @@ export default function Resources() {
           <div className="max-w-6xl mx-auto">
             {activeCategory !== "All" && (
               <p className="text-[9px] tracking-[0.35em] uppercase mb-8" style={{ color: GOLD }}>
-                {activeCategory.toUpperCase()} — {filtered.length} ARTICLE{filtered.length !== 1 ? "S" : ""}
+                {activeCategory.toUpperCase()} - {filtered.length} ARTICLE{filtered.length !== 1 ? "S" : ""}
               </p>
             )}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">

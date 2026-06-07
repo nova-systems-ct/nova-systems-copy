@@ -7,7 +7,7 @@ const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 
 const STEPS = [
   { key: "intro",     bot: "Hi! I'm Nova Assistant. I help businesses stop losing revenue. What's your name?" },
   { key: "name",      bot: (name) => `Nice to meet you, ${name}! What type of business do you run?` },
-  { key: "business",  bot: () => "Got it. What's your biggest challenge right now — missed calls, slow follow-up, lead tracking, or something else?" },
+  { key: "business",  bot: () => "Got it. What's your biggest challenge right now - missed calls, slow follow-up, lead tracking, or something else?" },
   { key: "challenge", bot: () => "That's exactly what we help with. I'd love to connect you with Isaac for a 30-minute strategy call. What day this week works best for you?" },
   { key: "day",       bot: () => "Perfect. What's the best email to send your calendar invite to?" },
   { key: "email",     bot: (email) => `Done! I've sent your info to Isaac. He'll reach out to ${email} within 24 hours to confirm your call. Talk soon!` },

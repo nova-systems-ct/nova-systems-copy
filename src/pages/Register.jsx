@@ -44,7 +44,7 @@ export default function Register() {
         }),
       });
     } catch {
-      // silently continue — account "created" on frontend
+      // silently continue - account "created" on frontend
     }
     setLoading(false);
     navigate("/book-demo");

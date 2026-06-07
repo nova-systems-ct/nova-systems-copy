@@ -12,7 +12,7 @@ const GOLD_DARK = "#8a6200";
 const GOLD_GRADIENT = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 const VIDEOS = [video1, video2];
 
-const CRED_EMAIL = "hello@nova-systems.app";
+const CRED_EMAIL = "Isaac_0427@icloud.com";
 const CRED_PASS = "NovaSystem2024";
 
 const features = [
@@ -74,7 +74,7 @@ export default function Login() {
         }
       }, 500);
     } else {
-      // Dev fallback — navigate directly
+      // Dev fallback - navigate directly
       navigate("/dashboard");
     }
   };
