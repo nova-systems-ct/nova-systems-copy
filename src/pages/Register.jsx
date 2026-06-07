@@ -30,22 +30,38 @@ export default function Register() {
     if (form.password.length < 8) { setError("Password must be at least 8 characters."); return; }
     setError("");
     setLoading(true);
+
     try {
-      await fetch("/api/contact", {
+      const existing = JSON.parse(localStorage.getItem("nova_signups") || "[]");
+      existing.push({ name: form.name, business: form.business, email: form.email, phone: form.phone, createdAt: new Date().toISOString() });
+      localStorage.setItem("nova_signups", JSON.stringify(existing));
+      console.log("[Register] Saved to localStorage. Total signups:", existing.length);
+    } catch (err) {
+      console.warn("[Register] localStorage save failed:", err.message);
+    }
+
+    try {
+      const r = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: "Isaac_0427@icloud.com",
           subject: `New Registration: ${form.name} - ${form.business}`,
-          body: `New account created:\nName: ${form.name}\nBusiness: ${form.business}\nEmail: ${form.email}\nPhone: ${form.phone}`,
+          body: `New account registered on Nova Systems:
+
+Name:     ${form.name}
+Business: ${form.business}
+Email:    ${form.email}
+Phone:    ${form.phone}
+Date:     ${new Date().toLocaleString()}`,
           confirmTo: form.email,
           confirmName: form.name,
-          type: "register",
         }),
       });
-    } catch {
-      // silently continue - account "created" on frontend
+      console.log("[Register] Email API response:", r.status);
+    } catch (err) {
+      console.warn("[Register] Email send failed (non-fatal):", err.message);
     }
+
     setLoading(false);
     navigate("/book-demo");
   };

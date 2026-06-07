@@ -14,7 +14,7 @@ export default function CTASection() {
             Ready to stop losing revenue?
           </h2>
           <p className="text-sm text-white/40 mt-2">
-            Let's plug the leaks and grow your business.
+            Book a free 30-minute strategy call.
           </p>
         </div>
         <div className="flex items-center gap-5 flex-shrink-0">

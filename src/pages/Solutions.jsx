@@ -104,7 +104,7 @@ export default function Solutions() {
               }}>local businesses<br />unstoppable.</span>
             </h1>
             <p className="text-base leading-relaxed max-w-xl" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Four core services. One mission: stop revenue from leaking out of your business and start capturing every opportunity you're currently missing.
+              Four systems. One mission: stop losing revenue.
             </p>
           </div>
         </section>

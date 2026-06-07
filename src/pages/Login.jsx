@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight, Activity, Bell, Wrench, TrendingUp } from "lucide-react";
-
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 import video1 from "@/assets/Video 1.mp4";
 import video2 from "@/assets/video 2.mp4";
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#C8921A";
@@ -12,14 +12,15 @@ const GOLD_DARK = "#8a6200";
 const GOLD_GRADIENT = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 const VIDEOS = [video1, video2];
 
+// Admin credentials — change here to update login
 const CRED_EMAIL = "Isaac_0427@icloud.com";
 const CRED_PASS = "NovaSystem2024";
 
 const features = [
-  { icon: Activity, label: "TRACK EVERY LEAD", sub: "See every call, contact, and opportunity in real time." },
-  { icon: Bell, label: "SMART ALERTS", sub: "Get notified the moment revenue is at risk." },
-  { icon: Wrench, label: "AUTOMATE WORKFLOWS", sub: "Follow-ups, booking, CRM - all on autopilot." },
-  { icon: TrendingUp, label: "DRIVE REVENUE", sub: "Convert more of the leads you're already getting." },
+  { icon: Activity, label: "TRACK EVERY LEAD", sub: "Every call, contact, and opportunity in real time." },
+  { icon: Bell, label: "SMART ALERTS", sub: "Know the moment revenue is at risk." },
+  { icon: Wrench, label: "AUTOMATE WORKFLOWS", sub: "Follow-ups, booking, CRM — on autopilot." },
+  { icon: TrendingUp, label: "DRIVE REVENUE", sub: "Convert more of the leads you already have." },
 ];
 
 export default function Login() {
@@ -45,12 +46,26 @@ export default function Login() {
   const handleSubmit = (e) => {
     e.preventDefault();
     setError("");
-    if (email !== CRED_EMAIL || password !== CRED_PASS) {
+
+    const enteredEmail = email.trim().toLowerCase();
+    const enteredPass = password.trim();
+    const expectedEmail = CRED_EMAIL.trim().toLowerCase();
+    const expectedPass = CRED_PASS.trim();
+
+    console.log("[Login] Credential check:", {
+      enteredEmail,
+      expectedEmail,
+      emailMatch: enteredEmail === expectedEmail,
+      passMatch: enteredPass === expectedPass,
+    });
+
+    if (enteredEmail !== expectedEmail || enteredPass !== expectedPass) {
       setError("Invalid email or password.");
       return;
     }
+
     setLoading(true);
-    setTimeout(() => navigate("/dashboard"), 900);
+    setTimeout(() => navigate("/dashboard"), 600);
   };
 
   const handleGoogleLogin = () => {
@@ -74,7 +89,6 @@ export default function Login() {
         }
       }, 500);
     } else {
-      // Dev fallback - navigate directly
       navigate("/dashboard");
     }
   };
@@ -82,21 +96,17 @@ export default function Login() {
   return (
     <div className="min-h-screen flex" style={{ background: "#080600" }}>
 
-      {/* LEFT PANEL - looping video background */}
+      {/* LEFT PANEL */}
       <div className="hidden lg:flex lg:w-3/5 relative flex-col justify-between p-14 overflow-hidden">
-
-        {/* Video BG */}
         <video
           ref={videoRef}
           muted
           playsInline
-          onEnded={() => setVidIdx((i) => (i + 1) % 2)}
+          onEnded={() => setVidIdx((i) => (i + 1) % VIDEOS.length)}
           className="absolute inset-0 w-full h-full object-cover"
           style={{ zIndex: 0 }}
         />
-        {/* Dark overlay */}
-        <div className="absolute inset-0" style={{ zIndex: 1, background: "rgba(4,3,0,0.78)" }} />
-        {/* Gold glow overlay */}
+        <div className="absolute inset-0" style={{ zIndex: 1, background: "rgba(4,3,0,0.80)" }} />
         <div className="absolute inset-0 pointer-events-none" style={{
           zIndex: 2,
           background: "radial-gradient(ellipse at 30% 40%, rgba(212,160,48,0.10) 0%, transparent 60%)",
@@ -111,22 +121,17 @@ export default function Login() {
           <span className="text-sm font-bold tracking-[0.2em] uppercase" style={{ color: GOLD }}>NOVA SYSTEMS</span>
         </div>
 
-        {/* Main copy */}
+        {/* Copy */}
         <div className="relative" style={{ zIndex: 10 }}>
-          <p className="text-[9px] tracking-[0.35em] uppercase mb-6" style={{ color: GOLD }}>OPERATIONAL INTELLIGENCE</p>
-          <h1
-            className="font-black text-white leading-[0.88] mb-8"
-            style={{ fontSize: "clamp(2.8rem, 5vw, 4.5rem)", letterSpacing: "-0.02em" }}
-          >
+          <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>OPERATIONAL INTELLIGENCE</p>
+          <h1 className="font-black text-white leading-[0.9] mb-7" style={{ fontSize: "clamp(2.8rem,5vw,4.5rem)", letterSpacing: "-0.02em" }}>
             TOTAL VISIBILITY.<br />
-            <span style={{
-              background: `linear-gradient(90deg, ${GOLD} 0%, ${GOLD_BRIGHT} 50%, ${GOLD} 100%)`,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}>TOTAL CONTROL.</span>
+            <span style={{ background: `linear-gradient(90deg,${GOLD} 0%,${GOLD_BRIGHT} 50%,${GOLD} 100%)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              TOTAL CONTROL.
+            </span>
           </h1>
-          <p className="text-sm leading-relaxed max-w-sm mb-10" style={{ color: "rgba(255,255,255,0.45)" }}>
-            Nova Systems gives you the intelligence to track every lead, optimize every workflow, and stop losing opportunities.
+          <p className="text-sm mb-10" style={{ color: "rgba(255,255,255,0.4)", maxWidth: 320 }}>
+            Stop losing leads. Start capturing every opportunity.
           </p>
           <div className="space-y-5">
             {features.map(({ icon: Icon, label, sub }) => (
@@ -137,19 +142,16 @@ export default function Login() {
                 </div>
                 <div>
                   <p className="text-[10px] font-black tracking-[0.18em] text-white">{label}</p>
-                  <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.32)" }}>{sub}</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.32)" }}>{sub}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Footer tag */}
         <div className="relative flex items-center gap-2" style={{ zIndex: 10 }}>
           <div className="w-1.5 h-1.5 rounded-full" style={{ background: GOLD }} />
-          <p className="text-[10px] tracking-[0.2em] uppercase" style={{ color: "rgba(255,255,255,0.25)" }}>
-            Secure. Reliable. Built for scale.
-          </p>
+          <p className="text-[10px] tracking-[0.2em] uppercase" style={{ color: "rgba(255,255,255,0.25)" }}>Secure. Reliable. Built for scale.</p>
         </div>
       </div>
 
@@ -170,11 +172,11 @@ export default function Login() {
         <div className="max-w-sm w-full mx-auto">
           <div className="flex items-center gap-3 mb-5">
             <p className="text-[9px] tracking-[0.35em] uppercase whitespace-nowrap" style={{ color: GOLD }}>WELCOME BACK</p>
-            <div className="flex-1 h-px" style={{ background: `linear-gradient(to right, ${GOLD}60, transparent)` }} />
+            <div className="flex-1 h-px" style={{ background: `linear-gradient(to right,${GOLD}60,transparent)` }} />
           </div>
-          <h2 className="text-2xl font-black text-white mb-2">Log in to Nova Systems</h2>
-          <p className="text-xs mb-8 leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
-            Access your dashboard and take control of your operational intelligence.
+          <h2 className="text-2xl font-black text-white mb-1">Log in to Nova Systems</h2>
+          <p className="text-xs mb-8" style={{ color: "rgba(255,255,255,0.35)" }}>
+            Access your dashboard and operational intelligence.
           </p>
 
           {error && (
@@ -190,14 +192,15 @@ export default function Login() {
                 Email Address
               </label>
               <input
-                type="email" required
+                type="email"
+                required
                 placeholder={CRED_EMAIL}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 text-sm text-white placeholder-white/20 rounded-lg outline-none transition-all bg-transparent"
                 style={{ border: "1px solid rgba(255,255,255,0.12)" }}
-                onFocus={(e) => e.target.style.borderColor = `${GOLD}70`}
-                onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
+                onFocus={(e) => (e.target.style.borderColor = `${GOLD}70`)}
+                onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
               />
             </div>
 
@@ -207,14 +210,15 @@ export default function Login() {
               </label>
               <div className="relative">
                 <input
-                  type={showPw ? "text" : "password"} required
+                  type={showPw ? "text" : "password"}
+                  required
                   placeholder={CRED_PASS}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-3 pr-12 text-sm text-white placeholder-white/20 rounded-lg outline-none transition-all bg-transparent"
                   style={{ border: "1px solid rgba(255,255,255,0.12)" }}
-                  onFocus={(e) => e.target.style.borderColor = `${GOLD}70`}
-                  onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.12)"}
+                  onFocus={(e) => (e.target.style.borderColor = `${GOLD}70`)}
+                  onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
                 />
                 <button type="button" onClick={() => setShowPw(!showPw)}
                   className="absolute right-3 top-1/2 -translate-y-1/2"
@@ -250,7 +254,7 @@ export default function Login() {
 
           <div className="flex items-center gap-3 my-6">
             <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
-            <span className="text-[10px] uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.2)" }}>or continue with</span>
+            <span className="text-[10px] uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.2)" }}>or</span>
             <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.07)" }} />
           </div>
 
@@ -269,13 +273,13 @@ export default function Login() {
             <button type="button"
               className="flex items-center justify-center gap-2 py-3 text-xs font-semibold transition-all"
               style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.55)", borderRadius: 8 }}>
-              <span className="font-black text-sm" style={{ color: "rgba(255,255,255,0.7)" }}>⊞</span>
+              <span className="font-black text-sm" style={{ color: "rgba(255,255,255,0.7)" }}>&#x2B22;</span>
               Microsoft
             </button>
           </div>
 
           <p className="text-center mt-8 text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link to="/book-demo" className="font-semibold transition-colors hover:opacity-80" style={{ color: GOLD }}>
               Book a demo
             </Link>

@@ -245,7 +245,7 @@ export default function HeroSection() {
           </h1>
 
           <p className="text-white/55 mt-6 leading-relaxed" style={{ fontSize: "clamp(0.95rem, 1.2vw, 1.1rem)", maxWidth: "420px" }}>
-            Every missed call is a customer walking to your competitor. Nova Systems deploys premium web infrastructure, AI-driven lead capture, and presence kiosks to scale your operations.
+            Every missed call is money walking out your door. We stop the leak.
           </p>
 
           <Link

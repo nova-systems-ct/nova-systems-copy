@@ -97,7 +97,7 @@ export default function Company() {
               for real businesses.
             </h1>
             <p className="text-base leading-relaxed max-w-xl" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Nova Systems is a Connecticut-based company that builds revenue infrastructure for local businesses - not Fortune 500s. We find your revenue leaks, fix your systems, and make sure every lead that finds you becomes a customer.
+              We build revenue infrastructure for local businesses. We find the leaks, fix the systems, and make sure every lead converts.
             </p>
             <div className="flex items-center gap-2 mt-6" style={{ color: "rgba(255,255,255,0.3)" }}>
               <MapPin className="w-3.5 h-3.5" style={{ color: GOLD }} />

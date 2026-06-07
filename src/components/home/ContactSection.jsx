@@ -50,7 +50,7 @@ export default function ContactSection() {
               }}>losing revenue?</span>
             </h2>
             <p className="mt-5 text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.4)" }}>
-              Book a demo and see how Nova Pulse can help your team close more deals.
+              30 minutes. We find your leaks and show you exactly how to fix them.
             </p>
             <div className="mt-8 space-y-3">
               {["No obligation", "Personalized demo", "See ROI in real conversations"].map((item) => (

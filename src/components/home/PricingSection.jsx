@@ -70,7 +70,7 @@ export default function PricingSection() {
           <p className="text-[9px] tracking-[0.35em] uppercase mb-4" style={{ color: GOLD }}>PRICING</p>
           <h2 className="text-4xl md:text-5xl font-black text-white">Simple. Transparent. Scalable.</h2>
           <p className="mt-3 text-sm max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
-            Choose the plan that fits your business and start recovering lost revenue today.
+            No contracts. Cancel anytime.
           </p>
 
           <div className="flex items-center justify-center gap-3 mt-8">
