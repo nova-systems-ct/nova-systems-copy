@@ -1,13 +1,17 @@
-import React, { useState } from "react";
-import { CheckCircle, AlertTriangle, ArrowRight } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { CheckCircle, AlertTriangle, ArrowRight, Info } from "lucide-react";
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const POSITIONS = [
-  "Videographer / Content Creator",
-  "Social Media Manager",
-  "Brand Ambassador / Sales",
+  { id: "videographer",   label: "Lead Videographer / Content Creator",       open: true },
+  { id: "social-media",   label: "Social Media Manager",                       open: true },
+  { id: "ambassador",     label: "Brand Ambassador / Sales Representative",    open: true },
+  { id: "drone",          label: "Drone Operator / Aerial Cinematographer",    open: true },
+  { id: "web-dev",        label: "Web Developer Intern",                       open: false },
+  { id: "graphic-designer", label: "Graphic Designer",                         open: false },
+  { id: "client-success", label: "Client Success Coordinator",                 open: false },
 ];
 
 const EDITING_SOFTWARE = ["Adobe Premiere Pro", "Final Cut Pro", "CapCut", "DaVinci Resolve", "iMovie", "Other"];
@@ -56,9 +60,9 @@ function YesNo({ value, onChange }) {
   );
 }
 
-export default function ApplicationForm() {
+export default function ApplicationForm({ preselectedPosition }) {
   const [form, setForm] = useState({
-    name: "", email: "", phone: "", position: "",
+    name: "", email: "", phone: "", position: preselectedPosition || "",
     canRecord: "", ownsCamera: "", hasDrone: "",
     hasEditingExp: "", editingSoftware: "",
     portfolioUrl: "", resumeFile: null, resumeName: "",
@@ -67,6 +71,13 @@ export default function ApplicationForm() {
   });
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+
+  // Update position if parent changes preselectedPosition
+  useEffect(() => {
+    if (preselectedPosition) {
+      setForm((f) => ({ ...f, position: preselectedPosition }));
+    }
+  }, [preselectedPosition]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const setVal = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
@@ -78,32 +89,37 @@ export default function ApplicationForm() {
     if (file) setForm((f) => ({ ...f, resumeFile: file, resumeName: file.name }));
   };
 
+  const selectedPosition = POSITIONS.find((p) => p.id === form.position);
+  const isFilled = selectedPosition && !selectedPosition.open;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    // Save to localStorage for Dashboard display
+    // Save to localStorage for Dashboard
     try {
       const existing = JSON.parse(localStorage.getItem("nova_applications") || "[]");
       existing.unshift({
         id: Date.now().toString(),
         name: form.name, email: form.email, phone: form.phone,
-        position: form.position, canRecord: form.canRecord,
-        ownsCamera: form.ownsCamera, hasDrone: form.hasDrone,
-        hasEditingExp: form.hasEditingExp, editingSoftware: form.editingSoftware,
-        portfolioUrl: form.portfolioUrl, resumeName: form.resumeName,
-        experience: form.experience, education: form.education,
-        whyNova: form.whyNova, availability: form.availability,
-        expectedPay: form.expectedPay,
+        position: selectedPosition?.label || form.position,
+        canRecord: form.canRecord, ownsCamera: form.ownsCamera,
+        hasDrone: form.hasDrone, hasEditingExp: form.hasEditingExp,
+        editingSoftware: form.editingSoftware, portfolioUrl: form.portfolioUrl,
+        resumeName: form.resumeName, experience: form.experience,
+        education: form.education, whyNova: form.whyNova,
+        availability: form.availability, expectedPay: form.expectedPay,
+        filledPosition: isFilled,
         status: "new", submittedAt: new Date().toISOString(),
       });
       localStorage.setItem("nova_applications", JSON.stringify(existing));
     } catch {}
 
+    const posLabel = selectedPosition?.label || form.position;
     const body = `
 NEW JOB APPLICATION — Nova Systems
 
-POSITION: ${form.position}
+POSITION: ${posLabel}${isFilled ? " (FILLED — future consideration)" : ""}
 
 APPLICANT:
 Name: ${form.name}
@@ -140,7 +156,7 @@ Expected Pay Per Deliverable: ${form.expectedPay}
         body: JSON.stringify({
           to: "Isaac_0427@icloud.com",
           replyTo: form.email,
-          subject: `Job Application: ${form.position} — ${form.name}`,
+          subject: `Job Application: ${posLabel} — ${form.name}`,
           body,
           confirmTo: form.email,
           confirmName: form.name,
@@ -149,7 +165,7 @@ Expected Pay Per Deliverable: ${form.expectedPay}
     } catch {
       const encoded = encodeURIComponent(body);
       window.open(
-        `mailto:Isaac_0427@icloud.com?subject=${encodeURIComponent(`Job Application: ${form.position} — ${form.name}`)}&body=${encoded}`,
+        `mailto:Isaac_0427@icloud.com?subject=${encodeURIComponent(`Job Application: ${posLabel} — ${form.name}`)}&body=${encoded}`,
         "_blank"
       );
     }
@@ -179,9 +195,8 @@ Expected Pay Per Deliverable: ${form.expectedPay}
   }
 
   return (
-    <section id="apply" className="py-16 md:py-24 px-6 bg-black">
+    <section id="apply" className="py-16 md:py-24 px-6 bg-black border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
         <div className="mb-10">
           <p className="text-[9px] tracking-[0.3em] uppercase mb-3" style={{ color: GOLD }}>APPLY NOW</p>
           <h2 className="text-3xl md:text-4xl font-black text-white mb-4 leading-tight">
@@ -214,16 +229,35 @@ Expected Pay Per Deliverable: ${form.expectedPay}
               style={inputStyle} onFocus={focus} onBlur={blur} />
           </Field>
 
-          {/* Position */}
+          {/* Position dropdown */}
           <Field label="Position Applying For *">
             <select required value={form.position} onChange={set("position")}
               style={{ ...inputStyle, appearance: "none" }} onFocus={focus} onBlur={blur}>
               <option value="" style={{ background: "#111" }}>Select a position</option>
-              {POSITIONS.map((p) => <option key={p} value={p} style={{ background: "#111" }}>{p}</option>)}
+              <optgroup label="Open Positions" style={{ background: "#111", color: GOLD }}>
+                {POSITIONS.filter((p) => p.open).map((p) => (
+                  <option key={p.id} value={p.id} style={{ background: "#111" }}>{p.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Filled Positions" style={{ background: "#111", color: "rgba(255,255,255,0.4)" }}>
+                {POSITIONS.filter((p) => !p.open).map((p) => (
+                  <option key={p.id} value={p.id} style={{ background: "#111", color: "rgba(255,255,255,0.5)" }}>{p.label} — FILLED</option>
+                ))}
+              </optgroup>
             </select>
+
+            {/* Filled position notice */}
+            {isFilled && (
+              <div className="mt-3 flex items-start gap-2.5 rounded-lg p-3"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)" }}>
+                <Info className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: "rgba(255,255,255,0.5)" }} />
+                <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.5)" }}>
+                  This position is filled. Submit anyway to be considered for future openings.
+                </p>
+              </div>
+            )}
           </Field>
 
-          {/* Divider */}
           <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
           {/* Equipment questions */}
@@ -233,7 +267,7 @@ Expected Pay Per Deliverable: ${form.expectedPay}
               <div className="mt-3 flex items-start gap-2.5 rounded-lg p-3"
                 style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)" }}>
                 <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-red-400">This role requires video capability. All three positions involve filming content.</p>
+                <p className="text-xs text-red-400">This role requires video capability. All positions involve filming content.</p>
               </div>
             )}
           </Field>
@@ -248,7 +282,7 @@ Expected Pay Per Deliverable: ${form.expectedPay}
               <div className="mt-3 flex items-start gap-2.5 rounded-lg p-3"
                 style={{ background: `${GOLD}10`, border: `1px solid ${GOLD}35` }}>
                 <span className="text-[13px]">★</span>
-                <p className="text-xs font-semibold" style={{ color: GOLD }}>Drone operators are highly valued! This gives you a major edge.</p>
+                <p className="text-xs font-semibold" style={{ color: GOLD }}>Drone operators are highly valued — this gives you a major edge.</p>
               </div>
             )}
           </Field>
@@ -267,7 +301,6 @@ Expected Pay Per Deliverable: ${form.expectedPay}
             )}
           </Field>
 
-          {/* Divider */}
           <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
           {/* Portfolio & Resume */}
@@ -291,7 +324,6 @@ Expected Pay Per Deliverable: ${form.expectedPay}
             </label>
           </Field>
 
-          {/* Divider */}
           <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
           {/* Background */}
@@ -314,7 +346,7 @@ Expected Pay Per Deliverable: ${form.expectedPay}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <Field label="Availability *">
-              <input required placeholder="Part-time, full-time, weekends..." value={form.availability}
+              <input required placeholder="Part-time, weekdays, weekends..." value={form.availability}
                 onChange={set("availability")} style={inputStyle} onFocus={focus} onBlur={blur} />
             </Field>
             <Field label="Expected Pay Per Deliverable *">
