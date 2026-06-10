@@ -20,6 +20,16 @@ import ApplicantLogin from './pages/ApplicantLogin';
 import SetPassword from './pages/SetPassword';
 import ApplicationStatus from './pages/ApplicationStatus';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import CRMHome from './pages/crm/CRMHome';
+import CRMClients from './pages/crm/CRMClients';
+import CRMClientDetail from './pages/crm/CRMClientDetail';
+import CRMLeads from './pages/crm/CRMLeads';
+import CRMLeadDetail from './pages/crm/CRMLeadDetail';
+import CRMJobs from './pages/crm/CRMJobs';
+import CRMJobDetail from './pages/crm/CRMJobDetail';
+import CRMDocuments from './pages/crm/CRMDocuments';
+import CRMNewsletter from './pages/crm/CRMNewsletter';
+import CRMSettings from './pages/crm/CRMSettings';
 
 function App() {
   return (
@@ -42,6 +52,16 @@ function App() {
           <Route path="/set-password" element={<SetPassword />} />
           <Route path="/application-status" element={<ApplicationStatus />} />
           <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
+          <Route path="/dashboard" element={<CRMHome />} />
+          <Route path="/dashboard/clients" element={<CRMClients />} />
+          <Route path="/dashboard/clients/:id" element={<CRMClientDetail />} />
+          <Route path="/dashboard/leads" element={<CRMLeads />} />
+          <Route path="/dashboard/leads/:id" element={<CRMLeadDetail />} />
+          <Route path="/dashboard/jobs" element={<CRMJobs />} />
+          <Route path="/dashboard/jobs/:id" element={<CRMJobDetail />} />
+          <Route path="/dashboard/documents" element={<CRMDocuments />} />
+          <Route path="/dashboard/newsletter" element={<CRMNewsletter />} />
+          <Route path="/dashboard/settings" element={<CRMSettings />} />
           <Route path="*" element={<PageNotFound />} />
         </Routes>
         <ChatBot />

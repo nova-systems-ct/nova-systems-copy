@@ -152,6 +152,20 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true });
     }
 
+    if (type === "newsletter") {
+      const { toEmail, subject, body } = payload;
+      await sendEmail({
+        to: toEmail,
+        subject,
+        html: `<div style="font-family:sans-serif;max-width:600px;color:#222">
+          ${body.replace(/\n/g, "<br/>")}
+          <hr style="margin-top:32px"/>
+          <p style="color:#888;font-size:12px">Nova Systems · Connecticut, USA · <a href="https://nova-systems-copy.base44.app" style="color:#D4A030">nova-systems.app</a></p>
+          </div>`,
+      });
+      return Response.json({ ok: true });
+    }
+
     return Response.json({ error: "Unknown email type" }, { status: 400 });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
