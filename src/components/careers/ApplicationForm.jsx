@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { CheckCircle, AlertTriangle, ArrowRight, Info } from "lucide-react";
+import { CheckCircle, ArrowRight, Info } from "lucide-react";
 import { callFunction } from "@/lib/callFunction";
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const POSITIONS = [
-  { id: "videographer", label: "Videographer / Content Creator",  open: true },
-  { id: "sales",        label: "Sales Representative",            open: true },
-  { id: "web-dev",      label: "Web Developer",                   open: false },
-  { id: "brand-ambassador", label: "Brand Ambassador",            open: false },
+  { id: "videographer",    label: "Videographer / Content Creator", open: true },
+  { id: "sales",           label: "Sales Representative",           open: true },
+  { id: "drone-operator",  label: "Drone Operator",                 open: true },
+  { id: "web-dev",         label: "Web Developer",                  open: false },
+  { id: "brand-ambassador",label: "Brand Ambassador",               open: false },
 ];
 
 const EDITING_SOFTWARE = ["CapCut", "Adobe Premiere Pro", "DaVinci Resolve", "Final Cut Pro", "iMovie", "Other"];
@@ -20,7 +21,6 @@ const inputStyle = {
   border: "1px solid rgba(255,255,255,0.1)",
   borderRadius: 8, color: "#fff", outline: "none", boxSizing: "border-box",
 };
-
 const labelStyle = {
   display: "block", fontSize: 9, fontWeight: 700,
   letterSpacing: "0.22em", textTransform: "uppercase",
@@ -49,14 +49,119 @@ function YesNo({ value, onChange }) {
   );
 }
 
+// ── VIDEOGRAPHER FIELDS ──────────────────────────────────────────────
+function VideographerFields({ form, set, setVal, focus, blur }) {
+  return (
+    <>
+      <Field label="Do you own a camera or 1080p-capable phone? *">
+        <YesNo value={form.ownsCamera} onChange={setVal("ownsCamera")} />
+      </Field>
+      <Field label="Camera specs / model (if applicable)">
+        <input placeholder="e.g. iPhone 15 Pro, Sony A7III..." value={form.cameraSpecs || ""} onChange={set("cameraSpecs")} style={inputStyle} onFocus={focus} onBlur={blur} />
+      </Field>
+      <Field label="Video editing experience? *">
+        <YesNo value={form.hasEditingExp} onChange={setVal("hasEditingExp")} />
+        {form.hasEditingExp === "yes" && (
+          <div className="mt-3">
+            <label style={{ ...labelStyle, marginBottom: 8 }}>Which software?</label>
+            <select value={form.editingSoftware || ""} onChange={set("editingSoftware")} style={{ ...inputStyle, appearance: "none" }} onFocus={focus} onBlur={blur}>
+              <option value="" style={{ background: "#111" }}>Select software</option>
+              {EDITING_SOFTWARE.map((s) => <option key={s} value={s} style={{ background: "#111" }}>{s}</option>)}
+            </select>
+          </div>
+        )}
+      </Field>
+      <Field label="Portfolio URL (website, Instagram, TikTok, etc.) *">
+        <input required type="url" placeholder="https://..." value={form.portfolioUrl || ""} onChange={set("portfolioUrl")} style={inputStyle} onFocus={focus} onBlur={blur} />
+      </Field>
+      <Field label="Social media experience (platforms & follower counts)">
+        <textarea rows={2} placeholder="e.g. TikTok 10k, Instagram 5k, YouTube..." value={form.socialMedia || ""} onChange={set("socialMedia")} onFocus={focus} onBlur={blur} style={{ ...inputStyle, resize: "none" }} />
+      </Field>
+      <Field label="Do you have drone experience?">
+        <YesNo value={form.hasDrone} onChange={setVal("hasDrone")} />
+      </Field>
+    </>
+  );
+}
+
+// ── SALES FIELDS ─────────────────────────────────────────────────────
+function SalesFields({ form, set, setVal, focus, blur }) {
+  return (
+    <>
+      <Field label="Sales experience *">
+        <textarea required rows={3} placeholder="Describe your sales background — B2B, B2C, door-to-door, retail, etc." value={form.salesExperience || ""} onChange={set("salesExperience")} onFocus={focus} onBlur={blur} style={{ ...inputStyle, resize: "none" }} />
+      </Field>
+      <Field label="Industries you've worked in">
+        <input placeholder="e.g. Tech, Real Estate, Insurance, Retail..." value={form.industries || ""} onChange={set("industries")} style={inputStyle} onFocus={focus} onBlur={blur} />
+      </Field>
+      <Field label="Do you have a reliable car? *">
+        <YesNo value={form.hasCar} onChange={setVal("hasCar")} />
+      </Field>
+      <Field label="Comfortable with cold calling? *">
+        <YesNo value={form.coldCalling} onChange={setVal("coldCalling")} />
+      </Field>
+      <Field label="What was your biggest sale? *">
+        <textarea required rows={2} placeholder="Describe the deal — size, context, how you closed it..." value={form.biggestSale || ""} onChange={set("biggestSale")} onFocus={focus} onBlur={blur} style={{ ...inputStyle, resize: "none" }} />
+      </Field>
+      <Field label="Commission expectations *">
+        <input required placeholder="e.g. 10%, $500/deal, open to negotiation..." value={form.expectedPay || ""} onChange={set("expectedPay")} style={inputStyle} onFocus={focus} onBlur={blur} />
+      </Field>
+    </>
+  );
+}
+
+// ── DRONE OPERATOR FIELDS ─────────────────────────────────────────────
+function DroneFields({ form, set, setVal, focus, blur }) {
+  return (
+    <>
+      <Field label="Drone model(s) you own *">
+        <input required placeholder="e.g. DJI Mini 4 Pro, DJI Air 3, Autel EVO..." value={form.droneModel || ""} onChange={set("droneModel")} style={inputStyle} onFocus={focus} onBlur={blur} />
+      </Field>
+      <Field label="FAA Part 107 certified? *">
+        <YesNo value={form.faaPart107} onChange={setVal("faaPart107")} />
+      </Field>
+      <Field label="Years of flying experience *">
+        <input required placeholder="e.g. 2 years, 6 months..." value={form.yearsFlying || ""} onChange={set("yearsFlying")} style={inputStyle} onFocus={focus} onBlur={blur} />
+      </Field>
+      <Field label="Portfolio of aerial footage *">
+        <input required type="url" placeholder="https://... (YouTube, Google Drive, website, etc.)" value={form.portfolioUrl || ""} onChange={set("portfolioUrl")} style={inputStyle} onFocus={focus} onBlur={blur} />
+      </Field>
+      <Field label="Can you edit drone footage?">
+        <YesNo value={form.canEditDrone} onChange={setVal("canEditDrone")} />
+        {form.canEditDrone === "yes" && (
+          <div className="mt-3">
+            <label style={{ ...labelStyle, marginBottom: 8 }}>Editing software used?</label>
+            <input placeholder="e.g. DaVinci Resolve, Premiere Pro, LumaFusion..." value={form.editingSoftware || ""} onChange={set("editingSoftware")} style={inputStyle} onFocus={focus} onBlur={blur} />
+          </div>
+        )}
+      </Field>
+    </>
+  );
+}
+
+// ── GENERIC FIELDS (for filled positions) ─────────────────────────────
+function GenericFields({ form, set, focus, blur }) {
+  return (
+    <>
+      <Field label="Portfolio URL (if applicable)">
+        <input type="url" placeholder="https://..." value={form.portfolioUrl || ""} onChange={set("portfolioUrl")} style={inputStyle} onFocus={focus} onBlur={blur} />
+      </Field>
+    </>
+  );
+}
+
 export default function ApplicationForm({ preselectedPosition }) {
   const [form, setForm] = useState({
     name: "", email: "", phone: "", position: preselectedPosition || "",
-    canRecord: "", ownsCamera: "", hasDrone: "",
-    hasEditingExp: "", editingSoftware: "",
-    portfolioUrl: "", resumeFile: null, resumeName: "",
-    experience: "", education: "", whyNova: "",
-    availability: "", expectedPay: "",
+    // shared
+    experience: "", whyNova: "", availability: "", expectedPay: "",
+    // videographer
+    ownsCamera: "", cameraSpecs: "", hasEditingExp: "", editingSoftware: "",
+    portfolioUrl: "", socialMedia: "", hasDrone: "",
+    // sales
+    salesExperience: "", industries: "", hasCar: "", coldCalling: "", biggestSale: "",
+    // drone
+    droneModel: "", faaPart107: "", yearsFlying: "", canEditDrone: "",
   });
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -70,11 +175,6 @@ export default function ApplicationForm({ preselectedPosition }) {
   const focus = (e) => (e.target.style.borderColor = `${GOLD}70`);
   const blur = (e) => (e.target.style.borderColor = "rgba(255,255,255,0.1)");
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) setForm((f) => ({ ...f, resumeFile: file, resumeName: file.name }));
-  };
-
   const selectedPosition = POSITIONS.find((p) => p.id === form.position);
   const isFilled = selectedPosition && !selectedPosition.open;
 
@@ -85,57 +185,34 @@ export default function ApplicationForm({ preselectedPosition }) {
     const posLabel = selectedPosition?.label || form.position;
     const appId = Date.now().toString();
 
-    // Save to localStorage
     const existing = JSON.parse(localStorage.getItem("nova_applications") || "[]");
     const newApp = {
       id: appId,
       name: form.name, email: form.email, phone: form.phone,
-      position: posLabel,
-      canRecord: form.canRecord, ownsCamera: form.ownsCamera,
-      hasDrone: form.hasDrone, hasEditingExp: form.hasEditingExp,
-      editingSoftware: form.editingSoftware, portfolioUrl: form.portfolioUrl,
-      resumeName: form.resumeName, experience: form.experience,
-      education: form.education, whyNova: form.whyNova,
-      availability: form.availability, expectedPay: form.expectedPay,
+      position: posLabel, status: "new",
+      submittedAt: new Date().toISOString(),
       filledPosition: isFilled,
-      status: "new", submittedAt: new Date().toISOString(),
+      ...form,
     };
     existing.unshift(newApp);
     localStorage.setItem("nova_applications", JSON.stringify(existing));
 
-    // Create applicant account (no password yet)
     const accounts = JSON.parse(localStorage.getItem("nova_employee_accounts") || "[]");
     if (!accounts.find((a) => a.email.toLowerCase() === form.email.toLowerCase())) {
       accounts.push({
-        id: crypto.randomUUID(),
-        applicationId: appId,
-        email: form.email,
-        name: form.name,
-        password: null,
-        token: null,
-        isEmployee: false,
+        id: crypto.randomUUID(), applicationId: appId,
+        email: form.email, name: form.name,
+        password: null, token: null, isEmployee: false,
       });
       localStorage.setItem("nova_employee_accounts", JSON.stringify(accounts));
     }
 
-    // Send emails via backend
     try {
       await callFunction("sendEmail", {
         type: "new_application",
-        payload: {
-          name: form.name, email: form.email, phone: form.phone,
-          position: posLabel, isFilled,
-          canRecord: form.canRecord, ownsCamera: form.ownsCamera,
-          hasDrone: form.hasDrone, hasEditingExp: form.hasEditingExp,
-          editingSoftware: form.editingSoftware, portfolioUrl: form.portfolioUrl,
-          resumeName: form.resumeName, experience: form.experience,
-          education: form.education, whyNova: form.whyNova,
-          availability: form.availability, expectedPay: form.expectedPay,
-        },
+        payload: { ...form, position: posLabel, isFilled },
       });
-    } catch {
-      // Email failure is silent — app is still saved locally
-    }
+    } catch { /* silent */ }
 
     setLoading(false);
     setDone(true);
@@ -154,7 +231,8 @@ export default function ApplicationForm({ preselectedPosition }) {
           <p className="text-sm leading-relaxed mb-6" style={{ color: "rgba(255,255,255,0.4)" }}>
             Isaac will personally review your application and reach out within a few days. A confirmation was sent to your email.
           </p>
-          <a href="/applicant-login" className="inline-flex items-center gap-2 text-xs font-bold tracking-wider uppercase px-6 py-3 rounded-lg hover:opacity-85 transition-all"
+          <a href="/applicant-login"
+            className="inline-flex items-center gap-2 text-xs font-bold tracking-wider uppercase px-6 py-3 rounded-lg hover:opacity-85 transition-all"
             style={{ background: GOLD_GRADIENT, color: "#0a0800" }}>
             CHECK APPLICATION STATUS
           </a>
@@ -177,6 +255,7 @@ export default function ApplicationForm({ preselectedPosition }) {
         <form onSubmit={handleSubmit} className="rounded-2xl p-8 space-y-7"
           style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)" }}>
 
+          {/* CONTACT */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <Field label="Full Name *">
               <input required placeholder="Jane Smith" value={form.name} onChange={set("name")} style={inputStyle} onFocus={focus} onBlur={blur} />
@@ -185,11 +264,11 @@ export default function ApplicationForm({ preselectedPosition }) {
               <input required type="tel" placeholder="+1 (860) 000-0000" value={form.phone} onChange={set("phone")} style={inputStyle} onFocus={focus} onBlur={blur} />
             </Field>
           </div>
-
           <Field label="Email Address *">
             <input required type="email" placeholder="jane@email.com" value={form.email} onChange={set("email")} style={inputStyle} onFocus={focus} onBlur={blur} />
           </Field>
 
+          {/* POSITION */}
           <Field label="Position Applying For *">
             <select required value={form.position} onChange={set("position")} style={{ ...inputStyle, appearance: "none" }} onFocus={focus} onBlur={blur}>
               <option value="" style={{ background: "#111" }}>Select a position</option>
@@ -217,91 +296,51 @@ export default function ApplicationForm({ preselectedPosition }) {
 
           <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
-          <Field label="Can you record video? *">
-            <YesNo value={form.canRecord} onChange={setVal("canRecord")} />
-            {form.canRecord === "no" && (
-              <div className="mt-3 flex items-start gap-2.5 rounded-lg p-3"
-                style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.22)" }}>
-                <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-red-400">Most roles require filming content. Consider whether this role is a fit.</p>
-              </div>
-            )}
-          </Field>
+          {/* POSITION-SPECIFIC FIELDS */}
+          {form.position === "videographer" && (
+            <VideographerFields form={form} set={set} setVal={setVal} focus={focus} blur={blur} />
+          )}
+          {form.position === "sales" && (
+            <SalesFields form={form} set={set} setVal={setVal} focus={focus} blur={blur} />
+          )}
+          {form.position === "drone-operator" && (
+            <DroneFields form={form} set={set} setVal={setVal} focus={focus} blur={blur} />
+          )}
+          {(isFilled || (!["videographer","sales","drone-operator"].includes(form.position) && form.position)) && (
+            <GenericFields form={form} set={set} focus={focus} blur={blur} />
+          )}
 
-          <Field label="Do you own a camera or 1080p-capable phone? *">
-            <YesNo value={form.ownsCamera} onChange={setVal("ownsCamera")} />
-          </Field>
+          {form.position && (
+            <>
+              <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
 
-          <Field label="Do you have a drone?">
-            <YesNo value={form.hasDrone} onChange={setVal("hasDrone")} />
-            {form.hasDrone === "yes" && (
-              <div className="mt-3 flex items-start gap-2.5 rounded-lg p-3"
-                style={{ background: `${GOLD}10`, border: `1px solid ${GOLD}35` }}>
-                <span className="text-[13px]">★</span>
-                <p className="text-xs font-semibold" style={{ color: GOLD }}>Drone operators are highly valued — major edge in hiring.</p>
-              </div>
-            )}
-          </Field>
+              <Field label="Previous Experience *">
+                <textarea required rows={3} placeholder="Describe any relevant work experience..."
+                  value={form.experience} onChange={set("experience")} onFocus={focus} onBlur={blur}
+                  style={{ ...inputStyle, resize: "none" }} />
+              </Field>
 
-          <Field label="Do you have video editing experience?">
-            <YesNo value={form.hasEditingExp} onChange={setVal("hasEditingExp")} />
-            {form.hasEditingExp === "yes" && (
-              <div className="mt-3">
-                <label style={{ ...labelStyle, marginBottom: 8 }}>Which software?</label>
-                <select value={form.editingSoftware} onChange={set("editingSoftware")} style={{ ...inputStyle, appearance: "none" }} onFocus={focus} onBlur={blur}>
-                  <option value="" style={{ background: "#111" }}>Select software</option>
-                  {EDITING_SOFTWARE.map((s) => <option key={s} value={s} style={{ background: "#111" }}>{s}</option>)}
-                </select>
-              </div>
-            )}
-          </Field>
+              <Field label="Why Nova Systems? *">
+                <textarea required rows={3} placeholder="Tell us why you want to work with us..."
+                  value={form.whyNova} onChange={set("whyNova")} onFocus={focus} onBlur={blur}
+                  style={{ ...inputStyle, resize: "none" }} />
+              </Field>
 
-          <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+              <Field label="Availability *">
+                <input required placeholder="Weekdays, weekends, flexible..." value={form.availability} onChange={set("availability")} style={inputStyle} onFocus={focus} onBlur={blur} />
+              </Field>
 
-          <Field label="Portfolio URL (website, Instagram, TikTok, etc.)">
-            <input type="url" placeholder="https://..." value={form.portfolioUrl} onChange={set("portfolioUrl")} style={inputStyle} onFocus={focus} onBlur={blur} />
-          </Field>
+              {form.position !== "sales" && (
+                <Field label="Expected Pay *">
+                  <input required placeholder="e.g. $20/hr, $200/project, negotiable..." value={form.expectedPay} onChange={set("expectedPay")} style={inputStyle} onFocus={focus} onBlur={blur} />
+                </Field>
+              )}
+            </>
+          )}
 
-          <Field label="Upload Resume (PDF — optional)">
-            <label className="flex items-center gap-3 cursor-pointer rounded-lg px-4 py-3"
-              style={{ background: "rgba(255,255,255,0.03)", border: `1px dashed ${form.resumeName ? GOLD + "60" : "rgba(255,255,255,0.12)"}` }}>
-              <input type="file" accept=".pdf" onChange={handleFileChange} className="hidden" />
-              <span className="text-xs" style={{ color: form.resumeName ? GOLD : "rgba(255,255,255,0.35)" }}>
-                {form.resumeName ? `✓ ${form.resumeName}` : "Click to upload PDF"}
-              </span>
-            </label>
-          </Field>
-
-          <div className="h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
-
-          <Field label="Previous Experience *">
-            <textarea required rows={3} placeholder="Describe any relevant work experience..."
-              value={form.experience} onChange={set("experience")} onFocus={focus} onBlur={blur}
-              style={{ ...inputStyle, resize: "none" }} />
-          </Field>
-
-          <Field label="Education">
-            <input placeholder="High school, college, certificates..." value={form.education} onChange={set("education")} style={inputStyle} onFocus={focus} onBlur={blur} />
-          </Field>
-
-          <Field label="Why Nova Systems? *">
-            <textarea required rows={4} placeholder="Tell us why you want to work with us..."
-              value={form.whyNova} onChange={set("whyNova")} onFocus={focus} onBlur={blur}
-              style={{ ...inputStyle, resize: "none" }} />
-          </Field>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <Field label="Availability *">
-              <input required placeholder="Weekdays, weekends, flexible..." value={form.availability} onChange={set("availability")} style={inputStyle} onFocus={focus} onBlur={blur} />
-            </Field>
-            <Field label="Expected Pay *">
-              <input required placeholder="e.g. $20/hr, $200/project..." value={form.expectedPay} onChange={set("expectedPay")} style={inputStyle} onFocus={focus} onBlur={blur} />
-            </Field>
-          </div>
-
-          <button type="submit" disabled={loading}
+          <button type="submit" disabled={loading || !form.position}
             className="w-full py-4 text-[11px] font-bold tracking-[0.2em] uppercase transition-all hover:opacity-85 flex items-center justify-center gap-2 rounded-lg"
-            style={{ background: GOLD_GRADIENT, color: "#0a0800", border: "none", cursor: "pointer" }}>
+            style={{ background: GOLD_GRADIENT, color: "#0a0800", border: "none", cursor: "pointer", opacity: (!form.position || loading) ? 0.5 : 1 }}>
             {loading
               ? <div className="w-4 h-4 border-2 border-[#0a0800]/30 border-t-[#0a0800] rounded-full animate-spin" />
               : <><span>SUBMIT APPLICATION</span><ArrowRight className="w-4 h-4" /></>}

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Camera, Users, Code, TrendingUp, MapPin, Clock, DollarSign, ArrowRight } from "lucide-react";
+import { Camera, Users, Code, TrendingUp, MapPin, Clock, DollarSign, ArrowRight, Wind } from "lucide-react";
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
@@ -44,6 +44,26 @@ const JOBS = [
     ],
     highlight: null,
     bonus: "No cap on earnings",
+  },
+  {
+    id: "drone-operator",
+    title: "Drone Operator",
+    icon: Wind,
+    type: "Per Project",
+    pay: "Negotiated per project",
+    hours: "Flexible",
+    location: "Waterbury, CT",
+    tag: "DRONE",
+    open: true,
+    description:
+      "Nova Systems needs a licensed drone pilot for cinematic aerial footage for local business clients. You'll shoot real estate, events, and commercial content from above.",
+    requirements: [
+      "Must own professional drone (DJI preferred)",
+      "FAA Part 107 certification preferred",
+      "Portfolio of aerial footage required",
+      "Drone footage editing a plus",
+    ],
+    highlight: "FAA Part 107 certified pilots prioritized",
   },
   {
     id: "web-dev",
