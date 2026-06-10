@@ -13,23 +13,24 @@ import Resources from './pages/Resources';
 import Article from './pages/Article';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
 import BookDemo from './pages/BookDemo';
 import Careers from './pages/Careers';
 import ApplicantLogin from './pages/ApplicantLogin';
 import SetPassword from './pages/SetPassword';
 import ApplicationStatus from './pages/ApplicationStatus';
 import EmployeeDashboard from './pages/EmployeeDashboard';
-import CRMHome from './pages/crm/CRMHome';
-import CRMClients from './pages/crm/CRMClients';
-import CRMClientDetail from './pages/crm/CRMClientDetail';
-import CRMLeads from './pages/crm/CRMLeads';
-import CRMLeadDetail from './pages/crm/CRMLeadDetail';
-import CRMJobs from './pages/crm/CRMJobs';
-import CRMJobDetail from './pages/crm/CRMJobDetail';
-import CRMDocuments from './pages/crm/CRMDocuments';
-import CRMNewsletter from './pages/crm/CRMNewsletter';
-import CRMSettings from './pages/crm/CRMSettings';
+// CRM Dashboard
+import DashboardLayout from './components/dashboard/DashboardLayout';
+import DashboardHome from './pages/dashboard/DashboardHome';
+import Clients from './pages/dashboard/Clients';
+import ClientDetail from './pages/dashboard/ClientDetail';
+import Leads from './pages/dashboard/Leads';
+import LeadDetail from './pages/dashboard/LeadDetail';
+import Jobs from './pages/dashboard/Jobs';
+import JobDetail from './pages/dashboard/JobDetail';
+import Documents from './pages/dashboard/Documents';
+import Newsletter from './pages/dashboard/Newsletter';
+import DashboardSettings from './pages/dashboard/Settings';
 
 function App() {
   return (
@@ -45,23 +46,27 @@ function App() {
           <Route path="/resources/:slug" element={<Article />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/book-demo" element={<BookDemo />} />
           <Route path="/careers" element={<Careers />} />
           <Route path="/applicant-login" element={<ApplicantLogin />} />
           <Route path="/set-password" element={<SetPassword />} />
           <Route path="/application-status" element={<ApplicationStatus />} />
           <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
-          <Route path="/dashboard" element={<CRMHome />} />
-          <Route path="/dashboard/clients" element={<CRMClients />} />
-          <Route path="/dashboard/clients/:id" element={<CRMClientDetail />} />
-          <Route path="/dashboard/leads" element={<CRMLeads />} />
-          <Route path="/dashboard/leads/:id" element={<CRMLeadDetail />} />
-          <Route path="/dashboard/jobs" element={<CRMJobs />} />
-          <Route path="/dashboard/jobs/:id" element={<CRMJobDetail />} />
-          <Route path="/dashboard/documents" element={<CRMDocuments />} />
-          <Route path="/dashboard/newsletter" element={<CRMNewsletter />} />
-          <Route path="/dashboard/settings" element={<CRMSettings />} />
+
+          {/* CRM Dashboard — nested routes */}
+          <Route path="/dashboard" element={<DashboardLayout />}>
+            <Route index element={<DashboardHome />} />
+            <Route path="clients" element={<Clients />} />
+            <Route path="clients/:id" element={<ClientDetail />} />
+            <Route path="leads" element={<Leads />} />
+            <Route path="leads/:id" element={<LeadDetail />} />
+            <Route path="jobs" element={<Jobs />} />
+            <Route path="jobs/:id" element={<JobDetail />} />
+            <Route path="documents" element={<Documents />} />
+            <Route path="newsletter" element={<Newsletter />} />
+            <Route path="settings" element={<DashboardSettings />} />
+          </Route>
+
           <Route path="*" element={<PageNotFound />} />
         </Routes>
         <ChatBot />

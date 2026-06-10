@@ -65,6 +65,7 @@ export default function Login() {
     }
 
     setLoading(true);
+    localStorage.setItem('nova_crm_auth', 'true');
     setTimeout(() => navigate("/dashboard"), 600);
   };
 
@@ -85,10 +86,12 @@ export default function Login() {
       const timer = setInterval(() => {
         if (!popup || popup.closed) {
           clearInterval(timer);
+          localStorage.setItem('nova_crm_auth', 'true');
           navigate("/dashboard");
         }
       }, 500);
     } else {
+      localStorage.setItem('nova_crm_auth', 'true');
       navigate("/dashboard");
     }
   };
