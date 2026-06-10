@@ -16,6 +16,10 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import BookDemo from './pages/BookDemo';
 import Careers from './pages/Careers';
+import ApplicantLogin from './pages/ApplicantLogin';
+import SetPassword from './pages/SetPassword';
+import ApplicationStatus from './pages/ApplicationStatus';
+import EmployeeDashboard from './pages/EmployeeDashboard';
 
 function App() {
   return (
@@ -34,6 +38,10 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/book-demo" element={<BookDemo />} />
           <Route path="/careers" element={<Careers />} />
+          <Route path="/applicant-login" element={<ApplicantLogin />} />
+          <Route path="/set-password" element={<SetPassword />} />
+          <Route path="/application-status" element={<ApplicationStatus />} />
+          <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
           <Route path="*" element={<PageNotFound />} />
         </Routes>
         <ChatBot />

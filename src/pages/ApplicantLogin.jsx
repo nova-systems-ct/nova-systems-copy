@@ -1,0 +1,129 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
+
+const GOLD = "#D4A030";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+
+const inputStyle = {
+  width: "100%", padding: "13px 16px", fontSize: 13,
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.12)",
+  borderRadius: 8, color: "#fff", outline: "none", boxSizing: "border-box",
+};
+
+export default function ApplicantLogin() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // If already logged in
+  useEffect(() => {
+    const session = JSON.parse(localStorage.getItem("nova_applicant_session") || "null");
+    if (session) {
+      if (session.isEmployee) navigate("/employee-dashboard");
+      else navigate("/application-status");
+    }
+  }, []);
+
+  const focus = (e) => (e.target.style.borderColor = `${GOLD}70`);
+  const blur = (e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)");
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    const accounts = JSON.parse(localStorage.getItem("nova_employee_accounts") || "[]");
+    const account = accounts.find((a) => a.email.toLowerCase() === email.toLowerCase() && a.password === password);
+
+    setTimeout(() => {
+      setLoading(false);
+      if (!account) {
+        setError("Invalid email or password. Check your credentials and try again.");
+        return;
+      }
+      localStorage.setItem("nova_applicant_session", JSON.stringify({
+        id: account.id,
+        email: account.email,
+        applicationId: account.applicationId,
+        isEmployee: account.isEmployee,
+      }));
+      if (account.isEmployee) navigate("/employee-dashboard");
+      else navigate("/application-status");
+    }, 600);
+  };
+
+  return (
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-20">
+      {/* Logo */}
+      <a href="/" className="flex items-center gap-3 mb-12">
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+          <rect x="1" y="1" width="30" height="30" rx="4" stroke={GOLD} strokeWidth="1.5" fill="none" />
+          <text x="16" y="23" textAnchor="middle" fontFamily="'Arial Black',Arial,sans-serif" fontWeight="900" fontSize="18" fill={GOLD}>N</text>
+        </svg>
+        <span className="text-sm font-bold tracking-[0.2em] uppercase" style={{ color: GOLD }}>NOVA SYSTEMS</span>
+      </a>
+
+      <div className="w-full max-w-md">
+        <p className="text-[9px] tracking-[0.35em] uppercase mb-3 text-center" style={{ color: GOLD }}>APPLICANT PORTAL</p>
+        <h1 className="text-3xl font-black text-white text-center mb-2">Sign In</h1>
+        <p className="text-sm text-center mb-10" style={{ color: "rgba(255,255,255,0.35)" }}>
+          Check your application status or access your employee dashboard.
+        </p>
+
+        <form
+          onSubmit={handleLogin}
+          className="rounded-2xl p-8 space-y-5"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          <div>
+            <label style={{ display: "block", fontSize: 9, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: 8 }}>
+              Email Address
+            </label>
+            <input required type="email" placeholder="you@email.com" value={email}
+              onChange={(e) => setEmail(e.target.value)} style={inputStyle} onFocus={focus} onBlur={blur} />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: 9, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: 8 }}>
+              Password
+            </label>
+            <div className="relative">
+              <input required type={showPw ? "text" : "password"} placeholder="••••••••" value={password}
+                onChange={(e) => setPassword(e.target.value)} style={{ ...inputStyle, paddingRight: 44 }}
+                onFocus={focus} onBlur={blur} />
+              <button type="button" onClick={() => setShowPw(!showPw)}
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+                style={{ color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer" }}>
+                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-xs px-3 py-2 rounded-lg" style={{ background: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}>
+              {error}
+            </p>
+          )}
+
+          <button type="submit" disabled={loading}
+            className="w-full py-3.5 text-[11px] font-bold tracking-[0.2em] uppercase flex items-center justify-center gap-2 rounded-lg transition-all hover:opacity-85"
+            style={{ background: GOLD_GRADIENT, color: "#0a0800" }}>
+            {loading
+              ? <div className="w-4 h-4 border-2 border-[#0a0800]/30 border-t-[#0a0800] rounded-full animate-spin" />
+              : <><span>SIGN IN</span><ArrowRight className="w-4 h-4" /></>}
+          </button>
+        </form>
+
+        <p className="text-center text-xs mt-6" style={{ color: "rgba(255,255,255,0.2)" }}>
+          Don't have an account?{" "}
+          <a href="/careers" style={{ color: GOLD }}>Apply for a position</a>
+        </p>
+      </div>
+    </div>
+  );
+}
