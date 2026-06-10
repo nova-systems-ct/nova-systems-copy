@@ -39,7 +39,7 @@ export default function Footer() {
           <div>
             <p className="text-[9px] tracking-[0.25em] uppercase font-semibold mb-4" style={{ color: GOLD }}>PLATFORM</p>
             <div className="space-y-2.5">
-              {[["Solutions", "/solutions"], ["Pricing", "/pricing"], ["Company", "/company"]].map(([label, path]) => (
+              {[["Solutions", "/solutions"], ["Pricing", "/pricing"], ["Careers", "/careers"], ["Company", "/company"]].map(([label, path]) => (
                 <Link key={label} to={path} className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>
                   {label}
                 </Link>
