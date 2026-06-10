@@ -3,14 +3,21 @@ import { useNavigate } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 
 const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const inputStyle = {
   width: "100%", padding: "13px 16px", fontSize: 13,
   background: "rgba(255,255,255,0.04)",
   border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 8, color: "#fff", outline: "none", boxSizing: "border-box",
+  borderRadius: 8, color: "#fff", outline: "none",
+  boxSizing: "border-box", fontFamily: "inherit",
 };
+
+async function hashPassword(pw) {
+  const data = new TextEncoder().encode(pw);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 export default function ApplicantLogin() {
   const navigate = useNavigate();
@@ -20,7 +27,6 @@ export default function ApplicantLogin() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // If already logged in
   useEffect(() => {
     const session = JSON.parse(localStorage.getItem("nova_applicant_session") || "null");
     if (session) {
@@ -32,29 +38,50 @@ export default function ApplicantLogin() {
   const focus = (e) => (e.target.style.borderColor = `${GOLD}70`);
   const blur = (e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)");
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    const accounts = JSON.parse(localStorage.getItem("nova_employee_accounts") || "[]");
-    const account = accounts.find((a) => a.email.toLowerCase() === email.toLowerCase() && a.password === password);
+    const pw_hash = await hashPassword(password);
 
-    setTimeout(() => {
-      setLoading(false);
-      if (!account) {
-        setError("Invalid email or password. Check your credentials and try again.");
-        return;
-      }
+    // 1. Check nova_applications (applicants who created account via form)
+    const apps = JSON.parse(localStorage.getItem("nova_applications") || "[]");
+    const app = apps.find(
+      (a) => a.email?.toLowerCase() === email.toLowerCase() && a.password_hash === pw_hash
+    );
+
+    if (app) {
       localStorage.setItem("nova_applicant_session", JSON.stringify({
-        id: account.id,
-        email: account.email,
-        applicationId: account.applicationId,
-        isEmployee: account.isEmployee,
+        id: app.id,
+        email: app.email,
+        applicationId: app.id,
+        isEmployee: false,
       }));
-      if (account.isEmployee) navigate("/employee-dashboard");
-      else navigate("/application-status");
-    }, 600);
+      setLoading(false);
+      navigate("/application-status");
+      return;
+    }
+
+    // 2. Check nova_employee_accounts (hired employees who set their password)
+    const accounts = JSON.parse(localStorage.getItem("nova_employee_accounts") || "[]");
+    const account = accounts.find(
+      (a) => a.email?.toLowerCase() === email.toLowerCase() && a.password === password
+    );
+
+    setLoading(false);
+    if (!account) {
+      setError("Invalid email or password. Use the credentials you created when applying.");
+      return;
+    }
+    localStorage.setItem("nova_applicant_session", JSON.stringify({
+      id: account.id,
+      email: account.email,
+      applicationId: account.applicationId,
+      isEmployee: account.isEmployee,
+    }));
+    if (account.isEmployee) navigate("/employee-dashboard");
+    else navigate("/application-status");
   };
 
   return (
@@ -69,17 +96,15 @@ export default function ApplicantLogin() {
       </a>
 
       <div className="w-full max-w-md">
-        <p className="text-[9px] tracking-[0.35em] uppercase mb-3 text-center" style={{ color: GOLD }}>APPLICANT PORTAL</p>
-        <h1 className="text-3xl font-black text-white text-center mb-2">Sign In</h1>
+        <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 12, textAlign: "center" }}>APPLICANT PORTAL</p>
+        <h1 className="text-3xl font-black text-white text-center mb-2">Check Your Status</h1>
         <p className="text-sm text-center mb-10" style={{ color: "rgba(255,255,255,0.35)" }}>
-          Check your application status or access your employee dashboard.
+          Sign in with the email and password you created during your application.
         </p>
 
-        <form
-          onSubmit={handleLogin}
-          className="rounded-2xl p-8 space-y-5"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
-        >
+        <form onSubmit={handleLogin} className="rounded-2xl p-8 space-y-5"
+          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+
           <div>
             <label style={{ display: "block", fontSize: 9, fontWeight: 700, letterSpacing: "0.22em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", marginBottom: 8 }}>
               Email Address
@@ -105,14 +130,15 @@ export default function ApplicantLogin() {
           </div>
 
           {error && (
-            <p className="text-xs px-3 py-2 rounded-lg" style={{ background: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}>
+            <p className="text-xs px-3 py-2.5 rounded-lg"
+              style={{ background: "rgba(239,68,68,0.08)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)" }}>
               {error}
             </p>
           )}
 
           <button type="submit" disabled={loading}
-            className="w-full py-3.5 text-[11px] font-bold tracking-[0.2em] uppercase flex items-center justify-center gap-2 rounded-lg transition-all hover:opacity-85"
-            style={{ background: GOLD_GRADIENT, color: "#0a0800" }}>
+            className="w-full py-3.5 text-[11px] font-bold tracking-[0.2em] uppercase flex items-center justify-center gap-2 rounded-lg transition-opacity hover:opacity-85"
+            style={{ background: G, color: "#0a0800", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
             {loading
               ? <div className="w-4 h-4 border-2 border-[#0a0800]/30 border-t-[#0a0800] rounded-full animate-spin" />
               : <><span>SIGN IN</span><ArrowRight className="w-4 h-4" /></>}

@@ -44,7 +44,7 @@ export default function CareersHero() {
         <div className="flex items-center justify-center gap-6 mt-10">
           <div className="h-px flex-1 max-w-24" style={{ background: "rgba(255,255,255,0.08)" }} />
           <p style={{ color: "rgba(255,255,255,0.22)", fontSize: 10, letterSpacing: "0.25em", textTransform: "uppercase" }}>
-            2 OPEN POSITIONS · 2 FILLED
+            2 OPEN · 2 FILLED
           </p>
           <div className="h-px flex-1 max-w-24" style={{ background: "rgba(255,255,255,0.08)" }} />
         </div>
