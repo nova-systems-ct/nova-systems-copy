@@ -12,7 +12,7 @@ const NAV = [
   { to: '/dashboard',            label: 'Home',       icon: LayoutDashboard, exact: true },
   { to: '/dashboard/clients',    label: 'Clients',    icon: Building2 },
   { to: '/dashboard/leads',      label: 'Leads',      icon: Target },
-  { to: '/dashboard/jobs',       label: 'Jobs',       icon: Users },
+  { to: '/dashboard/jobs',       label: 'Candidates', icon: Users },
   { to: '/dashboard/documents',  label: 'Documents',  icon: FileText },
   { to: '/dashboard/newsletter', label: 'Newsletter', icon: Mail },
   { to: '/dashboard/settings',   label: 'Settings',   icon: Settings },

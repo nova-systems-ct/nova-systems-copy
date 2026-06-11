@@ -138,12 +138,20 @@ function ClientCard({ client: c, onClick }) {
       </div>
       <h3 style={{ color: '#fff', fontSize: 15, fontWeight: 700, marginBottom: 4 }}>{c.name}</h3>
       <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginBottom: 14 }}>{c.industry || 'No industry'}</p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {c.website && <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>
           <ExternalLink style={{ width: 11, height: 11, flexShrink: 0 }} />
           {c.website.replace(/^https?:\/\//, '')}
         </div>}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+        {c.services?.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {c.services.slice(0, 3).map((s, i) => (
+              <span key={i} style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', padding: '2px 7px', borderRadius: 20, background: `${GOLD}0d`, color: `${GOLD}bb`, border: `1px solid ${GOLD}1a` }}>{s}</span>
+            ))}
+            {c.services.length > 3 && <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', padding: '2px 4px' }}>+{c.services.length - 3}</span>}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ color: GOLD, fontSize: 14, fontWeight: 700 }}>{c.monthly_rate === 0 ? 'Pro bono' : `$${c.monthly_rate}/mo`}</span>
           {c.owner_name && <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{c.owner_name}</span>}
         </div>

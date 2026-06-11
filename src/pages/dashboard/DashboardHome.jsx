@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, Target, DollarSign, FileText, Plus, Zap, Mail, ArrowRight } from 'lucide-react'
+import { Building2, Target, DollarSign, FileText, Plus, Zap, Mail, ArrowRight, CalendarCheck } from 'lucide-react'
 import { getClients, getLeads, getActivity, getInvoices } from '../../lib/crmStore'
 
 const GOLD = '#D4A030'
@@ -60,11 +60,13 @@ export default function DashboardHome() {
   const [clients, setClients] = useState([])
   const [leads, setLeads] = useState([])
   const [activity, setActivity] = useState([])
+  const [demoRequests, setDemoRequests] = useState([])
 
   useEffect(() => {
     setClients(getClients())
     setLeads(getLeads())
     setActivity(getActivity())
+    try { setDemoRequests(JSON.parse(localStorage.getItem('nova_demo_requests') || '[]')) } catch {}
   }, [])
 
   const pipeline = ['New Contact', 'Proposal Sent', 'Demo Shown', 'Negotiating', 'Closed Won', 'Closed Lost']
@@ -87,10 +89,10 @@ export default function DashboardHome() {
 
       {/* Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 40 }}>
-        <MetricCard icon={Building2} label="Total Clients"        value={clients.length}    sub="Active accounts"           onClick={() => navigate('/dashboard/clients')} />
-        <MetricCard icon={Target}    label="Active Leads"         value={leads.filter(l => !['Closed Won','Closed Lost'].includes(l.stage)).length} sub="In pipeline" onClick={() => navigate('/dashboard/leads')} />
-        <MetricCard icon={DollarSign} label="Revenue This Month"  value={`$${revenue.toLocaleString()}`} sub="Paid invoices" />
-        <MetricCard icon={FileText}  label="Open Invoices"        value={openInvoices}      sub="Awaiting payment" />
+        <MetricCard icon={Building2}    label="Total Clients"     value={clients.length}    sub="Active accounts"  onClick={() => navigate('/dashboard/clients')} />
+        <MetricCard icon={Target}       label="Active Leads"      value={leads.filter(l => !['Closed Won','Closed Lost'].includes(l.stage)).length} sub="In pipeline" onClick={() => navigate('/dashboard/leads')} />
+        <MetricCard icon={CalendarCheck} label="Demo Requests"    value={demoRequests.length} sub={demoRequests.filter(d => d.status === 'pending').length + ' pending'} onClick={() => navigate('/dashboard/leads')} />
+        <MetricCard icon={DollarSign}   label="Revenue This Month" value={`$${revenue.toLocaleString()}`} sub="Paid invoices" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, marginBottom: 40 }} className="grid-dashboard">

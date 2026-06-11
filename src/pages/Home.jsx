@@ -7,6 +7,7 @@ import TrustedBySection from "@/components/home/TrustedBySection";
 import ProblemSection from "@/components/home/ProblemSection";
 import SolutionSection from "@/components/home/SolutionSection";
 import PricingSection from "@/components/home/PricingSection";
+import PortfolioSection from "@/components/home/PortfolioSection";
 import ContactSection from "@/components/home/ContactSection";
 
 export default function Home() {
@@ -18,7 +19,8 @@ export default function Home() {
         <FadeUp><TrustedBySection /></FadeUp>
         <FadeUp><ProblemSection /></FadeUp>
         <FadeUp><SolutionSection /></FadeUp>
-<FadeUp><PricingSection /></FadeUp>
+<FadeUp><PortfolioSection /></FadeUp>
+        <FadeUp><PricingSection /></FadeUp>
         <FadeUp><ContactSection /></FadeUp>
       </main>
       <Footer />

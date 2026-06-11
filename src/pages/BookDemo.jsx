@@ -50,38 +50,25 @@ export default function BookDemo() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const body = `
-New Demo Request from ${form.name}
 
-Business: ${form.business}
-Industry: ${form.industry}
-Phone: ${form.phone}
-Email: ${form.email}
-Monthly Revenue: ${form.revenue}
-Biggest Challenge: ${form.challenge}
-Best Time to Meet: ${form.time}
-
-Message:
-${form.message}
-    `.trim();
+    const entry = { ...form, id: `demo-${Date.now()}`, submittedAt: new Date().toISOString(), status: 'pending' };
 
     try {
-      await fetch("/api/contact", {
+      await fetch("/api/book-demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: "Isaac_0427@icloud.com",
-          replyTo: form.email,
-          subject: `Demo Request: ${form.name} - ${form.business}`,
-          body,
-          confirmTo: form.email,
-          confirmName: form.name,
-        }),
+        body: JSON.stringify(form),
       });
     } catch {
-      const encoded = encodeURIComponent(body);
-      window.open(`mailto:Isaac_0427@icloud.com?subject=Demo%20Request%3A%20${encodeURIComponent(form.name)}&body=${encoded}`, "_blank");
+      const body = `New Demo Request from ${form.name}\n\nBusiness: ${form.business}\nIndustry: ${form.industry}\nPhone: ${form.phone}\nEmail: ${form.email}\nRevenue: ${form.revenue}\nChallenge: ${form.challenge}\nTime: ${form.time}\n\n${form.message}`;
+      window.open(`mailto:Isaac_0427@icloud.com?subject=Demo%20Request%3A%20${encodeURIComponent(form.name)}&body=${encodeURIComponent(body)}`, "_blank");
     }
+
+    try {
+      const existing = JSON.parse(localStorage.getItem("nova_demo_requests") || "[]");
+      localStorage.setItem("nova_demo_requests", JSON.stringify([entry, ...existing]));
+    } catch {}
+
     setLoading(false);
     setDone(true);
   };

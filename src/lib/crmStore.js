@@ -27,13 +27,29 @@ const SEED_LEADS = [
     industry: 'Barbershop',
     email: '',
     phone: '',
-    stage: 'Proposal Sent',
-    potential_value: '$1,500 startup + $1,000/mo',
-    what_they_want: 'Website, social media presence, online booking',
-    what_they_need: 'Full revenue infrastructure — website, booking, social',
-    next_steps: 'Meeting Thursday June 12 at Bread of Heaven 4pm',
+    stage: 'Negotiating',
+    potential_value: '$600/mo Social Media Management',
+    what_they_want: 'Social media management, online presence, brand growth',
+    what_they_need: 'Monthly social media management — content, posting, strategy',
+    next_steps: 'Send contract — verbal yes given at June 12 meeting',
     meeting_date: '2026-06-12T16:00:00',
-    notes: 'Meeting at Bread of Heaven, 141 Grand St, Waterbury CT. June 12 at 4pm. Proposal already sent.',
+    notes: 'Met June 12 at Bread of Heaven, 141 Grand St, Waterbury CT. Verbal yes on $600/mo social media management. Send contract to close.',
+    created_at: '2026-06-01T00:00:00Z',
+  },
+  {
+    id: 'lead-la-cazuela',
+    name: 'La Cazuela',
+    contact_name: 'Owner',
+    industry: 'Restaurant',
+    email: '',
+    phone: '',
+    stage: 'New Contact',
+    potential_value: '$1,500/mo',
+    what_they_want: 'Full digital presence — website, social media, AI call agent',
+    what_they_need: 'Website for 2 locations, social media management, AI phone answering agent',
+    next_steps: 'Discovery call — pitch full digital package at $1,500/mo',
+    meeting_date: null,
+    notes: '2 locations. High value lead at $1,500/mo. Package: website + social media + AI call agent. Initial outreach stage.',
     created_at: '2026-06-01T00:00:00Z',
   },
   {
@@ -60,12 +76,12 @@ const SEED_LEADS = [
     email: '',
     phone: '',
     stage: 'Demo Shown',
-    potential_value: '$150/mo after pilot',
-    what_they_want: 'Student tracking and reporting tools',
-    what_they_need: 'Custom dashboard, student management, reporting',
-    next_steps: 'Meeting June 10 at 12pm',
-    meeting_date: '2026-06-10T12:00:00',
-    notes: 'Matt is the program coordinator. Demo already shown. Pilot period likely.',
+    potential_value: '$1,000/mo after summer pilot',
+    what_they_want: 'Student tracking, attendance, reporting, parent communication',
+    what_they_need: 'Full student management platform across 4 schools',
+    next_steps: 'Run summer pilot — convert to $1,000/mo contract after summer',
+    meeting_date: null,
+    notes: 'Matt is the program coordinator. Demo shown June 10. Running pilot during summer. 4 schools in the TRIO program. Target $1,000/mo after pilot.',
     created_at: '2026-06-01T00:00:00Z',
   },
   {
@@ -104,8 +120,9 @@ const SEED_LEADS = [
 
 const SEED_ACTIVITY = [
   { id: 'a1', type: 'client', text: 'Mars Hill Apologetics added as client', ts: '2024-01-01T00:00:00Z' },
-  { id: 'a2', type: 'lead', text: 'Flow Barbershop added — Proposal Sent', ts: '2026-06-01T09:00:00Z' },
-  { id: 'a3', type: 'lead', text: "Angelina's Pizza added — New Contact", ts: '2026-06-01T09:05:00Z' },
+  { id: 'a2', type: 'lead', text: 'Flow Barbershop — Verbal yes! $600/mo social media. Send contract.', ts: '2026-06-12T17:00:00Z' },
+  { id: 'a7', type: 'lead', text: 'La Cazuela added — 2 locations, $1,500/mo target (website + social + AI)', ts: '2026-06-01T09:06:00Z' },
+  { id: 'a3', type: 'lead', text: "Angelina's Pizza added — CEO in surgery, follow up next week", ts: '2026-06-01T09:05:00Z' },
   { id: 'a4', type: 'lead', text: 'TRIO Upward Bound added — Demo Shown', ts: '2026-06-01T09:10:00Z' },
   { id: 'a5', type: 'lead', text: 'WAVE Program added — Proposal Sent', ts: '2026-06-01T09:15:00Z' },
   { id: 'a6', type: 'lead', text: 'CT State Library added — Negotiating', ts: '2026-06-01T09:20:00Z' },
@@ -119,7 +136,7 @@ function set(key, value) {
 }
 
 function init() {
-  if (localStorage.getItem('nova_crm_v2')) return;
+  if (localStorage.getItem('nova_crm_v3')) return;
   set('nova_clients', [MARS_HILL]);
   set('nova_leads', SEED_LEADS);
   set('nova_invoices', []);
@@ -127,7 +144,7 @@ function init() {
   set('nova_nl_subscribers', []);
   set('nova_nl_sent', []);
   set('nova_crm_activity', SEED_ACTIVITY);
-  localStorage.setItem('nova_crm_v2', '1');
+  localStorage.setItem('nova_crm_v3', '1');
 }
 init();
 
