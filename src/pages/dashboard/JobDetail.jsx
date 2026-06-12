@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ExternalLink, X, Save, Check } from 'lucide-react'
-import { callFunction } from '../../lib/callFunction'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
@@ -74,9 +73,23 @@ export default function JobDetail() {
           accounts.push({ id: crypto.randomUUID(), applicationId: id, email: candidate.email, name: candidate.name, password: null, token, isEmployee: true })
           localStorage.setItem('nova_employee_accounts', JSON.stringify(accounts))
         }
-        await callFunction('sendEmail', { type: 'status_hired', payload: { applicantEmail: candidate.email, applicantName: candidate.name, token } })
+        await fetch('/api/contact', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'Nova Systems HR', email: 'isaac_0427@icloud.com',
+            subject: `Offer Letter: ${candidate.name} — ${candidate.position}`,
+            message: `Congratulations ${candidate.name}! You have been hired for ${candidate.position} at Nova Systems. Please set up your employee account at nova-systems.app/set-password?token=${token}`,
+          }),
+        })
       } else if (newStatus === 'declined') {
-        await callFunction('sendEmail', { type: 'status_declined', payload: { applicantEmail: candidate.email, applicantName: candidate.name, position: candidate.position } })
+        await fetch('/api/contact', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: 'Nova Systems HR', email: 'isaac_0427@icloud.com',
+            subject: `Application Update — ${candidate.name}`,
+            message: `Hi ${candidate.name}, thank you for applying for ${candidate.position} at Nova Systems. After careful review, we have decided to move forward with other candidates. We wish you the best.`,
+          }),
+        })
       }
     } catch {}
     setUpdating(false)
@@ -85,11 +98,19 @@ export default function JobDetail() {
   const confirmInterview = async () => {
     if (!interviewDate || !interviewTime) return
     setUpdating(true)
+    const dateFormatted = new Date(`${interviewDate}T${interviewTime}`).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
     setStatus('interview_scheduled')
-    persist({ status: 'interview_scheduled' })
+    persist({ status: 'interview_scheduled', interviewDate, interviewTime })
     setShowInterview(false)
     try {
-      await callFunction('sendEmail', { type: 'status_interview', payload: { applicantEmail: candidate.email, applicantName: candidate.name, interviewDate, interviewTime } })
+      await fetch('/api/contact', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Nova Systems HR', email: 'isaac_0427@icloud.com',
+          subject: `Interview Scheduled — ${candidate.name}`,
+          message: `Hi ${candidate.name},\n\nYour interview for ${candidate.position} at Nova Systems has been scheduled.\n\n📍 Bread of Heaven\n141 Grand St, Waterbury, CT\n\n📅 ${dateFormatted}\n\nPlease arrive 5 minutes early. Bring any portfolio or work samples you'd like to share.\n\n— Isaac Nova, Nova Systems`,
+        }),
+      })
     } catch {}
     setUpdating(false)
   }

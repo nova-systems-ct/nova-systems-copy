@@ -1,5 +1,43 @@
 // Nova Systems CRM — localStorage data layer with seeded data
 
+const FLOW_BARBERSHOP = {
+  id: 'client-flow-barbershop',
+  name: 'Flow Barbershop',
+  owner_name: 'Owner',
+  industry: 'Barbershop',
+  email: '',
+  phone: '',
+  website: '',
+  domain: '',
+  services: ['Social Media Management'],
+  monthly_rate: 600,
+  contract_start: '2026-06-12',
+  status: 'active',
+  hosting_status: 'N/A',
+  last_updated: '2026-06-12',
+  notes: 'Verbal yes given at June 12 meeting at Bread of Heaven, 141 Grand St, Waterbury CT. $600/mo social media management — Instagram + Facebook. Send formal contract.',
+  created_at: '2026-06-12T00:00:00Z',
+};
+
+const TRIO_UPWARD_BOUND = {
+  id: 'client-trio-upward-bound',
+  name: 'TRIO Upward Bound',
+  owner_name: 'Matt (Program Coordinator)',
+  industry: 'Education / Government',
+  email: '',
+  phone: '',
+  website: '',
+  domain: '',
+  services: ['Student Management System', 'Reporting Dashboard', 'Admin Portal'],
+  monthly_rate: 0,
+  contract_start: '2026-06-01',
+  status: 'active',
+  hosting_status: 'Pilot',
+  last_updated: '2026-06-10',
+  notes: 'Free summer pilot. $1,000/mo target after summer for 4 schools. Demo shown June 10. Matt is the program coordinator at CT State NVCC.',
+  created_at: '2026-06-01T00:00:00Z',
+};
+
 const MARS_HILL = {
   id: 'client-mars-hill',
   name: 'Mars Hill Apologetics',
@@ -20,22 +58,6 @@ const MARS_HILL = {
 };
 
 const SEED_LEADS = [
-  {
-    id: 'lead-flow-barbershop',
-    name: 'Flow Barbershop',
-    contact_name: 'Owner (unknown)',
-    industry: 'Barbershop',
-    email: '',
-    phone: '',
-    stage: 'Negotiating',
-    potential_value: '$600/mo Social Media Management',
-    what_they_want: 'Social media management, online presence, brand growth',
-    what_they_need: 'Monthly social media management — content, posting, strategy',
-    next_steps: 'Send contract — verbal yes given at June 12 meeting',
-    meeting_date: '2026-06-12T16:00:00',
-    notes: 'Met June 12 at Bread of Heaven, 141 Grand St, Waterbury CT. Verbal yes on $600/mo social media management. Send contract to close.',
-    created_at: '2026-06-01T00:00:00Z',
-  },
   {
     id: 'lead-la-cazuela',
     name: 'La Cazuela',
@@ -66,22 +88,6 @@ const SEED_LEADS = [
     next_steps: 'Call back next week — CEO recovering from surgery',
     meeting_date: null,
     notes: 'CEO is in surgery. Follow up next week. High potential monthly retainer.',
-    created_at: '2026-06-01T00:00:00Z',
-  },
-  {
-    id: 'lead-trio-upward-bound',
-    name: 'TRIO Upward Bound',
-    contact_name: 'Matt (last name unknown)',
-    industry: 'Education',
-    email: '',
-    phone: '',
-    stage: 'Demo Shown',
-    potential_value: '$1,000/mo after summer pilot',
-    what_they_want: 'Student tracking, attendance, reporting, parent communication',
-    what_they_need: 'Full student management platform across 4 schools',
-    next_steps: 'Run summer pilot — convert to $1,000/mo contract after summer',
-    meeting_date: null,
-    notes: 'Matt is the program coordinator. Demo shown June 10. Running pilot during summer. 4 schools in the TRIO program. Target $1,000/mo after pilot.',
     created_at: '2026-06-01T00:00:00Z',
   },
   {
@@ -119,8 +125,9 @@ const SEED_LEADS = [
 ];
 
 const SEED_ACTIVITY = [
-  { id: 'a1', type: 'client', text: 'Mars Hill Apologetics added as client', ts: '2024-01-01T00:00:00Z' },
-  { id: 'a2', type: 'lead', text: 'Flow Barbershop — Verbal yes! $600/mo social media. Send contract.', ts: '2026-06-12T17:00:00Z' },
+  { id: 'a1', type: 'client', text: 'Mars Hill Apologetics — Active client, website live', ts: '2024-01-01T00:00:00Z' },
+  { id: 'a8', type: 'client', text: 'Flow Barbershop — CLOSED! $600/mo social media, contract being sent', ts: '2026-06-12T17:00:00Z' },
+  { id: 'a9', type: 'client', text: 'TRIO Upward Bound — Pilot started, $1,000/mo target after summer', ts: '2026-06-10T12:00:00Z' },
   { id: 'a7', type: 'lead', text: 'La Cazuela added — 2 locations, $1,500/mo target (website + social + AI)', ts: '2026-06-01T09:06:00Z' },
   { id: 'a3', type: 'lead', text: "Angelina's Pizza added — CEO in surgery, follow up next week", ts: '2026-06-01T09:05:00Z' },
   { id: 'a4', type: 'lead', text: 'TRIO Upward Bound added — Demo Shown', ts: '2026-06-01T09:10:00Z' },
@@ -136,15 +143,15 @@ function set(key, value) {
 }
 
 function init() {
-  if (localStorage.getItem('nova_crm_v3')) return;
-  set('nova_clients', [MARS_HILL]);
+  if (localStorage.getItem('nova_crm_v4')) return;
+  set('nova_clients', [MARS_HILL, FLOW_BARBERSHOP, TRIO_UPWARD_BOUND]);
   set('nova_leads', SEED_LEADS);
   set('nova_invoices', []);
   set('nova_crm_docs', []);
   set('nova_nl_subscribers', []);
   set('nova_nl_sent', []);
   set('nova_crm_activity', SEED_ACTIVITY);
-  localStorage.setItem('nova_crm_v3', '1');
+  localStorage.setItem('nova_crm_v4', '1');
 }
 init();
 

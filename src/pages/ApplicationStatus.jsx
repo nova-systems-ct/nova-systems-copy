@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Clock, CheckCircle, XCircle, Calendar, MessageSquare, MapPin, ChevronRight } from "lucide-react";
+import { LogOut, Clock, CheckCircle, XCircle, Calendar, MessageSquare, MapPin, Link2, Plus, Trash2, FileText } from "lucide-react";
 
 const GOLD = "#D4A030";
 const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
@@ -19,6 +19,9 @@ export default function ApplicationStatus() {
   const navigate = useNavigate();
   const [session, setSession] = useState(null);
   const [application, setApplication] = useState(null);
+  const [portfolioLinks, setPortfolioLinks] = useState([]);
+  const [newLink, setNewLink] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
 
   useEffect(() => {
     const s = JSON.parse(localStorage.getItem("nova_applicant_session") || "null");
@@ -27,7 +30,31 @@ export default function ApplicationStatus() {
     const apps = JSON.parse(localStorage.getItem("nova_applications") || "[]");
     const app = apps.find((a) => a.id === s.applicationId);
     setApplication(app || null);
+    setPortfolioLinks(app?.portfolio_links || []);
   }, []);
+
+  const persistApp = (patch) => {
+    const apps = JSON.parse(localStorage.getItem("nova_applications") || "[]");
+    const updated = apps.map((a) => a.id === application.id ? { ...a, ...patch } : a);
+    localStorage.setItem("nova_applications", JSON.stringify(updated));
+    setApplication((prev) => ({ ...prev, ...patch }));
+  };
+
+  const addLink = () => {
+    if (!newLink.trim()) return;
+    const entry = { url: newLink.trim(), label: linkLabel.trim() || newLink.trim(), added_at: new Date().toISOString() };
+    const links = [...portfolioLinks, entry];
+    setPortfolioLinks(links);
+    persistApp({ portfolio_links: links });
+    setNewLink("");
+    setLinkLabel("");
+  };
+
+  const removeLink = (idx) => {
+    const links = portfolioLinks.filter((_, i) => i !== idx);
+    setPortfolioLinks(links);
+    persistApp({ portfolio_links: links });
+  };
 
   const logout = () => {
     localStorage.removeItem("nova_applicant_session");
@@ -174,6 +201,80 @@ export default function ApplicationStatus() {
                 <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 13 }}>{value}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Portfolio links */}
+        <div style={{ borderRadius: 14, padding: 24, marginBottom: 20, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+            <Link2 className="w-4 h-4" style={{ color: GOLD }} />
+            <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase" }}>YOUR PORTFOLIO</p>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            <input
+              value={linkLabel}
+              onChange={(e) => setLinkLabel(e.target.value)}
+              placeholder="Label (e.g. 'Instagram' or 'Design Work')"
+              style={{ width: "100%", padding: "9px 12px", fontSize: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, color: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={newLink}
+                onChange={(e) => setNewLink(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addLink()}
+                placeholder="https://..."
+                style={{ flex: 1, padding: "9px 12px", fontSize: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, color: "#fff", outline: "none", fontFamily: "inherit" }}
+              />
+              <button onClick={addLink} disabled={!newLink.trim()} style={{ padding: "9px 14px", background: newLink.trim() ? G : "#111", border: "none", borderRadius: 7, color: newLink.trim() ? "#0a0800" : "#444", fontSize: 12, fontWeight: 700, cursor: newLink.trim() ? "pointer" : "not-allowed", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
+                <Plus className="w-3 h-3" /> Add
+              </button>
+            </div>
+          </div>
+          {portfolioLinks.length === 0 ? (
+            <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No links added yet. Add your portfolio, social media, or work samples.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {portfolioLinks.map((link, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
+                  <Link2 className="w-3 h-3" style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {link.label && link.label !== link.url && <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, marginBottom: 2 }}>{link.label}</p>}
+                    <a href={link.url} target="_blank" rel="noreferrer" style={{ color: "#60a5fa", fontSize: 12, wordBreak: "break-all" }}>{link.url}</a>
+                  </div>
+                  <button onClick={() => removeLink(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.2)", padding: 4, flexShrink: 0 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#f87171")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.2)")}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Documents from Isaac */}
+        {(application?.documents || []).length > 0 && (
+          <div style={{ borderRadius: 14, padding: 24, marginBottom: 20, background: "rgba(255,255,255,0.025)", border: `1px solid ${GOLD}25` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+              <FileText className="w-4 h-4" style={{ color: GOLD }} />
+              <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase" }}>DOCUMENTS FROM ISAAC</p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {(application.documents || []).map((doc, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10 }}>
+                  <FileText className="w-4 h-4" style={{ color: GOLD, flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <p style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{doc.name || "Document"}</p>
+                    {doc.uploaded_at && <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 2 }}>{new Date(doc.uploaded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>}
+                  </div>
+                  {doc.url && (
+                    <a href={doc.url} target="_blank" rel="noreferrer" style={{ padding: "6px 12px", background: `${GOLD}15`, border: `1px solid ${GOLD}35`, borderRadius: 6, color: GOLD, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+                      View
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

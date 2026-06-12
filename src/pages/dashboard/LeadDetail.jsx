@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Calendar, X, Check, Save, Sparkles, Loader2 } from 'lucide-react'
+import { ArrowLeft, Check, Save, Sparkles } from 'lucide-react'
 import { getLead, updateLead, getDocuments, saveDocument, addActivity } from '../../lib/crmStore'
+import DocumentGeneratorModal from '../../components/dashboard/DocumentGeneratorModal'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
@@ -42,9 +43,7 @@ export default function LeadDetail() {
   const [docs, setDocs] = useState([])
   const [notes, setNotes] = useState('')
   const [notesSaved, setNotesSaved] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [genResult, setGenResult] = useState('')
-  const [genError, setGenError] = useState('')
+  const [docModal, setDocModal] = useState(false)
   const [demoUrl, setDemoUrl] = useState('')
 
   useEffect(() => {
@@ -69,42 +68,6 @@ export default function LeadDetail() {
     setTimeout(() => setNotesSaved(false), 2000)
   }
 
-  const generateProposal = async () => {
-    const apiKey = import.meta.env.VITE_CLAUDE_API_KEY
-    if (!apiKey) { setGenError('VITE_CLAUDE_API_KEY not set — add it to your .env file.'); return }
-    setGenerating(true)
-    setGenError('')
-    setGenResult('')
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1500,
-          system: 'You are a professional business document writer for Nova Systems, a Connecticut-based operational infrastructure company. Generate professional, concise business documents.',
-          messages: [{
-            role: 'user',
-            content: `Write a professional proposal for ${lead.name} (${lead.industry} industry). Contact: ${lead.contact_name}. They want: ${lead.what_they_want}. They need: ${lead.what_they_need}. Potential value: ${lead.potential_value}. Format as a clean, professional business proposal from Nova Systems.`,
-          }],
-        }),
-      })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error.message)
-      const text = data.content?.[0]?.text || ''
-      setGenResult(text)
-      saveDocument({ lead_id: id, entity_name: lead.name, type: 'Proposal', content: text, sent: false })
-      setDocs(getDocuments({ lead_id: id }))
-    } catch (err) {
-      setGenError(err.message || 'Generation failed')
-    }
-    setGenerating(false)
-  }
 
   return (
     <div style={{ padding: '40px 48px 80px', maxWidth: 1100 }}>
@@ -176,23 +139,24 @@ export default function LeadDetail() {
       {tab === 'Proposals' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
-            <button onClick={generateProposal} disabled={generating} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: G, border: 'none', borderRadius: 7, color: '#0a0800', fontSize: 12, fontWeight: 700, cursor: generating ? 'not-allowed' : 'pointer', opacity: generating ? 0.7 : 1, fontFamily: 'inherit' }}>
-              {generating ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> : <Sparkles style={{ width: 14, height: 14 }} />}
-              {generating ? 'Generating…' : 'Generate Proposal with AI'}
+            <button onClick={() => setDocModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: G, border: 'none', borderRadius: 7, color: '#0a0800', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <Sparkles style={{ width: 14, height: 14 }} /> Generate Document with AI
             </button>
           </div>
-          {genError && <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, color: '#f87171', fontSize: 13, marginBottom: 16 }}>{genError}</div>}
-          {genResult && (
-            <div style={{ background: 'rgba(255,255,255,0.025)', border: `1px solid ${GOLD}25`, borderRadius: 12, padding: 24, marginBottom: 20 }}>
-              <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 14 }}>Generated Proposal</p>
-              <pre style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 1.75, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{genResult}</pre>
-            </div>
-          )}
-          {docs.filter(d => d.type === 'Proposal').length === 0 && !genResult && (
+          {docs.filter(d => d.type === 'Proposal').length === 0 && (
             <div style={{ textAlign: 'center', padding: 60, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12 }}>
-              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>No proposals yet. Click "Generate Proposal with AI" above.</p>
+              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>No proposals yet. Click "Generate Document with AI" above.</p>
             </div>
           )}
+          {docs.filter(d => d.type === 'Proposal').map(d => (
+            <div key={d.id} style={{ padding: '14px 18px', marginBottom: 8, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>Proposal</p>
+                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 2 }}>{new Date(d.created_at).toLocaleDateString()}</p>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: d.sent ? 'rgba(34,197,94,0.1)' : `${GOLD}10`, color: d.sent ? '#4ade80' : GOLD, border: `1px solid ${d.sent ? 'rgba(34,197,94,0.3)' : GOLD + '30'}` }}>{d.sent ? 'Sent' : 'Draft'}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -224,9 +188,14 @@ export default function LeadDetail() {
       {/* Documents */}
       {tab === 'Documents' && (
         <div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+            <button onClick={() => setDocModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: G, border: 'none', borderRadius: 7, color: '#0a0800', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <Sparkles style={{ width: 14, height: 14 }} /> Generate Document
+            </button>
+          </div>
           {docs.filter(d => d.type !== 'Demo Link').length === 0 ? (
             <div style={{ textAlign: 'center', padding: 60, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12 }}>
-              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>No documents yet. Use the Documents page to generate.</p>
+              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>No documents yet. Click "Generate Document" above.</p>
             </div>
           ) : docs.filter(d => d.type !== 'Demo Link').map(d => (
             <div key={d.id} style={{ padding: '14px 18px', marginBottom: 8, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -248,6 +217,16 @@ export default function LeadDetail() {
             {notesSaved ? <><Check style={{ width: 13, height: 13 }} /> Saved</> : <><Save style={{ width: 13, height: 13 }} /> Save Notes</>}
           </button>
         </div>
+      )}
+
+      {docModal && (
+        <DocumentGeneratorModal
+          leadId={id}
+          entityName={lead.name}
+          industry={lead.industry}
+          onClose={() => setDocModal(false)}
+          onSaved={() => setDocs(getDocuments({ lead_id: id }))}
+        />
       )}
     </div>
   )

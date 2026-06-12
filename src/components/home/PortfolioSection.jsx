@@ -27,6 +27,17 @@ const projects = [
     category: "Education / Government",
     status: "Pilot",
   },
+  {
+    client: "Flow Barbershop",
+    tagline: "Social media presence — Instagram, Facebook, and content strategy.",
+    description:
+      "A Waterbury barbershop ready to grow its brand. Nova Systems manages their full social media presence — content creation, scheduling, and audience growth across Instagram and Facebook.",
+    services: ["Social Media Management", "Content Creation", "Instagram", "Facebook"],
+    url: null,
+    domain: "Waterbury, CT",
+    category: "Local Business",
+    status: "Active",
+  },
 ];
 
 export default function PortfolioSection() {
@@ -68,7 +79,7 @@ export default function PortfolioSection() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((p, i) => (
             <ProjectCard key={i} project={p} />
           ))}
@@ -110,12 +121,9 @@ function ProjectCard({ project: p }) {
           <span
             className="text-[9px] font-bold tracking-[0.15em] uppercase px-3 py-1 rounded-full"
             style={{
-              color: p.status === "Live" ? "#4ade80" : GOLD,
-              background:
-                p.status === "Live" ? "rgba(34,197,94,0.1)" : `${GOLD}12`,
-              border: `1px solid ${
-                p.status === "Live" ? "rgba(34,197,94,0.25)" : `${GOLD}28`
-              }`,
+              color: (p.status === "Live" || p.status === "Active") ? "#4ade80" : GOLD,
+              background: (p.status === "Live" || p.status === "Active") ? "rgba(34,197,94,0.1)" : `${GOLD}12`,
+              border: `1px solid ${(p.status === "Live" || p.status === "Active") ? "rgba(34,197,94,0.25)" : `${GOLD}28`}`,
             }}
           >
             {p.status}

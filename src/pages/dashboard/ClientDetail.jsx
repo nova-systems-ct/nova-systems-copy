@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, Plus, Check, X, Edit2, Save } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Plus, Check, X, Edit2, Save, Sparkles } from 'lucide-react'
 import { getClient, updateClient, getInvoices, addInvoice, updateInvoice, getDocuments, saveDocument } from '../../lib/crmStore'
+import DocumentGeneratorModal from '../../components/dashboard/DocumentGeneratorModal'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
@@ -41,6 +42,7 @@ export default function ClientDetail() {
   const [notesSaved, setNotesSaved] = useState(false)
   const [invModal, setInvModal] = useState(false)
   const [invForm, setInvForm] = useState({ description: '', amount: '', due_date: '', paid: false })
+  const [docModal, setDocModal] = useState(false)
 
   useEffect(() => {
     const c = getClient(id)
@@ -229,10 +231,19 @@ export default function ClientDetail() {
       {tab === 'Documents' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
-            <button onClick={() => window.location.href = '/dashboard/documents'} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: G, border: 'none', borderRadius: 7, color: '#0a0800', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              <Plus style={{ width: 13, height: 13 }} /> Generate New
+            <button onClick={() => setDocModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: G, border: 'none', borderRadius: 7, color: '#0a0800', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <Sparkles style={{ width: 13, height: 13 }} /> Generate with AI
             </button>
           </div>
+          {docModal && (
+            <DocumentGeneratorModal
+              clientId={id}
+              entityName={client.name}
+              industry={client.industry}
+              onClose={() => setDocModal(false)}
+              onSaved={() => setDocs(getDocuments({ client_id: id }))}
+            />
+          )}
           {docs.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 60, background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12 }}>
               <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>No documents yet. Generate one from the Documents page.</p>
