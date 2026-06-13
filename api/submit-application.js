@@ -5,7 +5,7 @@ import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!rateLimit(req, res, 5, 60_000)) return; // stricter: 5/min for applications
+  if (!rateLimit(req, res, 5, 60_000)) return;
 
   const RESEND_KEY         = process.env.RESEND_API_KEY;
   const SUPABASE_URL       = process.env.SUPABASE_URL;
@@ -13,10 +13,6 @@ export default async function handler(req, res) {
 
   console.log('[submit-application] RESEND_KEY present:', !!RESEND_KEY);
   console.log('[submit-application] Supabase configured:', !!(SUPABASE_URL && SUPABASE_SERVICE_KEY));
-
-  if (!RESEND_KEY) {
-    return res.status(500).json({ error: 'Email service not configured' });
-  }
 
   // Sanitize all inputs
   const b = req.body || {};
@@ -30,22 +26,22 @@ export default async function handler(req, res) {
   const why_nova     = sanitize(b.why_nova, 3000);
   const availability = sanitize(b.availability, 200);
   const expected_pay = sanitize(b.expected_pay, 200);
-  const password_hash = sanitize(b.password_hash, 128); // SHA-256 hex = 64 chars
+  const password_hash = sanitize(b.password_hash, 128);
 
   const reference_1_name         = sanitize(b.reference_1_name, 100);
   const reference_1_relationship = sanitize(b.reference_1_relationship, 100);
-  const reference_1_phone        = sanitizePhone(b.reference_1_phone);
-  const reference_1_email        = sanitizeEmail(b.reference_1_email);
+  const reference_1_phone        = sanitizePhone(b.reference_1_phone || '');
+  const reference_1_email        = sanitizeEmail(b.reference_1_email || '');
   const reference_2_name         = sanitize(b.reference_2_name, 100);
   const reference_2_relationship = sanitize(b.reference_2_relationship, 100);
-  const reference_2_phone        = sanitizePhone(b.reference_2_phone);
-  const reference_2_email        = sanitizeEmail(b.reference_2_email);
+  const reference_2_phone        = sanitizePhone(b.reference_2_phone || '');
+  const reference_2_email        = sanitizeEmail(b.reference_2_email || '');
   const reference_3_name         = sanitize(b.reference_3_name, 100);
   const reference_3_relationship = sanitize(b.reference_3_relationship, 100);
-  const reference_3_phone        = sanitizePhone(b.reference_3_phone);
-  const reference_3_email        = sanitizeEmail(b.reference_3_email);
+  const reference_3_phone        = sanitizePhone(b.reference_3_phone || '');
+  const reference_3_email        = sanitizeEmail(b.reference_3_email || '');
 
-  const portfolio_url    = sanitizeUrl(b.portfolio_url);
+  const portfolio_url    = (() => { try { return sanitizeUrl(b.portfolio_url || ''); } catch { return ''; } })();
   const owns_camera      = sanitize(b.owns_camera, 10);
   const camera_specs     = sanitize(b.camera_specs, 300);
   const has_editing_exp  = sanitize(b.has_editing_exp, 10);
@@ -61,15 +57,12 @@ export default async function handler(req, res) {
   const resume_name   = sanitize(b.resume_name, 200);
   const resume_base64 = typeof b.resume_base64 === 'string' ? b.resume_base64 : '';
 
-  // Basic validation
-  if (!name || !email) {
-    return res.status(400).json({ error: 'Name and email are required' });
-  }
-  if (!position) {
-    return res.status(400).json({ error: 'Position is required' });
-  }
+  // Only name, email, position, password_hash are truly required
+  if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
+  if (!position)       return res.status(400).json({ error: 'Position is required' });
+  if (!password_hash)  return res.status(400).json({ error: 'Password hash is required' });
 
-  // Save to Supabase
+  // 1. Save to Supabase first — always, before emails
   if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
     try {
       const sbRes = await fetch(`${SUPABASE_URL}/rest/v1/applications`, {
@@ -87,17 +80,32 @@ export default async function handler(req, res) {
           reference_1_name, reference_1_relationship, reference_1_phone, reference_1_email,
           reference_2_name, reference_2_relationship, reference_2_phone, reference_2_email,
           reference_3_name, reference_3_relationship, reference_3_phone, reference_3_email,
-          portfolio_url, submitted_at: new Date().toISOString(),
+          portfolio_url: portfolio_url || null,
+          owns_camera: owns_camera || null, camera_specs: camera_specs || null,
+          has_editing_exp: has_editing_exp || null, editing_software: editing_software || null,
+          social_media: social_media || null, has_drone: has_drone || null,
+          sales_experience: sales_experience || null, industries: industries || null,
+          has_car: has_car || null, cold_calling: cold_calling || null,
+          biggest_sale: biggest_sale || null,
+          resume_name: resume_name || null,
+          submitted_at: new Date().toISOString(),
         }),
       });
       if (!sbRes.ok) {
-        console.error('[submit-application] Supabase error:', sbRes.status, await sbRes.text());
+        const errText = await sbRes.text();
+        console.error('[submit-application] Supabase error:', sbRes.status, errText);
       } else {
         console.log('[submit-application] Saved to Supabase');
       }
     } catch (e) {
       console.error('[submit-application] Supabase error (non-fatal):', e.message);
     }
+  }
+
+  // 2. Send emails (non-fatal — application is already saved above)
+  if (!RESEND_KEY) {
+    console.warn('[submit-application] RESEND_API_KEY not set — skipping emails');
+    return res.status(200).json({ ok: true, warning: 'Emails skipped — Resend not configured' });
   }
 
   const FROM = 'Nova Systems <noreply@nova-systems.app>';
@@ -116,9 +124,9 @@ export default async function handler(req, res) {
 
   const posFields = position.includes('Videographer')
     ? [
-        `Camera/Phone: ${owns_camera === 'yes' ? 'Yes' : 'No'}`,
+        `Camera/Phone: ${owns_camera === 'yes' ? 'Yes' : owns_camera === 'no' ? 'No' : 'N/A'}`,
         `Camera Specs: ${camera_specs || 'N/A'}`,
-        `Video Editing: ${has_editing_exp === 'yes' ? `Yes — ${editing_software || 'unspecified'}` : 'No'}`,
+        `Video Editing: ${has_editing_exp === 'yes' ? `Yes — ${editing_software || 'unspecified'}` : has_editing_exp === 'no' ? 'No' : 'N/A'}`,
         `Social Media: ${social_media || 'N/A'}`,
         `Drone: ${has_drone === 'yes' ? 'Yes' : has_drone === 'no' ? 'No' : 'N/A'}`,
         `Portfolio: ${portfolio_url || 'N/A'}`,
@@ -127,8 +135,8 @@ export default async function handler(req, res) {
     ? [
         `Sales Exp: ${sales_experience || 'N/A'}`,
         `Industries: ${industries || 'N/A'}`,
-        `Reliable Car: ${has_car === 'yes' ? 'Yes' : 'No'}`,
-        `Cold Calling: ${cold_calling === 'yes' ? 'Yes' : 'No'}`,
+        `Reliable Car: ${has_car === 'yes' ? 'Yes' : has_car === 'no' ? 'No' : 'N/A'}`,
+        `Cold Calling: ${cold_calling === 'yes' ? 'Yes' : cold_calling === 'no' ? 'No' : 'N/A'}`,
         `Biggest Sale: ${biggest_sale || 'N/A'}`,
         `Commission Expectation: ${expected_pay || 'N/A'}`,
       ].join('\n')
@@ -189,13 +197,12 @@ export default async function handler(req, res) {
     });
     const r1Body = await r1.text();
     console.log('[submit-application] Isaac email:', r1.status, r1Body);
-    if (!r1.ok) return res.status(500).json({ error: 'Failed to send notification', details: r1Body });
+    if (!r1.ok) console.error('[submit-application] Isaac email failed (non-fatal):', r1Body);
   } catch (e) {
-    console.error('[submit-application] Isaac email error:', e.message);
-    return res.status(500).json({ error: 'Network error sending notification' });
+    console.error('[submit-application] Isaac email error (non-fatal):', e.message);
   }
 
-  // Confirmation to applicant
+  // Confirmation email to applicant
   const confirmBody = [
     `Hi ${name},`,
     '',
@@ -208,8 +215,8 @@ export default async function handler(req, res) {
     'Track your application status at:',
     'https://nova-systems.app/applicant-login',
     '',
-    `Email:    ${email}`,
-    'Password: (the password you created during your application)',
+    `Login Email: ${email}`,
+    'Password:    The password you set during your application',
     '',
     '━━━━━━━━━━━━━━━━━━━━',
     'Questions? Email hello@nova-systems.app',
@@ -220,13 +227,19 @@ export default async function handler(req, res) {
   ].join('\n');
 
   try {
-    await fetch('https://api.resend.com/emails', {
+    const r2 = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM, to: [email], subject: 'Application Received — Nova Systems', text: confirmBody }),
+      body: JSON.stringify({
+        from: FROM,
+        to: [email],
+        subject: 'Application Received — Nova Systems',
+        text: confirmBody,
+      }),
     });
+    console.log('[submit-application] Applicant confirmation email:', r2.status);
   } catch (e) {
-    console.warn('[submit-application] Confirm email error (non-fatal):', e.message);
+    console.warn('[submit-application] Applicant confirm email error (non-fatal):', e.message);
   }
 
   return res.status(200).json({ ok: true });

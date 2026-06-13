@@ -70,14 +70,14 @@ function RefBlock({ number, value, onChange }) {
         Reference {number}
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="Full Name *">
-          <input required value={value.name} onChange={setF("name")} style={inp} placeholder="Jane Smith" onFocus={focus} onBlur={blur} />
+        <Field label="Full Name">
+          <input value={value.name} onChange={setF("name")} style={inp} placeholder="Jane Smith" onFocus={focus} onBlur={blur} />
         </Field>
-        <Field label="Relationship *">
-          <input required value={value.relationship} onChange={setF("relationship")} style={inp} placeholder="Manager, Teacher, Coach…" onFocus={focus} onBlur={blur} />
+        <Field label="Relationship">
+          <input value={value.relationship} onChange={setF("relationship")} style={inp} placeholder="Manager, Teacher, Coach…" onFocus={focus} onBlur={blur} />
         </Field>
-        <Field label="Phone *">
-          <input required type="tel" value={value.phone} onChange={setF("phone")} style={inp} placeholder="+1 (860) 000-0000" onFocus={focus} onBlur={blur} />
+        <Field label="Phone">
+          <input type="tel" value={value.phone} onChange={setF("phone")} style={inp} placeholder="+1 (860) 000-0000" onFocus={focus} onBlur={blur} />
         </Field>
         <Field label="Email">
           <input type="email" value={value.email} onChange={setF("email")} style={inp} placeholder="jane@email.com" onFocus={focus} onBlur={blur} />
@@ -139,7 +139,6 @@ export default function ApplicationForm({ preselectedPosition }) {
     e.preventDefault();
     setError("");
 
-    if (!isFilled && !resumeFile) { setError("Please upload your resume (PDF)."); return; }
     if (form.password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return; }
 
@@ -241,7 +240,7 @@ export default function ApplicationForm({ preselectedPosition }) {
           <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 12 }}>APPLY NOW</p>
           <h2 className="text-3xl md:text-4xl font-black text-white mb-4 leading-tight">Ready to Build With Us?</h2>
           <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.4)" }}>
-            Fill out every field. Isaac reviews every application personally. Be real, be specific.
+            Required fields are marked with *. Everything else is optional — leave blank or write N/A.
           </p>
         </div>
 
@@ -331,8 +330,8 @@ export default function ApplicationForm({ preselectedPosition }) {
                   </div>
                 )}
               </Field>
-              <Field label="Portfolio URL (website, Instagram, TikTok, YouTube) *">
-                <input required type="url" value={form.portfolio_url || ""} onChange={set("portfolio_url")} style={inp} placeholder="https://…" onFocus={focus} onBlur={blur} />
+              <Field label="Portfolio URL (website, Instagram, TikTok, YouTube)">
+                <input type="text" value={form.portfolio_url || ""} onChange={set("portfolio_url")} style={inp} placeholder="https://…" onFocus={focus} onBlur={blur} />
               </Field>
               <Field label="Social media (platforms & follower counts)">
                 <textarea rows={2} value={form.social_media || ""} onChange={set("social_media")} onFocus={focus} onBlur={blur} style={{ ...inp, resize: "none" }} placeholder="TikTok 10k, Instagram 5k…" />
@@ -345,23 +344,23 @@ export default function ApplicationForm({ preselectedPosition }) {
 
           {form.position === "sales" && (
             <>
-              <Field label="Sales experience *">
-                <textarea required rows={3} value={form.sales_experience || ""} onChange={set("sales_experience")} onFocus={focus} onBlur={blur} style={{ ...inp, resize: "none" }} placeholder="B2B, B2C, door-to-door, retail…" />
+              <Field label="Sales experience">
+                <textarea rows={3} value={form.sales_experience || ""} onChange={set("sales_experience")} onFocus={focus} onBlur={blur} style={{ ...inp, resize: "none" }} placeholder="B2B, B2C, door-to-door, retail…" />
               </Field>
               <Field label="Industries you've worked in">
                 <input value={form.industries || ""} onChange={set("industries")} style={inp} placeholder="Tech, Real Estate, Insurance…" onFocus={focus} onBlur={blur} />
               </Field>
-              <Field label="Reliable car? *">
+              <Field label="Reliable car?">
                 <YesNo value={form.has_car} onChange={setVal("has_car")} />
               </Field>
-              <Field label="Comfortable cold calling? *">
+              <Field label="Comfortable cold calling?">
                 <YesNo value={form.cold_calling} onChange={setVal("cold_calling")} />
               </Field>
-              <Field label="Biggest sale you've ever closed *">
-                <textarea required rows={2} value={form.biggest_sale || ""} onChange={set("biggest_sale")} onFocus={focus} onBlur={blur} style={{ ...inp, resize: "none" }} placeholder="Size, context, how you closed it…" />
+              <Field label="Biggest sale you've ever closed">
+                <textarea rows={2} value={form.biggest_sale || ""} onChange={set("biggest_sale")} onFocus={focus} onBlur={blur} style={{ ...inp, resize: "none" }} placeholder="Size, context, how you closed it…" />
               </Field>
-              <Field label="Commission expectations *">
-                <input required value={form.expected_pay || ""} onChange={set("expected_pay")} style={inp} placeholder="10%, $500/deal, open to negotiation…" onFocus={focus} onBlur={blur} />
+              <Field label="Commission expectations">
+                <input value={form.expected_pay || ""} onChange={set("expected_pay")} style={inp} placeholder="10%, $500/deal, open to negotiation…" onFocus={focus} onBlur={blur} />
               </Field>
             </>
           )}
@@ -370,32 +369,32 @@ export default function ApplicationForm({ preselectedPosition }) {
           {form.position && (
             <>
               <SectionDivider title="Cover Letter" />
-              <Field label="Cover Letter * — make it real, make it specific">
-                <textarea required rows={8} value={form.cover_letter} onChange={set("cover_letter")} onFocus={focus} onBlur={blur}
+              <Field label="Cover Letter">
+                <textarea rows={8} value={form.cover_letter} onChange={set("cover_letter")} onFocus={focus} onBlur={blur}
                   style={{ ...inp, resize: "vertical", lineHeight: 1.75 }}
                   placeholder="Tell Isaac why you're the one. What have you done, what are you building, and why Nova Systems specifically…" />
               </Field>
 
               <SectionDivider title="Background" />
-              <Field label="Previous Experience *">
-                <textarea required rows={3} value={form.experience} onChange={set("experience")} onFocus={focus} onBlur={blur} style={{ ...inp, resize: "none" }} placeholder="Relevant work, projects, or life experience…" />
+              <Field label="Previous Experience">
+                <textarea rows={3} value={form.experience} onChange={set("experience")} onFocus={focus} onBlur={blur} style={{ ...inp, resize: "none" }} placeholder="Relevant work, projects, or life experience…" />
               </Field>
-              <Field label="Why Nova Systems? *">
-                <textarea required rows={3} value={form.why_nova} onChange={set("why_nova")} onFocus={focus} onBlur={blur} style={{ ...inp, resize: "none" }} placeholder="Be specific. What do you know about what we do?" />
+              <Field label="Why Nova Systems?">
+                <textarea rows={3} value={form.why_nova} onChange={set("why_nova")} onFocus={focus} onBlur={blur} style={{ ...inp, resize: "none" }} placeholder="Be specific. What do you know about what we do?" />
               </Field>
-              <Field label="Availability *">
-                <input required value={form.availability} onChange={set("availability")} style={inp} placeholder="Weekdays, weekends, flexible…" onFocus={focus} onBlur={blur} />
+              <Field label="Availability">
+                <input value={form.availability} onChange={set("availability")} style={inp} placeholder="Weekdays, weekends, flexible…" onFocus={focus} onBlur={blur} />
               </Field>
               {form.position !== "sales" && (
-                <Field label="Expected Pay *">
-                  <input required value={form.expected_pay} onChange={set("expected_pay")} style={inp} placeholder="$20/hr, $200/project, negotiable…" onFocus={focus} onBlur={blur} />
+                <Field label="Expected Pay">
+                  <input value={form.expected_pay} onChange={set("expected_pay")} style={inp} placeholder="$20/hr, $200/project, negotiable…" onFocus={focus} onBlur={blur} />
                 </Field>
               )}
 
               {/* ── REFERENCES ─────────────────────────────────────── */}
-              <SectionDivider title="3 References" />
+              <SectionDivider title="References (optional)" />
               <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: -10, lineHeight: 1.6 }}>
-                Provide 3 professional or personal references. Do not list family members.
+                Up to 3 professional or personal references. All fields optional. Do not list family members.
               </p>
               {refs.map((ref, i) => (
                 <RefBlock key={i} number={i + 1} value={ref}
@@ -404,7 +403,7 @@ export default function ApplicationForm({ preselectedPosition }) {
 
               {/* ── RESUME ───────────────────────────────────────────── */}
               <SectionDivider title="Resume" />
-              <Field label={`Resume Upload (PDF) ${!isFilled ? "*" : ""}`}>
+              <Field label="Resume Upload (PDF) — optional">
                 <div
                   onClick={() => fileRef.current?.click()}
                   style={{

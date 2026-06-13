@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Users, UserPlus, X, Send, ExternalLink, Calendar } from 'lucide-react'
-import { callFunction } from '../../lib/callFunction'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
@@ -31,7 +30,29 @@ export default function Jobs() {
   const [addForm, setAddForm] = useState({ name: '', email: '', phone: '' })
   const [addLoading, setAddLoading] = useState(false)
 
-  const load = () => setCandidates(JSON.parse(localStorage.getItem('nova_applications') || '[]'))
+  const load = async () => {
+    const local = JSON.parse(localStorage.getItem('nova_applications') || '[]')
+    setCandidates(local) // show local immediately
+    try {
+      const res = await fetch('/api/get-applications')
+      if (!res.ok) return
+      const sbApps = await res.json()
+      if (!Array.isArray(sbApps) || sbApps.length === 0) return
+      // Merge: local overrides Supabase for mutable fields (status, notes, interviewDate)
+      const localMap = Object.fromEntries(local.map(a => [a.id, a]))
+      const merged = sbApps.map(sb => {
+        const loc = localMap[sb.id]
+        // If local has a more recent status update, keep local; otherwise use Supabase
+        return loc ? { ...sb, ...loc } : sb
+      })
+      const sbIds = new Set(sbApps.map(a => a.id))
+      const localOnly = local.filter(a => !sbIds.has(a.id))
+      const all = [...merged, ...localOnly]
+      all.sort((a, b) => new Date(b.submittedAt || b.submitted_at || 0) - new Date(a.submittedAt || a.submitted_at || 0))
+      localStorage.setItem('nova_applications', JSON.stringify(all))
+      setCandidates(all)
+    } catch {}
+  }
   useEffect(() => { load() }, [])
 
   const filtered = candidates.filter(c => {
@@ -51,7 +72,18 @@ export default function Jobs() {
   const sendInvite = async () => {
     if (!addForm.email) return
     setAddLoading(true)
-    try { await callFunction('sendEmail', { type: 'manual_invite', payload: { toEmail: addForm.email, toName: addForm.name } }) } catch {}
+    try {
+      await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: addForm.name || 'Prospective Candidate',
+          email: 'isaac_0427@icloud.com',
+          subject: `Invite Sent: ${addForm.name || addForm.email}`,
+          message: `You sent an invitation to ${addForm.name || 'a prospect'} (${addForm.email}) to apply at nova-systems.app/careers.`,
+        }),
+      })
+    } catch {}
     setAddLoading(false)
     setAddModal(false)
     setAddForm({ name: '', email: '', phone: '' })
