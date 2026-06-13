@@ -32,6 +32,7 @@ import Documents from './pages/dashboard/Documents';
 import Newsletter from './pages/dashboard/Newsletter';
 import DashboardSettings from './pages/dashboard/Settings';
 import Portfolio from './pages/dashboard/Portfolio';
+import SiteEditor from './pages/dashboard/SiteEditor';
 
 function App() {
   return (
@@ -66,6 +67,7 @@ function App() {
             <Route path="documents" element={<Documents />} />
             <Route path="newsletter" element={<Newsletter />} />
             <Route path="portfolio" element={<Portfolio />} />
+            <Route path="site-editor" element={<SiteEditor />} />
             <Route path="settings" element={<DashboardSettings />} />
           </Route>
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, Plus, Check, X, Edit2, Save, Sparkles } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Plus, Check, X, Edit2, Save, Sparkles, Send, Loader2 } from 'lucide-react'
 import { getClient, updateClient, getInvoices, addInvoice, updateInvoice, getDocuments, saveDocument } from '../../lib/crmStore'
 import DocumentGeneratorModal from '../../components/dashboard/DocumentGeneratorModal'
 
@@ -8,7 +8,7 @@ const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
 const inp = { width: '100%', padding: '10px 13px', fontSize: 13, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 
-const TABS = ['Overview', 'Website', 'Services', 'Invoices', 'Documents', 'Notes']
+const TABS = ['Overview', 'Website', 'Services', 'Invoices', 'Documents', 'Notes', 'Messages']
 
 const STATUS_CFG = {
   active:   { label: 'Active',   color: '#4ade80', bg: 'rgba(34,197,94,0.1)',  border: 'rgba(34,197,94,0.3)' },
@@ -43,6 +43,11 @@ export default function ClientDetail() {
   const [invModal, setInvModal] = useState(false)
   const [invForm, setInvForm] = useState({ description: '', amount: '', due_date: '', paid: false })
   const [docModal, setDocModal] = useState(false)
+  const [msgText, setMsgText] = useState('')
+  const [msgSending, setMsgSending] = useState(false)
+  const [msgError, setMsgError] = useState('')
+  const [msgSuccess, setMsgSuccess] = useState(false)
+  const [msgHistory, setMsgHistory] = useState([])
 
   useEffect(() => {
     const c = getClient(id)
@@ -51,7 +56,44 @@ export default function ClientDetail() {
     setNotes(c.notes || '')
     setInvoices(getInvoices(id))
     setDocs(getDocuments({ client_id: id }))
+    // Load message history from localStorage (Supabase messages also appear here when fetched)
+    try {
+      const all = JSON.parse(localStorage.getItem('nova_client_messages') || '[]')
+      setMsgHistory(all.filter(m => m.client_id === id))
+    } catch {}
   }, [id])
+
+  const sendMessage = async () => {
+    if (!msgText.trim()) return
+    if (!client?.email) { setMsgError('No email on file for this client.'); return }
+    setMsgSending(true)
+    setMsgError('')
+    try {
+      const r = await fetch('/api/send-client-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: id,
+          client_name: client.name,
+          client_email: client.email,
+          message: msgText.trim(),
+        }),
+      })
+      const d = await r.json()
+      if (!r.ok || d.error) { setMsgError(d.error || 'Send failed'); setMsgSending(false); return }
+      const entry = { client_id: id, message: msgText.trim(), sent_at: new Date().toISOString(), id: Date.now().toString(), ...(d.message || {}) }
+      const all = JSON.parse(localStorage.getItem('nova_client_messages') || '[]')
+      const updated = [entry, ...all]
+      localStorage.setItem('nova_client_messages', JSON.stringify(updated))
+      setMsgHistory(updated.filter(m => m.client_id === id))
+      setMsgText('')
+      setMsgSuccess(true)
+      setTimeout(() => setMsgSuccess(false), 2500)
+    } catch (err) {
+      setMsgError(err.message || 'Send failed')
+    }
+    setMsgSending(false)
+  }
 
   if (!client) return null
 
@@ -274,6 +316,57 @@ export default function ClientDetail() {
           <button onClick={saveNotes} style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', background: notesSaved ? 'rgba(34,197,94,0.15)' : G, border: notesSaved ? '1px solid rgba(34,197,94,0.3)' : 'none', borderRadius: 7, color: notesSaved ? '#4ade80' : '#0a0800', fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', fontFamily: 'inherit' }}>
             {notesSaved ? <><Check style={{ width: 13, height: 13 }} /> Saved</> : <><Save style={{ width: 13, height: 13 }} /> Save Notes</>}
           </button>
+        </div>
+      )}
+
+      {/* Messages */}
+      {tab === 'Messages' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Send Update */}
+          <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 26 }}>
+            <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4 }}>Send Update</p>
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, marginBottom: 18 }}>
+              Send an email directly to {client.name} at <span style={{ color: '#60a5fa' }}>{client.email || '(no email on file)'}</span>
+            </p>
+            {!client.email && (
+              <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, marginBottom: 16 }}>
+                <p style={{ color: '#f87171', fontSize: 12 }}>No email address on file. Add one in the Overview tab.</p>
+              </div>
+            )}
+            <textarea
+              value={msgText}
+              onChange={e => setMsgText(e.target.value)}
+              rows={6}
+              style={{ ...inp, resize: 'vertical', lineHeight: 1.7, marginBottom: 12 }}
+              placeholder={`Hi ${client.name.split(' ')[0]},\n\nHere's an update on your project…`}
+            />
+            {msgError && <p style={{ color: '#f87171', fontSize: 12, marginBottom: 10 }}>{msgError}</p>}
+            {msgSuccess && <p style={{ color: '#4ade80', fontSize: 12, marginBottom: 10 }}>Message sent successfully.</p>}
+            <button onClick={sendMessage} disabled={msgSending || !msgText.trim() || !client.email}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 20px', background: msgSending || !msgText.trim() || !client.email ? '#161410' : G, border: msgSending || !msgText.trim() || !client.email ? '1px solid rgba(255,255,255,0.07)' : 'none', borderRadius: 8, color: msgSending || !msgText.trim() || !client.email ? 'rgba(255,255,255,0.25)' : '#0a0800', fontSize: 12, fontWeight: 700, cursor: msgSending || !msgText.trim() || !client.email ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+              {msgSending ? <><Loader2 style={{ width: 13, height: 13, animation: 'spin 1s linear infinite' }} /> Sending…</> : <><Send style={{ width: 13, height: 13 }} /> Send to Client</>}
+            </button>
+          </div>
+
+          {/* History */}
+          <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 26 }}>
+            <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 18 }}>Communication History</p>
+            {msgHistory.length === 0 ? (
+              <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>No messages sent yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {msgHistory.map((m, i) => (
+                  <div key={m.id || i} style={{ padding: '14px 18px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 9 }}>
+                    <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', marginBottom: 8 }}>{m.message}</p>
+                    <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: 10 }}>
+                      Sent {new Date(m.sent_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

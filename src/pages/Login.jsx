@@ -3,8 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight, Activity, Bell, Wrench, TrendingUp } from "lucide-react";
 import video1 from "@/assets/Video 1.mp4";
 import video2 from "@/assets/video 2.mp4";
-
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+import { supabase } from "@/lib/supabaseClient";
 
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#C8921A";
@@ -69,31 +68,44 @@ export default function Login() {
     setTimeout(() => navigate("/dashboard"), 600);
   };
 
-  const handleGoogleLogin = () => {
-    if (GOOGLE_CLIENT_ID) {
-      const params = new URLSearchParams({
-        client_id: GOOGLE_CLIENT_ID,
-        redirect_uri: `${window.location.origin}/dashboard`,
-        response_type: "token",
-        scope: "email profile",
-        prompt: "select_account",
-      });
-      const popup = window.open(
-        `https://accounts.google.com/o/oauth2/v2/auth?${params}`,
-        "google-login",
-        "width=500,height=620,left=300,top=100"
-      );
-      const timer = setInterval(() => {
-        if (!popup || popup.closed) {
-          clearInterval(timer);
-          localStorage.setItem('nova_crm_auth', 'true');
-          navigate("/dashboard");
+  const handleGoogleLogin = async () => {
+    if (supabase) {
+      try {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: `${window.location.origin}/dashboard` },
+        });
+        if (error) {
+          setError("Google login failed: " + error.message);
         }
-      }, 500);
-    } else {
-      localStorage.setItem('nova_crm_auth', 'true');
-      navigate("/dashboard");
+        // Supabase handles the redirect — no further action needed here
+        return;
+      } catch {}
     }
+    // Fallback when Supabase not configured
+    localStorage.setItem('nova_crm_auth', 'true');
+    navigate("/dashboard");
+  };
+
+  const handleMicrosoftLogin = async () => {
+    if (supabase) {
+      try {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'azure',
+          options: {
+            redirectTo: `${window.location.origin}/dashboard`,
+            scopes: 'email',
+          },
+        });
+        if (error) {
+          setError("Microsoft login failed: " + error.message);
+        }
+        return;
+      } catch {}
+    }
+    // Fallback when Supabase not configured
+    localStorage.setItem('nova_crm_auth', 'true');
+    navigate("/dashboard");
   };
 
   return (
@@ -273,10 +285,15 @@ export default function Login() {
               </svg>
               Google
             </button>
-            <button type="button"
+            <button type="button" onClick={handleMicrosoftLogin}
               className="flex items-center justify-center gap-2 py-3 text-xs font-semibold transition-all"
               style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.55)", borderRadius: 8 }}>
-              <span className="font-black text-sm" style={{ color: "rgba(255,255,255,0.7)" }}>&#x2B22;</span>
+              <svg width="16" height="16" viewBox="0 0 21 21">
+                <rect x="1" y="1" width="9" height="9" fill="#f25022"/>
+                <rect x="11" y="1" width="9" height="9" fill="#7fba00"/>
+                <rect x="1" y="11" width="9" height="9" fill="#00a4ef"/>
+                <rect x="11" y="11" width="9" height="9" fill="#ffb900"/>
+              </svg>
               Microsoft
             </button>
           </div>

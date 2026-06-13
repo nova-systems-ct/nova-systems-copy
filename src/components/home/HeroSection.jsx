@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight, Phone, Clock, AlertTriangle } from "lucide-react";
+import { useSiteContent } from "@/hooks/useSiteContent";
 import video3 from "@/assets/video 3.mp4";
 import video4 from "@/assets/video 4.mp4";
 
@@ -158,6 +159,10 @@ export default function HeroSection() {
   const [notifVisible, setNotifVisible] = useState(false);
   const [vidIdx, setVidIdx] = useState(0);
   const videoRef = useRef(null);
+  const heroContent = useSiteContent('hero');
+  const heroHeadline = heroContent?.headline || "Stop losing\nrevenue";
+  const heroSubheadline = heroContent?.subheadline || "Every missed call is money walking out your door. We stop the leak.";
+  const heroCta = heroContent?.cta_label || "Deploy Nova Pulse";
 
   useEffect(() => {
     const v = videoRef.current;
@@ -241,11 +246,13 @@ export default function HeroSection() {
             className="font-black text-white leading-[0.88]"
             style={{ fontSize: "clamp(4rem, 7.5vw, 8rem)", letterSpacing: "-0.02em" }}
           >
-            Stop losing<br />revenue
+            {heroHeadline.split('\n').map((line, i) => (
+              <React.Fragment key={i}>{line}{i < heroHeadline.split('\n').length - 1 && <br />}</React.Fragment>
+            ))}
           </h1>
 
           <p className="text-white/55 mt-6 leading-relaxed" style={{ fontSize: "clamp(0.95rem, 1.2vw, 1.1rem)", maxWidth: "420px" }}>
-            Every missed call is money walking out your door. We stop the leak.
+            {heroSubheadline}
           </p>
 
           <Link
@@ -259,7 +266,7 @@ export default function HeroSection() {
               padding: "18px 32px",
             }}
           >
-            Deploy Nova Pulse <ChevronRight className="w-4 h-4" />
+            {heroCta} <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
 

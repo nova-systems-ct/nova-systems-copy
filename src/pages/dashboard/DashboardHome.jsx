@@ -36,21 +36,18 @@ function MetricCard({ icon: Icon, label, value, sub, onClick }) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        background: hov ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.035)',
-        border: `1px solid ${hov ? 'rgba(212,160,48,0.3)' : 'rgba(255,255,255,0.07)'}`,
-        borderRadius: 12, padding: '22px 24px',
+        background: hov ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.025)',
+        borderRadius: 14, padding: '26px 28px',
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'all 0.18s',
+        transition: 'background 0.15s',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase' }}>{label}</p>
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: `${GOLD}12`, border: `1px solid ${GOLD}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon style={{ width: 14, height: 14, color: GOLD }} />
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        <Icon style={{ width: 14, height: 14, color: GOLD }} />
+        <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase' }}>{label}</p>
       </div>
-      <p style={{ color: '#fff', fontSize: 28, fontWeight: 800, lineHeight: 1 }}>{value}</p>
-      {sub && <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, marginTop: 6 }}>{sub}</p>}
+      <p style={{ color: '#fff', fontSize: 32, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em' }}>{value}</p>
+      {sub && <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: 11, marginTop: 8 }}>{sub}</p>}
     </div>
   )
 }
@@ -76,29 +73,28 @@ export default function DashboardHome() {
   const revenue = getInvoices().filter(i => i.paid && new Date(i.created_at) > new Date(new Date().setDate(1))).reduce((sum, i) => sum + (i.amount || 0), 0)
 
   return (
-    <div style={{ padding: '40px 48px 80px', maxWidth: 1200 }}>
+    <div style={{ padding: '48px 52px 80px', maxWidth: 1200 }}>
 
       {/* Header */}
-      <div style={{ marginBottom: 40 }}>
-        <p style={{ color: GOLD, fontSize: 11, fontWeight: 700, letterSpacing: '0.35em', textTransform: 'uppercase', marginBottom: 6 }}>Nova Systems CRM</p>
-        <h1 style={{ color: '#fff', fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 4 }}>
+      <div style={{ marginBottom: 48 }}>
+        <h1 style={{ color: '#fff', fontSize: 34, fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 6 }}>
           {greeting()}, Isaac.
         </h1>
-        <p style={{ color: 'rgba(255,255,255,0.28)', fontSize: 14 }}>{fmtDate()}</p>
+        <p style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14 }}>{fmtDate()}</p>
       </div>
 
       {/* Metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 16, marginBottom: 40 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 48 }}>
         <MetricCard icon={Building2}    label="Total Clients"     value={clients.length}    sub="Active accounts"  onClick={() => navigate('/dashboard/clients')} />
         <MetricCard icon={Target}       label="Active Leads"      value={leads.filter(l => !['Closed Won','Closed Lost'].includes(l.stage)).length} sub="In pipeline" onClick={() => navigate('/dashboard/leads')} />
         <MetricCard icon={CalendarCheck} label="Demo Requests"    value={demoRequests.length} sub={demoRequests.filter(d => d.status === 'pending').length + ' pending'} onClick={() => navigate('/dashboard/leads')} />
         <MetricCard icon={DollarSign}   label="Revenue This Month" value={`$${revenue.toLocaleString()}`} sub="Paid invoices" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, marginBottom: 40 }} className="grid-dashboard">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, marginBottom: 48 }} className="grid-dashboard">
 
         {/* Pipeline */}
-        <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '28px 28px' }}>
+        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 14, padding: '32px 32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
             <div>
               <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4 }}>Pipeline</p>
@@ -128,7 +124,7 @@ export default function DashboardHome() {
         </div>
 
         {/* Activity */}
-        <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: '28px 24px' }}>
+        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 14, padding: '32px 24px' }}>
           <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4 }}>Recent</p>
           <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 700, marginBottom: 20 }}>Activity</h3>
           {activity.length === 0 ? (
