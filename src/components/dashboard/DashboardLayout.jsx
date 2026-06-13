@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Target, Users,
-  FileText, Mail, Settings, LogOut, Menu, X,
+  FileText, Mail, Settings, LogOut, Menu, X, LayoutGrid,
 } from 'lucide-react'
 
 const GOLD = '#D4A030'
@@ -15,6 +15,7 @@ const NAV = [
   { to: '/dashboard/jobs',       label: 'Candidates', icon: Users },
   { to: '/dashboard/documents',  label: 'Documents',  icon: FileText },
   { to: '/dashboard/newsletter', label: 'Newsletter', icon: Mail },
+  { to: '/dashboard/portfolio',  label: 'Portfolio',  icon: LayoutGrid },
   { to: '/dashboard/settings',   label: 'Settings',   icon: Settings },
 ]
 

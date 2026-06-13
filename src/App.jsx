@@ -31,6 +31,7 @@ import JobDetail from './pages/dashboard/JobDetail';
 import Documents from './pages/dashboard/Documents';
 import Newsletter from './pages/dashboard/Newsletter';
 import DashboardSettings from './pages/dashboard/Settings';
+import Portfolio from './pages/dashboard/Portfolio';
 
 function App() {
   return (
@@ -64,6 +65,7 @@ function App() {
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="documents" element={<Documents />} />
             <Route path="newsletter" element={<Newsletter />} />
+            <Route path="portfolio" element={<Portfolio />} />
             <Route path="settings" element={<DashboardSettings />} />
           </Route>
 
