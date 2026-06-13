@@ -5,10 +5,11 @@ const GOLD = "#D4A030";
 const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const POSITIONS = [
-  { id: "videographer", label: "Videographer / Content Creator", open: true },
-  { id: "sales",        label: "Sales Representative",           open: true },
-  { id: "web-dev",      label: "Web Developer",                  open: false },
-  { id: "brand-ambassador", label: "Brand Ambassador",           open: false },
+  { id: "videographer",   label: "Videographer / Content Creator",         open: true  },
+  { id: "sales",          label: "Sales Representative",                   open: true  },
+  { id: "drone-operator", label: "Drone Operator & Aerial Cinematographer", open: true  },
+  { id: "web-dev",        label: "Web Developer",                          open: false },
+  { id: "brand-ambassador", label: "Brand Ambassador",                     open: false },
 ];
 
 const EDITING_SOFTWARE = ["CapCut", "Adobe Premiere Pro", "DaVinci Resolve", "Final Cut Pro", "iMovie", "Other"];
@@ -361,6 +362,23 @@ export default function ApplicationForm({ preselectedPosition }) {
               </Field>
               <Field label="Commission expectations">
                 <input value={form.expected_pay || ""} onChange={set("expected_pay")} style={inp} placeholder="10%, $500/deal, open to negotiation…" onFocus={focus} onBlur={blur} />
+              </Field>
+            </>
+          )}
+
+          {form.position === "drone-operator" && (
+            <>
+              <Field label="Drone model / manufacturer">
+                <input value={form.camera_specs || ""} onChange={set("camera_specs")} style={inp} placeholder="DJI Mini 4 Pro, Mavic 3 Cine, Autel EVO II…" onFocus={focus} onBlur={blur} />
+              </Field>
+              <Field label="FAA Part 107 certified?">
+                <YesNo value={form.has_editing_exp} onChange={setVal("has_editing_exp")} />
+              </Field>
+              <Field label="Years of flying experience">
+                <input value={form.social_media || ""} onChange={set("social_media")} style={inp} placeholder="e.g. 3 years, 18 months…" onFocus={focus} onBlur={blur} />
+              </Field>
+              <Field label="Aerial footage portfolio URL">
+                <input type="text" value={form.portfolio_url || ""} onChange={set("portfolio_url")} style={inp} placeholder="YouTube, Vimeo, Instagram, website…" onFocus={focus} onBlur={blur} />
               </Field>
             </>
           )}

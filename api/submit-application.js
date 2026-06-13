@@ -140,6 +140,13 @@ export default async function handler(req, res) {
         `Biggest Sale: ${biggest_sale || 'N/A'}`,
         `Commission Expectation: ${expected_pay || 'N/A'}`,
       ].join('\n')
+    : position.includes('Drone')
+    ? [
+        `Drone Model: ${camera_specs || 'N/A'}`,
+        `FAA Part 107: ${has_editing_exp === 'yes' ? 'Yes' : has_editing_exp === 'no' ? 'No' : 'N/A'}`,
+        `Years Flying: ${social_media || 'N/A'}`,
+        `Aerial Portfolio: ${portfolio_url || 'N/A'}`,
+      ].join('\n')
     : `Portfolio: ${portfolio_url || 'N/A'}`;
 
   const isaacBody = [

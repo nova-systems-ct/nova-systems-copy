@@ -1,5 +1,5 @@
 import React from "react";
-import { Camera, TrendingUp, Code, Users, MapPin, Clock, DollarSign, ArrowRight } from "lucide-react";
+import { Camera, TrendingUp, Code, Users, MapPin, Clock, DollarSign, ArrowRight, Wind } from "lucide-react";
 
 const GOLD = "#D4A030";
 const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
@@ -40,6 +40,24 @@ const OPEN_JOBS = [
     ],
     bonus: "No cap on earnings",
   },
+  {
+    id: "drone-operator",
+    title: "Drone Operator & Aerial Cinematographer",
+    icon: Wind,
+    type: "Per Project",
+    pay: "$25–50/hour · per project",
+    location: "Waterbury, CT area",
+    tag: "AERIAL",
+    description:
+      "Capture aerial footage for client websites and social media. Film local businesses, events, and locations across Waterbury and CT. Your shots will be the headline content.",
+    requirements: [
+      "Must own a professional drone (DJI preferred)",
+      "FAA Part 107 license preferred",
+      "Portfolio of aerial footage required",
+      "Video editing experience preferred",
+    ],
+    highlight: "FAA Part 107 certified pilots prioritized",
+  },
 ];
 
 const FILLED_JOBS = [
@@ -55,14 +73,14 @@ export default function JobListings({ onApply }) {
         {/* Header */}
         <div className="mb-14">
           <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 12 }}>OPEN ROLES</p>
-          <h2 className="text-3xl md:text-4xl font-black text-white leading-tight">2 Positions Open</h2>
+          <h2 className="text-3xl md:text-4xl font-black text-white leading-tight">3 Positions Open</h2>
           <p className="mt-3 text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>
             Isaac reviews every application himself. Be real, be specific — that's what gets noticed.
           </p>
         </div>
 
         {/* Open positions grid */}
-        <div className="grid md:grid-cols-2 gap-6 mb-16">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
           {OPEN_JOBS.map((job) => <OpenCard key={job.id} job={job} onApply={onApply} />)}
         </div>
 
