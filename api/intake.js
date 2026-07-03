@@ -263,6 +263,48 @@ async function uploadPortfolioFile(SUPABASE_URL, SUPABASE_SERVICE_KEY, email, ba
   }
 }
 
+// [column, label, maxLen, isUrl] — every optional applications-table column
+// that any job's application form might populate. Driven generically so new
+// jobs/fields don't require new email-formatting code.
+const EXTRA_FIELDS = [
+  ['linkedin_url', 'LinkedIn', 300, true],
+  ['github_url', 'GitHub', 300, true],
+  ['years_experience', 'Years of Experience', 30],
+  ['tech_stack', 'Tech Stack', 2000],
+  ['ai_tools_experience', 'AI/Automation Experience', 1500],
+  ['management_experience', 'Team Management Experience', 30],
+  ['operations_experience', 'Operational/Management Experience', 2000],
+  ['organization_tools', 'Organization Tools', 1000],
+  ['planning_experience', 'Planning/Product Management Experience', 2000],
+  ['project_example', 'Project Example', 2000],
+  ['financial_background', 'Financial/Accounting Background', 2000],
+  ['invoicing_tax_experience', 'Invoicing & Tax Experience', 10],
+  ['invoicing_tax_explain', 'Invoicing & Tax Details', 2000],
+  ['has_transportation_license', 'Reliable Vehicle + CT License', 10],
+  ['speaks_spanish', 'Speaks Spanish', 20],
+  ['sales_experience', 'Sales Experience', 30],
+  ['sales_experience_desc', 'Sales Experience Details', 2000],
+  ['start_timing', 'Can Start', 30],
+  ['equipment_owned', 'Equipment Owned', 1000],
+  ['has_transportation', 'Reliable Transportation', 10],
+  ['platforms', 'Platforms', 200],
+  ['instagram_tiktok', 'Instagram/TikTok', 200],
+  ['editing_software', 'Editing Software', 1000],
+  ['bio', 'Bio', 3000],
+  ['reliable_internet', 'Reliable Internet', 10],
+  ['outreach_experience', 'Outreach Experience', 30],
+  ['hours_per_week', 'Hours Per Week', 20],
+  ['camera_equipment', 'Camera Equipment', 1000],
+  ['drone_equipment', 'Drone Equipment', 1000],
+  ['faa_part_107', 'FAA Part 107', 10],
+  ['ai_system_description', 'AI System Description', 3000],
+  ['why_position', 'Why Nova Systems', 2000],
+];
+
+function cap(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 async function handleSubmitApplication(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 5, 60_000)) return;
@@ -278,33 +320,21 @@ async function handleSubmitApplication(req, res) {
   const phone        = sanitizePhone(b.phone);
   const position     = sanitize(b.position, 100);
   const password_hash = sanitize(b.password_hash, 128);
+  const city          = sanitize(b.city, 100);
 
-  const city                       = sanitize(b.city, 100);
-  const bio                        = sanitize(b.bio, 3000);
-  const equipment_owned            = sanitize(b.equipment_owned, 1000);
-  const has_transportation         = sanitize(b.has_transportation, 10);
-  const instagram_tiktok           = sanitize(b.instagram_tiktok, 200);
-  const camera_equipment           = sanitize(b.camera_equipment, 1000);
-  const drone_equipment            = sanitize(b.drone_equipment, 1000);
-  const faa_part_107               = sanitize(b.faa_part_107, 10);
-  const has_transportation_license = sanitize(b.has_transportation_license, 10);
-  const speaks_spanish             = sanitize(b.speaks_spanish, 15);
-  const sales_experience           = sanitize(b.sales_experience, 20);
-  const sales_experience_desc      = sanitize(b.sales_experience_desc, 2000);
-  const why_position                = sanitize(b.why_position, 2000);
-  const start_timing                = sanitize(b.start_timing, 20);
-  const linkedin_url                = (() => { try { return sanitizeUrl(b.linkedin_url || ''); } catch { return ''; } })();
-  const ai_tools_experience         = sanitize(b.ai_tools_experience, 1500);
-  const ai_system_description       = sanitize(b.ai_system_description, 3000);
-  const portfolio_links              = sanitize(b.portfolio_links, 2000);
-  const portfolio_file_name          = sanitize(b.portfolio_file_name, 200);
-  const portfolio_file_base64        = typeof b.portfolio_file_base64 === 'string' ? b.portfolio_file_base64 : '';
+  const extra = {};
+  for (const [column, , maxLen, isUrl] of EXTRA_FIELDS) {
+    extra[column] = isUrl
+      ? (() => { try { return sanitizeUrl(b[column] || ''); } catch { return ''; } })()
+      : sanitize(b[column], maxLen);
+  }
 
-  const isSalesRep = position.toLowerCase().includes('sales');
+  const portfolio_links       = sanitize(b.portfolio_links, 2000);
+  const portfolio_file_name   = sanitize(b.portfolio_file_name, 200);
+  const portfolio_file_base64 = typeof b.portfolio_file_base64 === 'string' ? b.portfolio_file_base64 : '';
 
   if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
   if (!position)       return res.status(400).json({ error: 'Position is required' });
-  if (!isSalesRep && !password_hash) return res.status(400).json({ error: 'Password hash is required' });
 
   let portfolio_file_url = null;
   if (portfolio_file_base64 && SUPABASE_URL && SUPABASE_SERVICE_KEY) {
@@ -313,6 +343,15 @@ async function handleSubmitApplication(req, res) {
 
   if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
     try {
+      const record = {
+        id, name, email, phone, position, status: 'new', password_hash: password_hash || null,
+        city: city || null,
+        portfolio_links: portfolio_links || null,
+        portfolio_file_url,
+        submitted_at: new Date().toISOString(),
+      };
+      for (const [column] of EXTRA_FIELDS) record[column] = extra[column] || null;
+
       const sbRes = await fetch(`${SUPABASE_URL}/rest/v1/applications`, {
         method: 'POST',
         headers: {
@@ -321,23 +360,7 @@ async function handleSubmitApplication(req, res) {
           'Content-Type': 'application/json',
           Prefer: 'return=minimal',
         },
-        body: JSON.stringify({
-          id, name, email, phone, position, status: 'new', password_hash: password_hash || null,
-          city: city || null, bio: bio || null,
-          equipment_owned: equipment_owned || null, has_transportation: has_transportation || null,
-          instagram_tiktok: instagram_tiktok || null,
-          camera_equipment: camera_equipment || null, drone_equipment: drone_equipment || null,
-          faa_part_107: faa_part_107 || null,
-          has_transportation_license: has_transportation_license || null,
-          speaks_spanish: speaks_spanish || null,
-          sales_experience: sales_experience || null, sales_experience_desc: sales_experience_desc || null,
-          why_position: why_position || null, start_timing: start_timing || null,
-          linkedin_url: linkedin_url || null,
-          ai_tools_experience: ai_tools_experience || null, ai_system_description: ai_system_description || null,
-          portfolio_links: portfolio_links || null,
-          portfolio_file_url,
-          submitted_at: new Date().toISOString(),
-        }),
+        body: JSON.stringify(record),
       });
       if (!sbRes.ok) {
         const errText = await sbRes.text();
@@ -357,34 +380,6 @@ async function handleSubmitApplication(req, res) {
 
   const FROM = 'Nova Systems <noreply@nova-systems.app>';
 
-  const posFields = position.includes('Content Creator')
-    ? [
-        `Equipment Owned: ${equipment_owned || 'N/A'}`,
-        `Reliable Transportation: ${has_transportation === 'yes' ? 'Yes' : has_transportation === 'no' ? 'No' : 'N/A'}`,
-        `Instagram/TikTok: ${instagram_tiktok || 'N/A'}`,
-      ].join('\n')
-    : position.includes('Videographer')
-    ? [
-        `Camera Equipment: ${camera_equipment || 'N/A'}`,
-        `Drone Equipment: ${drone_equipment || 'N/A'}`,
-        `FAA Part 107: ${faa_part_107 === 'yes' ? 'Yes' : faa_part_107 === 'no' ? 'No' : 'N/A'}`,
-        `Reliable Transportation: ${has_transportation === 'yes' ? 'Yes' : has_transportation === 'no' ? 'No' : 'N/A'}`,
-      ].join('\n')
-    : isSalesRep
-    ? [
-        `Transportation + Valid CT License: ${has_transportation_license === 'yes' ? 'Yes' : has_transportation_license === 'no' ? 'No' : 'N/A'}`,
-        `Speaks Spanish: ${speaks_spanish || 'N/A'}`,
-        `Sales Experience: ${sales_experience || 'N/A'}`,
-        `Experience Details: ${sales_experience_desc || 'N/A'}`,
-        `Why This Position: ${why_position || 'N/A'}`,
-        `Can Start: ${start_timing || 'N/A'}`,
-        `LinkedIn: ${linkedin_url || 'N/A'}`,
-      ].join('\n')
-    : [
-        `AI Tools Experience: ${ai_tools_experience || 'N/A'}`,
-        `System Built: ${ai_system_description || 'N/A'}`,
-      ].join('\n');
-
   const isaacBody = [
     'NEW JOB APPLICATION — Nova Systems',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
@@ -392,15 +387,11 @@ async function handleSubmitApplication(req, res) {
     `Name:     ${name}`,
     `Email:    ${email}`,
     `Phone:    ${phone || 'N/A'}`,
-    `City:     ${city || 'N/A'}`,
+    city ? `City:     ${city}` : '',
     '',
-    'BIO',
-    '━━━',
-    bio || 'N/A',
-    '',
-    'POSITION-SPECIFIC',
-    '━━━━━━━━━━━━━━━━━',
-    posFields,
+    'APPLICATION DETAILS',
+    '━━━━━━━━━━━━━━━━━━━',
+    ...EXTRA_FIELDS.filter(([column]) => extra[column]).map(([column, label]) => `${label}: ${cap(extra[column])}`),
     '',
     portfolio_links ? `PORTFOLIO LINKS:\n${portfolio_links}` : 'PORTFOLIO LINKS: None provided',
     portfolio_file_url ? `PORTFOLIO FILE: ${portfolio_file_url}` : (portfolio_file_name ? `PORTFOLIO FILE: ${portfolio_file_name} (upload failed, see logs)` : ''),
@@ -433,7 +424,7 @@ async function handleSubmitApplication(req, res) {
     '',
     `Position: ${position}`,
     '',
-    ...(isSalesRep ? [] : [
+    ...(password_hash ? [
       'YOUR APPLICANT LOGIN',
       '━━━━━━━━━━━━━━━━━━━━',
       'Track your application status at:',
@@ -442,7 +433,7 @@ async function handleSubmitApplication(req, res) {
       `Login Email: ${email}`,
       'Password:    The password you set during your application',
       '',
-    ]),
+    ] : []),
     '━━━━━━━━━━━━━━━━━━━━',
     'Questions? Email hello@nova-systems.app',
     '',

@@ -50,6 +50,23 @@ ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_tools_experience TEXT;
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_system_description TEXT;
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS portfolio_links TEXT;
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS portfolio_file_url TEXT;
+-- Added for the 7-position careers page (CTO/COO/CPO/CFO/Sales/Content Creator/Lead Gen)
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS github_url TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS years_experience TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS tech_stack TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS management_experience TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS operations_experience TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS organization_tools TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS planning_experience TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS project_example TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS financial_background TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS invoicing_tax_experience TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS invoicing_tax_explain TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS platforms TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS editing_software TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS reliable_internet TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS outreach_experience TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS hours_per_week TEXT;
 
 -- Storage bucket for job-application portfolio uploads (private): "portfolios"
 -- Create manually in Supabase Studio → Storage, or via API. Folder convention:
