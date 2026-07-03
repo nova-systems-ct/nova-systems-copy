@@ -51,7 +51,7 @@ export default function NovaVault() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/vault-list')
+      const r = await fetch('/api/client?resource=vault&op=list')
       const data = await r.json()
       setDocs(Array.isArray(data) ? data : [])
     } catch { setDocs([]) }
@@ -86,7 +86,7 @@ export default function NovaVault() {
 
   const handleDelete = async (doc) => {
     if (!window.confirm(`Delete "${doc.file_name}"? This cannot be undone.`)) return
-    await fetch('/api/vault-delete', {
+    await fetch('/api/client?resource=vault&op=delete', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: doc.id, storage_path: doc.storage_path }),
     })
@@ -100,7 +100,7 @@ export default function NovaVault() {
     const reader = new FileReader()
     reader.onload = async () => {
       try {
-        const r = await fetch('/api/vault-upload', {
+        const r = await fetch('/api/client?resource=vault&op=upload', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             file_base64: reader.result, file_name: uploadFile.name,

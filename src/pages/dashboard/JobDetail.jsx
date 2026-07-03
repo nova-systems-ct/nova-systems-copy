@@ -73,7 +73,7 @@ export default function JobDetail() {
           accounts.push({ id: crypto.randomUUID(), applicationId: id, email: candidate.email, name: candidate.name, password: null, token, isEmployee: true })
           localStorage.setItem('nova_employee_accounts', JSON.stringify(accounts))
         }
-        await fetch('/api/contact', {
+        await fetch('/api/notify?action=contact', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: 'Nova Systems HR', email: 'isaac_0427@icloud.com',
@@ -82,7 +82,7 @@ export default function JobDetail() {
           }),
         })
       } else if (newStatus === 'declined') {
-        await fetch('/api/contact', {
+        await fetch('/api/notify?action=contact', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: 'Nova Systems HR', email: 'isaac_0427@icloud.com',
@@ -103,7 +103,7 @@ export default function JobDetail() {
     persist({ status: 'interview_scheduled', interviewDate, interviewTime })
     setShowInterview(false)
     try {
-      await fetch('/api/contact', {
+      await fetch('/api/notify?action=contact', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: 'Nova Systems HR', email: 'isaac_0427@icloud.com',

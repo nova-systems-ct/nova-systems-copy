@@ -86,7 +86,7 @@ export default function ApplicantLogin() {
     let outcome;
 
     try {
-      const res = await fetch("/api/check-applicant", {
+      const res = await fetch("/api/intake?action=check-applicant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: normalizedEmail, password_hash: pw_hash }),

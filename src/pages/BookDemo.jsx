@@ -54,7 +54,7 @@ export default function BookDemo() {
     const entry = { ...form, id: `demo-${Date.now()}`, submittedAt: new Date().toISOString(), status: 'pending' };
 
     try {
-      await fetch("/api/book-demo", {
+      await fetch("/api/notify?action=book-demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),

@@ -38,7 +38,7 @@ export default function Invoices() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/invoices')
+      const r = await fetch('/api/client?resource=invoices')
       const data = await r.json()
       setInvoices(Array.isArray(data) ? data : [])
     } catch { setInvoices([]) }
@@ -84,7 +84,7 @@ export default function Invoices() {
     const invoice_number = nextInvoiceNumber(invoices)
     try {
       // 1. Create the invoice row first so we have an id to attach to the Stripe session
-      const createRes = await fetch('/api/invoices', {
+      const createRes = await fetch('/api/client?resource=invoices', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create', client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid' }),
       })
@@ -99,7 +99,7 @@ export default function Invoices() {
 
       let pay_link = ''
       try {
-        const cs = await fetch('/api/create-checkout-session', {
+        const cs = await fetch('/api/stripe?action=checkout-session', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amount: total, client_email: form.client_email, description: `Invoice ${invoice_number} — Nova Systems`, invoice_id: invoiceId, client_id: form.client_id }),
         })
@@ -109,7 +109,7 @@ export default function Invoices() {
 
       let invoice_pdf_url = ''
       try {
-        const vaultRes = await fetch('/api/vault-upload', {
+        const vaultRes = await fetch('/api/client?resource=vault&op=upload', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ file_base64: pdfDataUri, file_name: `${invoice_number}.pdf`, category: 'invoices', client_id: form.client_id, client_name: form.client_name, doc_type: 'Invoice', status: 'Pending' }),
         })
@@ -118,14 +118,14 @@ export default function Invoices() {
       } catch {}
 
       if (invoiceId) {
-        await fetch('/api/invoices', {
+        await fetch('/api/client?resource=invoices', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'update', id: invoiceId, client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid', stripe_payment_link: pay_link, invoice_pdf_url }),
         })
       }
 
       if (form.client_email) {
-        await fetch('/api/send-invoice', {
+        await fetch('/api/notify?action=send-invoice', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ client_email: form.client_email, client_name: form.client_name, invoice_number, total, due_date: form.due_date, pay_link, pdf_base64: pdfDataUri }),
         })
@@ -142,7 +142,7 @@ export default function Invoices() {
   }
 
   const markPaid = async (inv) => {
-    await fetch('/api/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: inv.id, ...inv, status: 'Paid' }) })
+    await fetch('/api/client?resource=invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: inv.id, ...inv, status: 'Paid' }) })
     load()
   }
 

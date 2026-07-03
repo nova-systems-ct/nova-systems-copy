@@ -33,7 +33,7 @@ export default function Blog() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/blog-posts?admin=true')
+      const r = await fetch('/api/client?resource=blog&op=posts&admin=true')
       const data = await r.json()
       setPosts(Array.isArray(data) ? data : [])
       setError(!Array.isArray(data))
@@ -50,7 +50,7 @@ export default function Blog() {
     if (!form.title.trim()) return
     setSaving(true)
     try {
-      const r = await fetch('/api/blog-admin', {
+      const r = await fetch('/api/client?resource=blog&op=admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'save', ...form, published: publish }),
@@ -66,7 +66,7 @@ export default function Blog() {
   }
 
   const togglePublish = async (post) => {
-    await fetch('/api/blog-admin', {
+    await fetch('/api/client?resource=blog&op=admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'save', ...post, published: !post.published }),
@@ -76,7 +76,7 @@ export default function Blog() {
 
   const remove = async (post) => {
     if (!window.confirm(`Delete "${post.title}"? This cannot be undone.`)) return
-    await fetch('/api/blog-admin', {
+    await fetch('/api/client?resource=blog&op=admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'delete', id: post.id }),

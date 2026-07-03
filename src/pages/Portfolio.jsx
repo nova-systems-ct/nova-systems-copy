@@ -15,7 +15,7 @@ export default function Portfolio() {
   const [lightbox, setLightbox] = useState(null);
 
   useEffect(() => {
-    fetch("/api/portfolio-items")
+    fetch("/api/client?resource=portfolio&op=items")
       .then((r) => r.json())
       .then((data) => setItems(Array.isArray(data) ? data : []))
       .catch(() => setItems([]))

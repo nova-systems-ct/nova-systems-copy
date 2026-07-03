@@ -34,7 +34,7 @@ export default function Jobs() {
     const local = JSON.parse(localStorage.getItem('nova_applications') || '[]')
     setCandidates(local) // show local immediately
     try {
-      const res = await fetch('/api/get-applications')
+      const res = await fetch('/api/intake?action=applications')
       if (!res.ok) return
       const sbApps = await res.json()
       if (!Array.isArray(sbApps) || sbApps.length === 0) return
@@ -73,7 +73,7 @@ export default function Jobs() {
     if (!addForm.email) return
     setAddLoading(true)
     try {
-      await fetch('/api/contact', {
+      await fetch('/api/notify?action=contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

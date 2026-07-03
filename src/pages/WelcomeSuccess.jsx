@@ -12,7 +12,7 @@ export default function WelcomeSuccess() {
 
   useEffect(() => {
     if (!clientId) return;
-    fetch("/api/intake-clients")
+    fetch("/api/intake?action=clients")
       .then((r) => r.json())
       .then((list) => setClient(Array.isArray(list) ? list.find((c) => c.id === clientId) : null))
       .catch(() => {});

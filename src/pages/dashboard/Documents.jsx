@@ -100,7 +100,7 @@ export default function Documents() {
     if (!email) { setError('No email on file for this client/lead.'); return }
     setSendingEmail(true)
     try {
-      await fetch('/api/contact', {
+      await fetch('/api/notify?action=contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -12,7 +12,7 @@ export default function IntakeForms() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/intake-clients')
+    fetch('/api/intake?action=clients')
       .then(r => r.json())
       .then(data => setClients(Array.isArray(data) ? data : []))
       .catch(() => setClients([]))

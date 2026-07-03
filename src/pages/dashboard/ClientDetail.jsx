@@ -69,7 +69,7 @@ export default function ClientDetail() {
     setMsgSending(true)
     setMsgError('')
     try {
-      const r = await fetch('/api/send-client-message', {
+      const r = await fetch('/api/notify?action=client-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -41,7 +41,7 @@ export default function Register() {
     }
 
     try {
-      const r = await fetch("/api/contact", {
+      const r = await fetch("/api/notify?action=contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

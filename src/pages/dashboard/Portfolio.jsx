@@ -41,7 +41,7 @@ export default function Portfolio() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/portfolio-items')
+      const r = await fetch('/api/client?resource=portfolio&op=items')
       if (!r.ok) { setSupabaseError(true); setLoading(false); return }
       const data = await r.json()
       if (!Array.isArray(data)) { setSupabaseError(true); setLoading(false); return }
@@ -71,7 +71,7 @@ export default function Portfolio() {
     setUploadError('')
     const clientName = form.client_name === 'Custom…' ? form.customClient.trim() : form.client_name
     try {
-      const r = await fetch('/api/portfolio-upload', {
+      const r = await fetch('/api/client?resource=portfolio&op=upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -106,7 +106,7 @@ export default function Portfolio() {
     if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) return
     setDeletingId(item.id)
     const filename = item.image_url?.split('/portfolio/')[1]
-    await fetch('/api/portfolio-update', {
+    await fetch('/api/client?resource=portfolio&op=mutate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'delete', id: item.id, filename }),
@@ -117,7 +117,7 @@ export default function Portfolio() {
 
   const handleToggleFeatured = async (item) => {
     setTogglingId(item.id)
-    await fetch('/api/portfolio-update', {
+    await fetch('/api/client?resource=portfolio&op=mutate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update', id: item.id, featured: !item.featured }),
@@ -139,7 +139,7 @@ export default function Portfolio() {
     setItems(reordered)
     setReordering(true)
     await Promise.all(reordered.map((it, i) =>
-      fetch('/api/portfolio-update', {
+      fetch('/api/client?resource=portfolio&op=mutate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update', id: it.id, sort_order: i }),
@@ -150,7 +150,7 @@ export default function Portfolio() {
 
   const handleSaveEdit = async () => {
     if (!editItem) return
-    await fetch('/api/portfolio-update', {
+    await fetch('/api/client?resource=portfolio&op=mutate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update', id: editItem.id, ...editForm }),

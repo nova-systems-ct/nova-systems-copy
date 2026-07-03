@@ -93,7 +93,7 @@ export default function SiteEditor() {
 
   const load = async () => {
     try {
-      const r = await fetch('/api/site-content')
+      const r = await fetch('/api/client?resource=site-content')
       if (!r.ok) { setSupabaseError(true); return }
       const rows = await r.json()
       if (!Array.isArray(rows)) { setSupabaseError(true); return }
@@ -130,7 +130,7 @@ export default function SiteEditor() {
     setSaving(true)
     setError('')
     try {
-      const r = await fetch('/api/site-content', {
+      const r = await fetch('/api/client?resource=site-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ section_key: activeKey, content_json: currentDraft }),

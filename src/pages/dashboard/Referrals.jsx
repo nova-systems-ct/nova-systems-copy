@@ -23,7 +23,7 @@ export default function Referrals() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/referrals')
+      const r = await fetch('/api/client?resource=referrals')
       const data = await r.json()
       setReferrals(Array.isArray(data) ? data : [])
     } catch { setReferrals([]) }
@@ -41,7 +41,7 @@ export default function Referrals() {
   const save = async () => {
     if (!form.rep_name || !form.client_name || !form.deal_value) return
     setSaving(true)
-    await fetch('/api/referrals', {
+    await fetch('/api/client?resource=referrals', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'create', ...form }),
     })
@@ -52,7 +52,7 @@ export default function Referrals() {
   }
 
   const markPaid = async (r) => {
-    await fetch('/api/referrals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: r.id, ...r, status: 'Paid' }) })
+    await fetch('/api/client?resource=referrals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: r.id, ...r, status: 'Paid' }) })
     load()
   }
 

@@ -183,7 +183,7 @@ export default function Welcome() {
     setSavingIntake(true);
     setError("");
     try {
-      const saveRes = await fetch("/api/save-intake", {
+      const saveRes = await fetch("/api/intake?action=save-client", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: clientId, full_name: form.full_name, business_name: form.business_name,
@@ -202,7 +202,7 @@ export default function Welcome() {
       if (!saveRes.ok) throw new Error(saveData.error || "Failed to save your information");
       setClientId(saveData.client_id);
 
-      const piRes = await fetch("/api/create-payment-intent", {
+      const piRes = await fetch("/api/stripe?action=payment-intent", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: tier.price, client_email: form.email, tier_name: tier.name, client_id: saveData.client_id }),
       });
@@ -224,7 +224,7 @@ export default function Welcome() {
       });
       const contract_pdf_base64 = doc.output("datauristring");
 
-      await fetch("/api/welcome-complete", {
+      await fetch("/api/intake?action=welcome-complete", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_id: clientId, full_name: form.full_name, business_name: form.business_name,

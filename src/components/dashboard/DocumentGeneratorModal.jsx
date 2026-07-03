@@ -119,7 +119,7 @@ export default function DocumentGeneratorModal({ clientId, leadId, entityName, i
     setError('')
     setGenerated('')
     try {
-      const res  = await fetch('/api/generate-document', {
+      const res  = await fetch('/api/client?resource=documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entity_name: entityName, industry, doc_type: docType, description, client_id: clientId, lead_id: leadId }),

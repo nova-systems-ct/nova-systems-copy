@@ -65,7 +65,7 @@ export default function DashboardHome() {
     setLeads(getLeads())
     try { setDemoRequests(JSON.parse(localStorage.getItem('nova_demo_requests') || '[]')) } catch {}
 
-    fetch('/api/notifications').then(r => r.json()).then(data => {
+    fetch('/api/notify?action=list').then(r => r.json()).then(data => {
       const remote = Array.isArray(data)
         ? data.map(n => ({ id: n.id, type: n.type || 'notification', text: n.message, ts: n.created_at }))
         : []
@@ -73,12 +73,12 @@ export default function DashboardHome() {
       setActivity(merged)
     }).catch(() => setActivity(getActivity()))
 
-    fetch('/api/invoices').then(r => r.json()).then(data => {
+    fetch('/api/client?resource=invoices').then(r => r.json()).then(data => {
       if (!Array.isArray(data)) return
       setInvoicesOutstanding(data.filter(i => i.status !== 'Paid').reduce((sum, i) => sum + (Number(i.total) || 0), 0))
     }).catch(() => {})
 
-    fetch('/api/referrals').then(r => r.json()).then(data => {
+    fetch('/api/client?resource=referrals').then(r => r.json()).then(data => {
       if (!Array.isArray(data)) return
       setCommissionsOwed(data.filter(r => r.status !== 'Paid').reduce((sum, r) => sum + (Number(r.commission_amount) || 0), 0))
     }).catch(() => {})

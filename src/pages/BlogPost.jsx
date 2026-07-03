@@ -22,12 +22,12 @@ export default function BlogPost() {
 
   useEffect(() => {
     setPost(undefined);
-    fetch(`/api/blog-posts?slug=${encodeURIComponent(slug)}`)
+    fetch(`/api/client?resource=blog&op=posts&slug=${encodeURIComponent(slug)}`)
       .then((r) => r.json())
       .then((data) => {
         setPost(data || null);
         if (data?.category) {
-          fetch("/api/blog-posts")
+          fetch("/api/client?resource=blog&op=posts")
             .then((r) => r.json())
             .then((all) => setRelated((Array.isArray(all) ? all : []).filter((p) => p.category === data.category && p.slug !== slug).slice(0, 3)));
         }

@@ -49,7 +49,7 @@ export default function ChatBot() {
   }, [messages]);
 
   const sendNotification = (d) => {
-    fetch("/api/contact", {
+    fetch("/api/notify?action=contact", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

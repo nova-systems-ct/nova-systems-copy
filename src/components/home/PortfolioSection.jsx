@@ -53,7 +53,7 @@ export default function PortfolioSection() {
   const [lightbox, setLightbox] = useState(null);
 
   useEffect(() => {
-    fetch("/api/portfolio-items?featured=true")
+    fetch("/api/client?resource=portfolio&op=items&featured=true")
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => setFeaturedItems(Array.isArray(data) && data.length > 0 ? data : []))
       .catch(() => setFeaturedItems([]));

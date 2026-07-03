@@ -16,7 +16,7 @@ export default function Blog() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/blog-posts")
+    fetch("/api/client?resource=blog&op=posts")
       .then((r) => r.json())
       .then((data) => setPosts(Array.isArray(data) ? data : []))
       .catch(() => setPosts([]))

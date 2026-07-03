@@ -172,7 +172,7 @@ export default function ApplicationForm({ preselectedPosition }) {
     localStorage.setItem("nova_applications", JSON.stringify(existing));
 
     try {
-      const res = await fetch("/api/submit-application", {
+      const res = await fetch("/api/intake?action=submit-application", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, portfolio_file_base64 }),

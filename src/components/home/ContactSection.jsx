@@ -13,7 +13,7 @@ export default function ContactSection() {
     e.preventDefault();
     setSending(true);
     try {
-      await fetch("/api/contact", {
+      await fetch("/api/notify?action=contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, to: "Isaac_0427@icloud.com" }),
