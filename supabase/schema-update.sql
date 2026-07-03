@@ -221,8 +221,10 @@ CREATE TABLE IF NOT EXISTS vault_documents (
   file_url TEXT,
   file_size BIGINT,
   status TEXT DEFAULT 'Pending',  -- Signed | Paid | Pending | Active
+  source TEXT DEFAULT 'system',  -- system (auto-generated) | manual (uploaded via Nova Vault)
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE vault_documents ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'system';
 
 -- ── STORAGE BUCKETS (create manually in Supabase Studio → Storage) ──────────
 -- portfolio   (public)  — homepage/portfolio images

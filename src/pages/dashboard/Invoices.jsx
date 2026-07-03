@@ -30,6 +30,9 @@ export default function Invoices() {
   const [form, setForm] = useState(emptyForm)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [sending, setSending] = useState(false)
+  const [clientFilter, setClientFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
   const clients = getClients()
 
   const load = async () => {
@@ -43,6 +46,16 @@ export default function Invoices() {
   }
 
   useEffect(() => { load() }, [])
+
+  const statusOptions = useMemo(() => [...new Set(invoices.map(i => i.status).filter(Boolean))].sort(), [invoices])
+
+  const filteredInvoices = useMemo(() => {
+    let list = invoices
+    if (clientFilter) list = list.filter(i => i.client_id === clientFilter)
+    if (statusFilter) list = list.filter(i => i.status === statusFilter)
+    if (dateFilter) list = list.filter(i => (i.due_date || '') === dateFilter)
+    return list
+  }, [invoices, clientFilter, statusFilter, dateFilter])
 
   const stats = useMemo(() => {
     const outstanding = invoices.filter(i => i.status !== 'Paid').reduce((s, i) => s + (Number(i.total) || 0), 0)
@@ -70,6 +83,14 @@ export default function Invoices() {
     setSending(true)
     const invoice_number = nextInvoiceNumber(invoices)
     try {
+      // 1. Create the invoice row first so we have an id to attach to the Stripe session
+      const createRes = await fetch('/api/invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid' }),
+      })
+      const createData = await createRes.json()
+      const invoiceId = createData.invoice?.id
+
       const doc = generateInvoicePDF({
         invoiceNumber: invoice_number, clientName: form.client_name, clientEmail: form.client_email,
         lineItems: form.line_items, subtotal, tax, total, dueDate: form.due_date, notes: form.notes,
@@ -80,7 +101,7 @@ export default function Invoices() {
       try {
         const cs = await fetch('/api/create-checkout-session', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: total, client_email: form.client_email, description: `Invoice ${invoice_number} — Nova Systems` }),
+          body: JSON.stringify({ amount: total, client_email: form.client_email, description: `Invoice ${invoice_number} — Nova Systems`, invoice_id: invoiceId, client_id: form.client_id }),
         })
         const csData = await cs.json()
         if (cs.ok) pay_link = csData.url
@@ -96,10 +117,12 @@ export default function Invoices() {
         if (vaultRes.ok) invoice_pdf_url = vaultData.file_url
       } catch {}
 
-      await fetch('/api/invoices', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid', stripe_payment_link: pay_link, invoice_pdf_url }),
-      })
+      if (invoiceId) {
+        await fetch('/api/invoices', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update', id: invoiceId, client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid', stripe_payment_link: pay_link, invoice_pdf_url }),
+        })
+      }
 
       if (form.client_email) {
         await fetch('/api/send-invoice', {
@@ -222,13 +245,25 @@ export default function Invoices() {
           <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No invoices yet. Click "Create Invoice" to bill your first client.</p>
         </div>
       ) : (
+        <>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+          <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} style={{ ...inp, width: 'auto', appearance: 'none', cursor: 'pointer' }}>
+            <option value="" style={{ background: '#111' }}>All Clients</option>
+            {clients.map(c => <option key={c.id} value={c.id} style={{ background: '#111' }}>{c.name}</option>)}
+          </select>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: 'auto', appearance: 'none', cursor: 'pointer' }}>
+            <option value="" style={{ background: '#111' }}>All Statuses</option>
+            {statusOptions.map(s => <option key={s} value={s} style={{ background: '#111' }}>{s}</option>)}
+          </select>
+          <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} style={{ ...inp, width: 'auto', colorScheme: 'dark' }} />
+        </div>
         <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 120px', padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             {['Invoice #', 'Client', 'Amount', 'Due Date', 'Status', ''].map(h => (
               <span key={h} style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)' }}>{h}</span>
             ))}
           </div>
-          {invoices.map(inv => {
+          {filteredInvoices.map(inv => {
             const sc = STATUS_COLORS[inv.status] || STATUS_COLORS.Unpaid
             return (
               <div key={inv.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 120px', padding: '14px 20px', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
@@ -249,6 +284,7 @@ export default function Invoices() {
             )
           })}
         </div>
+        </>
       )}
 
       {/* Preview modal */}

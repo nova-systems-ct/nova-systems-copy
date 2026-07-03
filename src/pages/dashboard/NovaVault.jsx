@@ -9,6 +9,7 @@ const SIDEBAR = [
   { key: 'Contract',  label: 'Contracts',     icon: FileText },
   { key: 'Invoice',   label: 'Invoices',      icon: Receipt },
   { key: 'Client File', label: 'Client Files', icon: FolderOpen },
+  { key: 'mine',      label: 'My Uploads',    icon: Upload },
 ]
 
 const STATUS_COLORS = {
@@ -37,6 +38,9 @@ export default function NovaVault() {
   const [loading, setLoading] = useState(true)
   const [category, setCategory] = useState('all')
   const [q, setQ] = useState('')
+  const [clientFilter, setClientFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
   const [preview, setPreview] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
@@ -56,15 +60,22 @@ export default function NovaVault() {
 
   useEffect(() => { load() }, [])
 
+  const clientOptions = useMemo(() => [...new Set(docs.map(d => d.client_name).filter(Boolean))].sort(), [docs])
+  const statusOptions = useMemo(() => [...new Set(docs.map(d => d.status).filter(Boolean))].sort(), [docs])
+
   const filtered = useMemo(() => {
     let list = docs
-    if (category !== 'all') list = list.filter(d => d.type === category)
+    if (category === 'mine') list = list.filter(d => d.source === 'manual')
+    else if (category !== 'all') list = list.filter(d => d.type === category)
+    if (clientFilter) list = list.filter(d => d.client_name === clientFilter)
+    if (statusFilter) list = list.filter(d => d.status === statusFilter)
+    if (dateFilter) list = list.filter(d => (d.created_at || '').slice(0, 10) === dateFilter)
     if (q.trim()) {
       const s = q.toLowerCase()
       list = list.filter(d => (d.file_name || '').toLowerCase().includes(s) || (d.client_name || '').toLowerCase().includes(s))
     }
     return list
-  }, [docs, category, q])
+  }, [docs, category, q, clientFilter, statusFilter, dateFilter])
 
   const stats = useMemo(() => ({
     total: docs.length,
@@ -147,9 +158,20 @@ export default function NovaVault() {
 
         {/* Main */}
         <div>
-          <div style={{ position: 'relative', marginBottom: 20, maxWidth: 340 }}>
-            <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'rgba(255,255,255,0.3)' }} />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by client or file name…" style={{ ...inp, width: '100%', paddingLeft: 34 }} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+            <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: 340 }}>
+              <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'rgba(255,255,255,0.3)' }} />
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by client or file name…" style={{ ...inp, width: '100%', paddingLeft: 34 }} />
+            </div>
+            <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} style={{ ...inp, appearance: 'none', cursor: 'pointer' }}>
+              <option value="" style={{ background: '#111' }}>All Clients</option>
+              {clientOptions.map(c => <option key={c} value={c} style={{ background: '#111' }}>{c}</option>)}
+            </select>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, appearance: 'none', cursor: 'pointer' }}>
+              <option value="" style={{ background: '#111' }}>All Statuses</option>
+              {statusOptions.map(s => <option key={s} value={s} style={{ background: '#111' }}>{s}</option>)}
+            </select>
+            <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} style={{ ...inp, colorScheme: 'dark' }} />
           </div>
 
           {loading ? (

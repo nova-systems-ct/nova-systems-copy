@@ -63,8 +63,15 @@ export default function DashboardHome() {
   useEffect(() => {
     setClients(getClients())
     setLeads(getLeads())
-    setActivity(getActivity())
     try { setDemoRequests(JSON.parse(localStorage.getItem('nova_demo_requests') || '[]')) } catch {}
+
+    fetch('/api/notifications').then(r => r.json()).then(data => {
+      const remote = Array.isArray(data)
+        ? data.map(n => ({ id: n.id, type: n.type || 'notification', text: n.message, ts: n.created_at }))
+        : []
+      const merged = [...remote, ...getActivity()].sort((a, b) => new Date(b.ts) - new Date(a.ts))
+      setActivity(merged)
+    }).catch(() => setActivity(getActivity()))
 
     fetch('/api/invoices').then(r => r.json()).then(data => {
       if (!Array.isArray(data)) return
@@ -97,7 +104,7 @@ export default function DashboardHome() {
       {/* Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 24 }}>
         <MetricCard icon={DollarSign}   label="Monthly Recurring Revenue" value={`$${mrr.toLocaleString()}`} sub={`${activeClients.length} active client${activeClients.length !== 1 ? 's' : ''}`} onClick={() => navigate('/dashboard/clients')} />
-        <MetricCard icon={Building2}    label="Total Clients"     value={clients.length}    sub="Active accounts"  onClick={() => navigate('/dashboard/clients')} />
+        <MetricCard icon={Building2}    label="Total Clients Active" value={activeClients.length} sub={`${clients.length} total accounts`} onClick={() => navigate('/dashboard/clients')} />
         <MetricCard icon={Receipt}      label="Invoices Outstanding" value={`$${invoicesOutstanding.toLocaleString()}`} sub="Unpaid" onClick={() => navigate('/dashboard/invoices')} />
         <MetricCard icon={HandCoins}    label="Commissions Owed"  value={`$${commissionsOwed.toLocaleString()}`} sub="Pending payout" onClick={() => navigate('/dashboard/referrals')} />
       </div>

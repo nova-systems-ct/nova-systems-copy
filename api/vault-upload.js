@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   try {
     const result = await uploadToVault(SUPABASE_URL, SUPABASE_KEY, {
       base64: base64Data, fileName, mimeType, category,
-      clientId, clientName, docType, status,
+      clientId, clientName, docType, status, source: 'manual',
     });
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {

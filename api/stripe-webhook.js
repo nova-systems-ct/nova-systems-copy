@@ -99,6 +99,19 @@ export default async function handler(req, res) {
           }),
         }).catch(() => {});
       }
+
+      if (RESEND_KEY && invoiceId) {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'Nova Systems <noreply@nova-systems.app>',
+            to: ['Isaac_0427@icloud.com'],
+            subject: `Invoice Paid — $${(session.amount_total / 100).toFixed(2)}`,
+            text: `An invoice was just paid.\n\nAmount: $${(session.amount_total / 100).toFixed(2)}\nPaid by: ${session.customer_details?.email || 'unknown'}\n\nnova-systems.app/dashboard/invoices`,
+          }),
+        }).catch(() => {});
+      }
     }
 
     if (event.type === 'payment_intent.succeeded') {
