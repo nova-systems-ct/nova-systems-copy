@@ -142,7 +142,7 @@ function LeadRow({ lead: l, onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', background: hov ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.025)', border: `1px solid ${hov ? 'rgba(212,160,48,0.25)' : 'rgba(255,255,255,0.07)'}`, borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s', flexWrap: 'wrap', gap: 12 }}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', background: hov ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.025)', border: `1px solid ${hov ? 'rgba(212,160,48,0.25)' : 'rgba(255,255,255,0.07)'}`, borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s', flexWrap: 'wrap' }}
     >
       <div style={{ width: 38, height: 38, borderRadius: 9, background: `${GOLD}12`, border: `1px solid ${GOLD}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900, color: GOLD, flexShrink: 0 }}>
         {l.name[0]}

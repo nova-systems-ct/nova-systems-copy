@@ -2,7 +2,7 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize } from './_sanitize.js';
 
-const VALID_CATEGORIES = ['Website', 'Branding', 'Social Media', 'Apparel', 'Other'];
+const VALID_CATEGORIES = ['Websites', 'Social Media', 'Branding', 'AI Systems', 'Signage and Print', 'Apparel and Uniforms', 'Other'];
 
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
@@ -63,11 +63,15 @@ export default async function handler(req, res) {
     const category    = sanitize(b.category, 50);
     const client_name = sanitize(b.client_name, 200);
 
+    const description = sanitize(b.description, 1000);
+
     const patch = {};
     if (title) patch.title = title;
     if (category && VALID_CATEGORIES.includes(category)) patch.category = category;
     if ('client_name' in b) patch.client_name = client_name || null;
     if ('featured' in b)    patch.featured = b.featured === true || b.featured === 'true';
+    if ('description' in b) patch.description = description || null;
+    if ('sort_order' in b)  patch.sort_order = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : 0;
 
     if (Object.keys(patch).length === 0) {
       return res.status(400).json({ error: 'No fields to update' });

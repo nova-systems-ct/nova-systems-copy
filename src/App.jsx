@@ -19,6 +19,11 @@ import ApplicantLogin from './pages/ApplicantLogin';
 import SetPassword from './pages/SetPassword';
 import ApplicationStatus from './pages/ApplicationStatus';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import Blog from './pages/Blog';
+import BlogPost from './pages/BlogPost';
+import PublicPortfolio from './pages/Portfolio';
+import Welcome from './pages/Welcome';
+import WelcomeSuccess from './pages/WelcomeSuccess';
 // CRM Dashboard
 import DashboardLayout from './components/dashboard/DashboardLayout';
 import DashboardHome from './pages/dashboard/DashboardHome';
@@ -33,6 +38,11 @@ import Newsletter from './pages/dashboard/Newsletter';
 import DashboardSettings from './pages/dashboard/Settings';
 import Portfolio from './pages/dashboard/Portfolio';
 import SiteEditor from './pages/dashboard/SiteEditor';
+import DashboardBlog from './pages/dashboard/Blog';
+import NovaVault from './pages/dashboard/NovaVault';
+import Invoices from './pages/dashboard/Invoices';
+import Referrals from './pages/dashboard/Referrals';
+import IntakeForms from './pages/dashboard/IntakeForms';
 
 function App() {
   return (
@@ -54,6 +64,11 @@ function App() {
           <Route path="/set-password" element={<SetPassword />} />
           <Route path="/application-status" element={<ApplicationStatus />} />
           <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
+          <Route path="/blog" element={<Blog />} />
+          <Route path="/blog/:slug" element={<BlogPost />} />
+          <Route path="/portfolio" element={<PublicPortfolio />} />
+          <Route path="/welcome" element={<Welcome />} />
+          <Route path="/welcome/success" element={<WelcomeSuccess />} />
 
           {/* CRM Dashboard — nested routes */}
           <Route path="/dashboard" element={<DashboardLayout />}>
@@ -64,6 +79,11 @@ function App() {
             <Route path="leads/:id" element={<LeadDetail />} />
             <Route path="jobs" element={<Jobs />} />
             <Route path="jobs/:id" element={<JobDetail />} />
+            <Route path="intake-forms" element={<IntakeForms />} />
+            <Route path="invoices" element={<Invoices />} />
+            <Route path="referrals" element={<Referrals />} />
+            <Route path="nova-vault" element={<NovaVault />} />
+            <Route path="blog" element={<DashboardBlog />} />
             <Route path="documents" element={<Documents />} />
             <Route path="newsletter" element={<Newsletter />} />
             <Route path="portfolio" element={<Portfolio />} />

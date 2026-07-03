@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { Upload, Star, Trash2, Edit3, X, Check, Plus, ImageIcon, Loader2, AlertCircle } from 'lucide-react'
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
+import { Upload, Star, Trash2, Edit3, X, Check, Plus, ImageIcon, Loader2, AlertCircle, GripVertical, ArrowUpDown } from 'lucide-react'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
-const CATEGORIES = ['Website', 'Branding', 'Social Media', 'Apparel', 'Other']
+const CATEGORIES = ['Websites', 'Social Media', 'Branding', 'AI Systems', 'Signage and Print', 'Apparel and Uniforms', 'Other']
 const CLIENT_OPTIONS = ['Mars Hill Apologetics', 'TRIO Upward Bound', 'Flow Barbershop', 'Wepaa', 'Custom…']
-const CAT_COLORS = { Website: '#60a5fa', Branding: '#a78bfa', 'Social Media': '#4ade80', Apparel: '#f97316', Other: GOLD }
+const CAT_COLORS = { Websites: '#60a5fa', Branding: '#a78bfa', 'Social Media': '#4ade80', 'AI Systems': '#22d3ee', 'Signage and Print': '#f97316', 'Apparel and Uniforms': '#f472b6', Other: GOLD }
 
 const inp = {
   width: '100%', padding: '10px 13px', fontSize: 13,
@@ -24,7 +25,9 @@ export default function Portfolio() {
   const [showUpload, setShowUpload] = useState(false)
   const [preview, setPreview] = useState('')
   const [fileData, setFileData] = useState('')
-  const [form, setForm] = useState({ title: '', category: 'Website', client_name: '', customClient: '', featured: false })
+  const [form, setForm] = useState({ title: '', category: 'Websites', client_name: '', customClient: '', featured: false, description: '' })
+  const [reorderMode, setReorderMode] = useState(false)
+  const [reordering, setReordering] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [uploadSuccess, setUploadSuccess] = useState(false)
@@ -76,6 +79,7 @@ export default function Portfolio() {
           category: form.category,
           client_name: clientName || null,
           featured: form.featured,
+          description: form.description || null,
           image_base64: fileData,
         }),
       })
@@ -88,7 +92,7 @@ export default function Portfolio() {
       setUploadSuccess(true)
       setPreview('')
       setFileData('')
-      setForm({ title: '', category: 'Website', client_name: '', customClient: '', featured: false })
+      setForm({ title: '', category: 'Websites', client_name: '', customClient: '', featured: false, description: '' })
       if (fileRef.current) fileRef.current.value = ''
       setTimeout(() => { setUploadSuccess(false); setShowUpload(false) }, 1200)
       load()
@@ -124,7 +128,24 @@ export default function Portfolio() {
 
   const openEdit = (item) => {
     setEditItem(item)
-    setEditForm({ title: item.title || '', category: item.category || 'Other', client_name: item.client_name || '', featured: !!item.featured })
+    setEditForm({ title: item.title || '', category: item.category || 'Other', client_name: item.client_name || '', featured: !!item.featured, description: item.description || '' })
+  }
+
+  const handleReorder = async (result) => {
+    if (!result.destination) return
+    const reordered = Array.from(items)
+    const [moved] = reordered.splice(result.source.index, 1)
+    reordered.splice(result.destination.index, 0, moved)
+    setItems(reordered)
+    setReordering(true)
+    await Promise.all(reordered.map((it, i) =>
+      fetch('/api/portfolio-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update', id: it.id, sort_order: i }),
+      })
+    ))
+    setReordering(false)
   }
 
   const handleSaveEdit = async () => {
@@ -149,14 +170,21 @@ export default function Portfolio() {
           <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>Portfolio Manager</p>
           <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Portfolio</h1>
           <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, marginTop: 4 }}>
-            {items.length} item{items.length !== 1 ? 's' : ''} · {featuredCount} featured on homepage
+            {items.length} item{items.length !== 1 ? 's' : ''} · {featuredCount} featured on homepage {reordering && <span style={{ color: GOLD }}>· Saving order…</span>}
           </p>
         </div>
-        <button
-          onClick={() => { setShowUpload(!showUpload); setUploadError(''); setPreview(''); setFileData('') }}
-          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '11px 18px', background: showUpload ? 'rgba(255,255,255,0.06)' : G, border: showUpload ? '1px solid rgba(255,255,255,0.12)' : 'none', borderRadius: 8, color: showUpload ? 'rgba(255,255,255,0.5)' : '#0a0800', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
-          {showUpload ? <><X style={{ width: 14, height: 14 }} /> Cancel</> : <><Plus style={{ width: 14, height: 14 }} /> Upload Image</>}
-        </button>
+        <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+          <button
+            onClick={() => setReorderMode(!reorderMode)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '11px 18px', background: reorderMode ? `${GOLD}18` : 'rgba(255,255,255,0.06)', border: `1px solid ${reorderMode ? GOLD + '50' : 'rgba(255,255,255,0.12)'}`, borderRadius: 8, color: reorderMode ? GOLD : 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <ArrowUpDown style={{ width: 14, height: 14 }} /> {reorderMode ? 'Done Reordering' : 'Reorder'}
+          </button>
+          <button
+            onClick={() => { setShowUpload(!showUpload); setUploadError(''); setPreview(''); setFileData('') }}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '11px 18px', background: showUpload ? 'rgba(255,255,255,0.06)' : G, border: showUpload ? '1px solid rgba(255,255,255,0.12)' : 'none', borderRadius: 8, color: showUpload ? 'rgba(255,255,255,0.5)' : '#0a0800', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {showUpload ? <><X style={{ width: 14, height: 14 }} /> Cancel</> : <><Plus style={{ width: 14, height: 14 }} /> Upload Image</>}
+          </button>
+        </div>
       </div>
 
       {/* Supabase setup required notice */}
@@ -170,13 +198,16 @@ export default function Portfolio() {
             Run this SQL in your Supabase dashboard → SQL Editor, then create a public storage bucket named <code style={{ color: GOLD, background: 'rgba(212,160,48,0.1)', padding: '1px 6px', borderRadius: 4 }}>portfolio</code>:
           </p>
           <pre style={{ padding: '14px 18px', background: 'rgba(0,0,0,0.5)', borderRadius: 8, fontSize: 11, color: 'rgba(255,255,255,0.55)', overflowX: 'auto', lineHeight: 1.8 }}>
-{`CREATE TABLE IF NOT EXISTS portfolio (
+{`-- See supabase/schema-update.sql for the full script
+CREATE TABLE IF NOT EXISTS portfolio (
   id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   title      TEXT NOT NULL,
   image_url  TEXT NOT NULL,
   category   TEXT DEFAULT 'Other',
   client_name TEXT,
   featured   BOOLEAN DEFAULT FALSE,
+  description TEXT,
+  sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );`}
           </pre>
@@ -237,6 +268,10 @@ export default function Portfolio() {
                   <input value={form.customClient} onChange={e => setForm(f => ({ ...f, customClient: e.target.value }))} style={{ ...inp, marginTop: 8 }} placeholder="Enter client name" />
                 )}
               </div>
+              <div>
+                <label style={lbl}>Description</label>
+                <textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} style={{ ...inp, resize: 'none' }} placeholder="Shown on hover in the public portfolio" />
+              </div>
               <div
                 onClick={() => setForm(f => ({ ...f, featured: !f.featured }))}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -273,6 +308,31 @@ export default function Portfolio() {
           <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 15, marginBottom: 8 }}>No portfolio items yet</p>
           <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>Click "Upload Image" to add your first item.</p>
         </div>
+      ) : reorderMode ? (
+        <DragDropContext onDragEnd={handleReorder}>
+          <Droppable droppableId="portfolio-items">
+            {(provided) => (
+              <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {items.map((item, index) => (
+                  <Draggable key={item.id} draggableId={item.id} index={index}>
+                    {(dragProvided, snapshot) => (
+                      <div ref={dragProvided.innerRef} {...dragProvided.draggableProps}
+                        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: snapshot.isDragging ? `${GOLD}12` : 'rgba(255,255,255,0.025)', border: `1px solid ${snapshot.isDragging ? GOLD + '50' : 'rgba(255,255,255,0.07)'}`, borderRadius: 10, ...dragProvided.draggableProps.style }}>
+                        <div {...dragProvided.dragHandleProps} style={{ color: 'rgba(255,255,255,0.3)', cursor: 'grab', display: 'flex' }}>
+                          <GripVertical style={{ width: 16, height: 16 }} />
+                        </div>
+                        <img src={item.image_url} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                        <p style={{ color: '#fff', fontSize: 13, fontWeight: 600, flex: 1 }}>{item.title}</p>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: `${CAT_COLORS[item.category] || GOLD}18`, color: CAT_COLORS[item.category] || GOLD }}>{item.category}</span>
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
           {items.map(item => (
@@ -317,6 +377,10 @@ export default function Portfolio() {
               <div>
                 <label style={lbl}>Client</label>
                 <input value={editForm.client_name || ''} onChange={e => setEditForm(f => ({ ...f, client_name: e.target.value }))} style={inp} placeholder="Client name" />
+              </div>
+              <div>
+                <label style={lbl}>Description</label>
+                <textarea rows={2} value={editForm.description || ''} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} style={{ ...inp, resize: 'none' }} />
               </div>
               <div
                 onClick={() => setEditForm(f => ({ ...f, featured: !f.featured }))}

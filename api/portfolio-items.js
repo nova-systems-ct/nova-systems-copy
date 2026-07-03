@@ -13,8 +13,8 @@ export default async function handler(req, res) {
 
   const featured = req.query?.featured === 'true';
   const qs = featured
-    ? 'featured=eq.true&order=created_at.desc'
-    : 'order=created_at.desc';
+    ? 'featured=eq.true&order=sort_order.asc,created_at.desc'
+    : 'order=sort_order.asc,created_at.desc';
 
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/portfolio?${qs}`, {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Check, Loader2, AlertCircle, Globe, ChevronRight } from 'lucide-react'
+import { Check, Loader2, AlertCircle, Globe } from 'lucide-react'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`

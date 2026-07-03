@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, Target, DollarSign, FileText, Plus, Zap, Mail, ArrowRight, CalendarCheck } from 'lucide-react'
-import { getClients, getLeads, getActivity, getInvoices } from '../../lib/crmStore'
+import { Building2, Target, DollarSign, FileText, Mail, ArrowRight, CalendarCheck, Receipt, HandCoins, Search, Newspaper, LayoutGrid } from 'lucide-react'
+import { getClients, getLeads, getActivity } from '../../lib/crmStore'
 
 const GOLD = '#D4A030'
-const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
 
 const STAGE_COLORS = {
   'New Contact':   { bg: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.4)', border: 'rgba(255,255,255,0.1)' },
@@ -58,19 +57,31 @@ export default function DashboardHome() {
   const [leads, setLeads] = useState([])
   const [activity, setActivity] = useState([])
   const [demoRequests, setDemoRequests] = useState([])
+  const [invoicesOutstanding, setInvoicesOutstanding] = useState(0)
+  const [commissionsOwed, setCommissionsOwed] = useState(0)
 
   useEffect(() => {
     setClients(getClients())
     setLeads(getLeads())
     setActivity(getActivity())
     try { setDemoRequests(JSON.parse(localStorage.getItem('nova_demo_requests') || '[]')) } catch {}
+
+    fetch('/api/invoices').then(r => r.json()).then(data => {
+      if (!Array.isArray(data)) return
+      setInvoicesOutstanding(data.filter(i => i.status !== 'Paid').reduce((sum, i) => sum + (Number(i.total) || 0), 0))
+    }).catch(() => {})
+
+    fetch('/api/referrals').then(r => r.json()).then(data => {
+      if (!Array.isArray(data)) return
+      setCommissionsOwed(data.filter(r => r.status !== 'Paid').reduce((sum, r) => sum + (Number(r.commission_amount) || 0), 0))
+    }).catch(() => {})
   }, [])
 
   const pipeline = ['New Contact', 'Proposal Sent', 'Demo Shown', 'Negotiating', 'Closed Won', 'Closed Lost']
     .map(s => ({ stage: s, count: leads.filter(l => l.stage === s).length }))
 
-  const openInvoices = getInvoices().filter(i => !i.paid).length
-  const revenue = getInvoices().filter(i => i.paid && new Date(i.created_at) > new Date(new Date().setDate(1))).reduce((sum, i) => sum + (i.amount || 0), 0)
+  const activeClients = clients.filter(c => c.status === 'active')
+  const mrr = activeClients.reduce((sum, c) => sum + (Number(c.monthly_rate) || 0), 0)
 
   return (
     <div style={{ padding: '48px 52px 80px', maxWidth: 1200 }}>
@@ -84,14 +95,18 @@ export default function DashboardHome() {
       </div>
 
       {/* Metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 48 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 24 }}>
+        <MetricCard icon={DollarSign}   label="Monthly Recurring Revenue" value={`$${mrr.toLocaleString()}`} sub={`${activeClients.length} active client${activeClients.length !== 1 ? 's' : ''}`} onClick={() => navigate('/dashboard/clients')} />
         <MetricCard icon={Building2}    label="Total Clients"     value={clients.length}    sub="Active accounts"  onClick={() => navigate('/dashboard/clients')} />
+        <MetricCard icon={Receipt}      label="Invoices Outstanding" value={`$${invoicesOutstanding.toLocaleString()}`} sub="Unpaid" onClick={() => navigate('/dashboard/invoices')} />
+        <MetricCard icon={HandCoins}    label="Commissions Owed"  value={`$${commissionsOwed.toLocaleString()}`} sub="Pending payout" onClick={() => navigate('/dashboard/referrals')} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 48 }}>
         <MetricCard icon={Target}       label="Active Leads"      value={leads.filter(l => !['Closed Won','Closed Lost'].includes(l.stage)).length} sub="In pipeline" onClick={() => navigate('/dashboard/leads')} />
         <MetricCard icon={CalendarCheck} label="Demo Requests"    value={demoRequests.length} sub={demoRequests.filter(d => d.status === 'pending').length + ' pending'} onClick={() => navigate('/dashboard/leads')} />
-        <MetricCard icon={DollarSign}   label="Revenue This Month" value={`$${revenue.toLocaleString()}`} sub="Paid invoices" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, marginBottom: 48 }} className="grid-dashboard">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, marginBottom: 32 }} className="grid-dashboard">
 
         {/* Pipeline */}
         <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 14, padding: '32px 32px' }}>
@@ -152,15 +167,29 @@ export default function DashboardHome() {
         </div>
       </div>
 
+      {/* Google Search Console placeholder */}
+      <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 14, padding: '28px 32px', marginBottom: 48, display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+        <div style={{ width: 44, height: 44, borderRadius: 11, background: `${GOLD}12`, border: `1px solid ${GOLD}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Search style={{ width: 18, height: 18, color: GOLD }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <p style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Google Search Console</p>
+          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>Connect Google Search Console to see your website traffic and keyword rankings.</p>
+        </div>
+        <button style={{ padding: '10px 20px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, cursor: 'not-allowed', fontFamily: 'inherit' }} title="Coming soon">
+          Connect
+        </button>
+      </div>
+
       {/* Quick Actions */}
       <div>
         <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 14 }}>Quick Actions</p>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {[
-            { label: 'Add Client',         icon: Building2, path: '/dashboard/clients' },
-            { label: 'Add Lead',           icon: Target,    path: '/dashboard/leads' },
-            { label: 'Generate Document',  icon: FileText,  path: '/dashboard/documents' },
-            { label: 'Send Newsletter',    icon: Mail,      path: '/dashboard/newsletter' },
+            { label: 'Add Client',         icon: Building2,   path: '/dashboard/clients' },
+            { label: 'Create Invoice',     icon: Receipt,     path: '/dashboard/invoices' },
+            { label: 'Write Blog Post',    icon: Newspaper,   path: '/dashboard/blog' },
+            { label: 'Upload Portfolio Item', icon: LayoutGrid, path: '/dashboard/portfolio' },
           ].map(({ label, icon: Icon, path }) => (
             <button
               key={label}

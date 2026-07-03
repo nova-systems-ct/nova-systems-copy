@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Activity, Bell, TrendingUp, FileText, Calendar, Plus, Send, X, ClipboardList, UserPlus } from "lucide-react";
+import { Users, Activity, Bell, FileText, Calendar, Plus, Send, X, ClipboardList, UserPlus } from "lucide-react";
 import { callFunction } from "@/lib/callFunction";
 
 const GOLD = "#D4A030";

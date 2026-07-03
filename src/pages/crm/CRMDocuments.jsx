@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FileText, Loader, Send, Save } from "lucide-react";
+import { FileText, Loader, Save } from "lucide-react";
 import CRMSidebar from "@/components/crm/CRMSidebar";
 import { CRMField, inputStyle, onFocus, onBlur } from "@/components/crm/CRMField";
 import { getClients, getLeads, getDocuments, upsertDocument, logActivity } from "@/lib/crmData";

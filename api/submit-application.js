@@ -2,65 +2,88 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
 
+const ALLOWED_PORTFOLIO_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm', 'application/pdf'];
+
+async function uploadPortfolioFile(SUPABASE_URL, SUPABASE_SERVICE_KEY, email, base64) {
+  const match = base64.match(/^data:([^;]+);base64,(.+)$/s);
+  if (!match) return null;
+  const [, mimeType, base64Data] = match;
+  if (!ALLOWED_PORTFOLIO_MIMES.includes(mimeType)) return null;
+
+  let buffer;
+  try { buffer = Buffer.from(base64Data, 'base64'); } catch { return null; }
+  if (buffer.length > 4.5 * 1024 * 1024) return null;
+
+  const ext = mimeType.split('/')[1].replace('quicktime', 'mov');
+  const safeEmail = email.replace(/[^a-z0-9@._-]/gi, '_');
+  const filename = `${safeEmail}/${Date.now()}.${ext}`;
+
+  try {
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/portfolios/${filename}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': mimeType,
+        'x-upsert': 'true',
+      },
+      body: buffer,
+    });
+    if (!r.ok) { console.error('[submit-application] Portfolio upload error:', r.status, await r.text()); return null; }
+    return `${SUPABASE_URL}/storage/v1/object/public/portfolios/${filename}`;
+  } catch (e) {
+    console.error('[submit-application] Portfolio upload error:', e.message);
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 5, 60_000)) return;
 
-  const RESEND_KEY         = process.env.RESEND_API_KEY;
-  const SUPABASE_URL       = process.env.SUPABASE_URL;
+  const RESEND_KEY           = process.env.RESEND_API_KEY;
+  const SUPABASE_URL         = process.env.SUPABASE_URL;
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  console.log('[submit-application] RESEND_KEY present:', !!RESEND_KEY);
-  console.log('[submit-application] Supabase configured:', !!(SUPABASE_URL && SUPABASE_SERVICE_KEY));
-
-  // Sanitize all inputs
   const b = req.body || {};
   const id           = sanitize(b.id, 100);
   const name         = sanitize(b.name, 100);
   const email        = sanitizeEmail(b.email);
   const phone        = sanitizePhone(b.phone);
   const position     = sanitize(b.position, 100);
-  const cover_letter = sanitize(b.cover_letter, 5000);
-  const experience   = sanitize(b.experience, 3000);
-  const why_nova     = sanitize(b.why_nova, 3000);
-  const availability = sanitize(b.availability, 200);
-  const expected_pay = sanitize(b.expected_pay, 200);
   const password_hash = sanitize(b.password_hash, 128);
 
-  const reference_1_name         = sanitize(b.reference_1_name, 100);
-  const reference_1_relationship = sanitize(b.reference_1_relationship, 100);
-  const reference_1_phone        = sanitizePhone(b.reference_1_phone || '');
-  const reference_1_email        = sanitizeEmail(b.reference_1_email || '');
-  const reference_2_name         = sanitize(b.reference_2_name, 100);
-  const reference_2_relationship = sanitize(b.reference_2_relationship, 100);
-  const reference_2_phone        = sanitizePhone(b.reference_2_phone || '');
-  const reference_2_email        = sanitizeEmail(b.reference_2_email || '');
-  const reference_3_name         = sanitize(b.reference_3_name, 100);
-  const reference_3_relationship = sanitize(b.reference_3_relationship, 100);
-  const reference_3_phone        = sanitizePhone(b.reference_3_phone || '');
-  const reference_3_email        = sanitizeEmail(b.reference_3_email || '');
+  const city                       = sanitize(b.city, 100);
+  const bio                        = sanitize(b.bio, 3000);
+  const equipment_owned            = sanitize(b.equipment_owned, 1000);
+  const has_transportation         = sanitize(b.has_transportation, 10);
+  const instagram_tiktok           = sanitize(b.instagram_tiktok, 200);
+  const camera_equipment           = sanitize(b.camera_equipment, 1000);
+  const drone_equipment            = sanitize(b.drone_equipment, 1000);
+  const faa_part_107               = sanitize(b.faa_part_107, 10);
+  const has_transportation_license = sanitize(b.has_transportation_license, 10);
+  const speaks_spanish             = sanitize(b.speaks_spanish, 15);
+  const sales_experience           = sanitize(b.sales_experience, 20);
+  const sales_experience_desc      = sanitize(b.sales_experience_desc, 2000);
+  const why_position                = sanitize(b.why_position, 2000);
+  const start_timing                = sanitize(b.start_timing, 20);
+  const linkedin_url                = (() => { try { return sanitizeUrl(b.linkedin_url || ''); } catch { return ''; } })();
+  const ai_tools_experience         = sanitize(b.ai_tools_experience, 1500);
+  const ai_system_description       = sanitize(b.ai_system_description, 3000);
+  const portfolio_links              = sanitize(b.portfolio_links, 2000);
+  const portfolio_file_name          = sanitize(b.portfolio_file_name, 200);
+  const portfolio_file_base64        = typeof b.portfolio_file_base64 === 'string' ? b.portfolio_file_base64 : '';
 
-  const portfolio_url    = (() => { try { return sanitizeUrl(b.portfolio_url || ''); } catch { return ''; } })();
-  const owns_camera      = sanitize(b.owns_camera, 10);
-  const camera_specs     = sanitize(b.camera_specs, 300);
-  const has_editing_exp  = sanitize(b.has_editing_exp, 10);
-  const editing_software = sanitize(b.editing_software, 200);
-  const social_media     = sanitize(b.social_media, 300);
-  const has_drone        = sanitize(b.has_drone, 10);
-  const sales_experience = sanitize(b.sales_experience, 1000);
-  const industries       = sanitize(b.industries, 300);
-  const has_car          = sanitize(b.has_car, 10);
-  const cold_calling     = sanitize(b.cold_calling, 10);
-  const biggest_sale     = sanitize(b.biggest_sale, 500);
+  const isSalesRep = position.toLowerCase().includes('sales');
 
-  const resume_name   = sanitize(b.resume_name, 200);
-  const resume_base64 = typeof b.resume_base64 === 'string' ? b.resume_base64 : '';
-
-  // Only name, email, position, password_hash are truly required
   if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
   if (!position)       return res.status(400).json({ error: 'Position is required' });
-  if (!password_hash)  return res.status(400).json({ error: 'Password hash is required' });
+  if (!isSalesRep && !password_hash) return res.status(400).json({ error: 'Password hash is required' });
+
+  let portfolio_file_url = null;
+  if (portfolio_file_base64 && SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+    portfolio_file_url = await uploadPortfolioFile(SUPABASE_URL, SUPABASE_SERVICE_KEY, email, portfolio_file_base64);
+  }
 
   // 1. Save to Supabase first — always, before emails
   if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
@@ -74,20 +97,20 @@ export default async function handler(req, res) {
           Prefer: 'return=minimal',
         },
         body: JSON.stringify({
-          id, name, email, phone, position, status: 'new',
-          cover_letter, experience, why_nova_systems: why_nova,
-          availability, expected_pay, password_hash,
-          reference_1_name, reference_1_relationship, reference_1_phone, reference_1_email,
-          reference_2_name, reference_2_relationship, reference_2_phone, reference_2_email,
-          reference_3_name, reference_3_relationship, reference_3_phone, reference_3_email,
-          portfolio_url: portfolio_url || null,
-          owns_camera: owns_camera || null, camera_specs: camera_specs || null,
-          has_editing_exp: has_editing_exp || null, editing_software: editing_software || null,
-          social_media: social_media || null, has_drone: has_drone || null,
-          sales_experience: sales_experience || null, industries: industries || null,
-          has_car: has_car || null, cold_calling: cold_calling || null,
-          biggest_sale: biggest_sale || null,
-          resume_name: resume_name || null,
+          id, name, email, phone, position, status: 'new', password_hash: password_hash || null,
+          city: city || null, bio: bio || null,
+          equipment_owned: equipment_owned || null, has_transportation: has_transportation || null,
+          instagram_tiktok: instagram_tiktok || null,
+          camera_equipment: camera_equipment || null, drone_equipment: drone_equipment || null,
+          faa_part_107: faa_part_107 || null,
+          has_transportation_license: has_transportation_license || null,
+          speaks_spanish: speaks_spanish || null,
+          sales_experience: sales_experience || null, sales_experience_desc: sales_experience_desc || null,
+          why_position: why_position || null, start_timing: start_timing || null,
+          linkedin_url: linkedin_url || null,
+          ai_tools_experience: ai_tools_experience || null, ai_system_description: ai_system_description || null,
+          portfolio_links: portfolio_links || null,
+          portfolio_file_url,
           submitted_at: new Date().toISOString(),
         }),
       });
@@ -110,44 +133,33 @@ export default async function handler(req, res) {
 
   const FROM = 'Nova Systems <noreply@nova-systems.app>';
 
-  const refs = [
-    [reference_1_name, reference_1_relationship, reference_1_phone, reference_1_email],
-    [reference_2_name, reference_2_relationship, reference_2_phone, reference_2_email],
-    [reference_3_name, reference_3_relationship, reference_3_phone, reference_3_email],
-  ].filter(([n]) => n);
-
-  const refText = refs.length
-    ? refs.map(([n, r, p, e], i) =>
-        `  Ref ${i + 1}: ${n} · ${r || 'N/A'} · ${p || 'N/A'} · ${e || 'N/A'}`
-      ).join('\n')
-    : '  None provided';
-
-  const posFields = position.includes('Videographer')
+  const posFields = position.includes('Content Creator')
     ? [
-        `Camera/Phone: ${owns_camera === 'yes' ? 'Yes' : owns_camera === 'no' ? 'No' : 'N/A'}`,
-        `Camera Specs: ${camera_specs || 'N/A'}`,
-        `Video Editing: ${has_editing_exp === 'yes' ? `Yes — ${editing_software || 'unspecified'}` : has_editing_exp === 'no' ? 'No' : 'N/A'}`,
-        `Social Media: ${social_media || 'N/A'}`,
-        `Drone: ${has_drone === 'yes' ? 'Yes' : has_drone === 'no' ? 'No' : 'N/A'}`,
-        `Portfolio: ${portfolio_url || 'N/A'}`,
+        `Equipment Owned: ${equipment_owned || 'N/A'}`,
+        `Reliable Transportation: ${has_transportation === 'yes' ? 'Yes' : has_transportation === 'no' ? 'No' : 'N/A'}`,
+        `Instagram/TikTok: ${instagram_tiktok || 'N/A'}`,
       ].join('\n')
-    : position.includes('Sales')
+    : position.includes('Videographer')
     ? [
-        `Sales Exp: ${sales_experience || 'N/A'}`,
-        `Industries: ${industries || 'N/A'}`,
-        `Reliable Car: ${has_car === 'yes' ? 'Yes' : has_car === 'no' ? 'No' : 'N/A'}`,
-        `Cold Calling: ${cold_calling === 'yes' ? 'Yes' : cold_calling === 'no' ? 'No' : 'N/A'}`,
-        `Biggest Sale: ${biggest_sale || 'N/A'}`,
-        `Commission Expectation: ${expected_pay || 'N/A'}`,
+        `Camera Equipment: ${camera_equipment || 'N/A'}`,
+        `Drone Equipment: ${drone_equipment || 'N/A'}`,
+        `FAA Part 107: ${faa_part_107 === 'yes' ? 'Yes' : faa_part_107 === 'no' ? 'No' : 'N/A'}`,
+        `Reliable Transportation: ${has_transportation === 'yes' ? 'Yes' : has_transportation === 'no' ? 'No' : 'N/A'}`,
       ].join('\n')
-    : position.includes('Drone')
+    : isSalesRep
     ? [
-        `Drone Model: ${camera_specs || 'N/A'}`,
-        `FAA Part 107: ${has_editing_exp === 'yes' ? 'Yes' : has_editing_exp === 'no' ? 'No' : 'N/A'}`,
-        `Years Flying: ${social_media || 'N/A'}`,
-        `Aerial Portfolio: ${portfolio_url || 'N/A'}`,
+        `Transportation + Valid CT License: ${has_transportation_license === 'yes' ? 'Yes' : has_transportation_license === 'no' ? 'No' : 'N/A'}`,
+        `Speaks Spanish: ${speaks_spanish || 'N/A'}`,
+        `Sales Experience: ${sales_experience || 'N/A'}`,
+        `Experience Details: ${sales_experience_desc || 'N/A'}`,
+        `Why This Position: ${why_position || 'N/A'}`,
+        `Can Start: ${start_timing || 'N/A'}`,
+        `LinkedIn: ${linkedin_url || 'N/A'}`,
       ].join('\n')
-    : `Portfolio: ${portfolio_url || 'N/A'}`;
+    : [
+        `AI Tools Experience: ${ai_tools_experience || 'N/A'}`,
+        `System Built: ${ai_system_description || 'N/A'}`,
+      ].join('\n');
 
   const isaacBody = [
     'NEW JOB APPLICATION — Nova Systems',
@@ -156,39 +168,23 @@ export default async function handler(req, res) {
     `Name:     ${name}`,
     `Email:    ${email}`,
     `Phone:    ${phone || 'N/A'}`,
+    `City:     ${city || 'N/A'}`,
     '',
-    'COVER LETTER',
-    '━━━━━━━━━━━━',
-    cover_letter || 'Not provided',
-    '',
-    'PREVIOUS EXPERIENCE',
-    experience || 'N/A',
-    '',
-    'WHY NOVA SYSTEMS',
-    why_nova || 'N/A',
-    '',
-    `Availability: ${availability || 'N/A'}`,
-    `Expected Pay: ${expected_pay || 'N/A'}`,
+    'BIO',
+    '━━━',
+    bio || 'N/A',
     '',
     'POSITION-SPECIFIC',
     '━━━━━━━━━━━━━━━━━',
     posFields,
     '',
-    'REFERENCES',
-    '━━━━━━━━━━',
-    refText,
-    '',
-    resume_name ? `RESUME: ${resume_name} (attached)` : 'RESUME: Not provided',
+    portfolio_links ? `PORTFOLIO LINKS:\n${portfolio_links}` : 'PORTFOLIO LINKS: None provided',
+    portfolio_file_url ? `PORTFOLIO FILE: ${portfolio_file_url}` : (portfolio_file_name ? `PORTFOLIO FILE: ${portfolio_file_name} (upload failed, see logs)` : ''),
     '',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-    'Review at: nova-systems.app/login → Candidates dashboard',
-  ].join('\n');
+    'Review at: nova-systems.app/dashboard/candidates',
+  ].filter(Boolean).join('\n');
 
-  const attachments = resume_base64
-    ? [{ filename: resume_name || 'resume.pdf', content: resume_base64.replace(/^data:[^;]+;base64,/, '') }]
-    : undefined;
-
-  // Email to Isaac
   try {
     const r1 = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -199,17 +195,13 @@ export default async function handler(req, res) {
         subject: `New Application: ${name} — ${position}`,
         text: isaacBody,
         reply_to: email,
-        ...(attachments ? { attachments } : {}),
       }),
     });
-    const r1Body = await r1.text();
-    console.log('[submit-application] Isaac email:', r1.status, r1Body);
-    if (!r1.ok) console.error('[submit-application] Isaac email failed (non-fatal):', r1Body);
+    if (!r1.ok) console.error('[submit-application] Isaac email failed (non-fatal):', await r1.text());
   } catch (e) {
     console.error('[submit-application] Isaac email error (non-fatal):', e.message);
   }
 
-  // Confirmation email to applicant
   const confirmBody = [
     `Hi ${name},`,
     '',
@@ -217,14 +209,16 @@ export default async function handler(req, res) {
     '',
     `Position: ${position}`,
     '',
-    'YOUR APPLICANT LOGIN',
-    '━━━━━━━━━━━━━━━━━━━━',
-    'Track your application status at:',
-    'https://nova-systems.app/applicant-login',
-    '',
-    `Login Email: ${email}`,
-    'Password:    The password you set during your application',
-    '',
+    ...(isSalesRep ? [] : [
+      'YOUR APPLICANT LOGIN',
+      '━━━━━━━━━━━━━━━━━━━━',
+      'Track your application status at:',
+      'https://nova-systems.app/application-status',
+      '',
+      `Login Email: ${email}`,
+      'Password:    The password you set during your application',
+      '',
+    ]),
     '━━━━━━━━━━━━━━━━━━━━',
     'Questions? Email hello@nova-systems.app',
     '',

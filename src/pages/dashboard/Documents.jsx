@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Sparkles, Loader2, Send, Save, FileText, X } from 'lucide-react'
-import { getClients, getLeads, saveDocument, getDocuments, addActivity } from '../../lib/crmStore'
+import { Sparkles, Loader2, Send, Save, FileText } from 'lucide-react'
+import { getClients, getLeads, saveDocument, getDocuments } from '../../lib/crmStore'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`

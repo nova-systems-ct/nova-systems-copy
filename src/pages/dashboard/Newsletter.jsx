@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Mail, Send, Plus, X, Users, Check } from 'lucide-react'
+import { Send, Plus, Users } from 'lucide-react'
 import { getSubscribers, addSubscriber, getSentNewsletters, saveSentNewsletter } from '../../lib/crmStore'
 
 const GOLD = '#D4A030'

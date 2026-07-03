@@ -2,7 +2,7 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize } from './_sanitize.js';
 
-const VALID_CATEGORIES = ['Website', 'Branding', 'Social Media', 'Apparel', 'Other'];
+const VALID_CATEGORIES = ['Websites', 'Social Media', 'Branding', 'AI Systems', 'Signage and Print', 'Apparel and Uniforms', 'Other'];
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 export default async function handler(req, res) {
@@ -23,6 +23,8 @@ export default async function handler(req, res) {
   const client_name = sanitize(b.client_name, 200);
   const image_base64 = typeof b.image_base64 === 'string' ? b.image_base64 : '';
   const featured    = b.featured === true || b.featured === 'true';
+  const description = sanitize(b.description, 1000);
+  const sort_order   = Number.isFinite(Number(b.sort_order)) ? Number(b.sort_order) : 0;
 
   if (!title)        return res.status(400).json({ error: 'Title is required' });
   if (!image_base64) return res.status(400).json({ error: 'Image is required' });
@@ -96,6 +98,8 @@ export default async function handler(req, res) {
         category: category || 'Other',
         client_name: client_name || null,
         featured,
+        description: description || null,
+        sort_order,
         created_at: new Date().toISOString(),
       }),
     });

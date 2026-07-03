@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, Plus, Check, X, Edit2, Save, Sparkles, Send, Loader2 } from 'lucide-react'
-import { getClient, updateClient, getInvoices, addInvoice, updateInvoice, getDocuments, saveDocument } from '../../lib/crmStore'
+import { ArrowLeft, ExternalLink, Plus, Check, X, Save, Sparkles, Send, Loader2 } from 'lucide-react'
+import { getClient, updateClient, getInvoices, addInvoice, updateInvoice, getDocuments } from '../../lib/crmStore'
 import DocumentGeneratorModal from '../../components/dashboard/DocumentGeneratorModal'
 
 const GOLD = '#D4A030'
