@@ -103,6 +103,15 @@ CREATE TABLE IF NOT EXISTS blog_posts (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Backfill columns for a blog_posts table that already existed before this file did.
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS slug TEXT UNIQUE;
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS excerpt TEXT;
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS thumbnail_color TEXT DEFAULT '#C49A3C';
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS seo_title TEXT;
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS seo_description TEXT;
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS published BOOLEAN DEFAULT FALSE;
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS author TEXT DEFAULT 'Isaac Nova';
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- ── CLIENTS (intake / CRM) ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS clients (
