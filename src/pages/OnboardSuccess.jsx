@@ -5,7 +5,7 @@ import { CheckCircle2, ArrowRight } from "lucide-react";
 const GOLD = "#D4A030";
 const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
-export default function WelcomeSuccess() {
+export default function OnboardSuccess() {
   const [params] = useSearchParams();
   const clientId = params.get("client_id");
   const [client, setClient] = useState(null);
@@ -42,7 +42,7 @@ export default function WelcomeSuccess() {
           </ul>
         </div>
 
-        <Link to="/login" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", background: G, color: "#0a0800", borderRadius: 9, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+        <Link to="/client-login" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", background: G, color: "#0a0800", borderRadius: 9, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
           GO TO CLIENT PORTAL <ArrowRight style={{ width: 14, height: 14 }} />
         </Link>
       </div>

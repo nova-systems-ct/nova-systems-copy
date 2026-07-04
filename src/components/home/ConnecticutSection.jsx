@@ -13,7 +13,7 @@ export default function ConnecticutSection() {
             Connecticut Based.<br />Connecticut Proud.
           </h2>
           <p className="text-sm md:text-base leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
-            Nova Systems was founded in Waterbury, CT and serves businesses across the entire state — from the corner stores of Waterbury to the luxury boutiques of Greenwich. We are local, we are bilingual, and we are building something real right here in Connecticut.
+            Founded in Waterbury, CT. Serving businesses from the corner store to the boardroom — from Waterbury to Greenwich.
           </p>
         </div>
         <ConnecticutMap />

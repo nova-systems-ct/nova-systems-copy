@@ -1,8 +1,9 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Link, useNavigate } from "react-router-dom";
-import { Check, Minus, ArrowRight, ArrowLeft } from "lucide-react";
+import { Check, ArrowRight, ArrowLeft, ChevronDown } from "lucide-react";
+import { useSEO } from "@/hooks/useSEO";
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
@@ -10,75 +11,68 @@ const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 
 const plans = [
   {
     name: "STARTER",
-    price: { monthly: 497, annual: 398 },
-    tagline: "Perfect for local businesses ready to stop losing leads.",
-    desc: "Get Nova Pulse monitoring, missed call alerts, and basic automation to start capturing more of what's already coming to you.",
+    price: "$1,000",
+    period: "/month",
+    tagline: "Custom website, SEO, and local presence.",
     features: [
-      "Nova Pulse revenue monitoring",
-      "Up to 500 tracked leads/month",
-      "Missed call & follow-up alerts",
-      "Basic lead capture automation",
-      "Monthly performance report",
-      "Email support",
+      "Custom website",
+      "SEO",
+      "Google Business setup",
+      "Hosting and maintenance",
+      "Monthly analytics report",
     ],
     cta: "GET STARTED",
     popular: false,
   },
   {
     name: "GROWTH",
-    price: { monthly: 997, annual: 798 },
-    tagline: "For growing operations that need full-stack infrastructure.",
-    desc: "Everything in Starter plus AI call handling, custom CRM integration, and weekly strategy calls to accelerate your revenue recovery.",
+    price: "$1,500",
+    period: "/month",
+    tagline: "Premium infrastructure and AI automation.",
     features: [
       "Everything in Starter",
-      "Unlimited lead tracking",
-      "AI call handling & SMS follow-up",
-      "Custom CRM build & integration",
-      "Weekly strategy calls",
-      "Priority support",
-      "Nova Pulse dashboard access",
-      "Conversion funnel tracking",
+      "Social media management (when team is hired)",
+      "AI phone agent",
+      "Brand organization",
+      "CRM setup",
+      "Email and SMS marketing",
     ],
-    cta: "BOOK A DEMO",
+    cta: "GET STARTED",
     popular: true,
   },
   {
     name: "ENTERPRISE",
-    price: null,
-    tagline: "Full operational infrastructure built for your business.",
-    desc: "Custom website, full automation suite, dedicated account manager, and complete revenue operations infrastructure.",
+    price: "Custom",
+    period: "",
+    tagline: "Full operational infrastructure, built for you.",
     features: [
-      "Everything in Growth",
-      "Custom website build",
-      "Dedicated account manager",
-      "Custom automation workflows",
-      "Multi-location support",
-      "White-label reporting",
-      "24/7 priority support",
-      "Quarterly business reviews",
+      "Full AI ecosystem",
+      "Custom web applications",
+      "Complete operational automation",
+      "Dedicated account management",
+      "Priority support",
+      "Everything Nova Systems offers",
     ],
-    cta: "GET A QUOTE",
+    cta: "BOOK A CONSULTATION",
     popular: false,
   },
 ];
 
-const comparisonRows = [
-  { feature: "Nova Pulse monitoring", starter: true, growth: true, enterprise: true },
-  { feature: "Missed call alerts", starter: true, growth: true, enterprise: true },
-  { feature: "AI call handling", starter: false, growth: true, enterprise: true },
-  { feature: "Custom CRM integration", starter: false, growth: true, enterprise: true },
-  { feature: "Custom website build", starter: false, growth: false, enterprise: true },
-  { feature: "Weekly strategy calls", starter: false, growth: true, enterprise: true },
-  { feature: "Dedicated account manager", starter: false, growth: false, enterprise: true },
-  { feature: "Multi-location support", starter: false, growth: false, enterprise: true },
-  { feature: "Tracked leads/month", starter: "500", growth: "Unlimited", enterprise: "Unlimited" },
-  { feature: "Support", starter: "Email", growth: "Priority", enterprise: "24/7" },
+const FAQS = [
+  { q: "Do you work with all business types?", a: "Yes, restaurants, barbershops, retail, medical, legal, and more." },
+  { q: "Do you serve all of Connecticut?", a: "Yes, we serve businesses statewide with priority in Fairfield County and Hartford County." },
+  { q: "Is there a contract?", a: "Month to month — cancel with 30 days notice." },
+  { q: "What if I need something not listed?", a: "We build custom solutions — book a meeting and we will scope it out." },
+  { q: "Do you offer services in Spanish?", a: "Yes — fully bilingual English and Spanish." },
 ];
 
 export default function Pricing() {
-  const [annual, setAnnual] = useState(true);
-
   const navigate = useNavigate();
+  const [openFaq, setOpenFaq] = useState(null);
+  useSEO({
+    title: "Pricing — Nova Systems Connecticut",
+    description: "Transparent, custom-built pricing for Connecticut businesses. Starter, Growth, and Enterprise plans from Nova Systems — Waterbury, CT's AI and technology agency.",
+  });
 
   return (
     <div className="min-h-screen bg-black">
@@ -101,41 +95,17 @@ export default function Pricing() {
             <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>
               PRICING <span className="inline-block w-8 h-px align-middle ml-2" style={{ background: GOLD }} />
             </p>
-            <h1 className="text-5xl md:text-6xl font-black text-white leading-[0.95] mb-5">
-              Simple pricing.<br />
+            <h1 className="text-4xl md:text-6xl font-black text-white leading-[1.05] mb-5">
+              Transparent Pricing.<br />
               <span style={{
                 background: `linear-gradient(90deg, ${GOLD} 0%, #C8921A 50%, ${GOLD} 100%)`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
-              }}>Powerful impact.</span>
+              }}>Built Around Your Scale.</span>
             </h1>
-            <p className="text-sm max-w-md mx-auto mb-10" style={{ color: "rgba(255,255,255,0.4)" }}>
-              Choose the plan that fits your business needs and start recovering lost revenue today.
+            <p className="text-sm max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
+              Every plan is custom built for your business. These are starting points — not ceilings.
             </p>
-
-            {/* Toggle */}
-            <div className="flex items-center justify-center gap-3">
-              <span className="text-xs" style={{ color: !annual ? "white" : "rgba(255,255,255,0.4)" }}>Monthly</span>
-              <button
-                onClick={() => setAnnual(!annual)}
-                className="relative w-11 h-6 rounded-full transition-colors"
-                style={{ background: annual ? GOLD : "rgba(255,255,255,0.15)" }}
-              >
-                <div
-                  className="absolute top-0.5 w-5 h-5 rounded-full bg-black transition-transform"
-                  style={{ transform: annual ? "translateX(22px)" : "translateX(2px)" }}
-                />
-              </button>
-              <span className="text-xs" style={{ color: annual ? "white" : "rgba(255,255,255,0.4)" }}>Annual</span>
-              {annual && (
-                <span
-                  className="text-[9px] font-bold tracking-wider px-2 py-0.5 rounded"
-                  style={{ background: `${GOLD}25`, color: GOLD, border: `1px solid ${GOLD}40` }}
-                >
-                  SAVE 20%
-                </span>
-              )}
-            </div>
           </div>
         </section>
 
@@ -164,25 +134,14 @@ export default function Pricing() {
                 <p className="text-[11px] mb-5 leading-relaxed" style={{ color: "rgba(255,255,255,0.38)" }}>{plan.tagline}</p>
 
                 <div className="mb-1">
-                  {plan.price ? (
-                    <>
-                      <span className="text-5xl font-black text-white">
-                        ${annual ? plan.price.annual : plan.price.monthly}
-                      </span>
-                      <span className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.38)" }}>/mo</span>
-                    </>
-                  ) : (
-                    <span className="text-4xl font-black text-white">Custom</span>
-                  )}
+                  <span className="text-4xl font-black text-white">{plan.price}</span>
+                  <span className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.38)" }}>{plan.period}</span>
                 </div>
                 <p className="text-[10px] mb-6" style={{ color: "rgba(255,255,255,0.28)" }}>
-                  {plan.price ? (annual ? "Billed annually" : "Billed monthly") : "Contact us for pricing"}
+                  {plan.period ? "Starting at" : "Tailored to your operation"}
                 </p>
 
-                <p className="text-xs leading-relaxed mb-6 pb-6 border-b" style={{ color: "rgba(255,255,255,0.35)", borderColor: "rgba(255,255,255,0.07)" }}>
-                  {plan.desc}
-                </p>
-
+                <p className="text-[9px] tracking-[0.25em] uppercase font-bold mb-4" style={{ color: "rgba(255,255,255,0.3)" }}>Includes</p>
                 <div className="space-y-3 flex-1 mb-8">
                   {plan.features.map((f) => (
                     <div key={f} className="flex items-center gap-2.5">
@@ -193,7 +152,7 @@ export default function Pricing() {
                 </div>
 
                 <Link
-                  to={plan.cta === "GET STARTED" ? "/register" : "/book-demo"}
+                  to="/welcome"
                   className="w-full py-3.5 text-[10px] font-bold tracking-[0.18em] uppercase transition-all hover:opacity-85 flex items-center justify-center gap-2"
                   style={plan.popular
                     ? { background: GOLD_GRADIENT, color: "#0a0800" }
@@ -202,47 +161,34 @@ export default function Pricing() {
                 >
                   {plan.cta} <ArrowRight className="w-3 h-3" />
                 </Link>
-                <p className="text-[10px] text-center mt-2" style={{ color: "rgba(255,255,255,0.2)" }}>
-                  {plan.price ? "No contracts. Cancel anytime." : "Custom terms available."}
-                </p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Comparison Table */}
+        {/* FAQ */}
         <section className="py-16 px-6 border-t" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.012)" }}>
-          <div className="max-w-4xl mx-auto">
-            <h3 className="text-2xl font-black text-white mb-10 text-center">Compare plans</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-                    <th className="text-left py-3 text-xs" style={{ color: "rgba(255,255,255,0.3)" }}></th>
-                    {["STARTER", "GROWTH", "ENTERPRISE"].map((p) => (
-                      <th key={p} className="text-center py-3 text-[10px] font-bold tracking-[0.2em]" style={{ color: GOLD }}>{p}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {comparisonRows.map((row) => (
-                    <tr key={row.feature} className="border-b" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-                      <td className="py-3.5 text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>{row.feature}</td>
-                      {["starter", "growth", "enterprise"].map((plan) => (
-                        <td key={plan} className="text-center py-3.5">
-                          {typeof row[plan] === "boolean" ? (
-                            row[plan]
-                              ? <Check className="w-4 h-4 mx-auto" style={{ color: GOLD }} />
-                              : <Minus className="w-4 h-4 mx-auto" style={{ color: "rgba(255,255,255,0.15)" }} />
-                          ) : (
-                            <span className="text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>{row[plan]}</span>
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="max-w-3xl mx-auto">
+            <p className="text-[9px] tracking-[0.35em] uppercase mb-4 text-center" style={{ color: GOLD }}>QUESTIONS</p>
+            <h2 className="text-2xl md:text-3xl font-black text-white mb-10 text-center">Frequently Asked Questions</h2>
+            <div className="space-y-3">
+              {FAQS.map((f, i) => (
+                <div key={f.q} className="rounded-xl overflow-hidden" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                  <button
+                    onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                    className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left"
+                    style={{ background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    <span className="text-sm font-semibold text-white">{f.q}</span>
+                    <ChevronDown className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: GOLD, transform: openFaq === i ? "rotate(180deg)" : "rotate(0deg)" }} />
+                  </button>
+                  {openFaq === i && (
+                    <div className="px-6 pb-5">
+                      <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>{f.a}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -260,22 +206,13 @@ export default function Pricing() {
                   Let's build a plan that fits your business exactly.
                 </p>
               </div>
-              <div className="flex items-center gap-4 flex-shrink-0">
-                <Link
-                  to="/book-demo"
-                  className="px-6 py-3 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
-                  style={{ background: GOLD_GRADIENT, color: "#0a0800", display: "inline-block" }}
-                >
-                  TALK TO ISAAC
-                </Link>
-                <Link
-                  to="/book-demo"
-                  className="px-6 py-3 text-[11px] font-bold tracking-[0.15em] uppercase"
-                  style={{ border: `1px solid ${GOLD}50`, color: GOLD, display: "inline-block" }}
-                >
-                  BOOK A DEMO
-                </Link>
-              </div>
+              <Link
+                to="/welcome"
+                className="px-6 py-3 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85 flex-shrink-0"
+                style={{ background: GOLD_GRADIENT, color: "#0a0800", display: "inline-block" }}
+              >
+                BOOK A CONSULTATION
+              </Link>
             </div>
           </div>
         </section>
@@ -285,4 +222,3 @@ export default function Pricing() {
     </div>
   );
 }
-

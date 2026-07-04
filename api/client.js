@@ -1,6 +1,6 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
-import { sanitize } from './_sanitize.js';
+import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { uploadToVault } from './_vaultStorage.js';
 
 // Combined client-dashboard endpoint — dispatch via ?resource= (and ?op= for
@@ -12,6 +12,7 @@ import { uploadToVault } from './_vaultStorage.js';
 //   site-content                 GET ?key= / POST upsert
 //   blog       &op=posts|admin           (admin: POST { action: save|delete })
 //   documents                    POST generate a document with Claude
+//   auth                         POST { email, password_hash } — Nova Connect client login
 
 const BLOG_CATEGORIES = ['AI and Technology', 'Connecticut Business', 'Case Studies', 'News', 'Tips and Strategy'];
 const PORTFOLIO_CATEGORIES = ['Websites', 'Social Media', 'Branding', 'AI Systems', 'Signage and Print', 'Apparel and Uniforms', 'Other'];
@@ -764,6 +765,47 @@ async function handleDocuments(req, res) {
   }
 }
 
+// Nova Connect client portal login — checks against client_accounts.
+async function handleAuth(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 5, 60_000)) return; // strict: 5 login attempts/min per IP
+
+  const email = sanitizeEmail(req.body?.email || '');
+  const password_hash = sanitize(req.body?.password_hash || '', 128);
+
+  if (!email || !password_hash) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return res.status(200).json({ result: 'no_account' });
+  }
+
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/client_accounts?email=eq.${encodeURIComponent(email)}&select=client_id,email,password_hash,status`;
+    const sbRes = await fetch(url, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+    if (!sbRes.ok) {
+      console.error('[client:auth] Supabase query error:', sbRes.status, await sbRes.text());
+      return res.status(502).json({ error: 'Database error — try again' });
+    }
+
+    const rows = await sbRes.json();
+    if (rows.length === 0) return res.status(200).json({ result: 'no_account' });
+
+    const row = rows.find((r) => r.password_hash === password_hash);
+    if (!row) return res.status(200).json({ result: 'wrong_password' });
+
+    return res.status(200).json({ result: 'ok', client_id: row.client_id, email: row.email });
+  } catch (err) {
+    console.error('[client:auth] Error:', err.message);
+    return res.status(502).json({ error: 'Database unreachable — try again' });
+  }
+}
+
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
 
@@ -794,6 +836,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: `Unknown blog op: ${op}` });
 
     case 'documents': return handleDocuments(req, res);
+    case 'auth':      return handleAuth(req, res);
 
     default:
       return res.status(400).json({ error: `Unknown resource: ${resource}` });

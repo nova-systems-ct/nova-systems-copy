@@ -146,7 +146,7 @@ async function handleWebhook(req, res, rawBody) {
 }
 
 // Redirect-style Stripe Checkout — used for invoice "PAY NOW" links emailed
-// to clients, and as a fallback checkout flow for the /welcome intake wizard.
+// to clients, and as a fallback checkout flow for the /onboard intake wizard.
 async function handleCheckoutSession(req, res, b) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 10, 60_000)) return;
@@ -165,9 +165,9 @@ async function handleCheckoutSession(req, res, b) {
 
   const origin = req.headers.origin || 'https://nova-systems.app';
   const success_url = (() => { try { return sanitizeUrl(b.success_url || ''); } catch { return ''; } })()
-    || `${origin}/welcome/success?session_id={CHECKOUT_SESSION_ID}&client_id=${encodeURIComponent(client_id)}`;
+    || `${origin}/onboard/success?session_id={CHECKOUT_SESSION_ID}&client_id=${encodeURIComponent(client_id)}`;
   const cancel_url = (() => { try { return sanitizeUrl(b.cancel_url || ''); } catch { return ''; } })()
-    || `${origin}/welcome?step=6`;
+    || `${origin}/onboard?step=6`;
 
   if (!amount || amount <= 0) return res.status(400).json({ error: 'A valid amount is required' });
 
@@ -194,7 +194,7 @@ async function handleCheckoutSession(req, res, b) {
   }
 }
 
-// Used by the /welcome intake wizard — embedded Stripe Elements payment for
+// Used by the /onboard intake wizard — embedded Stripe Elements payment for
 // the client's first month, and by the Nova Vault invoice flow for deposits.
 async function handlePaymentIntent(req, res, b) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

@@ -2,32 +2,32 @@ import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeUp from "@/components/FadeUp";
+import { useSEO } from "@/hooks/useSEO";
 import HeroSection from "@/components/home/HeroSection";
-import TrustedBySection from "@/components/home/TrustedBySection";
-import ProblemSection from "@/components/home/ProblemSection";
-import SolutionSection from "@/components/home/SolutionSection";
-import ServicesGridSection from "@/components/home/ServicesGridSection";
+import FivePillarsSection from "@/components/home/FivePillarsSection";
 import NovaConnectSection from "@/components/home/NovaConnectSection";
+import ClientsSection from "@/components/home/ClientsSection";
 import ConnecticutSection from "@/components/home/ConnecticutSection";
-import PricingSection from "@/components/home/PricingSection";
-import PortfolioSection from "@/components/home/PortfolioSection";
-import ContactSection from "@/components/home/ContactSection";
+import PricingPreviewSection from "@/components/home/PricingPreviewSection";
+import FinalCTASection from "@/components/home/FinalCTASection";
 
 export default function Home() {
+  useSEO({
+    title: "Nova Systems — AI and Technology Infrastructure for Connecticut Businesses",
+    description: "Nova Systems builds websites, AI phone systems, social media, branding, and full business infrastructure for Connecticut businesses. Based in Waterbury CT. English and Español.",
+  });
+
   return (
     <div className="min-h-screen bg-black">
       <Navbar />
       <main className="pt-16">
         <HeroSection />
-        <FadeUp><TrustedBySection /></FadeUp>
-        <FadeUp><ProblemSection /></FadeUp>
-        <FadeUp><SolutionSection /></FadeUp>
-        <FadeUp><ServicesGridSection /></FadeUp>
+        <FadeUp><FivePillarsSection /></FadeUp>
         <FadeUp><NovaConnectSection /></FadeUp>
-<FadeUp><PortfolioSection /></FadeUp>
+        <FadeUp><ClientsSection /></FadeUp>
         <FadeUp><ConnecticutSection /></FadeUp>
-        <FadeUp><PricingSection /></FadeUp>
-        <FadeUp><ContactSection /></FadeUp>
+        <FadeUp><PricingPreviewSection /></FadeUp>
+        <FadeUp><FinalCTASection /></FadeUp>
       </main>
       <Footer />
     </div>

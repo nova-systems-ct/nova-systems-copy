@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Clock } from "lucide-react";
+import { useSEO } from "@/hooks/useSEO";
 
 const GOLD = "#D4A030";
 
@@ -11,9 +12,14 @@ function readTime(content) {
   return Math.max(1, Math.round(words / 200));
 }
 
-export default function Blog() {
+export default function Insights() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useSEO({
+    title: "Nova Insights — AI and Business Growth Strategies for Connecticut",
+    description: "Digital architecture, AI strategy, and growth intelligence for Connecticut businesses — from Nova Systems, Waterbury CT's AI and technology agency.",
+  });
 
   useEffect(() => {
     fetch("/api/client?resource=blog&op=posts")
@@ -29,8 +35,11 @@ export default function Blog() {
       <main className="pt-16">
         <section className="py-20 px-6 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
           <div className="max-w-6xl mx-auto">
-            <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 12 }}>THE NOVA JOURNAL</p>
-            <h1 className="text-4xl md:text-5xl font-black text-white leading-tight max-w-2xl">Insights on AI, Growth, and Connecticut Business.</h1>
+            <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 12 }}>NOVA INSIGHTS</p>
+            <h1 className="text-4xl md:text-5xl font-black text-white leading-tight max-w-2xl mb-4">Nova Insights</h1>
+            <p className="text-sm max-w-lg" style={{ color: "rgba(255,255,255,0.4)" }}>
+              Digital architecture, AI strategy, and growth intelligence for Connecticut businesses.
+            </p>
           </div>
         </section>
 
@@ -42,7 +51,7 @@ export default function Blog() {
               </div>
             ) : posts.length === 0 ? (
               <div className="text-center py-24">
-                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 15 }}>No posts published yet — check back soon.</p>
+                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 15 }}>No insights published yet — check back soon.</p>
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -59,7 +68,7 @@ export default function Blog() {
 
 function PostCard({ post }) {
   return (
-    <Link to={`/blog/${post.slug}`} className="group block rounded-2xl overflow-hidden transition-all duration-300"
+    <Link to={`/insights/${post.slug}`} className="group block rounded-2xl overflow-hidden transition-all duration-300"
       style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)" }}>
       <div style={{ height: 160, background: post.thumbnail_color || GOLD, position: "relative" }}>
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.35) 100%)" }} />

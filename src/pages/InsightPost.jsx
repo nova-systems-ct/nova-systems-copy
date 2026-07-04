@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import PageNotFound from "../lib/PageNotFound";
+import { useSEO } from "@/hooks/useSEO";
 import { Link2, Linkedin, Twitter, ArrowRight, Clock, Loader2 } from "lucide-react";
 
 const GOLD = "#D4A030";
@@ -14,11 +15,16 @@ function readTime(content) {
   return Math.max(1, Math.round(words / 200));
 }
 
-export default function BlogPost() {
+export default function InsightPost() {
   const { slug } = useParams();
   const [post, setPost] = useState(undefined);
   const [related, setRelated] = useState([]);
   const [copied, setCopied] = useState(false);
+
+  useSEO({
+    title: post ? `${post.title} — Nova Insights` : "Nova Insights",
+    description: post?.seo_description || post?.excerpt || "Digital architecture, AI strategy, and growth intelligence for Connecticut businesses.",
+  });
 
   useEffect(() => {
     setPost(undefined);
@@ -98,10 +104,10 @@ export default function BlogPost() {
             {/* Related posts */}
             {related.length > 0 && (
               <div className="mt-16">
-                <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: 20 }}>Related Posts</p>
+                <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: 20 }}>Related Insights</p>
                 <div className="grid md:grid-cols-3 gap-5">
                   {related.map((r) => (
-                    <Link key={r.id} to={`/blog/${r.slug}`} className="block rounded-xl p-5 transition-colors" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <Link key={r.id} to={`/insights/${r.slug}`} className="block rounded-xl p-5 transition-colors" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
                       <p className="text-white text-sm font-bold leading-snug">{r.title}</p>
                     </Link>
                   ))}
@@ -111,10 +117,10 @@ export default function BlogPost() {
 
             {/* CTA */}
             <div className="mt-16 rounded-2xl p-10 text-center" style={{ background: "linear-gradient(135deg, rgba(212,160,48,0.1) 0%, rgba(0,0,0,0.3) 100%)", border: `1px solid ${GOLD}35` }}>
-              <h3 className="text-2xl font-black text-white mb-3">Ready to transform your business?</h3>
+              <h3 className="text-2xl font-black text-white mb-3">Ready to Build Something Real?</h3>
               <p className="text-sm mb-7" style={{ color: "rgba(255,255,255,0.45)" }}>nova-systems.app</p>
-              <Link to="/book-demo" className="inline-flex items-center gap-2 text-xs font-bold tracking-wider uppercase px-7 py-3.5 rounded-lg hover:opacity-85 transition-all" style={{ background: G, color: "#0a0800" }}>
-                BOOK A DEMO <ArrowRight className="w-3.5 h-3.5" />
+              <Link to="/welcome" className="inline-flex items-center gap-2 text-xs font-bold tracking-wider uppercase px-7 py-3.5 rounded-lg hover:opacity-85 transition-all" style={{ background: G, color: "#0a0800" }}>
+                BOOK YOUR FREE MEETING <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
           </div>

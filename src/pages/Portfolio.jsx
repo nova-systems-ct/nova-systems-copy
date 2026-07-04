@@ -3,9 +3,18 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { X, Loader2, MapPin } from "lucide-react";
 import ConnecticutMap from "@/components/ConnecticutMap";
+import { useSEO } from "@/hooks/useSEO";
 
 const GOLD = "#D4A030";
-const TABS = ["All", "Websites", "Social Media", "Branding", "AI Systems", "Signage and Print", "Apparel and Uniforms"];
+const TABS = [
+  { label: "All", value: "All" },
+  { label: "Websites", value: "Websites" },
+  { label: "Social Media", value: "Social Media" },
+  { label: "Branding", value: "Branding" },
+  { label: "AI Systems", value: "AI Systems" },
+  { label: "Signage and Print", value: "Signage and Print" },
+  { label: "Apparel", value: "Apparel and Uniforms" },
+];
 const CAT_COLORS = { Websites: '#60a5fa', Branding: '#a78bfa', 'Social Media': '#4ade80', 'AI Systems': '#22d3ee', 'Signage and Print': '#f97316', 'Apparel and Uniforms': '#f472b6', Other: GOLD };
 
 export default function Portfolio() {
@@ -13,6 +22,11 @@ export default function Portfolio() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("All");
   const [lightbox, setLightbox] = useState(null);
+
+  useSEO({
+    title: "Our Work — Real Connecticut Businesses — Nova Systems",
+    description: "See real websites, AI systems, branding, and social media work Nova Systems has built for Connecticut businesses — from Waterbury to Greenwich.",
+  });
 
   useEffect(() => {
     fetch("/api/client?resource=portfolio&op=items")
@@ -31,7 +45,8 @@ export default function Portfolio() {
         <section className="py-20 px-6 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
           <div className="max-w-6xl mx-auto">
             <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 12 }}>OUR WORK</p>
-            <h1 className="text-4xl md:text-5xl font-black text-white leading-tight max-w-2xl">Real Results for Real Connecticut Businesses.</h1>
+            <h1 className="text-4xl md:text-5xl font-black text-white leading-tight max-w-2xl mb-4">Real Connecticut Businesses. Real Infrastructure.</h1>
+            <p className="text-sm max-w-lg" style={{ color: "rgba(255,255,255,0.4)" }}>Every project is custom built for the client in front of us.</p>
           </div>
         </section>
 
@@ -40,15 +55,15 @@ export default function Portfolio() {
             {/* Filter tabs */}
             <div className="flex flex-wrap gap-2 mb-12">
               {TABS.map((t) => (
-                <button key={t} onClick={() => setTab(t)}
+                <button key={t.value} onClick={() => setTab(t.value)}
                   style={{
                     padding: "9px 18px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase",
                     borderRadius: 20, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
-                    background: tab === t ? GOLD : "rgba(255,255,255,0.05)",
-                    color: tab === t ? "#0a0800" : "rgba(255,255,255,0.5)",
-                    border: `1px solid ${tab === t ? GOLD : "rgba(255,255,255,0.1)"}`,
+                    background: tab === t.value ? GOLD : "rgba(255,255,255,0.05)",
+                    color: tab === t.value ? "#0a0800" : "rgba(255,255,255,0.5)",
+                    border: `1px solid ${tab === t.value ? GOLD : "rgba(255,255,255,0.1)"}`,
                   }}>
-                  {t}
+                  {t.label}
                 </button>
               ))}
             </div>

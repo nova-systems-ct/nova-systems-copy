@@ -1,6 +1,7 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X } from "lucide-react";
+import novaLogo from "@/assets/nova logo.png";
 
 const GOLD = "#D4A030";
 
@@ -9,11 +10,9 @@ export default function Navbar() {
   const location = useLocation();
 
   const navLinks = [
-    { label: "Home", path: "/" },
     { label: "Solutions", path: "/solutions" },
+    { label: "Insights", path: "/insights" },
     { label: "Portfolio", path: "/portfolio" },
-    { label: "Blog", path: "/blog" },
-    { label: "Resources", path: "/resources" },
     { label: "Careers", path: "/careers" },
     { label: "Company", path: "/company" },
     { label: "Pricing", path: "/pricing" },
@@ -24,14 +23,8 @@ export default function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-md border-b border-white/8">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link
-          to="/"
-          className="flex items-center gap-3"
-        >
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="1" y="1" width="30" height="30" rx="4" stroke={GOLD} strokeWidth="1.5" fill="none" />
-            <text x="16" y="23" textAnchor="middle" fontFamily="'Arial Black', Arial, sans-serif" fontWeight="900" fontSize="18" fill={GOLD}>N</text>
-          </svg>
+        <Link to="/" className="flex items-center gap-3">
+          <img src={novaLogo} alt="Nova Systems" className="h-9 w-9 object-contain flex-shrink-0" />
           <span className="text-sm font-bold tracking-[0.2em] uppercase" style={{ color: GOLD }}>
             NOVA SYSTEMS
           </span>
@@ -53,24 +46,15 @@ export default function Navbar() {
           ))}
         </div>
 
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden md:flex items-center">
           <Link
-            to="/login"
-            className="text-xs font-semibold tracking-wider uppercase transition-colors"
-            style={{ color: "rgba(255,255,255,0.45)" }}
-            onMouseEnter={(e) => e.target.style.color = "white"}
-            onMouseLeave={(e) => e.target.style.color = "rgba(255,255,255,0.45)"}
-          >
-            LOG IN
-          </Link>
-          <Link
-            to="/book-demo"
+            to="/welcome"
             className="inline-flex items-center px-5 py-2 text-xs font-semibold tracking-wider uppercase transition-all hover:opacity-85"
             style={{ border: `1px solid ${GOLD}`, color: GOLD }}
             onMouseEnter={(e) => { e.currentTarget.style.background = GOLD; e.currentTarget.style.color = "#0a0800"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = GOLD; }}
           >
-            BOOK A DEMO
+            BOOK A MEETING
           </Link>
         </div>
 
@@ -96,20 +80,12 @@ export default function Navbar() {
             </Link>
           ))}
           <Link
-            to="/login"
-            onClick={() => setMobileOpen(false)}
-            className="block py-2 text-sm text-center"
-            style={{ color: "rgba(255,255,255,0.45)" }}
-          >
-            LOG IN
-          </Link>
-          <Link
-            to="/book-demo"
+            to="/welcome"
             onClick={() => setMobileOpen(false)}
             className="block text-center px-5 py-3 text-xs font-semibold tracking-wider uppercase mt-1"
             style={{ border: `1px solid ${GOLD}`, color: GOLD }}
           >
-            BOOK A DEMO
+            BOOK A MEETING
           </Link>
         </div>
       )}

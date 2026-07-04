@@ -25,7 +25,7 @@ export default function IntakeForms() {
         <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>New Business</p>
         <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Intake Forms</h1>
         <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, marginTop: 4 }}>
-          Submissions from the /welcome contract & payment wizard. {clients.length} total.
+          Submissions from the /onboard contract & payment wizard. {clients.length} total.
         </p>
       </div>
 
@@ -34,7 +34,7 @@ export default function IntakeForms() {
       ) : clients.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '80px 40px', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12 }}>
           <ClipboardList style={{ width: 36, height: 36, color: 'rgba(255,255,255,0.1)', margin: '0 auto 16px' }} />
-          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No intake submissions yet. Share the /welcome link with a new client to get started.</p>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No intake submissions yet. Share the /onboard link with a new client to get started.</p>
         </div>
       ) : (
         <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, overflow: 'hidden' }}>

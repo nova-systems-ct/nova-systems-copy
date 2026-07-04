@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Target, Users,
-  FileText, Mail, Settings, LogOut, Menu, X, LayoutGrid, Globe,
+  FileText, Mail, Settings, LogOut, Menu, X, LayoutGrid,
   Lock, Newspaper, ClipboardList, Receipt, HandCoins,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
@@ -19,11 +19,10 @@ const NAV = [
   { to: '/dashboard/invoices',    label: 'Invoices',      icon: Receipt },
   { to: '/dashboard/referrals',   label: 'Referrals',     icon: HandCoins },
   { to: '/dashboard/nova-vault',  label: 'Nova Vault',    icon: Lock },
-  { to: '/dashboard/blog',        label: 'Blog',          icon: Newspaper },
+  { to: '/dashboard/blog',        label: 'Insights',      icon: Newspaper },
   { to: '/dashboard/portfolio',   label: 'Portfolio',     icon: LayoutGrid },
   { to: '/dashboard/documents',   label: 'Documents',     icon: FileText },
   { to: '/dashboard/newsletter',  label: 'Newsletter',    icon: Mail },
-  { to: '/dashboard/site-editor', label: 'Website Editor',icon: Globe },
   { to: '/dashboard/settings',    label: 'Settings',      icon: Settings },
 ]
 

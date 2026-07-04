@@ -1,14 +1,14 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { LayoutDashboard, FileCheck2, MessageSquare, ArrowRight } from "lucide-react";
+import { LayoutDashboard, FileCheck2, CreditCard, ArrowRight } from "lucide-react";
 
 const GOLD = "#D4A030";
 const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const FEATURES = [
-  { icon: LayoutDashboard, title: "Track Services", desc: "See every deliverable, campaign, and update in one live dashboard." },
-  { icon: FileCheck2,      title: "Approve Content", desc: "Review and approve social posts, designs, and copy before they go live." },
-  { icon: MessageSquare,   title: "Message Your Team", desc: "Direct line to Nova Systems — pay invoices and get answers, fast." },
+  { icon: LayoutDashboard, title: "Real-Time Dashboard", desc: "See your services and metrics live." },
+  { icon: FileCheck2,      title: "Content Approval", desc: "Review every post before it goes live." },
+  { icon: CreditCard,      title: "Instant Payments", desc: "Pay invoices securely in one click." },
 ];
 
 export default function NovaConnectSection() {
@@ -21,7 +21,7 @@ export default function NovaConnectSection() {
           Introducing <span style={{ color: GOLD }}>Nova Connect</span>
         </h2>
         <p className="text-sm md:text-base leading-relaxed max-w-xl mx-auto mb-16" style={{ color: "rgba(255,255,255,0.45)" }}>
-          Your dedicated client portal. Track services, approve content, pay invoices, message your team. All in one place.
+          Your dedicated client portal. Built for real clients getting real results.
         </p>
 
         <div className="grid md:grid-cols-3 gap-6 mb-14">
@@ -36,8 +36,8 @@ export default function NovaConnectSection() {
           ))}
         </div>
 
-        <Link to="/login" className="inline-flex items-center gap-2 text-xs font-bold tracking-wider uppercase px-8 py-4 rounded-lg hover:opacity-85 transition-all" style={{ background: G, color: "#0a0800" }}>
-          CLIENT LOGIN <ArrowRight className="w-4 h-4" />
+        <Link to="/welcome" className="inline-flex items-center gap-2 text-xs font-bold tracking-wider uppercase px-8 py-4 rounded-lg hover:opacity-85 transition-all" style={{ background: G, color: "#0a0800" }}>
+          GET STARTED <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
     </section>

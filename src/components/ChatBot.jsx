@@ -5,12 +5,12 @@ const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const STEPS = [
-  { key: "intro",     bot: "Hi! I'm Nova Assistant. I help businesses stop losing revenue. What's your name?" },
+  { key: "intro",     bot: "Hi! I'm Nova Assistant. Whatever your business needs, we build it. What's your name?" },
   { key: "name",      bot: (name) => `Nice to meet you, ${name}! What type of business do you run?` },
-  { key: "business",  bot: () => "Got it. What's your biggest challenge right now - missed calls, slow follow-up, lead tracking, or something else?" },
-  { key: "challenge", bot: () => "That's exactly what we help with. I'd love to connect you with Isaac for a 30-minute strategy call. What day this week works best for you?" },
+  { key: "business",  bot: () => "Got it. What do you need — a website, AI automation, social media, branding, or something custom?" },
+  { key: "challenge", bot: () => "That's exactly what we help with. I'd love to connect you with Isaac for a free strategy meeting. What day this week works best for you?" },
   { key: "day",       bot: () => "Perfect. What's the best email to send your calendar invite to?" },
-  { key: "email",     bot: (email) => `Done! I've sent your info to Isaac. He'll reach out to ${email} within 24 hours to confirm your call. Talk soon!` },
+  { key: "email",     bot: (email) => `Done! I've sent your info to Isaac. He'll reach out to ${email} within 24 hours to confirm your meeting. Talk soon!` },
 ];
 
 function BotBubble({ text }) {
@@ -138,9 +138,9 @@ export default function ChatBot() {
             </div>
           ) : (
             <div style={{ padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-              <a href="/book-demo"
+              <a href="/welcome"
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "10px 16px", fontSize: 11, fontWeight: 800, letterSpacing: "0.15em", textTransform: "uppercase", background: GOLD_GRADIENT, color: "#0a0800", borderRadius: 8, textDecoration: "none" }}>
-                BOOK DEMO FORM <ArrowRight size={13} />
+                SCHEDULE A MEETING <ArrowRight size={13} />
               </a>
             </div>
           )}

@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Mail, Phone, MapPin, Linkedin, Twitter, Instagram } from "lucide-react";
+import { Mail, Phone, MapPin, Linkedin, Instagram } from "lucide-react";
 
 const GOLD = "#D4A030";
 
@@ -18,11 +18,11 @@ export default function Footer() {
               NOVA SYSTEMS
             </p>
             <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
-              AI-powered revenue intelligence for teams that refuse to lose.
+              Waterbury, Connecticut. Elite digital infrastructure — whatever your business needs, we build it.
             </p>
             {/* Social icons */}
             <div className="flex gap-3 mt-5">
-              {[Linkedin, Twitter, Instagram].map((Icon, i) => (
+              {[Instagram, Linkedin].map((Icon, i) => (
                 <a
                   key={i}
                   href="#"
@@ -39,7 +39,7 @@ export default function Footer() {
           <div>
             <p className="text-[9px] tracking-[0.25em] uppercase font-semibold mb-4" style={{ color: GOLD }}>PLATFORM</p>
             <div className="space-y-2.5">
-              {[["Solutions", "/solutions"], ["Pricing", "/pricing"], ["Careers", "/careers"], ["Company", "/company"]].map(([label, path]) => (
+              {[["Solutions", "/solutions"], ["Insights", "/insights"], ["Portfolio", "/portfolio"], ["Careers", "/careers"], ["Company", "/company"], ["Pricing", "/pricing"]].map(([label, path]) => (
                 <Link key={label} to={path} className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>
                   {label}
                 </Link>
@@ -48,13 +48,11 @@ export default function Footer() {
           </div>
 
           <div>
-            <p className="text-[9px] tracking-[0.25em] uppercase font-semibold mb-4" style={{ color: GOLD }}>LEGAL</p>
+            <p className="text-[9px] tracking-[0.25em] uppercase font-semibold mb-4" style={{ color: GOLD }}>GET STARTED</p>
             <div className="space-y-2.5">
-              {[["Privacy Policy", "#"], ["Terms of Service", "#"], ["Resources", "#"]].map(([label, path]) => (
-                <Link key={label} to={path} className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>
-                  {label}
-                </Link>
-              ))}
+              <Link to="/welcome" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Book a Meeting</Link>
+              <Link to="/client-login" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Client Login</Link>
+              <Link to="/login" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Admin Login</Link>
             </div>
           </div>
 
@@ -63,9 +61,9 @@ export default function Footer() {
             <p className="text-[9px] tracking-[0.25em] uppercase font-semibold mb-4" style={{ color: GOLD }}>CONTACT</p>
             <div className="space-y-3">
               {[
-                { Icon: Mail, text: "hello@novasystems.ai" },
-                { Icon: Phone, text: "+1 (860) 000-0000" },
-                { Icon: MapPin, text: "Connecticut, USA" },
+                { Icon: Mail, text: "hello@nova-systems.app" },
+                { Icon: Phone, text: "(203) 706-0504" },
+                { Icon: MapPin, text: "Waterbury, Connecticut" },
               ].map(({ Icon, text }) => (
                 <div key={text} className="flex items-center gap-2.5">
                   <Icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: GOLD }} />
@@ -82,12 +80,12 @@ export default function Footer() {
         {/* Bottom row */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-2">
           <p className="text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>
-            © 2025 Nova Systems. All rights reserved.
+            © 2026 Nova Systems. All rights reserved.
           </p>
           <div className="flex items-center gap-1">
             <div className="w-1 h-1 rounded-full" style={{ background: GOLD }} />
             <p className="text-[10px] tracking-widest" style={{ color: "rgba(255,255,255,0.2)" }}>
-              POWERED BY AI
+              WATERBURY, CONNECTICUT
             </p>
             <div className="w-1 h-1 rounded-full" style={{ background: GOLD }} />
           </div>

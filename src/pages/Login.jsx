@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, ArrowRight, Activity, Bell, Wrench, TrendingUp } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, Bot, Globe, Palette, Workflow } from "lucide-react";
 import video1 from "@/assets/Video 1.mp4";
 import video2 from "@/assets/video 2.mp4";
 import { supabase } from "@/lib/supabaseClient";
+import { useSEO } from "@/hooks/useSEO";
 
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#C8921A";
@@ -16,14 +17,15 @@ const CRED_EMAIL = "Isaac_0427@icloud.com";
 const CRED_PASS = "NovaSystem2024";
 
 const features = [
-  { icon: Activity, label: "TRACK EVERY LEAD", sub: "Every call, contact, and opportunity in real time." },
-  { icon: Bell, label: "SMART ALERTS", sub: "Know the moment revenue is at risk." },
-  { icon: Wrench, label: "AUTOMATE WORKFLOWS", sub: "Follow-ups, booking, CRM — on autopilot." },
-  { icon: TrendingUp, label: "DRIVE REVENUE", sub: "Convert more of the leads you already have." },
+  { icon: Bot, label: "AI ECOSYSTEMS", sub: "Automated workflows and phone agents, live." },
+  { icon: Globe, label: "WEB INFRASTRUCTURE", sub: "Sites, portals, and platforms built to convert." },
+  { icon: Palette, label: "BRAND AND IDENTITY", sub: "Every asset, from digital to physical." },
+  { icon: Workflow, label: "FULL OPERATIONS", sub: "CRM, contracts, and cloud infrastructure." },
 ];
 
 export default function Login() {
   const navigate = useNavigate();
+  useSEO({ title: "Admin Login — Nova Systems", description: "Nova Systems team login." });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -138,15 +140,15 @@ export default function Login() {
 
         {/* Copy */}
         <div className="relative" style={{ zIndex: 10 }}>
-          <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>OPERATIONAL INTELLIGENCE</p>
+          <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>OPERATIONAL COMMAND</p>
           <h1 className="font-black text-white leading-[0.9] mb-7" style={{ fontSize: "clamp(2.8rem,5vw,4.5rem)", letterSpacing: "-0.02em" }}>
-            TOTAL VISIBILITY.<br />
+            ELITE<br />
             <span style={{ background: `linear-gradient(90deg,${GOLD} 0%,${GOLD_BRIGHT} 50%,${GOLD} 100%)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              TOTAL CONTROL.
+              INFRASTRUCTURE.
             </span>
           </h1>
           <p className="text-sm mb-10" style={{ color: "rgba(255,255,255,0.4)", maxWidth: 320 }}>
-            Stop losing leads. Start capturing every opportunity.
+            Whatever your business needs, we build it. Manage it all from here.
           </p>
           <div className="space-y-5">
             {features.map(({ icon: Icon, label, sub }) => (
@@ -299,9 +301,9 @@ export default function Login() {
           </div>
 
           <p className="text-center mt-8 text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>
-            Don&apos;t have an account?{" "}
-            <Link to="/book-demo" className="font-semibold transition-colors hover:opacity-80" style={{ color: GOLD }}>
-              Book a demo
+            Are you a client?{" "}
+            <Link to="/client-login" className="font-semibold transition-colors hover:opacity-80" style={{ color: GOLD }}>
+              Client Login
             </Link>
           </p>
         </div>

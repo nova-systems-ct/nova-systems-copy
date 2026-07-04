@@ -9,21 +9,19 @@ import Home from './pages/Home';
 import Solutions from './pages/Solutions';
 import Pricing from './pages/Pricing';
 import Company from './pages/Company';
-import Resources from './pages/Resources';
-import Article from './pages/Article';
 import Login from './pages/Login';
-import Register from './pages/Register';
-import BookDemo from './pages/BookDemo';
+import ClientLogin from './pages/ClientLogin';
 import Careers from './pages/Careers';
 import ApplicantLogin from './pages/ApplicantLogin';
 import SetPassword from './pages/SetPassword';
 import ApplicationStatus from './pages/ApplicationStatus';
 import EmployeeDashboard from './pages/EmployeeDashboard';
-import Blog from './pages/Blog';
-import BlogPost from './pages/BlogPost';
+import Insights from './pages/Insights';
+import InsightPost from './pages/InsightPost';
 import PublicPortfolio from './pages/Portfolio';
 import Welcome from './pages/Welcome';
-import WelcomeSuccess from './pages/WelcomeSuccess';
+import Onboard from './pages/Onboard';
+import OnboardSuccess from './pages/OnboardSuccess';
 // CRM Dashboard
 import DashboardLayout from './components/dashboard/DashboardLayout';
 import DashboardHome from './pages/dashboard/DashboardHome';
@@ -37,7 +35,6 @@ import Documents from './pages/dashboard/Documents';
 import Newsletter from './pages/dashboard/Newsletter';
 import DashboardSettings from './pages/dashboard/Settings';
 import Portfolio from './pages/dashboard/Portfolio';
-import SiteEditor from './pages/dashboard/SiteEditor';
 import DashboardBlog from './pages/dashboard/Blog';
 import NovaVault from './pages/dashboard/NovaVault';
 import Invoices from './pages/dashboard/Invoices';
@@ -54,21 +51,19 @@ function App() {
           <Route path="/solutions" element={<Solutions />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/company" element={<Company />} />
-          <Route path="/resources" element={<Resources />} />
-          <Route path="/resources/:slug" element={<Article />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/book-demo" element={<BookDemo />} />
+          <Route path="/client-login" element={<ClientLogin />} />
           <Route path="/careers" element={<Careers />} />
           <Route path="/applicant-login" element={<ApplicantLogin />} />
           <Route path="/set-password" element={<SetPassword />} />
           <Route path="/application-status" element={<ApplicationStatus />} />
           <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/blog/:slug" element={<BlogPost />} />
+          <Route path="/insights" element={<Insights />} />
+          <Route path="/insights/:slug" element={<InsightPost />} />
           <Route path="/portfolio" element={<PublicPortfolio />} />
           <Route path="/welcome" element={<Welcome />} />
-          <Route path="/welcome/success" element={<WelcomeSuccess />} />
+          <Route path="/onboard" element={<Onboard />} />
+          <Route path="/onboard/success" element={<OnboardSuccess />} />
 
           {/* CRM Dashboard — nested routes */}
           <Route path="/dashboard" element={<DashboardLayout />}>
@@ -87,7 +82,6 @@ function App() {
             <Route path="documents" element={<Documents />} />
             <Route path="newsletter" element={<Newsletter />} />
             <Route path="portfolio" element={<Portfolio />} />
-            <Route path="site-editor" element={<SiteEditor />} />
             <Route path="settings" element={<DashboardSettings />} />
           </Route>
 

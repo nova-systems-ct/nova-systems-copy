@@ -1,81 +1,68 @@
-﻿import React from "react";
+import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, Activity, Wrench, Globe, Phone, Check, ArrowRight, ArrowLeft } from "lucide-react";
+import { ChevronRight, Globe2, Bot, Palette, Check, ArrowRight, ArrowLeft } from "lucide-react";
+import { useSEO } from "@/hooks/useSEO";
 
 const GOLD = "#D4A030";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
-const services = [
+const sections = [
   {
-    icon: Activity,
-    tag: "01  -  NOVA PULSE",
-    title: "Revenue Monitoring & Lead Intelligence",
-    headline: "See every leak before revenue walks out the door.",
-    desc: "Nova Pulse tracks every call, lead, and follow-up in real time - and alerts you the moment an opportunity is at risk.",
+    icon: Globe2,
+    tag: "01 — WEB AND APPLICATION DEVELOPMENT",
+    title: "Web and Application Development",
+    desc: "Looking for a premium web developer in Connecticut? We build responsive fast web applications, custom admin portals, booking systems, e-commerce, and client-facing platforms.",
     features: [
-      "Real-time call & lead tracking",
-      "Automated missed-opportunity alerts",
-      "Follow-up delay detection",
-      "Conversion funnel visibility",
-      "Weekly revenue leak reports",
-      "Dashboard with live KPIs",
+      "Custom responsive websites",
+      "Client-facing web applications",
+      "Custom admin portals",
+      "Booking and scheduling systems",
+      "E-commerce platforms",
+      "Fast, mobile-first performance",
     ],
-    result: "Clients recover an average of 35% more revenue within 90 days.",
+    keywords: "Connecticut web developer, custom website Connecticut, web application development CT, client portal development",
   },
   {
-    icon: Wrench,
-    tag: "02  -  CUSTOM SYSTEMS",
-    title: "Business Automation & CRM Infrastructure",
-    headline: "Stop running your business on spreadsheets and sticky notes.",
-    desc: "Custom CRM pipelines, automated follow-up, and booking integrations - all built around how your specific business works.",
+    icon: Bot,
+    tag: "02 — AI AND BUSINESS AUTOMATION",
+    title: "AI and Business Automation",
+    desc: "Bring your business into the future. We design automated workflows, AI phone agents to handle inbound calls, lead tracking pipelines, and CRM systems that scale your revenue automatically.",
     features: [
-      "Custom CRM build & configuration",
-      "Automated follow-up sequences",
-      "Booking & scheduling integrations",
-      "Lead routing & assignment rules",
-      "Internal workflow automation",
-      "Team onboarding & training",
+      "AI phone agents for inbound calls",
+      "Automated workflow design",
+      "Lead tracking pipelines",
+      "Custom CRM systems",
+      "Follow-up and booking automation",
+      "Cloud infrastructure setup",
     ],
-    result: "Our clients save 15+ hours per week on manual tasks after implementation.",
+    keywords: "AI phone agent Connecticut, business automation CT, AI for small business Connecticut, automated lead tracking",
   },
   {
-    icon: Globe,
-    tag: "03  -  WEB INFRASTRUCTURE",
-    title: "High-Converting Local Business Websites",
-    headline: "Your website should be generating revenue, not just sitting there.",
-    desc: "Fast, mobile-first sites with embedded call tracking, lead capture, and local SEO foundations - so your site generates revenue, not just traffic.",
+    icon: Palette,
+    tag: "03 — BRANDING, IDENTITY, AND PHYSICAL ASSETS",
+    title: "Branding, Identity, and Physical Assets",
+    desc: "From full digital rebrands to premium physical assets. Custom team apparel, uniforms, business cards, storefront signage, neon signs, vehicle wrap coordination, billboard coordination, and corporate identity systems.",
     features: [
-      "Mobile-first responsive design",
-      "Embedded call tracking",
-      "Lead capture & contact forms",
-      "Google Business integration",
-      "Local SEO foundations",
-      "Speed-optimized (Core Web Vitals)",
+      "Full brand identity systems",
+      "Custom team apparel and uniforms",
+      "Business cards and print materials",
+      "Storefront and neon signage",
+      "Vehicle wrap coordination",
+      "Billboard coordination",
     ],
-    result: "Our websites generate 2 - 4x more leads from the same traffic.",
-  },
-  {
-    icon: Phone,
-    tag: "04  -  AI CALL HANDLING",
-    title: "24/7 AI Inbound Call Response",
-    headline: "Answer every call. Book every appointment. Even at 2am.",
-    desc: "Our AI answers every call, qualifies the lead, and books an appointment - then hands off to your team with full context, 24/7.",
-    features: [
-      "24/7 AI inbound call answering",
-      "Lead qualification scripting",
-      "Automatic appointment booking",
-      "SMS follow-up after every call",
-      "Full call transcripts",
-      "CRM handoff with context",
-    ],
-    result: "100% of calls answered. After-hours leads converted at the same rate as business hours.",
+    keywords: "luxury branding agency Connecticut, corporate uniforms CT, business signs Connecticut, custom apparel Connecticut",
   },
 ];
 
 export default function Solutions() {
   const navigate = useNavigate();
+  useSEO({
+    title: "Business Technology Solutions in Connecticut — Nova Systems",
+    description: "Web development, AI automation, and branding solutions for Connecticut businesses. Nova Systems builds custom websites, AI phone agents, CRM systems, and full brand identity — Waterbury to Fairfield County.",
+  });
+
   return (
     <div className="min-h-screen bg-black">
       <Navbar />
@@ -95,22 +82,17 @@ export default function Solutions() {
             <p className="text-[9px] tracking-[0.35em] uppercase mb-6" style={{ color: GOLD }}>
               SOLUTIONS <span className="inline-block w-8 h-px align-middle ml-2" style={{ background: GOLD }} />
             </p>
-            <h1 className="text-5xl md:text-7xl font-black text-white leading-[0.9] tracking-tight mb-6">
-              Built to make<br />
-              <span style={{
-                background: `linear-gradient(90deg, ${GOLD} 0%, #C8921A 50%, ${GOLD} 100%)`,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}>local businesses<br />unstoppable.</span>
+            <h1 className="text-4xl md:text-6xl font-black text-white leading-[1.05] tracking-tight mb-6">
+              Tailored Technical Solutions<br />for Every Business.
             </h1>
             <p className="text-base leading-relaxed max-w-xl" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Four systems. One mission: stop losing revenue.
+              Whatever you need — we have built it before. Here is how we can help you.
             </p>
           </div>
         </section>
 
         {/* Services */}
-        {services.map((s, i) => (
+        {sections.map((s, i) => (
           <section
             key={s.tag}
             className="py-20 px-6 border-t"
@@ -128,26 +110,17 @@ export default function Solutions() {
                     >
                       <s.icon className="w-5 h-5" style={{ color: GOLD }} />
                     </div>
-                    <p className="text-[9px] tracking-[0.25em] uppercase font-bold" style={{ color: GOLD }}>{s.tag}</p>
+                    <p className="text-[9px] tracking-[0.2em] uppercase font-bold" style={{ color: GOLD }}>{s.tag}</p>
                   </div>
-                  <h2 className="text-2xl md:text-3xl font-black text-white mb-3">{s.title}</h2>
-                  <p className="text-base font-semibold mb-4" style={{ color: GOLD }}>"{s.headline}"</p>
+                  <h2 className="text-2xl md:text-3xl font-black text-white mb-4">{s.title}</h2>
                   <p className="text-sm leading-relaxed mb-8" style={{ color: "rgba(255,255,255,0.4)" }}>{s.desc}</p>
 
-                  <div
-                    className="inline-flex items-start gap-3 p-4 rounded-xl mb-8"
-                    style={{ background: `${GOLD}08`, border: `1px solid ${GOLD}22` }}
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0" style={{ background: GOLD }} />
-                    <p className="text-xs font-semibold leading-relaxed" style={{ color: GOLD }}>{s.result}</p>
-                  </div>
-
                   <Link
-                    to="/register"
+                    to="/welcome"
                     className="inline-flex items-center gap-2 px-6 py-3 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
                     style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
                   >
-                    GET STARTED <ArrowRight className="w-3.5 h-3.5" />
+                    START THIS PROJECT <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                 </div>
 
@@ -182,18 +155,18 @@ export default function Solutions() {
           <div className="max-w-4xl mx-auto text-center">
             <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>READY TO START</p>
             <h2 className="text-4xl md:text-5xl font-black text-white mb-4">
-              Stop leaving money on the table.
+              Ready to Build Something Real?
             </h2>
             <p className="text-sm mb-10 max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
-              Book a 30-minute call and we'll show you exactly where your revenue is leaking and how to fix it.
+              Book a free strategy meeting and we will map out exactly what your business needs.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                to="/book-demo"
+                to="/welcome"
                 className="inline-flex items-center gap-2 px-8 py-4 text-[11px] font-bold tracking-[0.15em] uppercase transition-all hover:opacity-85"
                 style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
               >
-                BOOK A FREE DEMO <ChevronRight className="w-4 h-4" />
+                SCHEDULE A STRATEGY MEETING <ChevronRight className="w-4 h-4" />
               </Link>
               <Link
                 to="/company"
@@ -211,4 +184,3 @@ export default function Solutions() {
     </div>
   );
 }
-

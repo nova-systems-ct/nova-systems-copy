@@ -30,7 +30,10 @@ export default function JobListings({ onApply }) {
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {JOBS.map((job) => <JobCard key={job.id} job={job} onApply={onApply} />)}
+          {JOBS.map((job) => job.pitch
+            ? <SalesJobCard key={job.id} job={job} onApply={onApply} />
+            : <JobCard key={job.id} job={job} onApply={onApply} />
+          )}
         </div>
 
       </div>
@@ -76,6 +79,39 @@ function JobCard({ job, onApply }) {
         onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
         onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}>
         APPLY NOW <ArrowRight className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// Sales rep card stands out — spans two columns, larger, gold border, bold headline.
+function SalesJobCard({ job, onApply }) {
+  return (
+    <div
+      className="md:col-span-2 rounded-2xl p-10 flex flex-col gap-6 relative overflow-hidden transition-all duration-300"
+      style={{ background: `linear-gradient(135deg, rgba(212,160,48,0.1) 0%, rgba(0,0,0,0.4) 60%)`, border: `1.5px solid ${GOLD}60`, boxShadow: `0 0 50px ${GOLD}14` }}
+    >
+      <div style={{ position: "absolute", top: 0, right: 0, width: 260, height: 260, background: `radial-gradient(circle, ${GOLD}18 0%, transparent 70%)`, pointerEvents: "none" }} />
+
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, position: "relative" }}>
+        <div style={{ width: 48, height: 48, borderRadius: 12, background: `${GOLD}20`, border: `1px solid ${GOLD}55`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <TrendingUp className="w-5 h-5" style={{ color: GOLD }} />
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", padding: "6px 16px", borderRadius: 20, background: `${GOLD}22`, color: GOLD, border: `1px solid ${GOLD}55` }}>
+          {job.badge}
+        </span>
+      </div>
+
+      <div style={{ position: "relative" }}>
+        <h3 className="text-white font-black text-2xl md:text-3xl leading-snug mb-3">{job.pitch.headline}</h3>
+        <p className="text-sm leading-relaxed max-w-2xl" style={{ color: "rgba(255,255,255,0.5)" }}>{job.teaser}</p>
+      </div>
+
+      <button onClick={() => onApply(job.id)}
+        style={{ width: "fit-content", padding: "16px 32px", fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", borderRadius: 9, border: "none", cursor: "pointer", background: G, color: "#0a0800", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit", transition: "opacity 0.15s", position: "relative" }}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}>
+        APPLY NOW — START CLOSING <ArrowRight className="w-3.5 h-3.5" />
       </button>
     </div>
   );

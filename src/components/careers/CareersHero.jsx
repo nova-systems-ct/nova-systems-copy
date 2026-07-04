@@ -28,17 +28,17 @@ export default function CareersHero() {
         </p>
 
         <h1
-          className="font-black text-white leading-[0.9] mb-7"
-          style={{ fontSize: "clamp(3.2rem, 7vw, 6.5rem)", letterSpacing: "-0.025em" }}
+          className="font-black text-white leading-[1.0] mb-7"
+          style={{ fontSize: "clamp(2.4rem, 5.2vw, 4.6rem)", letterSpacing: "-0.025em" }}
         >
-          Build With Us.
+          Join the Frontier of<br />Technical Innovation.
         </h1>
 
         <p
           className="mx-auto leading-relaxed max-w-2xl"
           style={{ color: "rgba(255,255,255,0.5)", fontSize: "clamp(1rem, 1.3vw, 1.15rem)" }}
         >
-          Nova Systems is growing. We're looking for hungry, talented people who want to be part of building something real in Connecticut.
+          We are recruiting elite, hungry, self-driven talent to build something real in Connecticut.
         </p>
 
         <div className="flex items-center justify-center gap-6 mt-10">
