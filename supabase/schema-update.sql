@@ -243,6 +243,23 @@ CREATE TABLE IF NOT EXISTS vault_documents (
 );
 ALTER TABLE vault_documents ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'system';
 
+-- ── INTAKE REQUESTS (public /welcome strategy-meeting bookings) ──────────────
+CREATE TABLE IF NOT EXISTS intake_requests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  business_name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  email TEXT NOT NULL,
+  business_type TEXT,
+  needs TEXT[],
+  notes TEXT,
+  referral_source TEXT,
+  meeting_date TEXT NOT NULL,
+  meeting_time TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',  -- pending | confirmed | completed | no_show | rescheduled
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── STORAGE BUCKETS (create manually in Supabase Studio → Storage) ──────────
 -- portfolio   (public)  — homepage/portfolio images
 -- portfolios  (private) — job-applicant portfolio uploads, path: [applicant_email]/[file]

@@ -7,6 +7,7 @@ import { uploadToVault } from './_vaultStorage.js';
 // resources with more than one sub-route):
 //   invoices                    GET list / POST { action: create|update|delete }
 //   referrals                   GET list / POST { action: create|update|delete }
+//   intake-requests              GET list / POST { action: 'update-status', id, status }
 //   vault      &op=list|upload|delete
 //   portfolio  &op=items|upload|mutate   (mutate: POST { action: update|delete })
 //   site-content                 GET ?key= / POST upsert
@@ -105,6 +106,60 @@ async function handleInvoices(req, res) {
 }
 
 // --------------------------------------------------------------- referrals
+// Strategy-meeting requests submitted from the public /welcome form.
+async function handleIntakeRequests(req, res) {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(200).json([]);
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_requests?order=created_at.desc`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      });
+      if (!r.ok) { console.error('[client:intake-requests] Supabase error:', r.status, await r.text()); return res.status(200).json([]); }
+      return res.status(200).json(await r.json());
+    } catch (err) {
+      console.error('[client:intake-requests] Error:', err.message);
+      return res.status(200).json([]);
+    }
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const b = req.body || {};
+  const action = sanitize(b.action, 20);
+
+  if (action === 'update-status') {
+    const id = sanitize(b.id, 100);
+    const status = sanitize(b.status, 30);
+    const VALID_STATUSES = ['pending', 'confirmed', 'completed', 'no_show', 'rescheduled'];
+    if (!id) return res.status(400).json({ error: 'id is required' });
+    if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_requests?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json', Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ status }),
+      });
+      if (!r.ok) { console.error('[client:intake-requests] Update error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to update status' }); }
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error('[client:intake-requests] Error:', err.message);
+      return res.status(500).json({ error: 'Failed to update status' });
+    }
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
 async function handleReferrals(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -815,6 +870,7 @@ export default async function handler(req, res) {
   switch (resource) {
     case 'invoices':  return handleInvoices(req, res);
     case 'referrals': return handleReferrals(req, res);
+    case 'intake-requests': return handleIntakeRequests(req, res);
 
     case 'vault':
       if (op === 'list')   return handleVaultList(req, res);
