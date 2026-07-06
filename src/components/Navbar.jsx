@@ -11,6 +11,7 @@ export default function Navbar() {
 
   const navLinks = [
     { label: "Solutions", path: "/solutions" },
+    { label: "Nova AI", path: "/ai", badge: "AI" },
     { label: "Insights", path: "/insights" },
     { label: "Portfolio", path: "/portfolio" },
     { label: "Careers", path: "/careers" },
@@ -36,12 +37,20 @@ export default function Navbar() {
             <Link
               key={link.label}
               to={link.path}
-              className="text-sm transition-colors"
+              className="text-sm transition-colors flex items-center gap-1.5"
               style={{ color: isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)" }}
-              onMouseEnter={(e) => e.target.style.color = "white"}
-              onMouseLeave={(e) => e.target.style.color = isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)"}
+              onMouseEnter={(e) => e.currentTarget.style.color = "white"}
+              onMouseLeave={(e) => e.currentTarget.style.color = isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)"}
             >
               {link.label}
+              {link.badge && (
+                <span
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                  style={{ background: `${GOLD}20`, color: GOLD, border: `1px solid ${GOLD}50` }}
+                >
+                  {link.badge}
+                </span>
+              )}
             </Link>
           ))}
         </div>
@@ -73,10 +82,18 @@ export default function Navbar() {
               key={link.label}
               to={link.path}
               onClick={() => setMobileOpen(false)}
-              className="block text-sm py-2"
+              className="flex items-center gap-1.5 text-sm py-2"
               style={{ color: isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)" }}
             >
               {link.label}
+              {link.badge && (
+                <span
+                  className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                  style={{ background: `${GOLD}20`, color: GOLD, border: `1px solid ${GOLD}50` }}
+                >
+                  {link.badge}
+                </span>
+              )}
             </Link>
           ))}
           <Link

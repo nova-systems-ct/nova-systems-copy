@@ -269,6 +269,89 @@ CREATE TABLE IF NOT EXISTS intake_requests (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ── NOVA AI (voice + SMS agent platform, /ai) ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS nova_ai_agents (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  client_id UUID REFERENCES clients(id),
+  agent_name TEXT NOT NULL,
+  business_name TEXT NOT NULL,
+  phone_number TEXT,
+  twilio_number_sid TEXT,
+  voice_id TEXT,
+  voice_name TEXT,
+  knowledge_base_id UUID,
+  status TEXT DEFAULT 'testing',  -- testing | active | inactive
+  calls_total INTEGER DEFAULT 0,
+  bookings_total INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS nova_ai_knowledge_bases (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  agent_id UUID,
+  client_id UUID,
+  business_name TEXT,
+  business_description TEXT,
+  services TEXT,
+  hours TEXT,
+  address TEXT,
+  booking_process TEXT,
+  faqs JSONB,
+  never_say TEXT,
+  always_say TEXT,
+  escalation TEXT,
+  personality TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS nova_ai_calls (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  agent_id UUID REFERENCES nova_ai_agents(id),
+  caller_phone TEXT,
+  duration INTEGER,
+  transcript TEXT,
+  recording_url TEXT,
+  outcome TEXT DEFAULT 'unknown',  -- booked | callback | transferred | hangup | unknown
+  booked BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS nova_ai_sms_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  agent_id UUID REFERENCES nova_ai_agents(id),
+  contact_phone TEXT,
+  direction TEXT,  -- inbound | outbound
+  message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS nova_ai_voices (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  voice_name TEXT NOT NULL UNIQUE,
+  elevenlabs_voice_id TEXT NOT NULL,
+  industry TEXT,
+  language TEXT DEFAULT 'en-es',
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS nova_ai_settings (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  key TEXT UNIQUE NOT NULL,
+  value TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Default voices — swap elevenlabs_voice_id for real IDs in the Nova AI Voices tab.
+INSERT INTO nova_ai_voices (voice_name, elevenlabs_voice_id, industry, language, description) VALUES
+  ('Sofia',  'REPLACE_WITH_ELEVENLABS_VOICE_ID_1', 'Restaurant',  'en-es', 'Warm bilingual female voice, friendly and inviting.'),
+  ('Marcus', 'REPLACE_WITH_ELEVENLABS_VOICE_ID_2', 'Barbershop',  'en-es', 'Cool, confident male voice with an easygoing energy.'),
+  ('Elena',  'REPLACE_WITH_ELEVENLABS_VOICE_ID_3', 'Medical',     'en-es', 'Calm, professional female voice, reassuring bedside manner.'),
+  ('Victor', 'REPLACE_WITH_ELEVENLABS_VOICE_ID_4', 'Contractor',  'en-es', 'Direct, practical male voice — no-nonsense and trustworthy.'),
+  ('Aria',   'REPLACE_WITH_ELEVENLABS_VOICE_ID_5', 'General',     'en-es', 'Friendly, professional female voice suited to any business.')
+ON CONFLICT (voice_name) DO NOTHING;
+
 -- ── STORAGE BUCKETS (create manually in Supabase Studio → Storage) ──────────
 -- portfolio   (public)  — homepage/portfolio images
 -- portfolios  (private) — job-applicant portfolio uploads, path: [applicant_email]/[file]

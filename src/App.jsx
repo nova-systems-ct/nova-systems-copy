@@ -22,6 +22,12 @@ import PublicPortfolio from './pages/Portfolio';
 import Welcome from './pages/Welcome';
 import Onboard from './pages/Onboard';
 import OnboardSuccess from './pages/OnboardSuccess';
+// Nova AI
+import AIHome from './pages/ai/AIHome';
+import AIDashboard from './pages/ai/AIDashboard';
+import AICreateAgent from './pages/ai/AICreateAgent';
+import AIAgentDetail from './pages/ai/AIAgentDetail';
+import AIClientView from './pages/ai/AIClientView';
 // CRM Dashboard
 import DashboardLayout from './components/dashboard/DashboardLayout';
 import DashboardHome from './pages/dashboard/DashboardHome';
@@ -64,6 +70,13 @@ function App() {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/onboard" element={<Onboard />} />
           <Route path="/onboard/success" element={<OnboardSuccess />} />
+
+          {/* Nova AI */}
+          <Route path="/ai" element={<AIHome />} />
+          <Route path="/ai/dashboard" element={<AIDashboard />} />
+          <Route path="/ai/dashboard/create-agent" element={<AICreateAgent />} />
+          <Route path="/ai/agent/:id" element={<AIAgentDetail />} />
+          <Route path="/ai/client/:clientId" element={<AIClientView />} />
 
           {/* CRM Dashboard — nested routes */}
           <Route path="/dashboard" element={<DashboardLayout />}>

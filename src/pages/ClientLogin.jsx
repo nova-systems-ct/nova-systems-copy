@@ -21,6 +21,7 @@ export default function ClientLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [clientId, setClientId] = useState("");
 
   useSEO({
     title: "Client Login — Nova Connect — Nova Systems",
@@ -42,6 +43,8 @@ export default function ClientLogin() {
       const data = await res.json();
 
       if (data.result === "ok") {
+        localStorage.setItem("nova_client_session", JSON.stringify({ client_id: data.client_id, email: data.email }));
+        setClientId(data.client_id);
         setSuccess(true);
       } else if (data.result === "wrong_password") {
         setError("Incorrect password.");
@@ -66,9 +69,18 @@ export default function ClientLogin() {
           </div>
           <p className="text-[9px] tracking-[0.3em] uppercase mb-3" style={{ color: GOLD }}>WELCOME BACK</p>
           <h1 className="text-2xl font-black text-white mb-4">You're logged in.</h1>
-          <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+          <p className="text-sm leading-relaxed mb-6" style={{ color: "rgba(255,255,255,0.45)" }}>
             Nova Connect is being finalized for your account. Isaac will notify you the moment full portal access is live.
           </p>
+          {clientId && (
+            <Link
+              to={`/ai/client/${clientId}`}
+              className="inline-block px-6 py-3 text-[11px] font-bold tracking-[0.2em] uppercase transition-all hover:opacity-85"
+              style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
+            >
+              View My Nova AI Agent
+            </Link>
+          )}
         </div>
       </div>
     );
