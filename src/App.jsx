@@ -22,6 +22,8 @@ import PublicPortfolio from './pages/Portfolio';
 import Welcome from './pages/Welcome';
 import Onboard from './pages/Onboard';
 import OnboardSuccess from './pages/OnboardSuccess';
+import Waves from './pages/Waves';
+import WavesForm from './pages/WavesForm';
 // Nova AI
 import AIHome from './pages/ai/AIHome';
 import AIDashboard from './pages/ai/AIDashboard';
@@ -46,6 +48,7 @@ import NovaVault from './pages/dashboard/NovaVault';
 import Invoices from './pages/dashboard/Invoices';
 import Referrals from './pages/dashboard/Referrals';
 import IntakeForms from './pages/dashboard/IntakeForms';
+import WaveOne from './pages/dashboard/WaveOne';
 
 function App() {
   return (
@@ -70,6 +73,8 @@ function App() {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/onboard" element={<Onboard />} />
           <Route path="/onboard/success" element={<OnboardSuccess />} />
+          <Route path="/waves" element={<Waves />} />
+          <Route path="/waves/form" element={<WavesForm />} />
 
           {/* Nova AI */}
           <Route path="/ai" element={<AIHome />} />
@@ -88,6 +93,7 @@ function App() {
             <Route path="jobs" element={<Jobs />} />
             <Route path="jobs/:id" element={<JobDetail />} />
             <Route path="intake-forms" element={<IntakeForms />} />
+            <Route path="wave-one" element={<WaveOne />} />
             <Route path="invoices" element={<Invoices />} />
             <Route path="referrals" element={<Referrals />} />
             <Route path="nova-vault" element={<NovaVault />} />

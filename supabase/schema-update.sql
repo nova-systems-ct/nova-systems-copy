@@ -354,6 +354,29 @@ INSERT INTO nova_ai_voices (voice_name, elevenlabs_voice_id, industry, language,
   ('Aria',   'REPLACE_WITH_ELEVENLABS_VOICE_ID_5', 'General',     'en-es', 'Friendly, professional female voice suited to any business.')
 ON CONFLICT (voice_name) DO NOTHING;
 
+-- ── WAVE ONE (limited-enrollment landing page + intake, /waves) ─────────────
+CREATE TABLE IF NOT EXISTS wave_one_applications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  email TEXT NOT NULL,
+  company_name TEXT NOT NULL,
+  website TEXT,
+  city TEXT,
+  industry TEXT,
+  biggest_problem TEXT,
+  revenue_range TEXT,
+  priority_engines JSONB DEFAULT '[]'::jsonb,
+  notes TEXT,
+  status TEXT DEFAULT 'new',  -- new | reviewing | approved | rejected | waitlisted
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed the Wave One spots counter shown live on /waves (read/written via nova_ai_settings).
+INSERT INTO nova_ai_settings (key, value) VALUES ('wave_one_spots_remaining', '7')
+ON CONFLICT (key) DO NOTHING;
+
 -- ── STORAGE BUCKETS (create manually in Supabase Studio → Storage) ──────────
 -- portfolio   (public)  — homepage/portfolio images
 -- portfolios  (private) — job-applicant portfolio uploads, path: [applicant_email]/[file]

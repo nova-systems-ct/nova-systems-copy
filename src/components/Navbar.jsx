@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import novaLogo from "@/assets/nova logo.png";
 
 const GOLD = "#D4A030";
+const GOLD_BRIGHT = "#C8921A";
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -12,6 +13,7 @@ export default function Navbar() {
   const navLinks = [
     { label: "Solutions", path: "/solutions" },
     { label: "Nova AI", path: "/ai", badge: "AI" },
+    { label: "Wave One", path: "/waves", badge: "NEW", highlight: true },
     { label: "Insights", path: "/insights" },
     { label: "Portfolio", path: "/portfolio" },
     { label: "Careers", path: "/careers" },
@@ -37,11 +39,17 @@ export default function Navbar() {
             <Link
               key={link.label}
               to={link.path}
-              className="text-sm transition-colors flex items-center gap-1.5"
-              style={{ color: isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)" }}
-              onMouseEnter={(e) => e.currentTarget.style.color = "white"}
-              onMouseLeave={(e) => e.currentTarget.style.color = isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)"}
+              className="text-sm font-semibold transition-colors flex items-center gap-1.5"
+              style={{ color: link.highlight ? GOLD : (isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)"), fontWeight: link.highlight ? 700 : 400 }}
+              onMouseEnter={(e) => e.currentTarget.style.color = link.highlight ? GOLD_BRIGHT : "white"}
+              onMouseLeave={(e) => e.currentTarget.style.color = link.highlight ? GOLD : (isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)")}
             >
+              {link.highlight && (
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full rounded-full animate-ping" style={{ background: GOLD, opacity: 0.6 }} />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: GOLD }} />
+                </span>
+              )}
               {link.label}
               {link.badge && (
                 <span
@@ -82,9 +90,15 @@ export default function Navbar() {
               key={link.label}
               to={link.path}
               onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-1.5 text-sm py-2"
-              style={{ color: isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)" }}
+              className="flex items-center gap-1.5 text-sm py-2 font-semibold"
+              style={{ color: link.highlight ? GOLD : (isActive(link.path) ? GOLD : "rgba(255,255,255,0.55)") }}
             >
+              {link.highlight && (
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inline-flex h-full w-full rounded-full animate-ping" style={{ background: GOLD, opacity: 0.6 }} />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5" style={{ background: GOLD }} />
+                </span>
+              )}
               {link.label}
               {link.badge && (
                 <span
