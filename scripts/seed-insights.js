@@ -1514,6 +1514,7 @@ async function main() {
       seo_title: article.seo_title,
       seo_description: article.seo_description,
       updated_at: new Date().toISOString(),
+      site: 'nova',
     };
 
     try {

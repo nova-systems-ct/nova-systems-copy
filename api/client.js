@@ -640,6 +640,7 @@ async function handleBlogPosts(req, res) {
   let qs = 'order=created_at.desc';
   if (slug) qs = `slug=eq.${encodeURIComponent(slug)}`;
   else if (!admin) qs = `published=eq.true&${qs}`;
+  qs = `site=eq.nova&${qs}`;
 
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/blog_posts?${qs}`, {
@@ -668,7 +669,7 @@ async function handleBlogAdmin(req, res) {
   if (action === 'delete') {
     const id = sanitize(b.id, 100);
     if (!id) return res.status(400).json({ error: 'id is required' });
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/blog_posts?id=eq.${encodeURIComponent(id)}`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/blog_posts?id=eq.${encodeURIComponent(id)}&site=eq.nova`, {
       method: 'DELETE',
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
     });
@@ -696,11 +697,12 @@ async function handleBlogAdmin(req, res) {
       title, slug, category: category || BLOG_CATEGORIES[0], excerpt, content,
       thumbnail_color, seo_title: seo_title || title, seo_description: seo_description || excerpt,
       published, updated_at: new Date().toISOString(),
+      site: 'nova', // every post created from the Nova Systems dashboard is tagged 'nova'
     };
 
     try {
       const url = id
-        ? `${SUPABASE_URL}/rest/v1/blog_posts?id=eq.${encodeURIComponent(id)}`
+        ? `${SUPABASE_URL}/rest/v1/blog_posts?id=eq.${encodeURIComponent(id)}&site=eq.nova`
         : `${SUPABASE_URL}/rest/v1/blog_posts`;
       const r = await fetch(url, {
         method: id ? 'PATCH' : 'POST',
