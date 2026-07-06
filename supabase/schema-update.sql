@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS blog_posts (
   seo_description TEXT,
   published BOOLEAN DEFAULT FALSE,
   author TEXT DEFAULT 'Isaac Nova',
+  site TEXT DEFAULT 'nova',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -112,6 +113,7 @@ ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS seo_description TEXT;
 ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS published BOOLEAN DEFAULT FALSE;
 ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS author TEXT DEFAULT 'Isaac Nova';
 ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS site TEXT DEFAULT 'nova';
 
 -- ── CLIENTS (intake / CRM) ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS clients (
