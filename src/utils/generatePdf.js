@@ -73,6 +73,48 @@ export function generateLegalPDF({ title, effectiveDate, sections }) {
   return doc
 }
 
+// Signed /sign/:contract_id agreement — full contract text plus the client's
+// typed name, drawn signature, and signing date. Attached to both the client's
+// and Isaac's confirmation emails and stored in the nova-vault bucket.
+export function generateSignedContractPDF({ title, intro, sections, clientName, signedName, signatureDataUrl, signedDate }) {
+  const doc = new jsPDF()
+  header(doc, title)
+
+  let y = 54
+  if (intro) y = addSection(doc, '', intro, y)
+  for (const s of sections || []) {
+    y = addSection(doc, s.heading, s.body, y)
+  }
+
+  if (y > 230) { doc.addPage(); y = 24 }
+  y += 4
+  doc.setDrawColor(...GOLD)
+  doc.setLineWidth(0.6)
+  doc.line(14, y, 196, y)
+  y += 10
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(30, 30, 30)
+  doc.text('Signed By', 14, y)
+  y += 8
+
+  if (signatureDataUrl) {
+    try { doc.addImage(signatureDataUrl, 'PNG', 14, y, 70, 24) } catch { /* ignore malformed image */ }
+    y += 28
+  }
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9.5)
+  doc.setTextColor(60, 60, 60)
+  doc.text(`${signedName || clientName || ''}`, 14, y)
+  y += 6
+  doc.text(`Date: ${signedDate || new Date().toLocaleDateString()}`, 14, y)
+
+  footer(doc, title)
+  return doc
+}
+
 // Gold rule + all-caps label marking the start of a new assessment section.
 function sectionHeading(doc, text, y) {
   if (y > 260) { doc.addPage(); y = 24 }

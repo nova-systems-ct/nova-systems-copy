@@ -24,6 +24,8 @@ import Intake from './pages/Intake';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import ServiceAgreement from './pages/ServiceAgreement';
+import Sign from './pages/Sign';
+import SignSuccess from './pages/SignSuccess';
 import Onboard from './pages/Onboard';
 import OnboardSuccess from './pages/OnboardSuccess';
 import Waves from './pages/Waves';
@@ -53,6 +55,7 @@ import Invoices from './pages/dashboard/Invoices';
 import Referrals from './pages/dashboard/Referrals';
 import IntakeForms from './pages/dashboard/IntakeForms';
 import WaveOne from './pages/dashboard/WaveOne';
+import Contracts from './pages/dashboard/Contracts';
 
 function App() {
   return (
@@ -79,6 +82,8 @@ function App() {
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/service-agreement" element={<ServiceAgreement />} />
+          <Route path="/sign/:contract_id" element={<Sign />} />
+          <Route path="/sign/:contract_id/success" element={<SignSuccess />} />
           <Route path="/onboard" element={<Onboard />} />
           <Route path="/onboard/success" element={<OnboardSuccess />} />
           <Route path="/waves" element={<Waves />} />
@@ -103,6 +108,7 @@ function App() {
             <Route path="intake-forms" element={<IntakeForms />} />
             <Route path="wave-one" element={<WaveOne />} />
             <Route path="invoices" element={<Invoices />} />
+            <Route path="contracts" element={<Contracts />} />
             <Route path="referrals" element={<Referrals />} />
             <Route path="nova-vault" element={<NovaVault />} />
             <Route path="blog" element={<DashboardBlog />} />

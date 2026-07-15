@@ -467,6 +467,22 @@ CREATE TABLE IF NOT EXISTS nova_ai_audits (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- ── CONTRACTS (digital document signing, /sign/:contract_id) ────────────────
+CREATE TABLE IF NOT EXISTS contracts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  client_name TEXT,
+  client_email TEXT,
+  contract_type TEXT,   -- Digital Foundation | Growth Package | Custom
+  custom_notes TEXT,
+  status TEXT DEFAULT 'pending',  -- pending | signed
+  sent_at TIMESTAMPTZ DEFAULT NOW(),
+  signed_at TIMESTAMPTZ,
+  signed_name TEXT,
+  signature_data TEXT,  -- base64 PNG data URL of the drawn signature
+  pdf_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── STORAGE BUCKETS (create manually in Supabase Studio → Storage) ──────────
 -- portfolio         (public)  — homepage/portfolio images
 -- portfolios        (private) — job-applicant portfolio uploads, path: [applicant_email]/[file]

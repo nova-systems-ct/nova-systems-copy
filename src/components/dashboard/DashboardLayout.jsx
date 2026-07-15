@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Target, Users,
   FileText, Mail, Settings, LogOut, Menu, X, LayoutGrid,
-  Lock, Newspaper, ClipboardList, Receipt, HandCoins, Bot, Zap,
+  Lock, Newspaper, ClipboardList, Receipt, HandCoins, Bot, Zap, FileSignature,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 
@@ -17,6 +17,7 @@ const NAV = [
   { to: '/dashboard/jobs',        label: 'Candidates',    icon: Users },
   { to: '/dashboard/intake-forms',label: 'Intake Forms',  icon: ClipboardList },
   { to: '/dashboard/invoices',    label: 'Invoices',      icon: Receipt },
+  { to: '/dashboard/contracts',   label: 'Contracts',     icon: FileSignature },
   { to: '/dashboard/referrals',   label: 'Referrals',     icon: HandCoins },
   { to: '/ai/dashboard',          label: 'Nova AI',       icon: Bot },
   { to: '/dashboard/wave-one',    label: 'Wave One',      icon: Zap },
