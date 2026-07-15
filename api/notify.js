@@ -8,32 +8,8 @@ import { twilioRequest } from './nova-ai/_twilio.js';
 //   book-demo        POST  demo request email
 //   client-message   POST  message to a client (saved + emailed)
 //   send-invoice     POST  invoice email to a client
-//   welcome-lead     POST  /welcome quick-contact form (save + SMS + confirmation + 2hr SMS follow-up)
+//   welcome-lead     POST  /welcome quick-contact form (save + SMS alert + confirmation + 2hr email follow-up)
 //   list             GET   admin notifications feed
-
-// Sends via a Twilio Messaging Service's scheduled-send API when
-// TWILIO_MESSAGING_SERVICE_SID is configured (true delayed delivery). Without
-// one, Twilio's plain Messages API has no scheduling support, so this falls
-// back to sending immediately rather than silently dropping the follow-up.
-async function scheduleOrSendSms(accountSid, authToken, messagingServiceSid, fromNumber, { to, body, sendAtIso }) {
-  if (messagingServiceSid) {
-    try {
-      const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-      const res = await fetch(`https://messaging.twilio.com/v1/Services/${messagingServiceSid}/Messages`, {
-        method: 'POST',
-        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ To: to, Body: body, SendAt: sendAtIso, ScheduleType: 'fixed' }).toString(),
-      });
-      if (res.ok) return;
-      console.warn('[notify] Scheduled SMS failed, sending immediately instead:', await res.text());
-    } catch (err) {
-      console.warn('[notify] Scheduled SMS error, sending immediately instead:', err.message);
-    }
-  } else {
-    console.warn('[notify] TWILIO_MESSAGING_SERVICE_SID not set — sending follow-up SMS immediately instead of after the intended delay.');
-  }
-  await twilioRequest(accountSid, authToken, 'POST', 'Messages.json', { To: to, From: fromNumber, Body: body });
-}
 
 async function handleContact(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -420,7 +396,6 @@ async function handleWelcomeLead(req, res) {
   const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
   const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
   const TWILIO_FROM = process.env.TWILIO_PHONE_NUMBER;
-  const TWILIO_MESSAGING_SERVICE_SID = process.env.TWILIO_MESSAGING_SERVICE_SID;
 
   if (TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM) {
     try {
@@ -473,17 +448,31 @@ async function handleWelcomeLead(req, res) {
     } catch (err) {
       console.error('[notify:welcome-lead] Confirmation email error (non-fatal):', err.message);
     }
-  }
 
-  if (TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM && phone) {
     try {
-      await scheduleOrSendSms(TWILIO_SID, TWILIO_TOKEN, TWILIO_MESSAGING_SERVICE_SID, TWILIO_FROM, {
-        to: phone,
-        body: `Hi ${name.split(' ')[0]} this is Isaac from Nova Systems. Just wanted to make sure you got our email. We need about 30 minutes of your time to complete your business assessment so we can build your custom plan. Here is the link: ${intakeLink}. Reply STOP to opt out.`,
-        sendAtIso: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: FROM,
+          to: [email],
+          subject: 'One more step — complete your Business Intelligence Assessment.',
+          scheduled_at: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
+          text: [
+            `Hi ${name},`,
+            '',
+            'thank you again for reaching out to Nova Systems. To prepare your custom audit and proposal we need a little more information.',
+            '',
+            `Please take 30 minutes to complete your full Business Intelligence Assessment here: ${intakeLink}`,
+            '',
+            'This gives us everything we need to build your complete growth plan before we ever meet.',
+            '',
+            'Questions? Reply to this email or visit nova-systems.app.',
+          ].join('\n'),
+        }),
       });
     } catch (err) {
-      console.error('[notify:welcome-lead] Follow-up SMS error (non-fatal):', err.message);
+      console.error('[notify:welcome-lead] Scheduled follow-up email error (non-fatal):', err.message);
     }
   }
 
