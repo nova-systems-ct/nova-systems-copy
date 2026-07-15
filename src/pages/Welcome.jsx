@@ -4,13 +4,12 @@ import { ArrowRight, Check } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useSEO } from "@/hooks/useSEO";
+import { INDUSTRIES } from "@/pages/intake/constants";
 
 const GOLD = "#D4A030";
 const GOLD_DARK = "#8a6200";
 const GOLD_BRIGHT = "#C8921A";
 const G = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
-
-const SERVICE_OPTIONS = ["Website", "Social Media", "AI Automation", "Full Wave One", "Not Sure"];
 
 const inp = {
   width: "100%", padding: "13px 16px", fontSize: 14,
@@ -36,11 +35,36 @@ function Field({ label, required, error, children }) {
   );
 }
 
+function Checkbox({ checked, onChange, error, children }) {
+  return (
+    <div>
+      <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+        <span
+          onClick={() => onChange(!checked)}
+          style={{
+            width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center",
+            background: checked ? GOLD : "transparent", border: `1px solid ${checked ? GOLD : "rgba(255,255,255,0.3)"}`,
+          }}
+        >
+          {checked && <Check style={{ width: 12, height: 12, color: "#0a0800" }} />}
+        </span>
+        <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ display: "none" }} />
+        <span style={{ fontSize: 12.5, lineHeight: 1.6, color: "rgba(255,255,255,0.55)" }}>{children}</span>
+      </label>
+      {error && <p style={{ color: "#e05252", fontSize: 11, marginTop: 6 }}>{error}</p>}
+    </div>
+  );
+}
+
+const emptyForm = {
+  name: "", email: "", phone: "", company: "", website: "", industry: "", challenge: "", goal: "",
+};
+
 export default function Welcome() {
-  const [form, setForm] = useState({
-    full_name: "", email: "", phone: "", company_name: "", service_interest: "",
-  });
-  const [agreed, setAgreed] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [agreeContact, setAgreeContact] = useState(false);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -48,18 +72,17 @@ export default function Welcome() {
 
   useSEO({
     title: "Get Started — Nova Systems",
-    description: "Tell us what your business needs and Nova Systems will reach out to get started.",
+    description: "Tell us about your business and Nova Systems will reach out to get started.",
   });
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const validate = () => {
     const errs = {};
-    if (!form.full_name) errs.full_name = "This field is required.";
+    if (!form.name) errs.name = "This field is required.";
     if (!form.email) errs.email = "This field is required.";
     if (!form.phone) errs.phone = "This field is required.";
-    if (!form.service_interest) errs.service_interest = "This field is required.";
-    if (!agreed) errs.agreed = "You must agree to the Terms of Service and Privacy Policy.";
+    if (!agreeTerms || !agreePrivacy || !agreeContact) errs.agreements = "You must agree to all three items to continue.";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -75,12 +98,9 @@ export default function Welcome() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          full_name: form.full_name,
-          email: form.email,
-          phone: form.phone,
-          company_name: form.company_name,
-          service_interest: form.service_interest,
-          agreed_to_terms: agreed,
+          ...form,
+          agreed_to_terms: agreeTerms && agreePrivacy,
+          call_consent: agreeContact, sms_consent: agreeContact, email_consent: agreeContact,
         }),
       });
       if (!r.ok) {
@@ -103,13 +123,13 @@ export default function Welcome() {
         <div className="flex items-center justify-center px-6 pt-16" style={{ minHeight: "100vh" }}>
           <div className="max-w-md w-full text-center">
             <CheckmarkAnimation />
-            <h1 style={{ fontSize: 30, fontWeight: 900, color: "#fff", marginTop: 24, marginBottom: 14 }}>We got your message.</h1>
+            <h1 style={{ fontSize: 30, fontWeight: 900, color: "#fff", marginTop: 24, marginBottom: 14 }}>Thank You, {form.name.split(" ")[0]}.</h1>
             <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 14, lineHeight: 1.7, marginBottom: 32 }}>
-              Isaac will personally review your request and get back to you soon. Check your email for confirmation.
+              We received your information. Check your email for next steps.
             </p>
-            <Link to="/" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", background: G, color: "#0a0800", borderRadius: 9, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
-              Return to nova-systems.app <ArrowRight style={{ width: 14, height: 14 }} />
-            </Link>
+            <a href="https://nova-systems.app" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", background: G, color: "#0a0800", borderRadius: 9, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+              nova-systems.app <ArrowRight style={{ width: 14, height: 14 }} />
+            </a>
           </div>
         </div>
         <Footer />
@@ -127,8 +147,8 @@ export default function Welcome() {
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <Field label="Full Name" required error={errors.full_name}>
-            <input required value={form.full_name} onChange={set("full_name")} placeholder="Your full name" style={inp} />
+          <Field label="Full Name" required error={errors.name}>
+            <input required value={form.name} onChange={set("name")} placeholder="Your full name" style={inp} />
           </Field>
 
           <Field label="Email" required error={errors.email}>
@@ -140,33 +160,39 @@ export default function Welcome() {
           </Field>
 
           <Field label="Company Name">
-            <input value={form.company_name} onChange={set("company_name")} placeholder="Your business name" style={inp} />
+            <input value={form.company} onChange={set("company")} placeholder="Your business name" style={inp} />
           </Field>
 
-          <Field label="What do you need help with" required error={errors.service_interest}>
-            <select required value={form.service_interest} onChange={set("service_interest")} style={{ ...inp, appearance: "none", cursor: "pointer" }}>
-              <option value="">Select an option</option>
-              {SERVICE_OPTIONS.map((o) => <option key={o} value={o} style={{ background: "#111" }}>{o}</option>)}
+          <Field label="Website">
+            <input value={form.website} onChange={set("website")} placeholder="yourbusiness.com" style={inp} />
+          </Field>
+
+          <Field label="Industry">
+            <select value={form.industry} onChange={set("industry")} style={{ ...inp, appearance: "none", cursor: "pointer" }}>
+              <option value="">Select an industry</option>
+              {INDUSTRIES.map((o) => <option key={o} value={o} style={{ background: "#111" }}>{o}</option>)}
             </select>
           </Field>
 
-          <div>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
-              <span
-                onClick={() => setAgreed((a) => !a)}
-                style={{
-                  width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center",
-                  background: agreed ? GOLD : "transparent", border: `1px solid ${agreed ? GOLD : "rgba(255,255,255,0.3)"}`,
-                }}
-              >
-                {agreed && <Check style={{ width: 12, height: 12, color: "#0a0800" }} />}
-              </span>
-              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ display: "none" }} />
-              <span style={{ fontSize: 12.5, lineHeight: 1.6, color: "rgba(255,255,255,0.55)" }}>
-                By submitting you agree to our <Link to="/terms" style={{ color: GOLD }}>Terms of Service</Link> and <Link to="/privacy" style={{ color: GOLD }}>Privacy Policy</Link> and consent to be contacted by Nova Systems via phone, text, email, and AI assistant.
-              </span>
-            </label>
-            {errors.agreed && <p style={{ color: "#e05252", fontSize: 11, marginTop: 6 }}>{errors.agreed}</p>}
+          <Field label="Biggest Challenge">
+            <input value={form.challenge} onChange={set("challenge")} placeholder="What's the biggest challenge in your business?" style={inp} />
+          </Field>
+
+          <Field label="Biggest Goal">
+            <input value={form.goal} onChange={set("goal")} placeholder="What are you trying to achieve?" style={inp} />
+          </Field>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 4 }}>
+            <Checkbox checked={agreeTerms} onChange={setAgreeTerms}>
+              I agree to the <Link to="/terms" style={{ color: GOLD }}>Terms of Service</Link>
+            </Checkbox>
+            <Checkbox checked={agreePrivacy} onChange={setAgreePrivacy}>
+              I agree to the <Link to="/privacy" style={{ color: GOLD }}>Privacy Policy</Link>
+            </Checkbox>
+            <Checkbox checked={agreeContact} onChange={setAgreeContact}>
+              I consent to receive calls, texts, emails, and AI communications from Nova Systems. Reply STOP to opt out.
+            </Checkbox>
+            {errors.agreements && <p style={{ color: "#e05252", fontSize: 11 }}>{errors.agreements}</p>}
           </div>
 
           {submitError && <p style={{ color: "#e05252", fontSize: 12 }}>{submitError}</p>}

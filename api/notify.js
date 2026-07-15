@@ -8,10 +8,32 @@ import { twilioRequest } from './nova-ai/_twilio.js';
 //   book-demo        POST  demo request email
 //   client-message   POST  message to a client (saved + emailed)
 //   send-invoice     POST  invoice email to a client
-//   welcome-lead     POST  /welcome quick-contact form (save + SMS + confirmation + 45min follow-up)
+//   welcome-lead     POST  /welcome quick-contact form (save + SMS + confirmation + 2hr SMS follow-up)
 //   list             GET   admin notifications feed
 
-const SERVICE_INTERESTS = ['Website', 'Social Media', 'AI Automation', 'Full Wave One', 'Not Sure'];
+// Sends via a Twilio Messaging Service's scheduled-send API when
+// TWILIO_MESSAGING_SERVICE_SID is configured (true delayed delivery). Without
+// one, Twilio's plain Messages API has no scheduling support, so this falls
+// back to sending immediately rather than silently dropping the follow-up.
+async function scheduleOrSendSms(accountSid, authToken, messagingServiceSid, fromNumber, { to, body, sendAtIso }) {
+  if (messagingServiceSid) {
+    try {
+      const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+      const res = await fetch(`https://messaging.twilio.com/v1/Services/${messagingServiceSid}/Messages`, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ To: to, Body: body, SendAt: sendAtIso, ScheduleType: 'fixed' }).toString(),
+      });
+      if (res.ok) return;
+      console.warn('[notify] Scheduled SMS failed, sending immediately instead:', await res.text());
+    } catch (err) {
+      console.warn('[notify] Scheduled SMS error, sending immediately instead:', err.message);
+    }
+  } else {
+    console.warn('[notify] TWILIO_MESSAGING_SERVICE_SID not set — sending follow-up SMS immediately instead of after the intended delay.');
+  }
+  await twilioRequest(accountSid, authToken, 'POST', 'Messages.json', { To: to, From: fromNumber, Body: body });
+}
 
 async function handleContact(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -351,18 +373,25 @@ async function handleWelcomeLead(req, res) {
   if (!rateLimit(req, res, 10, 60_000)) return;
 
   const b = req.body || {};
-  const full_name = sanitize(b.full_name, 150);
+  const name = sanitize(b.name, 150);
   const email = sanitizeEmail(b.email);
   const phone = sanitizePhone(b.phone);
-  const company_name = sanitize(b.company_name, 200);
-  const service_interest = SERVICE_INTERESTS.includes(b.service_interest) ? b.service_interest : '';
+  const company = sanitize(b.company, 200);
+  const website = b.website ? (sanitizeUrl(b.website) || sanitize(b.website, 300)) : '';
+  const industry = sanitize(b.industry, 100);
+  const challenge = sanitize(b.challenge, 1000);
+  const goal = sanitize(b.goal, 1000);
   const agreed_to_terms = b.agreed_to_terms === true || b.agreed_to_terms === 'true';
+  const sms_consent = b.sms_consent === true || b.sms_consent === 'true';
+  const email_consent = b.email_consent === true || b.email_consent === 'true';
+  const call_consent = b.call_consent === true || b.call_consent === 'true';
 
-  if (!full_name || !email || !phone) return res.status(400).json({ error: 'Full name, email, and phone are required' });
+  if (!name || !email || !phone) return res.status(400).json({ error: 'Full name, email, and phone are required' });
   if (!agreed_to_terms) return res.status(400).json({ error: 'You must agree to the Terms of Service and Privacy Policy' });
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let leadId = null;
 
   if (SUPABASE_URL && SUPABASE_KEY) {
     try {
@@ -370,11 +399,19 @@ async function handleWelcomeLead(req, res) {
         method: 'POST',
         headers: {
           apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json', Prefer: 'return=minimal',
+          'Content-Type': 'application/json', Prefer: 'return=representation',
         },
-        body: JSON.stringify({ full_name, email, phone, company_name, service_interest, agreed_to_terms }),
+        body: JSON.stringify({
+          name, email, phone, company, website, industry, challenge, goal,
+          agreed_to_terms, sms_consent, email_consent, call_consent,
+        }),
       });
-      if (!r.ok) console.error('[notify:welcome-lead] Supabase save error:', r.status, await r.text());
+      if (r.ok) {
+        const rows = await r.json();
+        leadId = rows[0]?.id || null;
+      } else {
+        console.error('[notify:welcome-lead] Supabase save error:', r.status, await r.text());
+      }
     } catch (err) {
       console.error('[notify:welcome-lead] Supabase error (non-fatal):', err.message);
     }
@@ -383,17 +420,29 @@ async function handleWelcomeLead(req, res) {
   const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
   const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
   const TWILIO_FROM = process.env.TWILIO_PHONE_NUMBER;
+  const TWILIO_MESSAGING_SERVICE_SID = process.env.TWILIO_MESSAGING_SERVICE_SID;
+
   if (TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM) {
     try {
       await twilioRequest(TWILIO_SID, TWILIO_TOKEN, 'POST', 'Messages.json', {
         To: process.env.ISAAC_ALERT_PHONE || '+12037060504',
         From: TWILIO_FROM,
-        Body: `New lead: ${full_name}${company_name ? ` from ${company_name}` : ''}. Needs help with: ${service_interest || 'not specified'}.`,
+        Body: `New lead: ${name}${company ? ` from ${company}` : ''}. ${phone}. Check dashboard.`,
       });
     } catch (err) {
-      console.error('[notify:welcome-lead] Twilio error (non-fatal):', err.message);
+      console.error('[notify:welcome-lead] Twilio alert error (non-fatal):', err.message);
     }
   }
+
+  const origin = req.headers.origin && req.headers.origin.startsWith('https://') ? req.headers.origin : 'https://nova-systems.app';
+  const intakeParams = new URLSearchParams({
+    name, email, phone,
+    ...(company ? { company } : {}),
+    ...(website ? { website } : {}),
+    ...(industry ? { industry } : {}),
+    ...(leadId ? { lead_id: leadId } : {}),
+  }).toString();
+  const intakeLink = `${origin}/intake?${intakeParams}`;
 
   const RESEND_KEY = process.env.RESEND_API_KEY;
   if (RESEND_KEY) {
@@ -405,13 +454,17 @@ async function handleWelcomeLead(req, res) {
         body: JSON.stringify({
           from: FROM,
           to: [email],
-          subject: 'We got your message — Nova Systems',
+          subject: 'We got your info — here is what happens next.',
           text: [
-            `Hi ${full_name},`,
+            `Hi ${name},`,
             '',
-            'Thanks for reaching out to Nova Systems. Isaac will personally review your request and get back to you soon.',
+            'Thank you for reaching out to Nova Systems. We are reviewing your information and will be in touch within 24 hours.',
             '',
-            'Talk soon,',
+            'In the meantime please complete your full Business Intelligence Assessment so we can prepare your custom audit and proposal before we meet:',
+            intakeLink,
+            '',
+            'This takes about 30 minutes and gives us everything we need to hit the ground running.',
+            '',
             'Isaac Nova',
             'Founder, Nova Systems',
           ].join('\n'),
@@ -420,36 +473,21 @@ async function handleWelcomeLead(req, res) {
     } catch (err) {
       console.error('[notify:welcome-lead] Confirmation email error (non-fatal):', err.message);
     }
+  }
 
+  if (TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM && phone) {
     try {
-      const origin = req.headers.origin && req.headers.origin.startsWith('https://') ? req.headers.origin : 'https://nova-systems.app';
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM,
-          to: [email],
-          subject: 'Let’s make sure we come prepared',
-          scheduled_at: new Date(Date.now() + 45 * 60_000).toISOString(),
-          text: [
-            `Hi ${full_name},`,
-            '',
-            'Thank you for reaching out to Nova Systems. To make sure we come prepared for our conversation please take 30 minutes to complete our full business intake form. This helps our team and AI analyze exactly what your business needs to grow.',
-            '',
-            `${origin}/intake`,
-            '',
-            'Talk soon,',
-            'Isaac Nova',
-            'Founder, Nova Systems',
-          ].join('\n'),
-        }),
+      await scheduleOrSendSms(TWILIO_SID, TWILIO_TOKEN, TWILIO_MESSAGING_SERVICE_SID, TWILIO_FROM, {
+        to: phone,
+        body: `Hi ${name.split(' ')[0]} this is Isaac from Nova Systems. Just wanted to make sure you got our email. We need about 30 minutes of your time to complete your business assessment so we can build your custom plan. Here is the link: ${intakeLink}. Reply STOP to opt out.`,
+        sendAtIso: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
       });
     } catch (err) {
-      console.error('[notify:welcome-lead] Scheduled follow-up email error (non-fatal):', err.message);
+      console.error('[notify:welcome-lead] Follow-up SMS error (non-fatal):', err.message);
     }
   }
 
-  return res.status(200).json({ ok: true });
+  return res.status(200).json({ ok: true, lead_id: leadId });
 }
 
 async function handleList(req, res) {

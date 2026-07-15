@@ -1,353 +1,247 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { loadStripe } from "@stripe/stripe-js";
-import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
-import { ArrowLeft, ArrowRight, Check, Plus, X, ExternalLink, Lock } from "lucide-react";
+import { Elements } from "@stripe/react-stripe-js";
+import { ArrowLeft, ArrowRight, Download, Check } from "lucide-react";
 import novaLogo from "@/assets/nova logo.png";
 import { useSEO } from "@/hooks/useSEO";
 import { generateIntakeSummaryPDF } from "@/utils/generatePdf";
 
-const GOLD = "#D4A030";
-const GOLD_DARK = "#8a6200";
-const GOLD_BRIGHT = "#C8921A";
-const G = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
+import { GOLD, G, Field, TextInput, PillGroup, CheckmarkAnimation, useSavedFlash } from "./intake/ui";
+import {
+  SECTION_TITLES, BEST_TIMES, CONTACT_METHODS, INDUSTRIES, emptyForm,
+  MARKETING_PLATFORMS, TECH_TOOLS, COMM_CHANNELS,
+} from "./intake/constants";
+import {
+  STORY_FIELDS, GOALS_FIELDS, CUSTOMERS_FIELDS, SALES_PROCESS_FIELDS, TEAM_FIELDS,
+  REPUTATION_FIELDS, FINANCIALS_FIELDS, AI_KNOWLEDGE_FIELDS, FINAL_QUESTIONS_FIELDS,
+  MARKETING_DETAIL_FIELDS, TECHNOLOGY_DETAIL_FIELDS, COMMUNICATION_DETAIL_FIELDS,
+} from "./intake/sectionConfigs";
+import SimpleSection from "./intake/SimpleSection";
+import BusinessesSection from "./intake/BusinessesSection";
+import ServicesSection from "./intake/ServicesSection";
+import ChecklistSection from "./intake/ChecklistSection";
+import CompetitorsSection from "./intake/CompetitorsSection";
+import DocumentUploadSection from "./intake/DocumentUploadSection";
+import ReviewSection from "./intake/ReviewSection";
+import PaymentSection from "./intake/PaymentSection";
+import AgreementSection from "./intake/AgreementSection";
 
-const STORAGE_KEY = "nova_intake_progress_v1";
+const STORAGE_KEY = "nova_intake_progress_v2";
+const AUTOSAVE_MS = 30_000;
 
 const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
   : null;
 
-const SECTION_TITLES = [
-  "About You",
-  "Your Business",
-  "Social Media & Online Presence",
-  "Goals & Challenges",
-  "Budget & Timeline",
-  "Agreement & Payment",
+const REVIEW_STEP = SECTION_TITLES.indexOf("Review Your Submission");
+const PAYMENT_STEP = SECTION_TITLES.indexOf("Reserve Your Spot");
+const AGREEMENT_STEP = SECTION_TITLES.indexOf("Agreements & Signature");
+
+const TIMELINE_STEPS = [
+  "Assessment Received", "Nova Audit Running", "Research and Analysis",
+  "Proposal Being Prepared", "Strategy Meeting", "Launch",
 ];
 
-const BEST_TIMES = ["Morning", "Afternoon", "Evening"];
-const CONTACT_METHODS = ["Call", "Text", "WhatsApp", "Email"];
-const INDUSTRIES = ["Restaurant", "Barbershop", "Salon", "Medical", "Retail", "Contractor", "Nonprofit", "Technology", "Fitness", "Food and Beverage", "Real Estate", "Law", "Finance", "Other"];
-const REVENUE_RANGES = ["$0-$1k", "$1k-$5k", "$5k-$10k", "$10k-$25k", "$25k-$50k", "$50k+"];
-const SOCIAL_PLATFORMS = [
-  { key: "instagram", label: "Instagram" },
-  { key: "facebook", label: "Facebook" },
-  { key: "tiktok", label: "TikTok" },
-  { key: "linkedin", label: "LinkedIn" },
-  { key: "youtube", label: "YouTube" },
-  { key: "twitter", label: "Twitter / X" },
-];
-const BUDGET_RANGES = ["$0-$500", "$500-$1000", "$1000-$2500", "$2500-$5000", "$5000+"];
-const TIMELINES = ["Immediately", "Within 30 days", "Within 90 days", "Just exploring"];
-const REFERRAL_SOURCES = ["Google", "Instagram", "TikTok", "Referral", "In person", "Other"];
-
-const emptyBusiness = () => ({
-  id: `biz_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-  business_name: "", industry: "", address: "", website: "",
-  time_in_business: "", employee_count: "", monthly_revenue: "", locations: "",
-});
-
-const emptyForm = () => ({
-  name: "", email: "", phone: "", best_time: "", preferred_contact: "",
-  businesses: [emptyBusiness()],
-  social_media: {
-    instagram: { handle: "", followers: "" },
-    facebook: { handle: "", followers: "" },
-    tiktok: { handle: "", followers: "" },
-    linkedin: { handle: "", followers: "" },
-    youtube: { handle: "", followers: "" },
-    twitter: { handle: "", followers: "" },
-    paid_ads: { running: false, platforms: "", spend: "" },
-    google_business: "", google_rating: "",
-  },
-  goals: {
-    biggest_challenge: "", revenue_goal_12mo: "", dream_vision_3yr: "",
-    expansion_goals: "", tried_before: "", why_now: "",
-  },
-  budget_range: "", timeline: "", referral_source: "", referrer_name: "",
-});
-
-// ── Shared field styles ──────────────────────────────────────────────────────
-const inp = {
-  width: "100%", padding: "13px 16px", fontSize: 14,
-  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8,
-  color: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "inherit",
-};
-const lbl = {
-  display: "block", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-  textTransform: "uppercase", color: "rgba(255,255,255,0.45)", marginBottom: 8,
-};
-
-function Asterisk() {
-  return <span style={{ color: GOLD }}> *</span>;
-}
-
-function Field({ label, required, error, hint, children }) {
-  return (
-    <div>
-      {label && <label style={lbl}>{label}{required && <Asterisk />}</label>}
-      {children}
-      {hint && <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 5 }}>{hint}</p>}
-      {error && <p style={{ color: "#e05252", fontSize: 11, marginTop: 5 }}>{error}</p>}
-    </div>
-  );
-}
-
-function Select({ value, onChange, options, placeholder = "Select an option" }) {
-  return (
-    <select value={value} onChange={onChange} style={{ ...inp, appearance: "none", cursor: "pointer" }}>
-      <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o} value={o} style={{ background: "#111" }}>{o}</option>)}
-    </select>
-  );
-}
-
-function Pill({ selected, onClick, children }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: "10px 16px", fontSize: 12.5, fontWeight: 600, borderRadius: 8,
-        border: `1px solid ${selected ? GOLD : "rgba(255,255,255,0.15)"}`,
-        background: selected ? "rgba(212,160,48,0.12)" : "rgba(255,255,255,0.03)",
-        color: selected ? GOLD : "rgba(255,255,255,0.7)",
-        cursor: "pointer", transition: "all 0.15s", fontFamily: "inherit",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function CheckmarkAnimation() {
-  return (
-    <div style={{ width: 90, height: 90, margin: "0 auto", position: "relative" }}>
-      <svg viewBox="0 0 90 90" style={{ width: "100%", height: "100%" }}>
-        <circle cx="45" cy="45" r="42" fill="none" stroke={GOLD} strokeWidth="3"
-          style={{ strokeDasharray: 264, strokeDashoffset: 264, animation: "intakeCircle 0.6s ease-out forwards" }} />
-        <path d="M27 46 L40 59 L64 32" fill="none" stroke={GOLD} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"
-          style={{ strokeDasharray: 60, strokeDashoffset: 60, animation: "intakeCheck 0.4s ease-out 0.5s forwards" }} />
-      </svg>
-      <style>{`
-        @keyframes intakeCircle { to { stroke-dashoffset: 0; } }
-        @keyframes intakeCheck { to { stroke-dashoffset: 0; } }
-      `}</style>
-    </div>
-  );
-}
-
-// ── Payment + final submit (must live inside <Elements>) ────────────────────
-function PaymentAndSubmit({ form, agreed, setAgreed, onSuccess }) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleSubmit = async () => {
-    if (!agreed) { setError("You must agree to the Terms, Privacy Policy, and Service Agreement to continue."); return; }
-    if (!form.businesses.some((b) => b.business_name.trim())) {
-      setError("Please go back and add at least one business name.");
-      return;
-    }
-    setSubmitting(true);
-    setError("");
-
+function SuccessScreen({ form }) {
+  const downloadPdf = () => {
     try {
-      let stripe_customer_id = "";
-      let stripe_payment_method_id = "";
-
-      if (stripe && elements) {
-        const card = elements.getElement(CardElement);
-        if (card) {
-          const { paymentMethod, error: pmError } = await stripe.createPaymentMethod({
-            type: "card", card, billing_details: { name: form.name, email: form.email },
-          });
-          if (pmError) throw new Error(pmError.message || "Your card details could not be verified.");
-
-          const setupRes = await fetch("/api/stripe?action=setup-intent", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: form.email, name: form.name, payment_method_id: paymentMethod.id }),
-          });
-          const setupData = await setupRes.json().catch(() => ({}));
-          if (!setupRes.ok || setupData.ok === false) {
-            throw new Error(setupData.error || "We could not save your payment method. Please check your card details.");
-          }
-          stripe_customer_id = setupData.customer_id || "";
-          stripe_payment_method_id = setupData.payment_method_id || "";
-        }
-      }
-
-      let pdf_base64 = "";
-      try {
-        const doc = generateIntakeSummaryPDF(form);
-        pdf_base64 = doc.output("datauristring");
-      } catch (err) {
-        console.warn("[Intake] PDF generation failed (non-fatal):", err.message);
-      }
-
-      const submitRes = await fetch("/api/business-intake?action=submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          stripe_customer_id, stripe_payment_method_id,
-          agreed_to_terms: true,
-          pdf_base64,
-        }),
-      });
-      const submitData = await submitRes.json().catch(() => ({}));
-      if (!submitRes.ok) throw new Error(submitData.error || "Something went wrong submitting your intake. Please try again.");
-
-      onSuccess();
+      const doc = generateIntakeSummaryPDF(form);
+      doc.save(`Nova-Systems-Assessment-${(form.name || "client").replace(/[^a-z0-9]+/gi, "-")}.pdf`);
     } catch (err) {
-      console.error("[Intake] Submit error:", err.message);
-      setError(err.message || "Something went wrong. Please try again.");
+      console.error("[Intake] PDF download failed:", err.message);
     }
-    setSubmitting(false);
   };
 
   return (
-    <div>
-      <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", padding: 20, marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          <Lock style={{ width: 14, height: 14, color: GOLD }} />
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>Secure Payment Method on File</span>
-        </div>
-        <p style={{ fontSize: 12.5, lineHeight: 1.7, color: "rgba(255,255,255,0.55)", marginBottom: 16 }}>
-          We save your payment information securely using Stripe. You will not be charged anything today.
-          A charge will only occur after you approve a proposal and sign a contract. This is simply to
-          streamline the process when you are ready to move forward.
+    <div className="min-h-screen flex items-center justify-center px-6 py-16" style={{ background: "#0a0a0a" }}>
+      <style>{`@keyframes pulseGold { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
+      <div className="max-w-lg w-full text-center">
+        <img src={novaLogo} alt="Nova Systems" style={{ width: 44, height: 44, objectFit: "contain", margin: "0 auto 20px" }} />
+        <CheckmarkAnimation />
+        <h1 style={{ fontSize: 30, fontWeight: 900, color: "#fff", marginTop: 22, marginBottom: 10 }}>You Are Officially In.</h1>
+        <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 14, lineHeight: 1.7, marginBottom: 36 }}>
+          Your Business Intelligence Assessment has been received and your spot is reserved.
         </p>
 
-        {stripePromise ? (
-          <div style={{ ...inp, padding: "16px" }}>
-            <CardElement
-              options={{
-                style: {
-                  base: {
-                    color: "#fff", fontSize: "14px", fontFamily: "inherit",
-                    "::placeholder": { color: "rgba(255,255,255,0.35)" },
-                  },
-                  invalid: { color: "#e05252" },
-                },
-              }}
-            />
-          </div>
-        ) : (
-          <p style={{ color: "#e0a552", fontSize: 12 }}>
-            Payment collection is not configured yet — you can still complete your intake and we'll follow up to collect payment details.
+        <div style={{ textAlign: "left", marginBottom: 32 }}>
+          {TIMELINE_STEPS.map((label, i) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: i === 0 ? GOLD : i === 1 ? "rgba(200,169,110,0.25)" : "rgba(255,255,255,0.06)",
+                  border: i <= 1 ? `1px solid ${GOLD}` : "1px solid rgba(255,255,255,0.15)",
+                  animation: i === 1 ? "pulseGold 1.6s ease-in-out infinite" : "none",
+                }}>
+                  {i === 0 && <Check style={{ width: 12, height: 12, color: "#0a0800" }} />}
+                </div>
+                {i < TIMELINE_STEPS.length - 1 && <div style={{ width: 1, height: 26, background: "rgba(255,255,255,0.12)" }} />}
+              </div>
+              <span style={{ fontSize: 13, color: i <= 1 ? "#fff" : "rgba(255,255,255,0.4)", fontWeight: i <= 1 ? 700 : 500, paddingBottom: 20 }}>
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ textAlign: "left", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: 20, marginBottom: 28 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: "#fff", marginBottom: 8 }}>What happens now</p>
+          <p style={{ fontSize: 12.5, lineHeight: 1.7, color: "rgba(255,255,255,0.55)" }}>
+            Within 3 to 5 business days our team will analyze your website, review your online presence,
+            identify revenue opportunities, research your competitors, build your custom implementation
+            roadmap, and prepare your proposal and service agreement.
           </p>
-        )}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            onClick={downloadPdf}
+            style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 28px", border: "1px solid rgba(255,255,255,0.15)", color: "#fff", borderRadius: 9, fontSize: 12, fontWeight: 700, background: "none", cursor: "pointer", fontFamily: "inherit" }}
+          >
+            <Download style={{ width: 14, height: 14 }} /> Download PDF of Your Responses
+          </button>
+          <Link to="/" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 28px", background: G, color: "#0a0800", borderRadius: 9, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+            Go to nova-systems.app <ArrowRight style={{ width: 14, height: 14 }} />
+          </Link>
+        </div>
       </div>
-
-      <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", marginBottom: 20 }}>
-        <span
-          onClick={() => setAgreed((a) => !a)}
-          style={{
-            width: 18, height: 18, borderRadius: 4, flexShrink: 0, marginTop: 2, display: "flex", alignItems: "center", justifyContent: "center",
-            background: agreed ? GOLD : "transparent", border: `1px solid ${agreed ? GOLD : "rgba(255,255,255,0.3)"}`,
-          }}
-        >
-          {agreed && <Check style={{ width: 12, height: 12, color: "#0a0800" }} />}
-        </span>
-        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ display: "none" }} />
-        <span style={{ fontSize: 12.5, lineHeight: 1.6, color: "rgba(255,255,255,0.55)" }}>
-          I have read and agree to the Terms of Service, Privacy Policy, and Service Agreement. I consent to be
-          contacted by Nova Systems and its AI systems via phone call, text message, WhatsApp, and email for
-          business purposes. I understand I can opt out at any time by replying STOP.
-        </span>
-      </label>
-
-      {error && <p style={{ color: "#e05252", fontSize: 12.5, marginBottom: 16 }}>{error}</p>}
-
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={submitting}
-        style={{
-          width: "100%", padding: "19px", fontSize: 13, fontWeight: 800,
-          letterSpacing: "0.12em", textTransform: "uppercase", borderRadius: 10, border: "none",
-          cursor: submitting ? "not-allowed" : "pointer",
-          background: submitting ? "#5a4d1e" : G,
-          color: "#0a0800",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-          fontFamily: "inherit",
-        }}
-      >
-        {submitting ? "Submitting..." : "Complete Intake"}
-      </button>
     </div>
   );
 }
 
-function DocCard({ title, desc, href }) {
+function IntroScreen({ onBegin }) {
   return (
-    <div style={{ borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", padding: 16, marginBottom: 10 }}>
-      <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 4 }}>{title}</p>
-      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 8 }}>{desc}</p>
-      <a href={href} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: GOLD, textDecoration: "none" }}>
-        View Full Document <ExternalLink style={{ width: 11, height: 11 }} />
-      </a>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center" style={{ background: "#0a0a0a" }}>
+      <style>{`@keyframes introFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <div style={{ maxWidth: 620, animation: "introFadeUp 0.7s ease-out" }}>
+        <img src={novaLogo} alt="Nova Systems" style={{ width: 64, height: 64, objectFit: "contain", margin: "0 auto 32px" }} />
+        <h1 style={{ fontSize: "clamp(28px, 5vw, 42px)", fontWeight: 900, color: "#fff", lineHeight: 1.15, marginBottom: 18 }}>
+          The Nova Business Intelligence Assessment.
+        </h1>
+        <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 15, lineHeight: 1.7, marginBottom: 32, maxWidth: 540, marginLeft: "auto", marginRight: "auto" }}>
+          This assessment gives our team and AI everything needed to analyze your business, identify every
+          revenue leak, and build your complete custom growth plan. Be as detailed as possible. The more you
+          share the better we build.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32, alignItems: "center" }}>
+          {["Takes 30 to 60 minutes.", "Your progress saves automatically.", "Your information is 100% secure and confidential."].map((t) => (
+            <div key={t} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: GOLD, flexShrink: 0 }} />
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{t}</span>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={onBegin}
+          style={{
+            padding: "18px 44px", fontSize: 13, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase",
+            borderRadius: 10, border: "none", cursor: "pointer", background: G, color: "#0a0800",
+            display: "inline-flex", alignItems: "center", gap: 10, fontFamily: "inherit",
+          }}
+        >
+          Begin Assessment <ArrowRight style={{ width: 15, height: 15 }} />
+        </button>
+
+        <p style={{ marginTop: 28, fontSize: 11, color: "rgba(255,255,255,0.3)", lineHeight: 1.6, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
+          This assessment is for businesses interested in Nova Systems services. Completing it does not
+          guarantee services will be provided. All information is used solely to prepare your custom proposal.
+        </p>
+      </div>
     </div>
   );
 }
 
 export default function Intake() {
+  const [searchParams] = useSearchParams();
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
   const [form, setForm] = useState(emptyForm());
-  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const loadedFromStorage = useRef(false);
+  const [savedFlashVisible, flashSaved] = useSavedFlash();
 
   useSEO({
-    title: "Business Intake — Nova Systems",
-    description: "Complete your full Nova Systems business intake so our team and AI can prepare your custom growth plan.",
+    title: "Business Intelligence Assessment — Nova Systems",
+    description: "Complete the Nova Business Intelligence Assessment so our team and AI can prepare your custom growth plan.",
   });
 
-  // Load saved progress on mount
+  // Load saved progress, else prefill from /welcome handoff query params.
   useEffect(() => {
+    let restored = false;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw);
-        if (saved.form) setForm({ ...emptyForm(), ...saved.form });
+        if (saved.form) { setForm({ ...emptyForm(), ...saved.form }); restored = true; }
         if (typeof saved.step === "number") setStep(saved.step);
         if (saved.started) setStarted(true);
       }
     } catch {
       // ignore corrupt storage
     }
-    loadedFromStorage.current = true;
-  }, []);
 
-  // Autosave progress
-  useEffect(() => {
-    if (!loadedFromStorage.current) return;
+    if (!restored) {
+      const name = searchParams.get("name");
+      const email = searchParams.get("email");
+      const phone = searchParams.get("phone");
+      const company = searchParams.get("company");
+      const website = searchParams.get("website");
+      const industry = searchParams.get("industry");
+      const lead_id = searchParams.get("lead_id");
+      if (name || email || phone || company || lead_id) {
+        setForm((f) => ({
+          ...f,
+          name: name || f.name, email: email || f.email, phone: phone || f.phone,
+          lead_id: lead_id || f.lead_id,
+          businesses: f.businesses.map((b, i) => (i === 0 ? {
+            ...b,
+            business_name: company || b.business_name,
+            website: website || b.website,
+            industry: INDUSTRIES.includes(industry) ? industry : b.industry,
+          } : b)),
+        }));
+      }
+    }
+    loadedFromStorage.current = true;
+  }, [searchParams]);
+
+  const saveProgress = useCallback(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ form, step, started }));
+      flashSaved();
     } catch {
       // storage full or unavailable — non-fatal
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, step, started]);
 
-  const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-  const setSocial = (patch) => setForm((f) => ({ ...f, social_media: { ...f.social_media, ...patch } }));
-  const setPlatform = (key, patch) => setForm((f) => ({
-    ...f, social_media: { ...f.social_media, [key]: { ...f.social_media[key], ...patch } },
-  }));
-  const setGoals = (patch) => setForm((f) => ({ ...f, goals: { ...f.goals, ...patch } }));
+  // Autosave every 30s while the assessment is in progress.
+  useEffect(() => {
+    if (!started) return;
+    const interval = setInterval(saveProgress, AUTOSAVE_MS);
+    return () => clearInterval(interval);
+  }, [started, saveProgress]);
 
-  const updateBusiness = (id, patch) => setForm((f) => ({
-    ...f, businesses: f.businesses.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-  }));
-  const addBusiness = () => setForm((f) => ({ ...f, businesses: [...f.businesses, emptyBusiness()] }));
-  const removeBusiness = (id) => setForm((f) => ({ ...f, businesses: f.businesses.filter((b) => b.id !== id) }));
+  // Also persist immediately whenever the step changes (covers back/forward nav + tab close).
+  useEffect(() => {
+    if (!loadedFromStorage.current) return;
+    saveProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, started]);
+
+  useEffect(() => {
+    document.body.style.background = "#0a0a0a";
+    return () => { document.body.style.background = ""; };
+  }, []);
+
+  const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const setSection = (key) => (patch) => setForm((f) => ({ ...f, [key]: { ...f[key], ...patch } }));
 
   const validateStep = () => {
     if (step === 0) {
@@ -355,6 +249,12 @@ export default function Intake() {
     }
     if (step === 1) {
       if (!form.businesses.some((b) => b.business_name.trim())) return "Please add at least one business name.";
+    }
+    if (step === 2 && form.story.business_story.trim().length < 500) {
+      return "Please write at least 500 characters about your business story.";
+    }
+    if (step === 6 && form.sales_process.journey.trim().length < 200) {
+      return "Please write at least 200 characters describing your sales process.";
     }
     return "";
   };
@@ -371,97 +271,79 @@ export default function Intake() {
     setStep((s) => Math.max(0, s - 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  const handleSuccess = () => {
-    setSubmitted(true);
-    try { localStorage.removeItem(STORAGE_KEY); } catch { /* non-fatal */ }
+  const goToStep = (idx) => {
+    setError("");
+    setStep(idx);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  useEffect(() => {
-    document.body.style.background = "#0a0a0a";
-    return () => { document.body.style.background = ""; };
-  }, []);
+  const handlePaymentContinue = (paymentPatch) => {
+    set(paymentPatch);
+    setStep(AGREEMENT_STEP);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-  // ── Submitted screen ────────────────────────────────────────────────────
-  if (submitted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0a0a0a" }}>
-        <div className="max-w-md w-full text-center">
-          <CheckmarkAnimation />
-          <h1 style={{ fontSize: 28, fontWeight: 900, color: "#fff", marginTop: 24, marginBottom: 14 }}>
-            Your Intake Is Complete.
-          </h1>
-          <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 14, lineHeight: 1.7, marginBottom: 32 }}>
-            Thank you, {form.name.split(" ")[0] || "there"}. Our team and AI are reviewing everything you shared.
-            Within 24 to 48 hours we'll send you your custom growth plan and reach out to schedule a time to
-            review it together. Check your email for a copy of your submission.
-          </p>
-          <Link to="/" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", background: G, color: "#0a0800", borderRadius: 9, fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
-            Return to nova-systems.app <ArrowRight style={{ width: 14, height: 14 }} />
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  const handleFinalSubmit = async () => {
+    const missingRequired = !form.agree_terms || !form.agree_privacy || !form.agree_audit_authorization
+      || !form.agree_no_services_until_signed || !form.agree_no_charge_today || !form.agree_cancellation_policy
+      || !form.ai_authorization;
+    if (missingRequired) { setError("Please check all required agreements before submitting."); return; }
+    if (!form.digital_signature.trim()) { setError("Please type your full legal name to sign."); return; }
 
-  // ── Intro screen ─────────────────────────────────────────────────────────
-  if (!started) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center" style={{ background: "#0a0a0a" }}>
-        <style>{`@keyframes introFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-        <div style={{ maxWidth: 620, animation: "introFadeUp 0.6s ease-out" }}>
-          <img src={novaLogo} alt="Nova Systems" style={{ width: 64, height: 64, objectFit: "contain", margin: "0 auto 32px" }} />
-          <h1 style={{ fontSize: "clamp(28px, 5vw, 42px)", fontWeight: 900, color: "#fff", lineHeight: 1.15, marginBottom: 18 }}>
-            Before We Build Anything We Need To Understand Everything.
-          </h1>
-          <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 15, lineHeight: 1.7, marginBottom: 32, maxWidth: 520, marginLeft: "auto", marginRight: "auto" }}>
-            This intake form helps our team and AI analyze your business, identify growth opportunities, and
-            prepare your custom proposal before we ever meet. Your information is secure and will never be shared.
-          </p>
+    setSubmitting(true);
+    setError("");
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 40, alignItems: "center" }}>
-            {["Takes about 30 minutes.", "Be as detailed as possible.", "The more we know the better we build."].map((t) => (
-              <div key={t} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 5, height: 5, borderRadius: "50%", background: GOLD, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{t}</span>
-              </div>
-            ))}
-          </div>
+    const submissionForm = { ...form, signature_date: new Date().toISOString().slice(0, 10) };
 
-          <button
-            onClick={() => setStarted(true)}
-            style={{
-              padding: "18px 44px", fontSize: 13, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase",
-              borderRadius: 10, border: "none", cursor: "pointer", background: G, color: "#0a0800",
-              display: "inline-flex", alignItems: "center", gap: 10, fontFamily: "inherit",
-            }}
-          >
-            Get Started <ArrowRight style={{ width: 15, height: 15 }} />
-          </button>
+    let pdf_base64 = "";
+    try {
+      const doc = generateIntakeSummaryPDF(submissionForm);
+      pdf_base64 = doc.output("datauristring");
+    } catch (err) {
+      console.warn("[Intake] PDF generation failed (non-fatal):", err.message);
+    }
 
-          <p style={{ marginTop: 28, fontSize: 11.5, color: "rgba(255,255,255,0.35)" }}>
-            If you need to stop and come back your progress is saved automatically.
-          </p>
-        </div>
-      </div>
-    );
-  }
+    try {
+      const res = await fetch("/api/business-intake?action=submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...submissionForm, pdf_base64 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Something went wrong submitting your assessment. Please try again.");
+
+      setForm(submissionForm);
+      setSubmitted(true);
+      try { localStorage.removeItem(STORAGE_KEY); } catch { /* non-fatal */ }
+    } catch (err) {
+      setError(err.message || "Something went wrong. Please try again.");
+    }
+    setSubmitting(false);
+  };
+
+  if (submitted) return <SuccessScreen form={form} />;
+  if (!started) return <IntroScreen onBegin={() => setStarted(true)} />;
 
   const progressPct = ((step + 1) / SECTION_TITLES.length) * 100;
+  const minutesRemaining = Math.max(2, (SECTION_TITLES.length - step) * 2);
 
   return (
     <div className="min-h-screen" style={{ background: "#0a0a0a" }}>
       <style>{`@keyframes intakeStepIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }`}</style>
 
-      {/* Sticky header + progress bar */}
       <div className="sticky top-0 z-40" style={{ background: "rgba(10,10,10,0.95)", backdropFilter: "blur(8px)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <img src={novaLogo} alt="Nova Systems" style={{ width: 26, height: 26, objectFit: "contain" }} />
           </Link>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: GOLD }}>
-            {step + 1} of {SECTION_TITLES.length}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.35)", transition: "opacity 0.3s", opacity: savedFlashVisible ? 1 : 0 }}>
+              Saved
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: GOLD }}>
+              Step {step + 1} of {SECTION_TITLES.length}
+            </span>
+          </div>
         </div>
         <div style={{ height: 3, background: "rgba(255,255,255,0.06)" }}>
           <div style={{ height: "100%", width: `${progressPct}%`, background: G, transition: "width 0.4s ease" }} />
@@ -470,218 +352,88 @@ export default function Intake() {
 
       <div className="max-w-2xl mx-auto px-6 py-14">
         <p style={{ color: GOLD, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: 8 }}>
-          Section {step + 1} of {SECTION_TITLES.length}
+          Step {step + 1} of {SECTION_TITLES.length} &middot; ~{minutesRemaining} min remaining
         </p>
         <h1 style={{ fontSize: 26, fontWeight: 900, color: "#fff", marginBottom: 32 }}>{SECTION_TITLES[step]}</h1>
 
         <div key={step} style={{ animation: "intakeStepIn 0.35s ease-out", display: "flex", flexDirection: "column", gap: 20 }}>
 
-          {/* ── Section 1: About You ── */}
           {step === 0 && (
             <>
               <Field label="Full Name" required>
-                <input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="Your full name" style={inp} />
+                <TextInput value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="Your full name" />
               </Field>
               <Field label="Email Address" required>
-                <input type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="your@email.com" style={inp} />
+                <TextInput type="email" value={form.email} onChange={(e) => set({ email: e.target.value })} placeholder="your@email.com" />
               </Field>
               <Field label="Phone Number" required>
-                <input type="tel" value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="(203) 000-0000" style={inp} />
+                <TextInput type="tel" value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="(203) 000-0000" />
               </Field>
               <Field label="Best Time to Contact">
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {BEST_TIMES.map((t) => <Pill key={t} selected={form.best_time === t} onClick={() => set({ best_time: t })}>{t}</Pill>)}
-                </div>
+                <PillGroup value={form.best_time} onChange={(v) => set({ best_time: v })} options={BEST_TIMES} />
               </Field>
               <Field label="Preferred Contact Method">
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {CONTACT_METHODS.map((m) => <Pill key={m} selected={form.preferred_contact === m} onClick={() => set({ preferred_contact: m })}>{m}</Pill>)}
-                </div>
+                <PillGroup value={form.preferred_contact} onChange={(v) => set({ preferred_contact: v })} options={CONTACT_METHODS} />
               </Field>
             </>
           )}
 
-          {/* ── Section 2: Your Business ── */}
-          {step === 1 && (
-            <>
-              {form.businesses.map((biz, i) => (
-                <div key={biz.id} style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: 20, position: "relative" }}>
-                  {form.businesses.length > 1 && (
-                    <button type="button" onClick={() => removeBusiness(biz.id)} style={{ position: "absolute", top: 14, right: 14, background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)" }}>
-                      <X style={{ width: 16, height: 16 }} />
-                    </button>
-                  )}
-                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: GOLD, marginBottom: 16 }}>
-                    Business {i + 1}
-                  </p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                    <Field label="Business Name" required={i === 0}>
-                      <input value={biz.business_name} onChange={(e) => updateBusiness(biz.id, { business_name: e.target.value })} placeholder="Your business name" style={inp} />
-                    </Field>
-                    <Field label="Industry">
-                      <Select value={biz.industry} onChange={(e) => updateBusiness(biz.id, { industry: e.target.value })} options={INDUSTRIES} />
-                    </Field>
-                    <Field label="Business Address">
-                      <input value={biz.address} onChange={(e) => updateBusiness(biz.id, { address: e.target.value })} placeholder="Street, City, State" style={inp} />
-                    </Field>
-                    <Field label="Website URL">
-                      <input value={biz.website} onChange={(e) => updateBusiness(biz.id, { website: e.target.value })} placeholder="yourbusiness.com" style={inp} />
-                    </Field>
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <Field label="How Long In Business">
-                        <input value={biz.time_in_business} onChange={(e) => updateBusiness(biz.id, { time_in_business: e.target.value })} placeholder="e.g. 3 years" style={inp} />
-                      </Field>
-                      <Field label="Number of Employees">
-                        <input value={biz.employee_count} onChange={(e) => updateBusiness(biz.id, { employee_count: e.target.value })} placeholder="e.g. 5" style={inp} />
-                      </Field>
-                    </div>
-                    <Field label="Monthly Revenue Range">
-                      <Select value={biz.monthly_revenue} onChange={(e) => updateBusiness(biz.id, { monthly_revenue: e.target.value })} options={REVENUE_RANGES} />
-                    </Field>
-                    <Field label="Number of Locations">
-                      <input value={biz.locations} onChange={(e) => updateBusiness(biz.id, { locations: e.target.value })} placeholder="e.g. 1" style={inp} />
-                    </Field>
-                  </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={addBusiness}
-                style={{
-                  display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  padding: "13px", borderRadius: 8, border: `1px dashed rgba(212,160,48,0.4)`,
-                  background: "transparent", color: GOLD, fontSize: 12.5, fontWeight: 700,
-                  cursor: "pointer", fontFamily: "inherit",
-                }}
-              >
-                <Plus style={{ width: 14, height: 14 }} /> Add Another Business
-              </button>
-            </>
+          {step === 1 && <BusinessesSection businesses={form.businesses} onChange={(list) => set({ businesses: list })} />}
+          {step === 2 && <SimpleSection config={STORY_FIELDS} data={form.story} onChange={setSection("story")} />}
+          {step === 3 && <SimpleSection config={GOALS_FIELDS} data={form.goals} onChange={setSection("goals")} />}
+          {step === 4 && <SimpleSection config={CUSTOMERS_FIELDS} data={form.customers} onChange={setSection("customers")} />}
+          {step === 5 && <ServicesSection services={form.services} onChange={(list) => set({ services: list })} />}
+          {step === 6 && <SimpleSection config={SALES_PROCESS_FIELDS} data={form.sales_process} onChange={setSection("sales_process")} />}
+
+          {step === 7 && (
+            <ChecklistSection options={MARKETING_PLATFORMS} data={form.marketing} onChange={(v) => set({ marketing: v })} detailFields={MARKETING_DETAIL_FIELDS} />
+          )}
+          {step === 8 && (
+            <ChecklistSection options={TECH_TOOLS} data={form.technology} onChange={(v) => set({ technology: v })} detailFields={TECHNOLOGY_DETAIL_FIELDS} />
+          )}
+          {step === 9 && (
+            <ChecklistSection options={COMM_CHANNELS} data={form.communication} onChange={(v) => set({ communication: v })} detailFields={COMMUNICATION_DETAIL_FIELDS} />
           )}
 
-          {/* ── Section 3: Social Media ── */}
-          {step === 2 && (
-            <>
-              {SOCIAL_PLATFORMS.map((p) => (
-                <div key={p.key} className="grid sm:grid-cols-2 gap-4">
-                  <Field label={`${p.label} Handle`}>
-                    <input value={form.social_media[p.key].handle} onChange={(e) => setPlatform(p.key, { handle: e.target.value })} placeholder="@yourbusiness" style={inp} />
-                  </Field>
-                  <Field label="Approx. Followers">
-                    <input value={form.social_media[p.key].followers} onChange={(e) => setPlatform(p.key, { followers: e.target.value })} placeholder="e.g. 2,500" style={inp} />
-                  </Field>
-                </div>
-              ))}
-
-              <Field label="Do You Currently Run Paid Ads?">
-                <div style={{ display: "flex", gap: 8 }}>
-                  <Pill selected={form.social_media.paid_ads.running === true} onClick={() => setSocial({ paid_ads: { ...form.social_media.paid_ads, running: true } })}>Yes</Pill>
-                  <Pill selected={form.social_media.paid_ads.running === false} onClick={() => setSocial({ paid_ads: { ...form.social_media.paid_ads, running: false } })}>No</Pill>
-                </div>
-              </Field>
-
-              {form.social_media.paid_ads.running && (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <Field label="Which Platforms">
-                    <input value={form.social_media.paid_ads.platforms} onChange={(e) => setSocial({ paid_ads: { ...form.social_media.paid_ads, platforms: e.target.value } })} placeholder="e.g. Facebook, Google" style={inp} />
-                  </Field>
-                  <Field label="Monthly Ad Spend">
-                    <input value={form.social_media.paid_ads.spend} onChange={(e) => setSocial({ paid_ads: { ...form.social_media.paid_ads, spend: e.target.value } })} placeholder="e.g. $500" style={inp} />
-                  </Field>
-                </div>
-              )}
-
-              <Field label="Do You Have a Google Business Profile?">
-                <div style={{ display: "flex", gap: 8 }}>
-                  {["Yes", "No", "Not Sure"].map((o) => (
-                    <Pill key={o} selected={form.social_media.google_business === o} onClick={() => setSocial({ google_business: o })}>{o}</Pill>
-                  ))}
-                </div>
-              </Field>
-
-              <Field label="Current Google Rating (if known)">
-                <input value={form.social_media.google_rating} onChange={(e) => setSocial({ google_rating: e.target.value })} placeholder="e.g. 4.6 stars" style={inp} />
-              </Field>
-            </>
+          {step === 10 && <SimpleSection config={TEAM_FIELDS} data={form.team} onChange={setSection("team")} />}
+          {step === 11 && <SimpleSection config={REPUTATION_FIELDS} data={form.reputation} onChange={setSection("reputation")} />}
+          {step === 12 && (
+            <SimpleSection
+              config={FINANCIALS_FIELDS} data={form.financials} onChange={setSection("financials")}
+              hint="These are optional ranges only. No exact numbers required."
+            />
+          )}
+          {step === 13 && <CompetitorsSection competitors={form.competitors} onChange={(v) => set({ competitors: v })} />}
+          {step === 14 && (
+            <SimpleSection
+              config={AI_KNOWLEDGE_FIELDS} data={form.ai_knowledge} onChange={setSection("ai_knowledge")}
+              hint="Help us train your AI. This information will be used to set up your Nova AI agents so they answer exactly like your business would."
+            />
+          )}
+          {step === 15 && <DocumentUploadSection documentUrls={form.document_urls} onChange={(v) => set({ document_urls: v })} email={form.email} />}
+          {step === 16 && (
+            <SimpleSection
+              config={FINAL_QUESTIONS_FIELDS} data={form.final_questions} onChange={setSection("final_questions")}
+              hint="The most important questions. These reveal where the biggest opportunities are."
+            />
           )}
 
-          {/* ── Section 4: Goals & Challenges ── */}
-          {step === 3 && (
-            <>
-              <Field label="What is your biggest business challenge right now?">
-                <textarea rows={4} value={form.goals.biggest_challenge} onChange={(e) => setGoals({ biggest_challenge: e.target.value })} style={{ ...inp, resize: "vertical" }} />
-              </Field>
-              <Field label="What is your revenue goal in the next 12 months?">
-                <input value={form.goals.revenue_goal_12mo} onChange={(e) => setGoals({ revenue_goal_12mo: e.target.value })} style={inp} />
-              </Field>
-              <Field label="What does your dream business look like in 3 years?">
-                <textarea rows={4} value={form.goals.dream_vision_3yr} onChange={(e) => setGoals({ dream_vision_3yr: e.target.value })} style={{ ...inp, resize: "vertical" }} />
-              </Field>
-              <Field label="Where do you want to expand geographically?">
-                <input value={form.goals.expansion_goals} onChange={(e) => setGoals({ expansion_goals: e.target.value })} style={inp} />
-              </Field>
-              <Field label="What have you tried before that did not work?">
-                <textarea rows={4} value={form.goals.tried_before} onChange={(e) => setGoals({ tried_before: e.target.value })} style={{ ...inp, resize: "vertical" }} />
-              </Field>
-              <Field label="Why are you reaching out to Nova Systems now?">
-                <textarea rows={4} value={form.goals.why_now} onChange={(e) => setGoals({ why_now: e.target.value })} style={{ ...inp, resize: "vertical" }} />
-              </Field>
-            </>
+          {step === REVIEW_STEP && <ReviewSection form={form} goToStep={goToStep} />}
+
+          {step === PAYMENT_STEP && (
+            <Elements stripe={stripePromise}>
+              <PaymentSection form={form} onContinue={handlePaymentContinue} />
+            </Elements>
           )}
 
-          {/* ── Section 5: Budget & Timeline ── */}
-          {step === 4 && (
-            <>
-              <Field label="Monthly Budget Range for Nova Systems Services">
-                <Select value={form.budget_range} onChange={(e) => set({ budget_range: e.target.value })} options={BUDGET_RANGES} />
-              </Field>
-              <Field label="When Do You Want to Get Started?">
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {TIMELINES.map((t) => <Pill key={t} selected={form.timeline === t} onClick={() => set({ timeline: t })}>{t}</Pill>)}
-                </div>
-              </Field>
-              <Field label="How Did You Hear About Nova Systems?">
-                <Select value={form.referral_source} onChange={(e) => set({ referral_source: e.target.value })} options={REFERRAL_SOURCES} />
-              </Field>
-              {form.referral_source === "Referral" && (
-                <Field label="Who Referred You?">
-                  <input value={form.referrer_name} onChange={(e) => set({ referrer_name: e.target.value })} style={inp} />
-                </Field>
-              )}
-            </>
-          )}
-
-          {/* ── Section 6: Agreement & Payment ── */}
-          {step === 5 && (
-            <>
-              <p style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", marginTop: -12, marginBottom: 4 }}>
-                Almost done. Two final steps.
-              </p>
-
-              <div>
-                <p style={{ fontSize: 12, fontWeight: 700, color: "#fff", marginBottom: 12 }}>Step 1 — Review &amp; Agree</p>
-                <DocCard title="Terms of Service" desc="The rules and guidelines for working with Nova Systems." href="/terms" />
-                <DocCard title="Privacy Policy" desc="How we collect, use, and protect your information." href="/privacy" />
-                <DocCard title="Service Agreement" desc="The standard agreement for Nova Systems client engagements." href="/service-agreement" />
-              </div>
-
-              <div>
-                <p style={{ fontSize: 12, fontWeight: 700, color: "#fff", marginBottom: 12 }}>Step 2 — Payment Method</p>
-                {stripePromise ? (
-                  <Elements stripe={stripePromise}>
-                    <PaymentAndSubmit form={form} agreed={agreed} setAgreed={setAgreed} onSuccess={handleSuccess} />
-                  </Elements>
-                ) : (
-                  <PaymentAndSubmit form={form} agreed={agreed} setAgreed={setAgreed} onSuccess={handleSuccess} />
-                )}
-              </div>
-            </>
+          {step === AGREEMENT_STEP && (
+            <AgreementSection form={form} onChange={set} onSubmit={handleFinalSubmit} submitting={submitting} error={error} />
           )}
         </div>
 
-        {error && <p style={{ color: "#e05252", fontSize: 12.5, marginTop: 20 }}>{error}</p>}
+        {error && step !== AGREEMENT_STEP && <p style={{ color: "#e05252", fontSize: 12.5, marginTop: 20 }}>{error}</p>}
 
-        {step < SECTION_TITLES.length - 1 && (
+        {step < REVIEW_STEP && (
           <div className="flex items-center justify-between mt-10">
             <button
               onClick={back}
@@ -705,22 +457,25 @@ export default function Intake() {
                 fontFamily: "inherit",
               }}
             >
-              Next <ArrowRight style={{ width: 14, height: 14 }} />
+              {step === REVIEW_STEP - 1 ? "Review" : "Next"} <ArrowRight style={{ width: 14, height: 14 }} />
             </button>
           </div>
         )}
 
-        {step === 5 && (
-          <div className="mt-10">
-            <button
-              onClick={back}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 0",
-                fontSize: 11.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
-                borderRadius: 8, border: "none", background: "none", fontFamily: "inherit",
-                color: "rgba(255,255,255,0.6)", cursor: "pointer",
-              }}
-            >
+        {step === REVIEW_STEP && (
+          <div className="flex items-center justify-between mt-10">
+            <button onClick={back} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 20px", fontSize: 11.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", borderRadius: 8, border: "none", background: "none", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontFamily: "inherit" }}>
+              <ArrowLeft style={{ width: 14, height: 14 }} /> Back
+            </button>
+            <button onClick={next} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", borderRadius: 9, border: "none", background: G, color: "#0a0800", cursor: "pointer", fontFamily: "inherit" }}>
+              Continue to Payment <ArrowRight style={{ width: 14, height: 14 }} />
+            </button>
+          </div>
+        )}
+
+        {(step === PAYMENT_STEP || step === AGREEMENT_STEP) && (
+          <div className="mt-6">
+            <button onClick={back} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 0", fontSize: 11.5, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", border: "none", background: "none", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontFamily: "inherit" }}>
               <ArrowLeft style={{ width: 14, height: 14 }} /> Back
             </button>
           </div>

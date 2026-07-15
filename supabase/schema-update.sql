@@ -378,19 +378,33 @@ INSERT INTO nova_ai_settings (key, value) VALUES ('wave_one_spots_remaining', '7
 ON CONFLICT (key) DO NOTHING;
 
 -- ── LEADS (public /welcome quick-contact form) ───────────────────────────────
+-- Column names below match the current /welcome form + api/notify.js (?action=welcome-lead).
+-- Legacy columns full_name / company_name / service_interest are kept (not dropped) in case
+-- older rows or code still reference them, but new writes go to name / company / industry etc.
 CREATE TABLE IF NOT EXISTS leads (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  full_name TEXT NOT NULL,
+  full_name TEXT,
   email TEXT NOT NULL,
   phone TEXT NOT NULL,
   company_name TEXT,
-  service_interest TEXT,  -- Website | Social Media | AI Automation | Full Wave One | Not Sure
+  service_interest TEXT,
   agreed_to_terms BOOLEAN DEFAULT FALSE,
   status TEXT DEFAULT 'new',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS company TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS website TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS industry TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS challenge TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS goal TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS sms_consent BOOLEAN DEFAULT FALSE;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS email_consent BOOLEAN DEFAULT FALSE;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS call_consent BOOLEAN DEFAULT FALSE;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS intake_completed BOOLEAN DEFAULT FALSE;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS intake_submission_id UUID;
 
--- ── INTAKE SUBMISSIONS (public /intake full business intake form) ───────────
+-- ── INTAKE SUBMISSIONS (public /intake — 20-step Business Intelligence Assessment) ──
 CREATE TABLE IF NOT EXISTS intake_submissions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT,
@@ -411,6 +425,32 @@ CREATE TABLE IF NOT EXISTS intake_submissions (
   status TEXT DEFAULT 'new',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Links back to the originating /welcome lead, when the client arrived via that funnel.
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS lead_id UUID REFERENCES leads(id);
+-- One JSONB column per assessment section (sections 3-17 of the 20-step form).
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS story JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS customers JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS services JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS sales_process JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS marketing JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS technology JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS communication JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS team JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS reputation JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS financials JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS competitors JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS ai_knowledge JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS final_questions JSONB;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS document_urls JSONB;
+-- Section 19 (Reserve Your Spot) — set when the client skips adding a card.
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS no_card_on_file BOOLEAN DEFAULT FALSE;
+-- Section 20 (Agreements & Signature).
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS ai_authorization BOOLEAN DEFAULT FALSE;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS digital_signature TEXT;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS signature_date DATE;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS sms_consent BOOLEAN DEFAULT FALSE;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS email_consent BOOLEAN DEFAULT FALSE;
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS call_consent BOOLEAN DEFAULT FALSE;
 
 -- ── NOVA AI AUDITS (contact/business record used by Nova AI for follow-up) ──
 CREATE TABLE IF NOT EXISTS nova_ai_audits (
@@ -428,9 +468,13 @@ CREATE TABLE IF NOT EXISTS nova_ai_audits (
 );
 
 -- ── STORAGE BUCKETS (create manually in Supabase Studio → Storage) ──────────
--- portfolio   (public)  — homepage/portfolio images
--- portfolios  (private) — job-applicant portfolio uploads, path: [applicant_email]/[file]
--- nova-vault  (private) — contracts, invoices, client files
+-- portfolio         (public)  — homepage/portfolio images
+-- portfolios        (private) — job-applicant portfolio uploads, path: [applicant_email]/[file]
+-- nova-vault        (private) — contracts, invoices, client files
 --   nova-vault/contracts/[client_id]/
 --   nova-vault/invoices/[client_id]/
 --   nova-vault/files/[client_id]/
+-- nova-intake-files (public)  — /intake section 16 document uploads (logos, price lists,
+--                                photos, brand guides, etc.), path: [email]/[category]/[timestamp]-[filename]
+--                                Public read so confirmation emails/dashboard can link directly;
+--                                writes go through the service-role key only (api/business-intake.js).

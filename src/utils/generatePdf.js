@@ -73,52 +73,218 @@ export function generateLegalPDF({ title, effectiveDate, sections }) {
   return doc
 }
 
-// Full Q&A summary of an /intake submission, attached to the confirmation email.
+// Gold rule + all-caps label marking the start of a new assessment section.
+function sectionHeading(doc, text, y) {
+  if (y > 260) { doc.addPage(); y = 24 }
+  y += 4
+  doc.setDrawColor(...GOLD)
+  doc.setLineWidth(0.6)
+  doc.line(14, y, 196, y)
+  y += 8
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12.5)
+  doc.setTextColor(...GOLD)
+  doc.text(text.toUpperCase(), 14, y)
+  y += 8
+  return y
+}
+
+// Renders every checked item in a checklist-with-details section (marketing /
+// technology / communication) as one line, e.g. "Instagram (frequency: Daily, happy: Yes)".
+function checklistSummary(obj) {
+  const entries = Object.entries(obj || {}).filter(([, v]) => v?.active)
+  if (!entries.length) return 'None selected'
+  return entries.map(([label, v]) => {
+    const details = Object.entries(v).filter(([k]) => k !== 'active' && v[k])
+      .map(([k, dv]) => `${k}: ${dv}`).join(', ')
+    return details ? `${label} (${details})` : label
+  }).join('\n')
+}
+
+// Full Q&A summary of a /intake (Nova Business Intelligence Assessment) submission,
+// attached to the confirmation email and offered as a download on the success screen.
 export function generateIntakeSummaryPDF(data) {
   const doc = new jsPDF()
-  header(doc, 'Business Intake Summary')
+  header(doc, 'Business Intelligence Assessment')
 
   let y = 54
   const row = (label, value) => { y = addSection(doc, label, value || '(not provided)', y) }
 
+  y = sectionHeading(doc, '1. About You', y)
   row('Full Name', data.name)
   row('Email', data.email)
   row('Phone', data.phone)
-  row('Preferred Contact Method', data.preferred_contact)
   row('Best Time to Contact', data.best_time)
+  row('Preferred Contact Method', data.preferred_contact)
 
+  y = sectionHeading(doc, '2. Your Business', y)
   ;(data.businesses || []).forEach((biz, i) => {
-    y = addSection(doc, `Business ${i + 1}: ${biz.business_name || ''}`, '', y)
-    row('Industry', biz.industry)
+    row(`Business ${i + 1}`, [biz.business_name, biz.industry].filter(Boolean).join(' — '))
     row('Address', biz.address)
     row('Website', biz.website)
-    row('Time in Business', biz.time_in_business)
+    row('Years in Business', biz.years_in_business)
     row('Employees', biz.employee_count)
-    row('Monthly Revenue', biz.monthly_revenue)
     row('Locations', biz.locations)
+    row('Monthly Revenue', biz.monthly_revenue)
   })
 
-  const sm = data.social_media || {}
-  const platformLine = (p, key) => `${key}: ${sm[p]?.handle || '—'} (${sm[p]?.followers || '0'} followers)`
-  row('Social Media', ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'twitter']
-    .map((p) => platformLine(p, p[0].toUpperCase() + p.slice(1))).join('\n'))
-  row('Paid Ads', sm.paid_ads?.running ? `Yes — ${sm.paid_ads.platforms || ''} ($${sm.paid_ads.spend || '0'}/mo)` : 'No')
-  row('Google Business Profile', sm.google_business)
-  row('Google Rating', sm.google_rating)
+  const story = data.story || {}
+  y = sectionHeading(doc, '3. Your Story', y)
+  row('Business Story', story.business_story)
+  row('Why Started', story.why_started)
+  row('Differentiation', story.differentiation)
+  row('Strengths', story.strengths)
+  row('Weaknesses', story.weaknesses)
+  row('Proudest', story.proudest)
+  row('Compliments', story.compliments)
+  row('Frustrations', story.frustrations)
 
-  const g = data.goals || {}
-  row('Biggest Challenge', g.biggest_challenge)
-  row('12-Month Revenue Goal', g.revenue_goal_12mo)
-  row('3-Year Vision', g.dream_vision_3yr)
-  row('Expansion Goals', g.expansion_goals)
-  row('What Has Not Worked Before', g.tried_before)
-  row('Why Reaching Out Now', g.why_now)
+  const goals = data.goals || {}
+  y = sectionHeading(doc, '4. Your Goals', y)
+  row('12-Month Revenue Goal', goals.revenue_goal_12mo)
+  row('Customer Goal', goals.customer_goal)
+  row('Employee Goal', goals.employee_goal)
+  row('Biggest Challenge', goals.biggest_challenge)
+  row('Biggest Opportunity', goals.biggest_opportunity)
+  row('One Problem to Solve', goals.one_problem_to_solve)
+  row('Success in 1 Year', goals.success_1yr)
+  row('Success in 3 Years', goals.success_3yr)
 
-  row('Monthly Budget Range', data.budget_range)
-  row('Start Timeline', data.timeline)
-  row('Referral Source', data.referral_source)
+  const customers = data.customers || {}
+  y = sectionHeading(doc, '5. Your Customers', y)
+  row('Ideal Customer', customers.ideal_customer)
+  row('Not Ideal Customer', customers.not_ideal_customer)
+  row('Average Age Range', customers.avg_age_range)
+  row('Geography', customers.geography)
+  row('Average Order Value', customers.avg_order_value)
+  row('Repeat or One-Time', customers.repeat_or_one_time)
+  row('Why They Buy', customers.why_buy)
+  row('Why They Leave', customers.why_leave)
+  row('Objections', customers.objections)
+  row('Lose Customers To', customers.lose_to)
 
-  footer(doc, 'Business Intake Summary')
+  y = sectionHeading(doc, '6. Products & Services', y)
+  ;(data.services || []).forEach((svc, i) => {
+    row(`Service ${i + 1}`, [svc.name, svc.price].filter(Boolean).join(' — '))
+    row('Best Seller', svc.best_seller)
+    row('Highest Profit', svc.highest_profit)
+    row('Wish Sold More', svc.wish_sold_more)
+    row('Seasonal', svc.seasonal)
+    row('Delivery Time', svc.delivery_time)
+    row('Upsells', svc.upsells)
+    row('Common Questions', svc.common_questions)
+  })
+
+  const sp = data.sales_process || {}
+  y = sectionHeading(doc, '7. Sales Process', y)
+  row('Journey', sp.journey)
+  row('How Found', sp.how_found)
+  row('After Call', sp.after_call)
+  row('After Email', sp.after_email)
+  row('After Form', sp.after_form)
+  row('Who Follows Up', sp.who_follows_up)
+  row('Follow-Up Time', sp.follow_up_time)
+  row('Software Used', sp.software_used)
+  row('People Involved', sp.people_involved)
+  row('Where Leads Disappear', sp.where_leads_disappear)
+
+  y = sectionHeading(doc, '8. Marketing', y)
+  row('Platforms', checklistSummary(data.marketing))
+
+  y = sectionHeading(doc, '9. Technology', y)
+  row('Tools', checklistSummary(data.technology))
+
+  y = sectionHeading(doc, '10. Communication', y)
+  row('Channels', checklistSummary(data.communication))
+
+  const team = data.team || {}
+  y = sectionHeading(doc, '11. Team', y)
+  row('Full Time Employees', team.full_time_count)
+  row('Part Time Employees', team.part_time_count)
+  row('Who Answers Phones', team.who_answers_phones)
+  row('Who Replies to Emails', team.who_replies_emails)
+  row('Who Handles Social', team.who_handles_social)
+  row('Who Books Appointments', team.who_books_appointments)
+  row('Biggest Time Waster', team.biggest_time_waster)
+  row('Biggest Training Issue', team.biggest_training_issue)
+  row('Well Trained', team.well_trained)
+  row('Hire First For', team.hire_first_for)
+
+  const rep = data.reputation || {}
+  y = sectionHeading(doc, '12. Reputation', y)
+  row('Google Rating', rep.google_rating)
+  row('Google Review Count', rep.google_review_count)
+  row('Facebook Rating', rep.facebook_rating)
+  row('Common Complaint', rep.common_complaint)
+  row('Common Compliment', rep.common_compliment)
+  row('Review Ask Method', rep.review_ask_method)
+  row('Respond to Reviews', rep.respond_to_reviews)
+  row('Lost Customer to Review', rep.lost_customer_to_review)
+
+  const fin = data.financials || {}
+  y = sectionHeading(doc, '13. Financial Snapshot', y)
+  row('Monthly Revenue Range', fin.monthly_revenue_range)
+  row('Average Sale Range', fin.avg_sale_range)
+  row('New Customers / Month', fin.new_customers_per_month)
+  row('Repeat Customers / Month', fin.repeat_customers_per_month)
+  row('Marketing Budget', fin.marketing_budget)
+  row('Biggest Expense', fin.biggest_expense)
+  row('Highest Profit Item', fin.highest_profit_item)
+  row('Lowest Profit Item', fin.lowest_profit_item)
+
+  const comp = data.competitors || {}
+  y = sectionHeading(doc, '14. Competitors', y)
+  row('Listed Competitors', (comp.list || []).map((c) => [c.name, c.website].filter(Boolean).join(' — ')).filter(Boolean).join('\n'))
+  row('Admire Who', comp.admire_who)
+  row('Admire Why', comp.admire_why)
+  row('Biggest Threat', comp.threat_who)
+  row('Threat Why', comp.threat_why)
+  row('What They Do Better', comp.what_they_do_better)
+  row('What We Do Better', comp.what_we_do_better)
+  row('Path to #1', comp.path_to_number_one)
+
+  const ai = data.ai_knowledge || {}
+  y = sectionHeading(doc, '15. AI Knowledge Base', y)
+  row('Pricing', ai.pricing)
+  row('Policies', ai.policies)
+  row('Guarantees', ai.guarantees)
+  row('Refund Policy', ai.refund_policy)
+  row('Common Q&A', ai.common_qa)
+  row('Brand Personality', ai.brand_personality)
+  row('Never Say', ai.never_say)
+  row('Always Say', ai.always_say)
+  row('Hours', ai.hours)
+  row('Emergency Contact', ai.emergency_contact)
+
+  y = sectionHeading(doc, '16. Document Uploads', y)
+  const docCount = Object.values(data.document_urls || {}).reduce((n, arr) => n + (arr?.length || 0), 0)
+  row('Files Uploaded', `${docCount} file${docCount === 1 ? '' : 's'}`)
+
+  const fq = data.final_questions || {}
+  y = sectionHeading(doc, '17. Final Questions', y)
+  row('Fix One Thing', fq.fix_one_thing)
+  row('Losing Money Where', fq.losing_money_where)
+  row('Time Waster', fq.time_waster)
+  row('Extra Employee Task', fq.extra_employee_task)
+  row('Phone 50 More Calls', fq.phone_50_more_calls)
+  row('Secret Shopper Criticism', fq.secret_shopper_criticism)
+  row('Keeps Up At Night', fq.keeps_up_at_night)
+  row('Tried Before', fq.tried_before)
+  row('Worth It Definition', fq.worth_it_definition)
+
+  y = sectionHeading(doc, '19. Reserve Your Spot', y)
+  row('Card on File', data.no_card_on_file ? 'No' : 'Yes')
+
+  y = sectionHeading(doc, '20. Agreements & Signature', y)
+  row('Signed By', data.digital_signature)
+  row('Signature Date', data.signature_date)
+  if (data.signature_image) {
+    if (y > 250) { doc.addPage(); y = 24 }
+    try { doc.addImage(data.signature_image, 'PNG', 14, y, 70, 24) } catch { /* ignore malformed image */ }
+    y += 30
+  }
+
+  footer(doc, 'Business Intelligence Assessment')
   return doc
 }
 
