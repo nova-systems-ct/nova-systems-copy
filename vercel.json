@@ -10,7 +10,7 @@
         {"key": "Referrer-Policy", "value": "strict-origin-when-cross-origin"},
         {"key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()"},
         {"key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload"},
-        {"key": "Content-Security-Policy", "value": "default-src 'self' https://mokyqxfgvdxajxytkcat.supabase.co https://api.resend.com https://api.anthropic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://mokyqxfgvdxajxytkcat.supabase.co https://api.resend.com https://api.anthropic.com;"},
+        {"key": "Content-Security-Policy", "value": "default-src 'self' https://mokyqxfgvdxajxytkcat.supabase.co https://api.resend.com https://api.anthropic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; frame-src 'self' https://js.stripe.com https://hooks.stripe.com; connect-src 'self' https://mokyqxfgvdxajxytkcat.supabase.co https://api.resend.com https://api.anthropic.com https://api.stripe.com;"},
         {"key": "X-DNS-Prefetch-Control", "value": "on"},
         {"key": "Cross-Origin-Opener-Policy", "value": "same-origin"},
         {"key": "Cross-Origin-Resource-Policy", "value": "same-origin"}

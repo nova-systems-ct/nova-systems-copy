@@ -19,6 +19,109 @@ function header(doc, title) {
   doc.text(title, 14, 44)
 }
 
+function footer(doc, pageLabel) {
+  const pageCount = doc.internal.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setTextColor(150, 150, 150)
+    doc.text(`Nova Systems  ·  nova-systems.app  ·  ${pageLabel}`, 14, 290)
+    doc.text(`Page ${i} of ${pageCount}`, 182, 290)
+  }
+}
+
+// Adds a heading + wrapped body paragraph, paginating as needed. Returns the new y.
+function addSection(doc, heading, body, y) {
+  if (y > 265) { doc.addPage(); y = 24 }
+  if (heading) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(11)
+    doc.setTextColor(30, 30, 30)
+    doc.text(heading, 14, y)
+    y += 7
+  }
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9.5)
+  doc.setTextColor(60, 60, 60)
+  const lines = doc.splitTextToSize(String(body || ''), 182)
+  for (const line of lines) {
+    if (y > 280) { doc.addPage(); y = 24 }
+    doc.text(line, 14, y)
+    y += 5.2
+  }
+  return y + 6
+}
+
+// Generic legal-document generator for /terms, /privacy, /service-agreement.
+// sections: [{ heading, body }]
+export function generateLegalPDF({ title, effectiveDate, sections }) {
+  const doc = new jsPDF()
+  header(doc, title)
+
+  let y = 54
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(120, 120, 120)
+  doc.text(`Effective Date: ${effectiveDate || new Date().toLocaleDateString()}`, 14, y)
+  y += 10
+
+  for (const s of sections || []) {
+    y = addSection(doc, s.heading, s.body, y)
+  }
+
+  footer(doc, title)
+  return doc
+}
+
+// Full Q&A summary of an /intake submission, attached to the confirmation email.
+export function generateIntakeSummaryPDF(data) {
+  const doc = new jsPDF()
+  header(doc, 'Business Intake Summary')
+
+  let y = 54
+  const row = (label, value) => { y = addSection(doc, label, value || '(not provided)', y) }
+
+  row('Full Name', data.name)
+  row('Email', data.email)
+  row('Phone', data.phone)
+  row('Preferred Contact Method', data.preferred_contact)
+  row('Best Time to Contact', data.best_time)
+
+  ;(data.businesses || []).forEach((biz, i) => {
+    y = addSection(doc, `Business ${i + 1}: ${biz.business_name || ''}`, '', y)
+    row('Industry', biz.industry)
+    row('Address', biz.address)
+    row('Website', biz.website)
+    row('Time in Business', biz.time_in_business)
+    row('Employees', biz.employee_count)
+    row('Monthly Revenue', biz.monthly_revenue)
+    row('Locations', biz.locations)
+  })
+
+  const sm = data.social_media || {}
+  const platformLine = (p, key) => `${key}: ${sm[p]?.handle || '—'} (${sm[p]?.followers || '0'} followers)`
+  row('Social Media', ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'twitter']
+    .map((p) => platformLine(p, p[0].toUpperCase() + p.slice(1))).join('\n'))
+  row('Paid Ads', sm.paid_ads?.running ? `Yes — ${sm.paid_ads.platforms || ''} ($${sm.paid_ads.spend || '0'}/mo)` : 'No')
+  row('Google Business Profile', sm.google_business)
+  row('Google Rating', sm.google_rating)
+
+  const g = data.goals || {}
+  row('Biggest Challenge', g.biggest_challenge)
+  row('12-Month Revenue Goal', g.revenue_goal_12mo)
+  row('3-Year Vision', g.dream_vision_3yr)
+  row('Expansion Goals', g.expansion_goals)
+  row('What Has Not Worked Before', g.tried_before)
+  row('Why Reaching Out Now', g.why_now)
+
+  row('Monthly Budget Range', data.budget_range)
+  row('Start Timeline', data.timeline)
+  row('Referral Source', data.referral_source)
+
+  footer(doc, 'Business Intake Summary')
+  return doc
+}
+
 export function generateInvoicePDF({ invoiceNumber, clientName, clientEmail, lineItems, subtotal, tax, total, dueDate, notes }) {
   const doc = new jsPDF()
   header(doc, `Invoice ${invoiceNumber}`)

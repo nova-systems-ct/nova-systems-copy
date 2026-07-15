@@ -1,13 +1,17 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
+import { twilioRequest } from './nova-ai/_twilio.js';
 
 // Combined email / notification endpoint — dispatch via ?action=
 //   contact          POST  general contact-form email (+ confirmation)
 //   book-demo        POST  demo request email
 //   client-message   POST  message to a client (saved + emailed)
 //   send-invoice     POST  invoice email to a client
+//   welcome-lead     POST  /welcome quick-contact form (save + SMS + confirmation + 45min follow-up)
 //   list             GET   admin notifications feed
+
+const SERVICE_INTERESTS = ['Website', 'Social Media', 'AI Automation', 'Full Wave One', 'Not Sure'];
 
 async function handleContact(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -342,6 +346,112 @@ async function handleSendInvoice(req, res) {
   }
 }
 
+async function handleWelcomeLead(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 10, 60_000)) return;
+
+  const b = req.body || {};
+  const full_name = sanitize(b.full_name, 150);
+  const email = sanitizeEmail(b.email);
+  const phone = sanitizePhone(b.phone);
+  const company_name = sanitize(b.company_name, 200);
+  const service_interest = SERVICE_INTERESTS.includes(b.service_interest) ? b.service_interest : '';
+  const agreed_to_terms = b.agreed_to_terms === true || b.agreed_to_terms === 'true';
+
+  if (!full_name || !email || !phone) return res.status(400).json({ error: 'Full name, email, and phone are required' });
+  if (!agreed_to_terms) return res.status(400).json({ error: 'You must agree to the Terms of Service and Privacy Policy' });
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json', Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({ full_name, email, phone, company_name, service_interest, agreed_to_terms }),
+      });
+      if (!r.ok) console.error('[notify:welcome-lead] Supabase save error:', r.status, await r.text());
+    } catch (err) {
+      console.error('[notify:welcome-lead] Supabase error (non-fatal):', err.message);
+    }
+  }
+
+  const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
+  const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+  const TWILIO_FROM = process.env.TWILIO_PHONE_NUMBER;
+  if (TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM) {
+    try {
+      await twilioRequest(TWILIO_SID, TWILIO_TOKEN, 'POST', 'Messages.json', {
+        To: process.env.ISAAC_ALERT_PHONE || '+12037060504',
+        From: TWILIO_FROM,
+        Body: `New lead: ${full_name}${company_name ? ` from ${company_name}` : ''}. Needs help with: ${service_interest || 'not specified'}.`,
+      });
+    } catch (err) {
+      console.error('[notify:welcome-lead] Twilio error (non-fatal):', err.message);
+    }
+  }
+
+  const RESEND_KEY = process.env.RESEND_API_KEY;
+  if (RESEND_KEY) {
+    const FROM = 'Nova Systems <noreply@nova-systems.app>';
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: FROM,
+          to: [email],
+          subject: 'We got your message — Nova Systems',
+          text: [
+            `Hi ${full_name},`,
+            '',
+            'Thanks for reaching out to Nova Systems. Isaac will personally review your request and get back to you soon.',
+            '',
+            'Talk soon,',
+            'Isaac Nova',
+            'Founder, Nova Systems',
+          ].join('\n'),
+        }),
+      });
+    } catch (err) {
+      console.error('[notify:welcome-lead] Confirmation email error (non-fatal):', err.message);
+    }
+
+    try {
+      const origin = req.headers.origin && req.headers.origin.startsWith('https://') ? req.headers.origin : 'https://nova-systems.app';
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: FROM,
+          to: [email],
+          subject: 'Let’s make sure we come prepared',
+          scheduled_at: new Date(Date.now() + 45 * 60_000).toISOString(),
+          text: [
+            `Hi ${full_name},`,
+            '',
+            'Thank you for reaching out to Nova Systems. To make sure we come prepared for our conversation please take 30 minutes to complete our full business intake form. This helps our team and AI analyze exactly what your business needs to grow.',
+            '',
+            `${origin}/intake`,
+            '',
+            'Talk soon,',
+            'Isaac Nova',
+            'Founder, Nova Systems',
+          ].join('\n'),
+        }),
+      });
+    } catch (err) {
+      console.error('[notify:welcome-lead] Scheduled follow-up email error (non-fatal):', err.message);
+    }
+  }
+
+  return res.status(200).json({ ok: true });
+}
+
 async function handleList(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 60, 60_000)) return;
@@ -372,6 +482,7 @@ export default async function handler(req, res) {
     case 'book-demo':       return handleBookDemo(req, res);
     case 'client-message':   return handleClientMessage(req, res);
     case 'send-invoice':      return handleSendInvoice(req, res);
+    case 'welcome-lead':       return handleWelcomeLead(req, res);
     case 'list':                return handleList(req, res);
     default:
       return res.status(400).json({ error: `Unknown action: ${action}` });

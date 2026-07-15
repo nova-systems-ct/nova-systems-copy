@@ -377,6 +377,56 @@ CREATE TABLE IF NOT EXISTS wave_one_applications (
 INSERT INTO nova_ai_settings (key, value) VALUES ('wave_one_spots_remaining', '7')
 ON CONFLICT (key) DO NOTHING;
 
+-- ── LEADS (public /welcome quick-contact form) ───────────────────────────────
+CREATE TABLE IF NOT EXISTS leads (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  full_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  company_name TEXT,
+  service_interest TEXT,  -- Website | Social Media | AI Automation | Full Wave One | Not Sure
+  agreed_to_terms BOOLEAN DEFAULT FALSE,
+  status TEXT DEFAULT 'new',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── INTAKE SUBMISSIONS (public /intake full business intake form) ───────────
+CREATE TABLE IF NOT EXISTS intake_submissions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT,
+  email TEXT,
+  phone TEXT,
+  preferred_contact TEXT,
+  best_time TEXT,
+  businesses JSONB,
+  social_media JSONB,
+  goals JSONB,
+  budget_range TEXT,
+  timeline TEXT,
+  referral_source TEXT,
+  stripe_customer_id TEXT,
+  stripe_payment_method_id TEXT,
+  agreed_to_terms BOOLEAN DEFAULT FALSE,
+  agreement_date TIMESTAMPTZ,
+  status TEXT DEFAULT 'new',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── NOVA AI AUDITS (contact/business record used by Nova AI for follow-up) ──
+CREATE TABLE IF NOT EXISTS nova_ai_audits (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  contact_name TEXT,
+  contact_email TEXT,
+  contact_phone TEXT,
+  business_name TEXT,
+  industry TEXT,
+  source TEXT DEFAULT 'intake_form',
+  intake_submission_id UUID REFERENCES intake_submissions(id),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ── STORAGE BUCKETS (create manually in Supabase Studio → Storage) ──────────
 -- portfolio   (public)  — homepage/portfolio images
 -- portfolios  (private) — job-applicant portfolio uploads, path: [applicant_email]/[file]

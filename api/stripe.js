@@ -230,6 +230,59 @@ async function handlePaymentIntent(req, res, b) {
   }
 }
 
+// Used by the /intake business-intake form's final step — collects a card via
+// Stripe Elements and saves it for future off-session charging without
+// charging anything now (zero-amount SetupIntent).
+async function handleSetupIntent(req, res, b) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 10, 60_000)) return;
+
+  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+  if (!STRIPE_SECRET_KEY) {
+    return res.status(500).json({ error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY to enable payments.' });
+  }
+
+  const email = sanitizeEmail(b.email || '');
+  const name = sanitize(b.name, 200);
+  const payment_method_id = sanitize(b.payment_method_id, 100);
+  if (!payment_method_id) return res.status(400).json({ error: 'payment_method_id is required' });
+
+  try {
+    const customer = await stripeRequest(STRIPE_SECRET_KEY, 'POST', 'customers', {
+      email: email || undefined,
+      name: name || undefined,
+      payment_method: payment_method_id,
+    });
+
+    const setupIntent = await stripeRequest(STRIPE_SECRET_KEY, 'POST', 'setup_intents', {
+      customer: customer.id,
+      payment_method: payment_method_id,
+      confirm: 'true',
+      'payment_method_types[0]': 'card',
+      usage: 'off_session',
+    });
+
+    if (setupIntent.status !== 'succeeded') {
+      return res.status(200).json({
+        ok: false,
+        requires_action: setupIntent.status === 'requires_action',
+        client_secret: setupIntent.client_secret,
+        status: setupIntent.status,
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      customer_id: customer.id,
+      payment_method_id,
+      setup_intent_id: setupIntent.id,
+    });
+  } catch (err) {
+    console.error('[stripe setup-intent] Error:', err.message);
+    return res.status(500).json({ error: err.message || 'Failed to save payment method' });
+  }
+}
+
 async function handleVerifyPayment(req, res, b) {
   if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 20, 60_000)) return;
@@ -269,6 +322,7 @@ export default async function handler(req, res) {
 
   if (action === 'checkout-session') return handleCheckoutSession(req, res, b);
   if (action === 'payment-intent') return handlePaymentIntent(req, res, b);
+  if (action === 'setup-intent') return handleSetupIntent(req, res, b);
   if (action === 'verify-payment') return handleVerifyPayment(req, res, b);
 
   return res.status(400).json({ error: `Unknown action: ${action}` });

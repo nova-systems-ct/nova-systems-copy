@@ -20,6 +20,10 @@ import Insights from './pages/Insights';
 import InsightPost from './pages/InsightPost';
 import PublicPortfolio from './pages/Portfolio';
 import Welcome from './pages/Welcome';
+import Intake from './pages/Intake';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
+import ServiceAgreement from './pages/ServiceAgreement';
 import Onboard from './pages/Onboard';
 import OnboardSuccess from './pages/OnboardSuccess';
 import Waves from './pages/Waves';
@@ -71,6 +75,10 @@ function App() {
           <Route path="/insights/:slug" element={<InsightPost />} />
           <Route path="/portfolio" element={<PublicPortfolio />} />
           <Route path="/welcome" element={<Welcome />} />
+          <Route path="/intake" element={<Intake />} />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/service-agreement" element={<ServiceAgreement />} />
           <Route path="/onboard" element={<Onboard />} />
           <Route path="/onboard/success" element={<OnboardSuccess />} />
           <Route path="/waves" element={<Waves />} />
