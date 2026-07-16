@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+/* Font is loaded via <link rel="preconnect"/"stylesheet"> in index.html instead of @import here —
+   @import inside CSS serializes the fetch behind the stylesheet itself, while a <link> in <head>
+   lets the browser start the font request in parallel with everything else. */
 
 @tailwind base;
 @tailwind components;

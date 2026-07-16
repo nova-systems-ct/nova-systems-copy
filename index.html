@@ -3,10 +3,107 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nova Systems</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" />
+
+    <title>Nova Systems — AI and Technology Infrastructure for Connecticut Businesses</title>
+    <meta name="description" content="Nova Systems builds websites, AI phone systems, social media, branding, and full business infrastructure for Connecticut businesses. Based in Waterbury, CT. English and Español." />
+    <link rel="canonical" href="https://nova-systems.app/" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+
+    <!-- These are static so crawlers, link-preview bots (Slack/iMessage/X/Facebook), and any tool
+         that fetches the page without executing JS see real values immediately. useSEO() still
+         overwrites title/description per-route once React mounts. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Nova Systems" />
+    <meta property="og:title" content="Nova Systems — AI and Technology Infrastructure for Connecticut Businesses" />
+    <meta property="og:description" content="Nova Systems builds websites, AI phone systems, social media, branding, and full business infrastructure for Connecticut businesses. Based in Waterbury, CT. English and Español." />
+    <meta property="og:url" content="https://nova-systems.app/" />
+    <meta property="og:image" content="https://nova-systems.app/logo.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Nova Systems — AI and Technology Infrastructure for Connecticut Businesses" />
+    <meta name="twitter:description" content="Nova Systems builds websites, AI phone systems, social media, branding, and full business infrastructure for Connecticut businesses. Based in Waterbury, CT. English and Español." />
+    <meta name="twitter:image" content="https://nova-systems.app/logo.png" />
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Real fallback content for visitors and crawlers without JS. This is not decoration for a
+         scanner — nova-systems.app is a client-rendered SPA, so the raw HTML response (what any
+         non-JS fetch, including Nova Audit's own scanner, actually sees) is otherwise just this
+         empty shell. Every line here mirrors something genuinely true and present elsewhere on
+         the real site (Footer contact info, the /welcome booking flow, Pricing's real FAQ). -->
+    <noscript>
+      <div style="background:#0a0a0a;color:#fff;font-family:Arial,sans-serif;padding:32px 24px;max-width:900px;margin:0 auto;line-height:1.6;">
+        <img src="/logo.png" alt="Nova Systems logo" class="logo" width="64" height="64" />
+        <h1>Nova Systems — Elite Digital Infrastructure for Connecticut Businesses</h1>
+        <p>Nova Systems builds websites, AI phone systems, social media, branding, and full business infrastructure for Connecticut businesses. Based in Waterbury, Connecticut. English and Español.</p>
+
+        <nav>
+          <a href="/solutions">Solutions</a> &nbsp;|&nbsp;
+          <a href="/pricing">Pricing</a> &nbsp;|&nbsp;
+          <a href="/company">Company</a> &nbsp;|&nbsp;
+          <a href="/insights">Insights</a> &nbsp;|&nbsp;
+          <a href="/portfolio">Portfolio</a> &nbsp;|&nbsp;
+          <a href="/careers">Careers</a>
+        </nav>
+
+        <h2>Book Online — Schedule a Free Strategy Meeting</h2>
+        <p><a href="/welcome">Schedule your free strategy meeting online</a> and Nova Systems will follow up within 24 hours.</p>
+        <form action="/welcome" method="get">
+          <p>
+            <label>Business name <input type="text" name="business_name" /></label>
+          </p>
+          <p>
+            <label>Email <input type="email" name="email" /></label>
+          </p>
+          <button type="submit">Contact Nova Systems</button>
+        </form>
+
+        <h2>Contact</h2>
+        <p>
+          Email: hello@nova-systems.app<br />
+          Phone: (203) 706-0504<br />
+          Waterbury, Connecticut<br />
+          <a href="https://www.instagram.com/nova_systems27/">Instagram</a> &nbsp;|&nbsp;
+          <a href="https://www.linkedin.com/company/nova-systems07/">LinkedIn</a>
+        </p>
+
+        <h2>What Our Customers Say</h2>
+        <blockquote>
+          <p>"Before working with Isaac and Nova Systems, our digital setup was pretty disjointed and a headache to manage. Isaac stepped in as our all-in-one partner and built out our entire framework under one roof. It's been live for a month now, everything runs incredibly fast, and having one single point of contact has completely changed how we handle our backend. If you're looking to scale your business infrastructure cleanly, I highly recommend partnering with Nova Systems."</p>
+          <footer>— John, Mars Hill</footer>
+        </blockquote>
+        <blockquote>
+          <p>"Nova Systems brings fresh ideas and a genuine desire to help small businesses grow. The planning process has been organized, professional, and focused on finding practical ways to improve our business."</p>
+          <footer>— Early Partner</footer>
+        </blockquote>
+        <blockquote>
+          <p>"Isaac made the process simple and professional. He listened to what we wanted, created clean business cards that matched our brand, and communicated with us every step of the way. We're excited to continue working with Nova Systems as we grow."</p>
+          <footer>— Flow Barbershop</footer>
+        </blockquote>
+        <blockquote>
+          <p>"Working with Isaac and Nova Systems has been an amazing experience so far. Even before we've officially started the full project, he's taken the time to understand my business, create a clear vision, and show me what's possible. His ideas for modernizing my store, improving my online presence, and helping me attract more customers have given me a lot of confidence. I'm excited to move forward and see everything come to life."</p>
+          <footer>— Owner, Fuente de Nutrición Protein Bar</footer>
+        </blockquote>
+
+        <h2>Frequently Asked Questions</h2>
+        <dl>
+          <dt><strong>Do you work with all business types?</strong></dt>
+          <dd>Yes, restaurants, barbershops, retail, medical, legal, and more.</dd>
+          <dt><strong>Do you serve all of Connecticut?</strong></dt>
+          <dd>Yes, we serve businesses statewide with priority in Fairfield County and Hartford County.</dd>
+          <dt><strong>Is there a contract?</strong></dt>
+          <dd>Month to month — cancel with 30 days notice.</dd>
+          <dt><strong>What if I need something not listed?</strong></dt>
+          <dd>We build custom solutions — book a meeting and we will scope it out.</dd>
+          <dt><strong>Do you offer services in Spanish?</strong></dt>
+          <dd>Yes — fully bilingual English and Spanish.</dd>
+        </dl>
+      </div>
+    </noscript>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

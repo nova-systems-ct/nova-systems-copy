@@ -8,6 +8,7 @@ import HeroSection from "@/components/home/HeroSection";
 import FivePillarsSection from "@/components/home/FivePillarsSection";
 import NovaConnectSection from "@/components/home/NovaConnectSection";
 import ClientsSection from "@/components/home/ClientsSection";
+import TestimonialsSection from "@/components/home/TestimonialsSection";
 import ConnecticutSection from "@/components/home/ConnecticutSection";
 import PricingPreviewSection from "@/components/home/PricingPreviewSection";
 import FinalCTASection from "@/components/home/FinalCTASection";
@@ -26,6 +27,7 @@ export default function Home() {
         <FadeUp><FivePillarsSection /></FadeUp>
         <FadeUp><NovaConnectSection /></FadeUp>
         <FadeUp><ClientsSection /></FadeUp>
+        <FadeUp><TestimonialsSection /></FadeUp>
         <FadeUp><ConnecticutSection /></FadeUp>
         <FadeUp><PricingPreviewSection /></FadeUp>
         <FadeUp><FinalCTASection /></FadeUp>

@@ -22,10 +22,15 @@ export default function Footer() {
             </p>
             {/* Social icons */}
             <div className="flex gap-3 mt-5">
-              {[Instagram, Linkedin].map((Icon, i) => (
+              {[
+                { Icon: Instagram, href: "https://www.instagram.com/nova_systems27/" },
+                { Icon: Linkedin, href: "https://www.linkedin.com/company/nova-systems07/" },
+              ].map(({ Icon, href }) => (
                 <a
-                  key={i}
-                  href="#"
+                  key={href}
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
                   className="w-8 h-8 rounded-lg flex items-center justify-center transition-all hover:scale-110"
                   style={{ border: `1px solid ${GOLD}35`, background: `${GOLD}10` }}
                 >
