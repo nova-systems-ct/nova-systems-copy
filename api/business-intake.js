@@ -96,7 +96,16 @@ async function handleSubmit(req, res) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   let submissionId = null;
 
-  if (SUPABASE_URL && SUPABASE_KEY) {
+  // The intake_submissions write is the one step that determines whether this assessment exists
+  // anywhere — a visitor just spent ~30 minutes on this form. The leads PATCH and nova_ai_audits
+  // upsert below are best-effort cross-references and stay non-fatal, but this write failing (or
+  // Supabase not being configured) must surface as a real error, not the { ok: true } this used
+  // to return unconditionally regardless of what actually got saved.
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.error('[business-intake:submit] Supabase not configured — submission was not saved anywhere');
+    return res.status(500).json({ error: 'We could not save your assessment right now. Please email hello@nova-systems.app directly so nothing is lost.' });
+  }
+  {
     try {
       const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_submissions`, {
         method: 'POST',
@@ -123,9 +132,11 @@ async function handleSubmit(req, res) {
         submissionId = rows[0]?.id || null;
       } else {
         console.error('[business-intake:submit] Supabase save error:', r.status, await r.text());
+        return res.status(502).json({ error: 'We could not save your assessment right now. Please email hello@nova-systems.app directly so nothing is lost.' });
       }
     } catch (err) {
-      console.error('[business-intake:submit] Supabase error (non-fatal):', err.message);
+      console.error('[business-intake:submit] Supabase error:', err.message);
+      return res.status(502).json({ error: 'We could not save your assessment right now. Please email hello@nova-systems.app directly so nothing is lost.' });
     }
 
     if (lead_id) {

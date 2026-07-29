@@ -65,10 +65,10 @@ const PRODUCTS = [
 
 const INDUSTRIES = [
   { icon: UtensilsCrossed, name: "Restaurants", desc: "Nova AI takes reservations, answers menu questions, and handles takeout orders — even during your busiest dinner rush." },
-  { icon: Scissors, name: "Barbershops and Salons", desc: "Every chair full, every call still answered. Nova AI books appointments and manages your schedule around the clock." },
+  { icon: Scissors, name: "Barbershops and Salons", desc: "Every chair full, every call captured. Nova AI is built to book appointments and manage your schedule around the clock." },
   { icon: Stethoscope, name: "Medical and Dental", desc: "Nova AI schedules appointments, answers insurance questions, and handles cancellations without tying up your front desk." },
   { icon: Building2, name: "Real Estate", desc: "Nova AI qualifies buyer and renter inquiries instantly and books showings before another agent gets there first." },
-  { icon: HardHat, name: "Contractors", desc: "Nova AI answers every call from the job site, captures the details, and books estimates onto your calendar automatically." },
+  { icon: HardHat, name: "Contractors", desc: "Nova AI is built to answer every call from the job site, capture the details, and book estimates onto your calendar automatically." },
   { icon: ShoppingBag, name: "Retail", desc: "Nova AI answers hours and inventory questions and captures every missed-call customer instead of losing them to voicemail." },
 ];
 

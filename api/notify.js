@@ -369,28 +369,37 @@ async function handleWelcomeLead(req, res) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   let leadId = null;
 
-  if (SUPABASE_URL && SUPABASE_KEY) {
-    try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
-        method: 'POST',
-        headers: {
-          apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json', Prefer: 'return=representation',
-        },
-        body: JSON.stringify({
-          name, email, phone, company, website, industry, challenge, goal,
-          agreed_to_terms, sms_consent, email_consent, call_consent,
-        }),
-      });
-      if (r.ok) {
-        const rows = await r.json();
-        leadId = rows[0]?.id || null;
-      } else {
-        console.error('[notify:welcome-lead] Supabase save error:', r.status, await r.text());
-      }
-    } catch (err) {
-      console.error('[notify:welcome-lead] Supabase error (non-fatal):', err.message);
+  // The Supabase write is the one step that actually determines whether this lead exists
+  // anywhere. Twilio/Resend below are notifications about a lead that's already safely saved —
+  // their failure shouldn't tell the visitor their submission failed. This write failing (or
+  // Supabase not being configured at all) means the lead was never captured, so that must surface
+  // as a real error instead of the generic { ok: true } this used to return unconditionally.
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.error('[notify:welcome-lead] Supabase not configured — lead was not saved anywhere');
+    return res.status(500).json({ error: 'We could not save your information right now. Please email hello@nova-systems.app directly.' });
+  }
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json', Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        name, email, phone, company, website, industry, challenge, goal,
+        agreed_to_terms, sms_consent, email_consent, call_consent,
+      }),
+    });
+    if (r.ok) {
+      const rows = await r.json();
+      leadId = rows[0]?.id || null;
+    } else {
+      console.error('[notify:welcome-lead] Supabase save error:', r.status, await r.text());
+      return res.status(502).json({ error: 'We could not save your information right now. Please email hello@nova-systems.app directly.' });
     }
+  } catch (err) {
+    console.error('[notify:welcome-lead] Supabase error:', err.message);
+    return res.status(502).json({ error: 'We could not save your information right now. Please email hello@nova-systems.app directly.' });
   }
 
   const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
