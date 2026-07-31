@@ -1,7 +1,7 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone } from './_sanitize.js';
-import { twilioRequest } from './nova-ai/_twilio.js';
+import { twilioRequest } from './_twilio.js';
 
 // /intake — the 20-step Nova Business Intelligence Assessment — two actions:
 //   submit       POST (?action=submit)      saves the full assessment, links back to the

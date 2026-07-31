@@ -103,14 +103,14 @@ export default function DashboardHome() {
 
       {/* Metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 24 }}>
-        <MetricCard icon={DollarSign}   label="Monthly Recurring Revenue" value={`$${mrr.toLocaleString()}`} sub={`${activeClients.length} active client${activeClients.length !== 1 ? 's' : ''}`} onClick={() => navigate('/dashboard/clients')} />
-        <MetricCard icon={Building2}    label="Total Clients Active" value={activeClients.length} sub={`${clients.length} total accounts`} onClick={() => navigate('/dashboard/clients')} />
+        <MetricCard icon={DollarSign}   label="Monthly Recurring Revenue" value={`$${mrr.toLocaleString()}`} sub={`${activeClients.length} active client${activeClients.length !== 1 ? 's' : ''}`} />
+        <MetricCard icon={Building2}    label="Total Clients Active" value={activeClients.length} sub={`${clients.length} total accounts`} />
         <MetricCard icon={Receipt}      label="Invoices Outstanding" value={`$${invoicesOutstanding.toLocaleString()}`} sub="Unpaid" onClick={() => navigate('/dashboard/invoices')} />
         <MetricCard icon={HandCoins}    label="Commissions Owed"  value={`$${commissionsOwed.toLocaleString()}`} sub="Pending payout" onClick={() => navigate('/dashboard/referrals')} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12, marginBottom: 48 }}>
-        <MetricCard icon={Target}       label="Active Leads"      value={leads.filter(l => !['Closed Won','Closed Lost'].includes(l.stage)).length} sub="In pipeline" onClick={() => navigate('/dashboard/leads')} />
-        <MetricCard icon={CalendarCheck} label="Demo Requests"    value={demoRequests.length} sub={demoRequests.filter(d => d.status === 'pending').length + ' pending'} onClick={() => navigate('/dashboard/leads')} />
+        <MetricCard icon={Target}       label="Active Leads"      value={leads.filter(l => !['Closed Won','Closed Lost'].includes(l.stage)).length} sub="In pipeline" />
+        <MetricCard icon={CalendarCheck} label="Demo Requests"    value={demoRequests.length} sub={demoRequests.filter(d => d.status === 'pending').length + ' pending'} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, marginBottom: 32 }} className="grid-dashboard">
@@ -122,9 +122,6 @@ export default function DashboardHome() {
               <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4 }}>Pipeline</p>
               <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 700 }}>Leads by Stage</h3>
             </div>
-            <button onClick={() => navigate('/dashboard/leads')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: GOLD, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit' }}>
-              View all <ArrowRight style={{ width: 12, height: 12 }} />
-            </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {pipeline.map(({ stage, count }) => {
@@ -193,7 +190,6 @@ export default function DashboardHome() {
         <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 14 }}>Quick Actions</p>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {[
-            { label: 'Add Client',         icon: Building2,   path: '/dashboard/clients' },
             { label: 'Create Invoice',     icon: Receipt,     path: '/dashboard/invoices' },
             { label: 'Write Blog Post',    icon: Newspaper,   path: '/dashboard/blog' },
             { label: 'Upload Portfolio Item', icon: LayoutGrid, path: '/dashboard/portfolio' },

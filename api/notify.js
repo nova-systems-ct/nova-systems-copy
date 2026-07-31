@@ -1,7 +1,7 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
-import { twilioRequest } from './nova-ai/_twilio.js';
+import { twilioRequest } from './_twilio.js';
 
 // Combined email / notification endpoint — dispatch via ?action=
 //   contact          POST  general contact-form email (+ confirmation)

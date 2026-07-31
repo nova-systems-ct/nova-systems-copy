@@ -15,6 +15,7 @@ import Home from './pages/Home';
 const Solutions = lazy(() => import('./pages/Solutions'));
 const Pricing = lazy(() => import('./pages/Pricing'));
 const Company = lazy(() => import('./pages/Company'));
+const RequestAudit = lazy(() => import('./pages/RequestAudit'));
 const Login = lazy(() => import('./pages/Login'));
 const ClientLogin = lazy(() => import('./pages/ClientLogin'));
 const Careers = lazy(() => import('./pages/Careers'));
@@ -36,24 +37,13 @@ const Onboard = lazy(() => import('./pages/Onboard'));
 const OnboardSuccess = lazy(() => import('./pages/OnboardSuccess'));
 const Waves = lazy(() => import('./pages/Waves'));
 const WavesForm = lazy(() => import('./pages/WavesForm'));
-// Nova AI
-const AIHome = lazy(() => import('./pages/ai/AIHome'));
-const AIDashboard = lazy(() => import('./pages/ai/AIDashboard'));
-const AICreateAgent = lazy(() => import('./pages/ai/AICreateAgent'));
-const AIAgentDetail = lazy(() => import('./pages/ai/AIAgentDetail'));
-const AIClientView = lazy(() => import('./pages/ai/AIClientView'));
 // CRM Dashboard
 const DashboardLayout = lazy(() => import('./components/dashboard/DashboardLayout'));
 const DashboardHome = lazy(() => import('./pages/dashboard/DashboardHome'));
-const Clients = lazy(() => import('./pages/dashboard/Clients'));
-const ClientDetail = lazy(() => import('./pages/dashboard/ClientDetail'));
-const Leads = lazy(() => import('./pages/dashboard/Leads'));
-const LeadDetail = lazy(() => import('./pages/dashboard/LeadDetail'));
 const Jobs = lazy(() => import('./pages/dashboard/Jobs'));
 const JobDetail = lazy(() => import('./pages/dashboard/JobDetail'));
 const Documents = lazy(() => import('./pages/dashboard/Documents'));
 const Newsletter = lazy(() => import('./pages/dashboard/Newsletter'));
-const DashboardSettings = lazy(() => import('./pages/dashboard/Settings'));
 const Portfolio = lazy(() => import('./pages/dashboard/Portfolio'));
 const DashboardBlog = lazy(() => import('./pages/dashboard/Blog'));
 const NovaVault = lazy(() => import('./pages/dashboard/NovaVault'));
@@ -78,6 +68,7 @@ function App() {
             <Route path="/solutions" element={<Solutions />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/company" element={<Company />} />
+            <Route path="/request-audit" element={<RequestAudit />} />
             <Route path="/login" element={<Login />} />
             <Route path="/client-login" element={<ClientLogin />} />
             <Route path="/careers" element={<Careers />} />
@@ -100,20 +91,9 @@ function App() {
             <Route path="/waves" element={<Waves />} />
             <Route path="/waves/form" element={<WavesForm />} />
 
-            {/* Nova AI */}
-            <Route path="/ai" element={<AIHome />} />
-            <Route path="/ai/dashboard" element={<AIDashboard />} />
-            <Route path="/ai/dashboard/create-agent" element={<AICreateAgent />} />
-            <Route path="/ai/agent/:id" element={<AIAgentDetail />} />
-            <Route path="/ai/client/:clientId" element={<AIClientView />} />
-
             {/* CRM Dashboard — nested routes */}
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<DashboardHome />} />
-              <Route path="clients" element={<Clients />} />
-              <Route path="clients/:id" element={<ClientDetail />} />
-              <Route path="leads" element={<Leads />} />
-              <Route path="leads/:id" element={<LeadDetail />} />
               <Route path="jobs" element={<Jobs />} />
               <Route path="jobs/:id" element={<JobDetail />} />
               <Route path="intake-forms" element={<IntakeForms />} />
@@ -126,7 +106,6 @@ function App() {
               <Route path="documents" element={<Documents />} />
               <Route path="newsletter" element={<Newsletter />} />
               <Route path="portfolio" element={<Portfolio />} />
-              <Route path="settings" element={<DashboardSettings />} />
             </Route>
 
             <Route path="*" element={<PageNotFound />} />

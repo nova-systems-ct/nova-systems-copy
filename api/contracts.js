@@ -1,7 +1,7 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
-import { twilioRequest } from './nova-ai/_twilio.js';
+import { twilioRequest } from './_twilio.js';
 import { uploadToVault } from './_vaultStorage.js';
 
 // Digital document signing — dispatch via ?action=:

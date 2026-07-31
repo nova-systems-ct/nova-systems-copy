@@ -1,32 +1,32 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
-  LayoutDashboard, Building2, Target, Users,
-  FileText, Mail, Settings, LogOut, Menu, X, LayoutGrid,
-  Lock, Newspaper, ClipboardList, Receipt, HandCoins, Bot, Zap, FileSignature,
+  LayoutDashboard, Users,
+  FileText, Mail, LogOut, Menu, X, LayoutGrid,
+  Lock, Newspaper, ClipboardList, Receipt, HandCoins, Zap, FileSignature,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
 
+// Clients/Leads/Settings and Nova AI were removed 2026-07-31 as part of the .app/.agency
+// consolidation: Clients/Leads/Settings were localStorage-only stubs with no real data (nothing
+// lost), and Nova AI duplicated nova-wave-one's more mature Nova Voice/SMS/Knowledge engines
+// against the exact same Supabase tables — see api/nova-ai's removal in the same change.
 const NAV = [
   { to: '/dashboard',             label: 'Home',          icon: LayoutDashboard, exact: true },
-  { to: '/dashboard/clients',     label: 'Clients',       icon: Building2 },
-  { to: '/dashboard/leads',       label: 'Leads',         icon: Target },
   { to: '/dashboard/jobs',        label: 'Candidates',    icon: Users },
   { to: '/dashboard/intake-forms',label: 'Intake Forms',  icon: ClipboardList },
   { to: '/dashboard/invoices',    label: 'Invoices',      icon: Receipt },
   { to: '/dashboard/contracts',   label: 'Contracts',     icon: FileSignature },
   { to: '/dashboard/referrals',   label: 'Referrals',     icon: HandCoins },
-  { to: '/ai/dashboard',          label: 'Nova AI',       icon: Bot },
   { to: '/dashboard/wave-one',    label: 'Wave One',      icon: Zap },
   { to: '/dashboard/nova-vault',  label: 'Nova Vault',    icon: Lock },
   { to: '/dashboard/blog',        label: 'Insights',      icon: Newspaper },
   { to: '/dashboard/portfolio',   label: 'Portfolio',     icon: LayoutGrid },
   { to: '/dashboard/documents',   label: 'Documents',     icon: FileText },
   { to: '/dashboard/newsletter',  label: 'Newsletter',    icon: Mail },
-  { to: '/dashboard/settings',    label: 'Settings',      icon: Settings },
 ]
 
 export default function DashboardLayout() {

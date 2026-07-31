@@ -1,7 +1,7 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
-import { twilioRequest } from './nova-ai/_twilio.js';
+import { twilioRequest } from './_twilio.js';
 
 const VALID_PRIORITY_ENGINES = ['Nova Voice', 'Nova Blue', 'Nova Email', 'Nova Social', 'Nova Revive', 'Nova Audit'];
 
