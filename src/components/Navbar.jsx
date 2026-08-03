@@ -12,7 +12,6 @@ export default function Navbar() {
 
   const navLinks = [
     { label: "Solutions", path: "/solutions" },
-    { label: "Nova AI", path: "/ai", badge: "AI" },
     { label: "Wave One", path: "/waves", badge: "NEW", highlight: true },
     { label: "Insights", path: "/insights" },
     { label: "Portfolio", path: "/portfolio" },
@@ -63,7 +62,7 @@ export default function Navbar() {
           ))}
         </div>
 
-        <div className="hidden md:flex items-center">
+        <div className="hidden md:flex items-center gap-3">
           <Link
             to="/welcome"
             className="inline-flex items-center px-5 py-2 text-xs font-semibold tracking-wider uppercase transition-all hover:opacity-85"
@@ -72,6 +71,13 @@ export default function Navbar() {
             onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = GOLD; }}
           >
             BOOK A MEETING
+          </Link>
+          <Link
+            to="/request-audit"
+            className="inline-flex items-center px-5 py-2 text-xs font-bold tracking-wider uppercase transition-opacity hover:opacity-85"
+            style={{ background: GOLD, color: "#0a0800" }}
+          >
+            REQUEST AN AUDIT
           </Link>
         </div>
 
@@ -111,9 +117,17 @@ export default function Navbar() {
             </Link>
           ))}
           <Link
+            to="/request-audit"
+            onClick={() => setMobileOpen(false)}
+            className="block text-center px-5 py-3 text-xs font-bold tracking-wider uppercase mt-1"
+            style={{ background: GOLD, color: "#0a0800" }}
+          >
+            REQUEST AN AUDIT
+          </Link>
+          <Link
             to="/welcome"
             onClick={() => setMobileOpen(false)}
-            className="block text-center px-5 py-3 text-xs font-semibold tracking-wider uppercase mt-1"
+            className="block text-center px-5 py-3 text-xs font-semibold tracking-wider uppercase mt-2"
             style={{ border: `1px solid ${GOLD}`, color: GOLD }}
           >
             BOOK A MEETING

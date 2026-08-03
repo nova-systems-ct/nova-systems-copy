@@ -92,31 +92,40 @@ export default function HeroSection() {
           className="font-black text-white leading-[0.95]"
           style={{ fontSize: "clamp(2.6rem, 5.2vw, 5.2rem)", letterSpacing: "-0.02em", maxWidth: 640 }}
         >
-          Elite Digital Infrastructure.{" "}
+          Your Business Is Losing{" "}
           <span style={{
             background: `linear-gradient(90deg, ${GOLD} 0%, ${GOLD_BRIGHT} 50%, ${GOLD} 100%)`,
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
-          }}>Engineered for Scale.</span>
+          }}>Opportunities You Can't See.</span>
         </h1>
 
         <p className="text-white/55 mt-6 leading-relaxed" style={{ fontSize: "clamp(0.95rem, 1.2vw, 1.1rem)", maxWidth: 460 }}>
-          Whatever your business needs, wants, or envisions — we build it. From premium websites to custom AI systems, Nova Systems engineers the tools your company demands.
+          Nova Systems audits every part of your digital operation, finds where leads, time, and revenue are slipping through, and builds the connected systems to fix it.
         </p>
 
-        <Link
-          to="/welcome"
-          className="inline-flex items-center gap-3 mt-10 font-bold uppercase tracking-widest transition-opacity hover:opacity-85"
-          style={{
-            background: `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 40%, ${GOLD_BRIGHT} 60%, ${GOLD} 80%, ${GOLD_DARK} 100%)`,
-            color: "#0a0800",
-            width: "fit-content",
-            fontSize: 12,
-            padding: "18px 32px",
-          }}
-        >
-          SCHEDULE A STRATEGY MEETING <ChevronRight className="w-4 h-4" />
-        </Link>
+        <div className="flex flex-wrap items-center gap-4 mt-10">
+          <Link
+            to="/request-audit"
+            className="inline-flex items-center gap-3 font-bold uppercase tracking-widest transition-opacity hover:opacity-85"
+            style={{
+              background: `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 40%, ${GOLD_BRIGHT} 60%, ${GOLD} 80%, ${GOLD_DARK} 100%)`,
+              color: "#0a0800",
+              width: "fit-content",
+              fontSize: 12,
+              padding: "18px 32px",
+            }}
+          >
+            REQUEST YOUR NOVA AUDIT <ChevronRight className="w-4 h-4" />
+          </Link>
+          <Link
+            to="/welcome"
+            className="inline-flex items-center gap-2 font-bold uppercase tracking-widest transition-colors hover:text-white"
+            style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, padding: "18px 8px" }}
+          >
+            Schedule a Strategy Meeting <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       </div>
 
     </section>

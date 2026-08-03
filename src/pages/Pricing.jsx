@@ -60,8 +60,8 @@ const plans = [
 
 const FAQS = [
   { q: "Do you work with all business types?", a: "Yes, restaurants, barbershops, retail, medical, legal, and more." },
-  { q: "Do you serve all of Connecticut?", a: "Yes, we serve businesses statewide with priority in Fairfield County and Hartford County." },
-  { q: "Is there a contract?", a: "Month to month — cancel with 30 days notice." },
+  { q: "Do you serve all of Connecticut?", a: "We're based in Waterbury and currently serve businesses from Waterbury to Fairfield County, with plans to expand statewide." },
+  { q: "Is there a contract?", a: "It depends on the scope. Smaller services can run month-to-month with 30 days notice to cancel; larger builds and ongoing partnerships are outlined in a Service Agreement before work begins, so there are no surprises." },
   { q: "What if I need something not listed?", a: "We build custom solutions — book a meeting and we will scope it out." },
   { q: "Do you offer services in Spanish?", a: "Yes — fully bilingual English and Spanish." },
 ];
