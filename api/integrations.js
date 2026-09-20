@@ -10,6 +10,16 @@ import { requireStaff } from './_auth.js';
 //                                   burn quota just by loading the page)
 // Admin-only (admin.view) — this can confirm whether a credential still works, which is itself
 // sensitive operational information.
+//
+// Status values: not_connected | disconnected | connected | tested | degraded |
+// authorization_required. `disconnected` is `not_connected` PLUS a known `resetNote` — every
+// provider currently mid credential-reset (2026-09-20) carries one, so the UI can say *why* it's
+// unconfigured (deliberately cleared pending rotation vs. a key that was found already dead vs.
+// simply never set up) instead of leaving "Not Connected" ambiguous between those very different
+// situations. `authorization_required` is reserved for a future OAuth-style integration — none of
+// the 8 providers here use OAuth today (every one is a single long-lived key/token pair, confirmed
+// in docs/credential-rotation-plan.md), so nothing currently returns it, but the frontend already
+// knows how to render it so a future integration doesn't need a UI change to use it.
 
 const PROVIDERS = {
   supabase: {
@@ -29,6 +39,7 @@ const PROVIDERS = {
     purpose: 'Invoice checkout sessions and payment webhooks.',
     envVars: ['STRIPE_SECRET_KEY', 'VITE_STRIPE_PUBLISHABLE_KEY', 'STRIPE_WEBHOOK_SECRET'],
     breaksIfMissing: 'Invoice "Pay Now" links stop working; webhook events are rejected outright (fails closed, not silently).',
+    resetNote: 'Secret key cleared 2026-09-20 — found already expired (live-mode) before the reset. Webhook secret was never set. Both need fresh values as part of the credential reset; see docs/credential-rotation-plan.md.',
     test: async (env) => {
       const key = env.STRIPE_SECRET_KEY;
       if (!key) return { ok: false, detail: 'Not configured' };
@@ -43,6 +54,7 @@ const PROVIDERS = {
     purpose: 'Lead confirmation, invoice, and payment-received emails.',
     envVars: ['RESEND_API_KEY'],
     breaksIfMissing: 'All outbound email — lead confirmations, invoice emails, contact form replies — is skipped (each caller checks for this and fails safe, not silently).',
+    resetNote: 'Cleared 2026-09-20 — found already invalid before the reset. Needs a fresh key as part of the credential reset; see docs/credential-rotation-plan.md.',
     test: async (env) => {
       const key = env.RESEND_API_KEY;
       if (!key) return { ok: false, detail: 'Not configured' };
@@ -55,6 +67,7 @@ const PROVIDERS = {
     purpose: 'Server-side document generation (proposals, contracts, SOWs).',
     envVars: ['ANTHROPIC_API_KEY'],
     breaksIfMissing: 'The Documents tool returns a clear "not configured" error instead of generating text.',
+    resetNote: 'Never set in this environment — not a reset action, just never configured. Whether it was ever set in Vercel production historically is still an open question; see docs/credential-rotation-plan.md.',
     test: async (env) => {
       const key = env.ANTHROPIC_API_KEY;
       if (!key) return { ok: false, detail: 'Not configured' };
@@ -67,6 +80,7 @@ const PROVIDERS = {
     purpose: 'SMS alert to Isaac when a new /welcome lead comes in.',
     envVars: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER'],
     breaksIfMissing: 'No SMS alert fires; the lead is still saved — this is a non-blocking notification only.',
+    resetNote: 'Account SID + Auth Token cleared 2026-09-20 — these were exposed in this session\'s own chat transcript and still need provider-side revocation in the Twilio Console (clearing the local value alone does not revoke it). See the URGENT section of docs/credential-rotation-plan.md.',
     test: async (env) => {
       const sid = env.TWILIO_ACCOUNT_SID, token = env.TWILIO_AUTH_TOKEN;
       if (!sid || !token) return { ok: false, detail: 'Not configured' };
@@ -80,6 +94,7 @@ const PROVIDERS = {
     purpose: 'Not currently used by any feature in this codebase.',
     envVars: ['GOOGLE_API_KEY'],
     breaksIfMissing: 'Nothing — unused today.',
+    resetNote: 'Cleared 2026-09-20 — exposed in this session\'s own chat transcript and still needs provider-side revocation in Google Cloud Console (clearing the local value alone does not revoke it). Unused in code, so safe to delete outright rather than rotate. See the URGENT section of docs/credential-rotation-plan.md.',
     test: async (env) => {
       const key = env.GOOGLE_API_KEY;
       if (!key) return { ok: false, detail: 'Not configured' };
@@ -94,6 +109,7 @@ const PROVIDERS = {
     purpose: 'Reserved for the not-yet-built voice-agent feature.',
     envVars: ['ELEVENLABS_API_KEY'],
     breaksIfMissing: 'Nothing — no code path calls this yet.',
+    resetNote: 'Cleared 2026-09-20 — exposed in this session\'s own chat transcript and still needs provider-side revocation in the ElevenLabs dashboard. Guards a feature that isn\'t built yet, so no urgency to replace, only to revoke. See the URGENT section of docs/credential-rotation-plan.md.',
     test: async (env) => {
       const key = env.ELEVENLABS_API_KEY;
       if (!key) return { ok: false, detail: 'Not configured' };
@@ -106,6 +122,7 @@ const PROVIDERS = {
     purpose: 'Reserved for the not-yet-built voice-agent feature.',
     envVars: ['DEEPGRAM_API_KEY'],
     breaksIfMissing: 'Nothing — no code path calls this yet.',
+    resetNote: 'Cleared 2026-09-20 — exposed in this session\'s own chat transcript and still needs provider-side revocation in the Deepgram Console. Guards a feature that isn\'t built yet, so no urgency to replace, only to revoke. See the URGENT section of docs/credential-rotation-plan.md.',
     test: async (env) => {
       const key = env.DEEPGRAM_API_KEY;
       if (!key) return { ok: false, detail: 'Not configured' };
@@ -118,15 +135,21 @@ const PROVIDERS = {
 function statusRow(key, def) {
   const env = process.env;
   const configured = def.envVars.every((v) => !!env[v]);
+  // A resetNote means this specific credential's missing-ness is a known, explained fact (cleared
+  // during the 2026-09-20 credential reset, or found already dead) rather than "just never set
+  // up" — surfaced as `disconnected` instead of the more ambiguous `not_connected` so the UI can
+  // show why, not just that.
+  const status = configured ? 'connected' : (def.resetNote ? 'disconnected' : 'not_connected');
   return {
     key,
     label: def.label,
     purpose: def.purpose,
     breaksIfMissing: def.breaksIfMissing,
+    resetNote: !configured ? (def.resetNote || null) : null,
     envVars: def.envVars.map((v) => ({ name: v, set: !!env[v] })),
     // Presence-only status — "connected" here means configured, not verified live. Use ?op=test
     // for a real check. Never conflate the two: this is intentionally the cheap, always-safe read.
-    status: configured ? 'connected' : 'not_connected',
+    status,
   };
 }
 
@@ -146,9 +169,10 @@ async function handleTest(req, res) {
 
   try {
     const result = await def.test(process.env);
+    const baseline = statusRow(providerKey, def).status;
     return res.status(200).json({
       key: providerKey,
-      status: result.ok ? 'tested' : (statusRow(providerKey, def).status === 'connected' ? 'degraded' : 'not_connected'),
+      status: result.ok ? 'tested' : (baseline === 'connected' ? 'degraded' : baseline),
       detail: result.detail,
       tested_at: new Date().toISOString(),
     });

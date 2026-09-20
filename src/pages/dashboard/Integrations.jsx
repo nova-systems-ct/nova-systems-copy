@@ -5,17 +5,24 @@ import { authedFetch } from '../../lib/apiAuth'
 const GOLD = '#C9A84C'
 
 // Status meanings (matches api/integrations.js exactly):
-//   not_connected — required env var(s) missing entirely
-//   connected     — env var(s) present, but not verified live since this page loaded
-//   tested        — a real, on-demand check against the provider's own API just succeeded
-//   degraded      — configured, but the last live check failed (e.g. an invalid/expired key)
+//   not_connected         — required env var(s) missing, no further explanation on record
+//   disconnected          — env var(s) missing AND a known reason why (cleared during the
+//                            2026-09-20 credential reset, or found already dead beforehand) —
+//                            shown with that reason rather than leaving "why" ambiguous
+//   connected             — env var(s) present, but not verified live since this page loaded
+//   tested                — a real, on-demand check against the provider's own API just succeeded
+//   degraded              — configured, but the last live check failed (e.g. an invalid/expired key)
+//   authorization_required — reserved for a future OAuth-style integration; none of the current
+//                            8 providers use OAuth, so nothing returns this today
 // "Tested" only ever comes from an explicit click — this page never calls a provider
 // automatically, so opening it can't burn quota or trigger rate limits on its own.
 const STATUS_META = {
   not_connected: { label: 'Not Connected', color: '#f87171', Icon: XCircle },
+  disconnected: { label: 'Disconnected', color: '#f87171', Icon: XCircle },
   connected: { label: 'Connected', color: '#60a5fa', Icon: Circle },
   tested: { label: 'Tested', color: '#4ade80', Icon: CheckCircle2 },
   degraded: { label: 'Degraded', color: '#fb923c', Icon: AlertTriangle },
+  authorization_required: { label: 'Authorization Required', color: '#fbbf24', Icon: AlertTriangle },
 }
 
 export default function Integrations() {
@@ -123,6 +130,12 @@ export default function Integrations() {
                 <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 10 }}>
                   If disconnected: {p.breaksIfMissing}
                 </p>
+
+                {p.resetNote && (
+                  <p style={{ color: '#fb923c', fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
+                    {p.resetNote}
+                  </p>
+                )}
 
                 {live && (
                   <p style={{ color: meta.color, fontSize: 11, marginTop: 8, fontWeight: 600 }}>

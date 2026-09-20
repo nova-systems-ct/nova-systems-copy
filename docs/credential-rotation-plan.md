@@ -30,6 +30,43 @@ step below actually took effect instead of re-deriving status by hand.
 
 ---
 
+## Master status table — all 8 providers, every tracked dimension
+
+One row per credential (not per provider, where a provider has more than one) so nothing gets
+collapsed into a single "done" checkbox that actually hides several separate facts. "✅" means that
+specific, narrow thing is independently confirmed true — never inferred from a different column.
+
+| Credential | In local `.env.local` | In Vercel (any env) | Found in source/Git history/bundle/logs | Provider-side revoked | Replacement installed | Replacement tested |
+|---|---|---|---|---|---|---|
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ set, active | ❓ unknown — check Vercel | ❌ not found anywhere (verified) | N/A — not being revoked yet, see hold note below | ❌ not started | ❌ not started |
+| `VITE_SUPABASE_ANON_KEY` | ✅ set, active | ❓ unknown — check Vercel | ✅ present in bundle **by design** — public/safe, not a leak | N/A | ❌ not started | ❌ not started |
+| `TWILIO_ACCOUNT_SID` | 🔲 cleared 2026-09-20 | ❓ unknown — check Vercel | ❌ not found in source/Git/bundle; **chat-exposed** 2026-09-20 (see URGENT) | ❌ **not done** | ❌ not started | ❌ not started |
+| `TWILIO_AUTH_TOKEN` | 🔲 cleared 2026-09-20 | ❓ unknown — check Vercel | ❌ not found in source/Git/bundle; **chat-exposed** 2026-09-20; also independently invalid against Twilio's own API | ❌ **not done** | ❌ not started | ❌ not started |
+| `TWILIO_PHONE_NUMBER` | 🔲 never set locally | ❓ unknown — check Vercel | ❌ not found anywhere | N/A — not secret, a phone number | ❌ not started | ❌ not started |
+| `RESEND_API_KEY` | 🔲 cleared 2026-09-20 (found already invalid) | ❓ unknown — check Vercel | ❌ not found anywhere | N/A — not confirmed exposed, just confirmed dead | ❌ not started | ❌ not started |
+| `ANTHROPIC_API_KEY` | 🔲 never set locally | ❓ **unknown — the highest-priority Vercel check, see below** | ❌ not found in current source/Git/bundle; **historical exposure via `VITE_CLAUDE_API_KEY` unresolved** (see note) | N/A | ❌ not started | ❌ not started |
+| `STRIPE_SECRET_KEY` | 🔲 cleared 2026-09-20 (found already expired, live-mode) | ❓ unknown — check Vercel | ❌ not found anywhere | N/A — not confirmed exposed, just confirmed dead | ❌ not started | ❌ not started |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | ✅ set (unchanged — public by design) | ❓ unknown — check Vercel | ✅ present in bundle **by design** — this is what a publishable key is for | N/A | ❌ not started | ❌ not started |
+| `STRIPE_WEBHOOK_SECRET` | 🔲 never set locally | ❓ unknown — check Vercel | ❌ not found anywhere | N/A | ❌ not started (this is a first-time setup, not a rotation) | ❌ not started |
+| `GOOGLE_API_KEY` | 🔲 cleared 2026-09-20 (found still active, unused in code) | ❓ unknown — check Vercel | ❌ not found in source/Git/bundle; **chat-exposed** 2026-09-20 | ❌ **not done** | N/A — unused; skip unless a feature needs it | N/A |
+| `ELEVENLABS_API_KEY` | 🔲 cleared 2026-09-20 | ❓ unknown — check Vercel | ❌ not found anywhere; **chat-exposed** 2026-09-20; also independently invalid | ❌ **not done** | N/A — feature not built | N/A |
+| `DEEPGRAM_API_KEY` | 🔲 cleared 2026-09-20 | ❓ unknown — check Vercel | ❌ not found anywhere; **chat-exposed** 2026-09-20; also independently invalid | ❌ **not done** | N/A — feature not built | N/A |
+
+Legend: ✅ confirmed done/true · 🔲 confirmed NOT present (a deliberate, checked state — not "unknown") ·
+❌ confirmed not done · ❓ genuinely unknown from this environment, needs Isaac to check directly ·
+N/A doesn't apply to this credential.
+
+**No OAuth grants, refresh tokens, or service-account credentials exist in this codebase** —
+confirmed by the inventory-completeness search above (no OAuth flow, no `client_secret`/
+`refresh_token` field anywhere outside Stripe's own unrelated `client_secret` naming for Payment/
+Setup Intents, which is Stripe's standard client-safe per-transaction token, not an OAuth secret).
+Every one of the 8 providers here authenticates with a single long-lived API key/token pair. If
+that changes — e.g. a future Google OAuth integration for something beyond the current unused Maps
+key — add its grant/refresh-token handling to this table under its own row, not folded into an
+existing one.
+
+---
+
 ## URGENT — act on these now, don't wait for the full post-build rotation
 
 Clearing a value out of local `.env.local` and a provider revoking/rotating a credential are two
