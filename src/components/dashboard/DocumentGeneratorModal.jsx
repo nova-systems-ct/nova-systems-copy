@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { X, Sparkles, Loader2, Check, Pen } from 'lucide-react'
 import { saveDocument } from '../../lib/crmStore'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#D4A030'
 const G    = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
@@ -119,7 +120,7 @@ export default function DocumentGeneratorModal({ clientId, leadId, entityName, i
     setError('')
     setGenerated('')
     try {
-      const res  = await fetch('/api/client?resource=documents', {
+      const res  = await authedFetch('/api/client?resource=documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ entity_name: entityName, industry, doc_type: docType, description, client_id: clientId, lead_id: leadId }),

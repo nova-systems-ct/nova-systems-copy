@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, X, Loader2, FileText, Eye, EyeOff, Trash2, Edit3, AlertCircle } from 'lucide-react'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
@@ -33,7 +34,7 @@ export default function Blog() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/client?resource=blog&op=posts&admin=true')
+      const r = await authedFetch('/api/client?resource=blog&op=posts&admin=true')
       const data = await r.json()
       setPosts(Array.isArray(data) ? data : [])
       setError(!Array.isArray(data))
@@ -50,7 +51,7 @@ export default function Blog() {
     if (!form.title.trim()) return
     setSaving(true)
     try {
-      const r = await fetch('/api/client?resource=blog&op=admin', {
+      const r = await authedFetch('/api/client?resource=blog&op=admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'save', ...form, published: publish }),
@@ -66,7 +67,7 @@ export default function Blog() {
   }
 
   const togglePublish = async (post) => {
-    await fetch('/api/client?resource=blog&op=admin', {
+    await authedFetch('/api/client?resource=blog&op=admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'save', ...post, published: !post.published }),
@@ -76,7 +77,7 @@ export default function Blog() {
 
   const remove = async (post) => {
     if (!window.confirm(`Delete "${post.title}"? This cannot be undone.`)) return
-    await fetch('/api/client?resource=blog&op=admin', {
+    await authedFetch('/api/client?resource=blog&op=admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'delete', id: post.id }),

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ClipboardList, Loader2, ExternalLink, Download, Calendar } from 'lucide-react'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#D4A030'
 const STATUS_COLORS = {
@@ -45,7 +46,7 @@ export default function IntakeForms() {
       .catch(() => setClients([]))
       .finally(() => setLoading(false))
 
-    fetch('/api/client?resource=intake-requests')
+    authedFetch('/api/client?resource=intake-requests')
       .then(r => r.json())
       .then(data => setMeetings(Array.isArray(data) ? data : []))
       .catch(() => setMeetings([]))
@@ -55,7 +56,7 @@ export default function IntakeForms() {
   const updateMeetingStatus = async (id, status) => {
     setMeetings(prev => prev.map(m => m.id === id ? { ...m, status } : m))
     try {
-      await fetch('/api/client?resource=intake-requests', {
+      await authedFetch('/api/client?resource=intake-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update-status', id, status }),

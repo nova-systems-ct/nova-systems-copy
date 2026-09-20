@@ -14,6 +14,14 @@ import { twilioRequest } from './_twilio.js';
 
 const CONTACT_METHODS = ['email', 'phone', 'sms'];
 
+// Duplicate-submission guard: absorbs the real causes of accidental duplicates — a double-click
+// before the button's disabled state takes effect, a browser/proxy retry of a POST that timed out
+// waiting for a response, or a resubmit because nothing visibly happened the first time — without
+// blocking a genuinely new inquiry, even from the same person hours or days later. A short window
+// keyed on the same email+phone is enough to catch those cases; anything outside it is treated as
+// a new, legitimate submission.
+const DUPLICATE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -54,6 +62,31 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.error('[welcome] Supabase not configured — submission was not saved anywhere');
     return res.status(500).json({ error: 'We could not save your request right now. Please email hello@nova-systems.app directly so nothing is lost.' });
+  }
+
+  // Duplicate check first — never block on it (if the lookup itself fails, fall through and treat
+  // this as a new submission rather than losing a real lead over a transient error).
+  try {
+    const cutoff = new Date(Date.now() - DUPLICATE_WINDOW_MS).toISOString();
+    const dupRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/leads?email=eq.${encodeURIComponent(email)}&phone=eq.${encodeURIComponent(phone)}&created_at=gte.${encodeURIComponent(cutoff)}&select=id,created_at&order=created_at.desc&limit=1`,
+      { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } },
+    );
+    if (dupRes.ok) {
+      const dupRows = await dupRes.json();
+      const existing = dupRows[0];
+      if (existing?.id) {
+        // Same request as a recent one already on file — return the same reference number as a
+        // normal success, but do not insert another row or re-fire SMS/email notifications.
+        return res.status(200).json({
+          ok: true,
+          reference_number: `NV-${existing.id.slice(0, 8).toUpperCase()}`,
+          duplicate: true,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[welcome] Duplicate check error (non-fatal, proceeding as new submission):', err.message);
   }
 
   // Best-effort org lookup — never let this block real lead capture. If it fails for any reason

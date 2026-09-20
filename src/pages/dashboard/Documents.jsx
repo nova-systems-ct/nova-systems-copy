@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Sparkles, Loader2, Send, Save, FileText } from 'lucide-react'
 import { getClients, getLeads, saveDocument, getDocuments } from '../../lib/crmStore'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
@@ -52,7 +53,7 @@ export default function Documents() {
     const industry = selectedEntity?.industry || ''
 
     try {
-      const res = await fetch('/api/client?resource=documents', {
+      const res = await authedFetch('/api/client?resource=documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

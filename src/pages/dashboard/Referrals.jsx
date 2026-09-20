@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, X, Loader2, HandCoins, CheckCircle2 } from 'lucide-react'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
@@ -23,7 +24,7 @@ export default function Referrals() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/client?resource=referrals')
+      const r = await authedFetch('/api/client?resource=referrals')
       const data = await r.json()
       setReferrals(Array.isArray(data) ? data : [])
     } catch { setReferrals([]) }
@@ -41,7 +42,7 @@ export default function Referrals() {
   const save = async () => {
     if (!form.rep_name || !form.client_name || !form.deal_value) return
     setSaving(true)
-    await fetch('/api/client?resource=referrals', {
+    await authedFetch('/api/client?resource=referrals', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'create', ...form }),
     })
@@ -52,7 +53,7 @@ export default function Referrals() {
   }
 
   const markPaid = async (r) => {
-    await fetch('/api/client?resource=referrals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: r.id, ...r, status: 'Paid' }) })
+    await authedFetch('/api/client?resource=referrals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: r.id, ...r, status: 'Paid' }) })
     load()
   }
 

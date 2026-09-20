@@ -2,18 +2,26 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { uploadToVault } from './_vaultStorage.js';
+import { requireStaff } from './_auth.js';
 
 // Combined client-dashboard endpoint — dispatch via ?resource= (and ?op= for
-// resources with more than one sub-route):
-//   invoices                    GET list / POST { action: create|update|delete }
-//   referrals                   GET list / POST { action: create|update|delete }
-//   intake-requests              GET list / POST { action: 'update-status', id, status }
-//   vault      &op=list|upload|delete
-//   portfolio  &op=items|upload|mutate   (mutate: POST { action: update|delete })
-//   site-content                 GET ?key= / POST upsert
-//   blog       &op=posts|admin           (admin: POST { action: save|delete })
-//   documents                    POST generate a document with Claude
-//   auth                         POST { email, password_hash } — Nova Connect client login
+// resources with more than one sub-route). All handlers use the Supabase SERVICE ROLE key
+// internally (full DB access, bypasses RLS), so every resource below except the ones marked
+// PUBLIC requires a staff Authorization: Bearer <supabase access token> header carrying the
+// listed permission — enforced in the dispatcher via api/_auth.js's requireStaff(), not just by
+// the frontend's route-level RequirePermission gate:
+//   invoices                    [admin.view]        GET list / POST { action: create|update|delete }
+//   referrals                   [growth.view]        GET list / POST { action: create|update|delete }
+//   intake-requests              [intelligence.view]  GET list / POST { action: 'update-status', id, status }
+//   vault      &op=list|upload|delete               [admin.view]
+//   portfolio  &op=items                             PUBLIC (mutate: POST { action: update|delete })
+//              &op=upload|mutate                     [growth.view]
+//   site-content                 GET ?key=           PUBLIC
+//                                 POST upsert         [admin.view]
+//   blog       &op=posts                             PUBLIC (&admin=true variant: [growth.view])
+//              &op=admin                              [growth.view] (POST { action: save|delete })
+//   documents                    [admin.view]          POST generate a document with Claude
+//   auth                         retired — always 410 (see note above handler())
 
 const BLOG_CATEGORIES = ['AI and Technology', 'Connecticut Business', 'Case Studies', 'News', 'Tips and Strategy'];
 const PORTFOLIO_CATEGORIES = ['Websites', 'Social Media', 'Branding', 'AI Systems', 'Signage and Print', 'Apparel and Uniforms', 'Other'];
@@ -825,46 +833,20 @@ async function handleDocuments(req, res) {
 }
 
 // Nova Connect client portal login — checks against client_accounts.
-async function handleAuth(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!rateLimit(req, res, 5, 60_000)) return; // strict: 5 login attempts/min per IP
+// handleAuth ("Nova Connect" client login) removed 2026-09-20 — confirmed dead (no live frontend
+// call, see src/pages/ClientLogin.jsx) and a real liability while it existed: unauthenticated,
+// compared password hashes itself instead of using Supabase Auth, and leaked account existence
+// via a no_account/wrong_password result split. The `auth` resource now returns 410 unconditionally
+// — see the dispatcher below.
 
-  const email = sanitizeEmail(req.body?.email || '');
-  const password_hash = sanitize(req.body?.password_hash || '', 128);
-
-  if (!email || !password_hash) {
-    return res.status(400).json({ error: 'Email and password required' });
-  }
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return res.status(200).json({ result: 'no_account' });
-  }
-
-  try {
-    const url = `${SUPABASE_URL}/rest/v1/client_accounts?email=eq.${encodeURIComponent(email)}&select=client_id,email,password_hash,status`;
-    const sbRes = await fetch(url, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-    });
-    if (!sbRes.ok) {
-      console.error('[client:auth] Supabase query error:', sbRes.status, await sbRes.text());
-      return res.status(502).json({ error: 'Database error — try again' });
-    }
-
-    const rows = await sbRes.json();
-    if (rows.length === 0) return res.status(200).json({ result: 'no_account' });
-
-    const row = rows.find((r) => r.password_hash === password_hash);
-    if (!row) return res.status(200).json({ result: 'wrong_password' });
-
-    return res.status(200).json({ result: 'ok', client_id: row.client_id, email: row.email });
-  } catch (err) {
-    console.error('[client:auth] Error:', err.message);
-    return res.status(502).json({ error: 'Database unreachable — try again' });
-  }
-}
-
+// Resources/ops below are either genuinely public (read-only content the marketing site itself
+// renders: portfolio items, blog posts, site-content reads) or require an authenticated Nova
+// staff member carrying the same permission the matching /dashboard/* route is gated on in
+// App.jsx — see api/_auth.js for why this check has to live here and not just in the frontend
+// route guard. `auth` (the unfinished "Nova Connect" client login) is confirmed dead: no live
+// frontend calls it (see src/pages/ClientLogin.jsx), and it compared password hashes and leaked
+// account-existence with no session ever issued — disabled outright rather than secured, since
+// there is nothing left depending on it.
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
 
@@ -872,31 +854,60 @@ export default async function handler(req, res) {
   const op       = typeof req.query?.op === 'string' ? req.query.op : '';
 
   switch (resource) {
-    case 'invoices':  return handleInvoices(req, res);
-    case 'referrals': return handleReferrals(req, res);
-    case 'intake-requests': return handleIntakeRequests(req, res);
+    case 'invoices':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleInvoices(req, res);
+
+    case 'referrals':
+      if (!(await requireStaff(req, res, 'growth.view'))) return;
+      return handleReferrals(req, res);
+
+    case 'intake-requests':
+      if (!(await requireStaff(req, res, 'intelligence.view'))) return;
+      return handleIntakeRequests(req, res);
 
     case 'vault':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
       if (op === 'list')   return handleVaultList(req, res);
       if (op === 'upload') return handleVaultUpload(req, res);
       if (op === 'delete') return handleVaultDelete(req, res);
       return res.status(400).json({ error: `Unknown vault op: ${op}` });
 
     case 'portfolio':
-      if (op === 'items')  return handlePortfolioItems(req, res);
-      if (op === 'upload') return handlePortfolioUpload(req, res);
-      if (op === 'mutate') return handlePortfolioMutate(req, res);
+      if (op === 'items')  return handlePortfolioItems(req, res); // public: /portfolio renders this
+      if (op === 'upload') {
+        if (!(await requireStaff(req, res, 'growth.view'))) return;
+        return handlePortfolioUpload(req, res);
+      }
+      if (op === 'mutate') {
+        if (!(await requireStaff(req, res, 'growth.view'))) return;
+        return handlePortfolioMutate(req, res);
+      }
       return res.status(400).json({ error: `Unknown portfolio op: ${op}` });
 
-    case 'site-content': return handleSiteContent(req, res);
+    case 'site-content':
+      if (req.method === 'POST' && !(await requireStaff(req, res, 'admin.view'))) return;
+      return handleSiteContent(req, res); // GET is public: useSiteContent() renders it site-wide
 
     case 'blog':
-      if (op === 'posts') return handleBlogPosts(req, res);
-      if (op === 'admin') return handleBlogAdmin(req, res);
+      if (op === 'posts') {
+        // Public for real reads (/insights), but `&admin=true` bypasses the published=true filter
+        // and returns drafts too — that variant needs the same check as op=admin below.
+        if (req.query?.admin === 'true' && !(await requireStaff(req, res, 'growth.view'))) return;
+        return handleBlogPosts(req, res);
+      }
+      if (op === 'admin') {
+        if (!(await requireStaff(req, res, 'growth.view'))) return;
+        return handleBlogAdmin(req, res);
+      }
       return res.status(400).json({ error: `Unknown blog op: ${op}` });
 
-    case 'documents': return handleDocuments(req, res);
-    case 'auth':      return handleAuth(req, res);
+    case 'documents':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleDocuments(req, res);
+
+    case 'auth':
+      return res.status(410).json({ error: 'This login method has been retired.' });
 
     default:
       return res.status(400).json({ error: `Unknown resource: ${resource}` });

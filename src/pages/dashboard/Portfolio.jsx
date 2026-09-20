@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { Upload, Star, Trash2, Edit3, X, Check, Plus, ImageIcon, Loader2, AlertCircle, GripVertical, ArrowUpDown } from 'lucide-react'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
@@ -71,7 +72,7 @@ export default function Portfolio() {
     setUploadError('')
     const clientName = form.client_name === 'Custom…' ? form.customClient.trim() : form.client_name
     try {
-      const r = await fetch('/api/client?resource=portfolio&op=upload', {
+      const r = await authedFetch('/api/client?resource=portfolio&op=upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -106,7 +107,7 @@ export default function Portfolio() {
     if (!window.confirm(`Delete "${item.title}"? This cannot be undone.`)) return
     setDeletingId(item.id)
     const filename = item.image_url?.split('/portfolio/')[1]
-    await fetch('/api/client?resource=portfolio&op=mutate', {
+    await authedFetch('/api/client?resource=portfolio&op=mutate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'delete', id: item.id, filename }),
@@ -117,7 +118,7 @@ export default function Portfolio() {
 
   const handleToggleFeatured = async (item) => {
     setTogglingId(item.id)
-    await fetch('/api/client?resource=portfolio&op=mutate', {
+    await authedFetch('/api/client?resource=portfolio&op=mutate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update', id: item.id, featured: !item.featured }),
@@ -139,7 +140,7 @@ export default function Portfolio() {
     setItems(reordered)
     setReordering(true)
     await Promise.all(reordered.map((it, i) =>
-      fetch('/api/client?resource=portfolio&op=mutate', {
+      authedFetch('/api/client?resource=portfolio&op=mutate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update', id: it.id, sort_order: i }),
@@ -150,7 +151,7 @@ export default function Portfolio() {
 
   const handleSaveEdit = async () => {
     if (!editItem) return
-    await fetch('/api/client?resource=portfolio&op=mutate', {
+    await authedFetch('/api/client?resource=portfolio&op=mutate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update', id: editItem.id, ...editForm }),
