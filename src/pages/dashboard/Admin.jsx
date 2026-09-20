@@ -1,4 +1,4 @@
-import { Users, Receipt, FileSignature, Lock, FileText, Plug } from 'lucide-react'
+import { Users, Receipt, FileSignature, Lock, FileText, Plug, UserPlus } from 'lucide-react'
 import AreaHub from '../../components/dashboard/AreaHub'
 
 // Team, billing, documents, and security. Real RBAC is live (Stage 4) — every route below and
@@ -40,6 +40,12 @@ export default function Admin() {
           description: 'General document management.',
           icon: FileText,
           path: '/dashboard/documents',
+        },
+        {
+          label: 'Team',
+          description: 'Nova staff accounts, roles, and invitations.',
+          icon: UserPlus,
+          path: '/dashboard/team',
         },
         {
           label: 'Integration Center',
