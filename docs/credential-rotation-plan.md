@@ -12,6 +12,22 @@ Don't move old credentials aside "just in case" inside a tracked file — put th
 into the real secret store (Vercel env vars, local `.env.local`) and revoke the old one at the
 provider once the new one verifies.
 
+**Inventory completeness (2026-09-20)**: the 8 providers in this document — Supabase, Stripe,
+Resend, Anthropic, Twilio, Google, ElevenLabs, Deepgram — are the complete, real list of external
+services this codebase connects to. Verified by: every `process.env.*`/`import.meta.env.*`
+reference across `api/` and `src/` (no undocumented env var reads anywhere), `package.json`'s
+dependency list (no other provider SDK installed), and a repo-wide search for OAuth flows,
+additional webhook/signing secrets, and common CRM/social/calendar integration names (Calendly,
+Facebook, Instagram, LinkedIn, HubSpot, Zapier, Mailchimp) — none found beyond the public,
+non-secret social profile links already in the footer and the public `VITE_CALCOM_URL` booking
+link. If a new integration is added later, add it here in the same pass.
+
+**Live status without leaving the app**: `/dashboard/integrations` (staff, admin-only) is a real
+Integration Center — for each provider it shows whether its env vars are present and, on demand
+(a button, never automatic), runs one real check against that provider's own API and reports
+Tested / Degraded / Not Connected. It never displays a credential value. Use it to confirm each
+step below actually took effect instead of re-deriving status by hand.
+
 ---
 
 ## URGENT — act on these now, don't wait for the full post-build rotation
@@ -26,19 +42,33 @@ clearing nor a 401 is a substitute for actually revoking it at the provider.
 
 Four credentials were printed into this Claude Code session's own chat transcript on 2026-09-20
 (before this security review began) and should be treated as compromised regardless of what any
-validity check says:
+validity check says. Each of the six states below is a genuinely separate fact — doing one does
+not imply any of the others, and this table only checks a box once that specific, distinct action
+is actually confirmed:
 
-| Credential | Why urgent | Action | Status |
-|---|---|---|---|
-| Twilio Account SID + Auth Token | Chat-exposed | Twilio Console → Account → API keys & tokens → regenerate the Auth Token (this invalidates the exposed one immediately; the Account SID itself isn't rotatable, but it's only useful paired with a valid token) | **Not yet done — needs Isaac's action in the Twilio dashboard** |
-| Google API Key | Chat-exposed; confirmed still active via a live API call | Google Cloud Console → APIs & Services → Credentials → delete this key (it's unused in code — see below — so there's no integration to break) | **Not yet done — needs Isaac's action in Google Cloud Console** |
-| ElevenLabs API Key | Chat-exposed | ElevenLabs dashboard → Profile → API Keys → revoke | **Not yet done — needs Isaac's action** (already returns 401 on its own, but that's not the same as confirmed-revoked — see above) |
-| Deepgram API Key | Chat-exposed | Deepgram Console → API Keys → revoke | **Not yet done — needs Isaac's action** (same caveat as ElevenLabs) |
+| Credential | Removed from source code | Removed from local `.env.local` | Removed from Vercel env config | Revoked by provider | Replaced with new credential | Tested with replacement |
+|---|---|---|---|---|---|---|
+| Twilio Account SID + Auth Token | N/A — never hardcoded in source, only referenced by name | ✅ done 2026-09-20 (value blanked, variable name kept) | ❓ unknown — needs Isaac to check Vercel directly | ❌ **not done — needs Isaac's action in Twilio Console** | ❌ not done | ❌ not done |
+| Google API Key | N/A — never hardcoded in source | ✅ done 2026-09-20 | ❓ unknown — needs Isaac to check Vercel directly | ❌ **not done — needs Isaac's action in Google Cloud Console** | ❌ not done | ❌ not done |
+| ElevenLabs API Key | N/A — never hardcoded in source | ✅ done 2026-09-20 | ❓ unknown — needs Isaac to check Vercel directly | ❌ **not done — needs Isaac's action in ElevenLabs dashboard** | ❌ not done | ❌ not done |
+| Deepgram API Key | N/A — never hardcoded in source | ✅ done 2026-09-20 | ❓ unknown — needs Isaac to check Vercel directly | ❌ **not done — needs Isaac's action in Deepgram Console** | ❌ not done | ❌ not done |
 
-I have no provider-dashboard access from this environment — I cannot revoke these myself. Local
-`.env.local` values for all four have already been cleared (variable names preserved), which stops
-local/dev use, but the values themselves remain valid-until-revoked at each provider until you act
-there directly.
+Provider-side action for each, once you're ready:
+- **Twilio**: Console → Account → API keys & tokens → regenerate the Auth Token (invalidates the
+  exposed one immediately; the Account SID itself isn't separately rotatable, but is only useful
+  paired with a valid token).
+- **Google**: Cloud Console → APIs & Services → Credentials → delete this key (confirmed unused in
+  code — see the Integration Center note below — so there's no integration to break by removing it
+  outright rather than rotating it).
+- **ElevenLabs**: dashboard → Profile → API Keys → revoke.
+- **Deepgram**: Console → API Keys → revoke.
+
+I have no provider-dashboard access from this environment — every "not done" row above requires
+your direct action; I cannot check or change provider-side state myself. The new
+Integration Center (`/dashboard/integrations`, staff admin-only) reflects local/Vercel
+configuration state and can run a real on-demand check against each provider's own API — use its
+"Test Connection" button after each step above to see the result change in real time, without ever
+displaying the credential itself.
 
 ### Also check now: Vercel's stored environment variables
 

@@ -1,14 +1,15 @@
-import { Users, Receipt, FileSignature, Lock, FileText } from 'lucide-react'
+import { Users, Receipt, FileSignature, Lock, FileText, Plug } from 'lucide-react'
 import AreaHub from '../../components/dashboard/AreaHub'
 
-// Team, billing, documents, and security. Roles/permissions/RBAC are a future build (Stage 4) —
-// this holds what's real today: hiring, invoicing, contracts, and document storage.
+// Team, billing, documents, and security. Real RBAC is live (Stage 4) — every route below and
+// this hub itself require admin.view via organization_members + role_permissions, not just a UI
+// convention; see src/lib/OrgContext.jsx and api/_auth.js for the actual enforcement.
 export default function Admin() {
   return (
     <AreaHub
       eyebrow="Admin"
       title="Team, billing, and documents"
-      description="Administrative functions. Roles and permissions are not built yet — everything here is currently visible to any authenticated account."
+      description="Administrative functions, gated to staff with admin-level access."
       items={[
         {
           label: 'Candidates',
@@ -39,6 +40,12 @@ export default function Admin() {
           description: 'General document management.',
           icon: FileText,
           path: '/dashboard/documents',
+        },
+        {
+          label: 'Integration Center',
+          description: 'Live connection status for every external provider — Supabase, Stripe, Resend, and more.',
+          icon: Plug,
+          path: '/dashboard/integrations',
         },
       ]}
     />

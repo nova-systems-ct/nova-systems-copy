@@ -54,6 +54,7 @@ const JobDetail = lazy(() => import('./pages/dashboard/JobDetail'));
 const Documents = lazy(() => import('./pages/dashboard/Documents'));
 const Newsletter = lazy(() => import('./pages/dashboard/Newsletter'));
 const Portfolio = lazy(() => import('./pages/dashboard/Portfolio'));
+const Integrations = lazy(() => import('./pages/dashboard/Integrations'));
 const DashboardBlog = lazy(() => import('./pages/dashboard/Blog'));
 const NovaVault = lazy(() => import('./pages/dashboard/NovaVault'));
 const Invoices = lazy(() => import('./pages/dashboard/Invoices'));
@@ -128,6 +129,7 @@ function App() {
               <Route path="documents" element={<RequirePermission permission="admin.view"><Documents /></RequirePermission>} />
               <Route path="newsletter" element={<RequirePermission permission="growth.view"><Newsletter /></RequirePermission>} />
               <Route path="portfolio" element={<RequirePermission permission="growth.view"><Portfolio /></RequirePermission>} />
+              <Route path="integrations" element={<RequirePermission permission="admin.view"><Integrations /></RequirePermission>} />
             </Route>
 
             <Route path="*" element={<PageNotFound />} />
