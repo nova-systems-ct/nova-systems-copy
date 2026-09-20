@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Mail, Phone, MapPin, Linkedin, Instagram } from "lucide-react";
+import novaLogo from "@/assets/nova logo.png";
 
 const GOLD = "#D4A030";
 
@@ -14,8 +15,14 @@ export default function Footer() {
 
           {/* Brand */}
           <div className="md:col-span-1">
-            <p className="text-sm font-black tracking-[0.2em] uppercase mb-3" style={{ color: GOLD }}>
-              NOVA SYSTEMS
+            <div className="flex items-center gap-2.5 mb-3">
+              <img src={novaLogo} alt="Nova Systems" loading="lazy" className="h-7 w-7 object-contain flex-shrink-0" />
+              <p className="text-sm font-black tracking-[0.2em] uppercase" style={{ color: GOLD }}>
+                NOVA SYSTEMS
+              </p>
+            </div>
+            <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>
+              Revenue Intelligence. Systems. Growth.
             </p>
             <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
               Waterbury, Connecticut. Elite digital infrastructure — whatever your business needs, we build it.
@@ -44,7 +51,7 @@ export default function Footer() {
           <div>
             <p className="text-[9px] tracking-[0.25em] uppercase font-semibold mb-4" style={{ color: GOLD }}>PLATFORM</p>
             <div className="space-y-2.5">
-              {[["Solutions", "/solutions"], ["Insights", "/insights"], ["Portfolio", "/portfolio"], ["Careers", "/careers"], ["Company", "/company"], ["Pricing", "/pricing"]].map(([label, path]) => (
+              {[["Solutions", "/solutions"], ["Nova Audit", "/request-audit"], ["Wave One", "/waves"], ["Case Studies", "/portfolio"], ["Insights", "/insights"], ["Careers", "/careers"], ["About", "/company"], ["Pricing", "/pricing"]].map(([label, path]) => (
                 <Link key={label} to={path} className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>
                   {label}
                 </Link>
@@ -57,7 +64,7 @@ export default function Footer() {
             <div className="space-y-2.5">
               <Link to="/welcome" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Book a Meeting</Link>
               <Link to="/client-login" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Client Login</Link>
-              <Link to="/login" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Admin Login</Link>
+              <Link to="/login" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Team Login</Link>
             </div>
           </div>
 

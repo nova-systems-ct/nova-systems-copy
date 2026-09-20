@@ -1,15 +1,19 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
-import { twilioRequest } from './_twilio.js';
 
 // Combined email / notification endpoint — dispatch via ?action=
 //   contact          POST  general contact-form email (+ confirmation)
 //   book-demo        POST  demo request email
 //   client-message   POST  message to a client (saved + emailed)
 //   send-invoice     POST  invoice email to a client
-//   welcome-lead     POST  /welcome quick-contact form (save + SMS alert + confirmation + 2hr email follow-up)
 //   list             GET   admin notifications feed
+//
+// /welcome used to post here as `welcome-lead` — it wrote straight to a separate `leads` table
+// and emailed an intake link with no human review step, which violated the Part 1 spec's
+// approval-gated flow (see PART_1_CUSTOMER_FOUNDATION.md §6-7). /welcome now posts to
+// nova-wave-one's api/nova-audit `request_audit` action instead (same needs_review/approve
+// pipeline /request-audit already used), so this action was removed rather than fixed in place.
 
 async function handleContact(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -344,150 +348,6 @@ async function handleSendInvoice(req, res) {
   }
 }
 
-async function handleWelcomeLead(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!rateLimit(req, res, 10, 60_000)) return;
-
-  const b = req.body || {};
-  const name = sanitize(b.name, 150);
-  const email = sanitizeEmail(b.email);
-  const phone = sanitizePhone(b.phone);
-  const company = sanitize(b.company, 200);
-  const website = b.website ? (sanitizeUrl(b.website) || sanitize(b.website, 300)) : '';
-  const industry = sanitize(b.industry, 100);
-  const challenge = sanitize(b.challenge, 1000);
-  const goal = sanitize(b.goal, 1000);
-  const agreed_to_terms = b.agreed_to_terms === true || b.agreed_to_terms === 'true';
-  const sms_consent = b.sms_consent === true || b.sms_consent === 'true';
-  const email_consent = b.email_consent === true || b.email_consent === 'true';
-  const call_consent = b.call_consent === true || b.call_consent === 'true';
-
-  if (!name || !email || !phone) return res.status(400).json({ error: 'Full name, email, and phone are required' });
-  if (!agreed_to_terms) return res.status(400).json({ error: 'You must agree to the Terms of Service and Privacy Policy' });
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  let leadId = null;
-
-  // The Supabase write is the one step that actually determines whether this lead exists
-  // anywhere. Twilio/Resend below are notifications about a lead that's already safely saved —
-  // their failure shouldn't tell the visitor their submission failed. This write failing (or
-  // Supabase not being configured at all) means the lead was never captured, so that must surface
-  // as a real error instead of the generic { ok: true } this used to return unconditionally.
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.error('[notify:welcome-lead] Supabase not configured — lead was not saved anywhere');
-    return res.status(500).json({ error: 'We could not save your information right now. Please email hello@nova-systems.app directly.' });
-  }
-  try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json', Prefer: 'return=representation',
-      },
-      body: JSON.stringify({
-        name, email, phone, company, website, industry, challenge, goal,
-        agreed_to_terms, sms_consent, email_consent, call_consent,
-      }),
-    });
-    if (r.ok) {
-      const rows = await r.json();
-      leadId = rows[0]?.id || null;
-    } else {
-      console.error('[notify:welcome-lead] Supabase save error:', r.status, await r.text());
-      return res.status(502).json({ error: 'We could not save your information right now. Please email hello@nova-systems.app directly.' });
-    }
-  } catch (err) {
-    console.error('[notify:welcome-lead] Supabase error:', err.message);
-    return res.status(502).json({ error: 'We could not save your information right now. Please email hello@nova-systems.app directly.' });
-  }
-
-  const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
-  const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-  const TWILIO_FROM = process.env.TWILIO_PHONE_NUMBER;
-
-  if (TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM) {
-    try {
-      await twilioRequest(TWILIO_SID, TWILIO_TOKEN, 'POST', 'Messages.json', {
-        To: process.env.ISAAC_ALERT_PHONE || '+12037060504',
-        From: TWILIO_FROM,
-        Body: `New lead: ${name}${company ? ` from ${company}` : ''}. ${phone}. Check dashboard.`,
-      });
-    } catch (err) {
-      console.error('[notify:welcome-lead] Twilio alert error (non-fatal):', err.message);
-    }
-  }
-
-  const origin = req.headers.origin && req.headers.origin.startsWith('https://') ? req.headers.origin : 'https://nova-systems.app';
-  const intakeParams = new URLSearchParams({
-    name, email, phone,
-    ...(company ? { company } : {}),
-    ...(website ? { website } : {}),
-    ...(industry ? { industry } : {}),
-    ...(leadId ? { lead_id: leadId } : {}),
-  }).toString();
-  const intakeLink = `${origin}/intake?${intakeParams}`;
-
-  const RESEND_KEY = process.env.RESEND_API_KEY;
-  if (RESEND_KEY) {
-    const FROM = 'Nova Systems <noreply@nova-systems.app>';
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM,
-          to: [email],
-          subject: 'We got your info — here is what happens next.',
-          text: [
-            `Hi ${name},`,
-            '',
-            'Thank you for reaching out to Nova Systems. We are reviewing your information and will be in touch within 24 hours.',
-            '',
-            'In the meantime please complete your full Business Intelligence Assessment so we can prepare your custom audit and proposal before we meet:',
-            intakeLink,
-            '',
-            'This takes about 30 minutes and gives us everything we need to hit the ground running.',
-            '',
-            'Isaac Nova',
-            'Founder, Nova Systems',
-          ].join('\n'),
-        }),
-      });
-    } catch (err) {
-      console.error('[notify:welcome-lead] Confirmation email error (non-fatal):', err.message);
-    }
-
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM,
-          to: [email],
-          subject: 'One more step — complete your Business Intelligence Assessment.',
-          scheduled_at: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
-          text: [
-            `Hi ${name},`,
-            '',
-            'thank you again for reaching out to Nova Systems. To prepare your custom audit and proposal we need a little more information.',
-            '',
-            `Please take 30 minutes to complete your full Business Intelligence Assessment here: ${intakeLink}`,
-            '',
-            'This gives us everything we need to build your complete growth plan before we ever meet.',
-            '',
-            'Questions? Reply to this email or visit nova-systems.app.',
-          ].join('\n'),
-        }),
-      });
-    } catch (err) {
-      console.error('[notify:welcome-lead] Scheduled follow-up email error (non-fatal):', err.message);
-    }
-  }
-
-  return res.status(200).json({ ok: true, lead_id: leadId });
-}
-
 async function handleList(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 60, 60_000)) return;
@@ -518,7 +378,6 @@ export default async function handler(req, res) {
     case 'book-demo':       return handleBookDemo(req, res);
     case 'client-message':   return handleClientMessage(req, res);
     case 'send-invoice':      return handleSendInvoice(req, res);
-    case 'welcome-lead':       return handleWelcomeLead(req, res);
     case 'list':                return handleList(req, res);
     default:
       return res.status(400).json({ error: `Unknown action: ${action}` });

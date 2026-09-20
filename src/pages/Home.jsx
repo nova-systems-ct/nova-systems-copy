@@ -5,10 +5,14 @@ import FadeUp from "@/components/FadeUp";
 import WaveOnePopup from "@/components/WaveOnePopup";
 import { useSEO } from "@/hooks/useSEO";
 import HeroSection from "@/components/home/HeroSection";
-import FivePillarsSection from "@/components/home/FivePillarsSection";
-import NovaConnectSection from "@/components/home/NovaConnectSection";
+import ServiceGrid from "@/components/home/ServiceGrid";
+import ProcessSection from "@/components/home/ProcessSection";
+import WhyNovaSection from "@/components/home/WhyNovaSection";
+import WaveOneFeature from "@/components/home/WaveOneFeature";
 import ClientsSection from "@/components/home/ClientsSection";
 import TestimonialsSection from "@/components/home/TestimonialsSection";
+import AuditCTA from "@/components/home/AuditCTA";
+import NovaConnectSection from "@/components/home/NovaConnectSection";
 import ConnecticutSection from "@/components/home/ConnecticutSection";
 import PricingPreviewSection from "@/components/home/PricingPreviewSection";
 import FinalCTASection from "@/components/home/FinalCTASection";
@@ -24,10 +28,14 @@ export default function Home() {
       <Navbar />
       <main className="pt-16">
         <HeroSection />
-        <FadeUp><FivePillarsSection /></FadeUp>
-        <FadeUp><NovaConnectSection /></FadeUp>
+        <FadeUp><ServiceGrid /></FadeUp>
+        <FadeUp><ProcessSection /></FadeUp>
+        <FadeUp><WhyNovaSection /></FadeUp>
+        <FadeUp><WaveOneFeature /></FadeUp>
         <FadeUp><ClientsSection /></FadeUp>
         <FadeUp><TestimonialsSection /></FadeUp>
+        <FadeUp><AuditCTA /></FadeUp>
+        <FadeUp><NovaConnectSection /></FadeUp>
         <FadeUp><ConnecticutSection /></FadeUp>
         <FadeUp><PricingPreviewSection /></FadeUp>
         <FadeUp><FinalCTASection /></FadeUp>

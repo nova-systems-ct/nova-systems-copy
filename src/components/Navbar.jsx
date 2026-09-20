@@ -1,23 +1,31 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LogIn, ArrowRight } from "lucide-react";
 import novaLogo from "@/assets/nova logo.png";
 
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#C8921A";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 40%, ${GOLD_BRIGHT} 60%, ${GOLD} 80%, #8a6200 100%)`;
 
+// Mapped to real, existing routes only — no dedicated "Case Studies" page exists separately from
+// Portfolio, so that label points at the closest real destination rather than a new page or a "#"
+// placeholder. "Services" and "Why Nova" are in-page anchors on the homepage itself (see
+// ServiceGrid, id="services", and WhyNovaSection, id="why-nova") since that content lives there,
+// not on a separate route. Wave One isn't repeated in the primary nav (spec's exact 7-item list
+// is Home/Services/Solutions/Why Nova/Case Studies/Pricing/About) — it stays fully reachable via
+// the ServiceGrid card, the dedicated WaveOneFeature section, and the footer.
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
   const navLinks = [
+    { label: "Home", path: "/" },
+    { label: "Services", path: "/#services" },
     { label: "Solutions", path: "/solutions" },
-    { label: "Wave One", path: "/waves", badge: "NEW", highlight: true },
-    { label: "Insights", path: "/insights" },
-    { label: "Portfolio", path: "/portfolio" },
-    { label: "Careers", path: "/careers" },
-    { label: "Company", path: "/company" },
+    { label: "Why Nova", path: "/#why-nova" },
+    { label: "Case Studies", path: "/portfolio" },
     { label: "Pricing", path: "/pricing" },
+    { label: "About", path: "/company" },
   ];
 
   const isActive = (path) => location.pathname === path;
@@ -64,20 +72,20 @@ export default function Navbar() {
 
         <div className="hidden md:flex items-center gap-3">
           <Link
-            to="/welcome"
-            className="inline-flex items-center px-5 py-2 text-xs font-semibold tracking-wider uppercase transition-all hover:opacity-85"
+            to="/login"
+            className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold tracking-wider uppercase transition-all hover:opacity-85"
             style={{ border: `1px solid ${GOLD}`, color: GOLD }}
             onMouseEnter={(e) => { e.currentTarget.style.background = GOLD; e.currentTarget.style.color = "#0a0800"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = GOLD; }}
           >
-            BOOK A MEETING
+            <LogIn className="w-3.5 h-3.5" /> LOG IN
           </Link>
           <Link
             to="/request-audit"
-            className="inline-flex items-center px-5 py-2 text-xs font-bold tracking-wider uppercase transition-opacity hover:opacity-85"
-            style={{ background: GOLD, color: "#0a0800" }}
+            className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold tracking-wider uppercase transition-opacity hover:opacity-85"
+            style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
           >
-            REQUEST AN AUDIT
+            BOOK AN AUDIT <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
@@ -120,17 +128,17 @@ export default function Navbar() {
             to="/request-audit"
             onClick={() => setMobileOpen(false)}
             className="block text-center px-5 py-3 text-xs font-bold tracking-wider uppercase mt-1"
-            style={{ background: GOLD, color: "#0a0800" }}
+            style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
           >
-            REQUEST AN AUDIT
+            BOOK AN AUDIT
           </Link>
           <Link
-            to="/welcome"
+            to="/login"
             onClick={() => setMobileOpen(false)}
             className="block text-center px-5 py-3 text-xs font-semibold tracking-wider uppercase mt-2"
             style={{ border: `1px solid ${GOLD}`, color: GOLD }}
           >
-            BOOK A MEETING
+            LOG IN
           </Link>
         </div>
       )}

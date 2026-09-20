@@ -10,50 +10,45 @@ const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 
 
 const plans = [
   {
-    name: "STARTER",
-    price: "$1,000",
-    period: "/month",
-    tagline: "Custom website, SEO, and local presence.",
+    name: "BUSINESS DIAGNOSTIC",
+    price: "Scope-based",
+    period: "",
+    tagline: "We investigate your business before recommending anything.",
     features: [
-      "Custom website",
-      "SEO",
-      "Google Business setup",
-      "Hosting and maintenance",
-      "Monthly analytics report",
+      "Website and digital presence review",
+      "Customer journey and conversion friction",
+      "Reputation and local visibility check",
+      "Evidence-backed findings, ranked by priority",
+      "No prescribed software before the diagnosis",
     ],
-    cta: "GET STARTED",
-    popular: false,
-  },
-  {
-    name: "GROWTH",
-    price: "$1,500",
-    period: "/month",
-    tagline: "Premium infrastructure and AI automation.",
-    features: [
-      "Everything in Starter",
-      "Social media management (when team is hired)",
-      "AI phone agent",
-      "Brand organization",
-      "CRM setup",
-      "Email and SMS marketing",
-    ],
-    cta: "GET STARTED",
+    cta: "START YOUR DIAGNOSTIC",
     popular: true,
   },
   {
-    name: "ENTERPRISE",
-    price: "Custom",
+    name: "IMPLEMENTATION",
+    price: "Quoted per finding",
     period: "",
-    tagline: "Full operational infrastructure, built for you.",
+    tagline: "Fix what the diagnostic actually finds — nothing prescribed in advance.",
     features: [
-      "Full AI ecosystem",
-      "Custom web applications",
-      "Complete operational automation",
-      "Dedicated account management",
-      "Priority support",
-      "Everything Nova Systems offers",
+      "Priced against the specific findings, not a fixed package",
+      "You can implement internally, use another provider, or hire Nova",
+      "Website, CRM, automation, or other systems — only what's needed",
+      "Clear scope and timeline before work begins",
     ],
     cta: "BOOK A CONSULTATION",
+    popular: false,
+  },
+  {
+    name: "MONITORING",
+    price: "Optional, recurring",
+    period: "",
+    tagline: "Ongoing measurement of what changed after implementation.",
+    features: [
+      "Tracks whether the intervention produced the intended result",
+      "Recurring check-ins, not a fixed monthly retainer",
+      "Available where it fits the business — not required",
+    ],
+    cta: "ASK ABOUT MONITORING",
     popular: false,
   },
 ];
@@ -71,7 +66,7 @@ export default function Pricing() {
   const [openFaq, setOpenFaq] = useState(null);
   useSEO({
     title: "Pricing — Nova Systems Connecticut",
-    description: "Transparent, custom-built pricing for Connecticut businesses. Starter, Growth, and Enterprise plans from Nova Systems — Waterbury, CT's AI and technology agency.",
+    description: "Diagnosis-first, scope-based pricing for Connecticut businesses. Nova Systems investigates before recommending — Waterbury, CT's business intelligence and execution partner.",
   });
 
   return (
@@ -96,15 +91,16 @@ export default function Pricing() {
               PRICING <span className="inline-block w-8 h-px align-middle ml-2" style={{ background: GOLD }} />
             </p>
             <h1 className="text-4xl md:text-6xl font-black text-white leading-[1.05] mb-5">
-              Transparent Pricing.<br />
+              Diagnosis First.<br />
               <span style={{
                 background: `linear-gradient(90deg, ${GOLD} 0%, #C8921A 50%, ${GOLD} 100%)`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
-              }}>Built Around Your Scale.</span>
+              }}>Pricing Second.</span>
             </h1>
             <p className="text-sm max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
-              Every plan is custom built for your business. These are starting points — not ceilings.
+              You only pay for what your business actually needs. Nova does not prescribe a system
+              before completing the diagnosis.
             </p>
           </div>
         </section>

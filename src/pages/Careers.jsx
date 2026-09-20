@@ -13,7 +13,7 @@ export default function Careers() {
 
   useSEO({
     title: "Careers at Nova Systems — Join Connecticut's AI Agency",
-    description: "Nova Systems is hiring elite, self-driven talent in Waterbury, Connecticut — C-suite executives, sales, content creators, and remote lead generation specialists.",
+    description: "Nova Systems is hiring elite, self-driven talent in Waterbury, Connecticut — sales representatives, content creators, and remote lead generation specialists.",
   });
 
   return (

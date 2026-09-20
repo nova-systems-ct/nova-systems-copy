@@ -1,16 +1,17 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Bot, Globe, Palette, Workflow } from "lucide-react";
 import video1 from "@/assets/Video 1.mp4";
 import video2 from "@/assets/video 2.mp4";
 import { useSEO } from "@/hooks/useSEO";
+import { supabase } from "@/lib/supabaseClient";
+import { safeReturnTo } from "@/lib/returnTo";
 
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#C8921A";
 const GOLD_DARK = "#8a6200";
 const GOLD_GRADIENT = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 const VIDEOS = [video1, video2];
-const PLATFORM_URL = "https://nova-systems.agency";
 
 const features = [
   { icon: Bot, label: "AI ECOSYSTEMS", sub: "Automated workflows and phone agents, live." },
@@ -19,34 +20,27 @@ const features = [
   { icon: Workflow, label: "FULL OPERATIONS", sub: "CRM, contracts, and cloud infrastructure." },
 ];
 
-// This page performs NO authentication of its own — nova-systems.app is the public marketing
-// entrance only. It exists to keep one consistent brand moment before handing off to the real,
-// canonical login at nova-systems.agency, which is the only place a session is ever created.
-// Only a relative path is ever accepted for returnTo (an open-redirect guard); anything else
-// falls back to the platform's default landing.
-function safeReturnTo(value) {
-  if (typeof value !== "string" || !value) return null;
-  let decoded;
-  try {
-    decoded = decodeURIComponent(value);
-  } catch {
-    return null;
-  }
-  if (!decoded.startsWith("/")) return null;
-  if (decoded.startsWith("//") || decoded.startsWith("/\\")) return null;
-  if (/[\x00-\x1f\s]/.test(decoded)) return null;
-  const rest = decoded.slice(1);
-  const breakIndex = rest.search(/[/?#]/);
-  const firstSegment = breakIndex === -1 ? rest : rest.slice(0, breakIndex);
-  if (firstSegment.includes(":")) return null;
-  return decoded;
-}
+const inputStyle = {
+  width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#fff",
+  fontSize: 14, outline: "none", boxSizing: "border-box",
+};
 
 export default function Login() {
-  useSEO({ title: "Client Login — Nova Systems", description: "Secure access to your Nova Systems workspace." });
+  useSEO({ title: "Login — Nova Systems", description: "Secure access to your Nova Systems workspace." });
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [vidIdx, setVidIdx] = useState(0);
   const videoRef = useRef(null);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  const destination = safeReturnTo(searchParams.get("returnTo"));
 
   useEffect(() => {
     const v = videoRef.current;
@@ -57,8 +51,67 @@ export default function Login() {
     v.play().catch(() => {});
   }, [vidIdx]);
 
-  const returnTo = safeReturnTo(searchParams.get("returnTo"));
-  const platformLoginUrl = `${PLATFORM_URL}/login?source=app${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`;
+  // If a real session already exists, skip the form entirely and go straight to the destination.
+  useEffect(() => {
+    let active = true;
+    async function check() {
+      if (!supabase) {
+        setCheckingSession(false);
+        return;
+      }
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      if (data?.session) {
+        navigate(destination, { replace: true });
+      } else {
+        setCheckingSession(false);
+      }
+    }
+    check();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    if (!supabase) {
+      setError("Login is not configured. Contact hello@nova-systems.app.");
+      setLoading(false);
+      return;
+    }
+
+    const { data, error: authErr } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (!authErr && data?.session) {
+      navigate(destination, { replace: true });
+      return;
+    }
+    setError("Invalid email or password. Please try again.");
+  };
+
+  const handleForgotPassword = async () => {
+    setError("");
+    setInfo("");
+    if (!supabase) return;
+    const target = email.trim();
+    if (!target) {
+      setError('Enter your email above first, then press "Forgot password?"');
+      return;
+    }
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    });
+    setInfo(resetErr ? "" : "If that email has an account, a reset link is on its way.");
+    if (resetErr) setError("Could not send a reset email right now. Please try again shortly.");
+  };
+
+  if (checkingSession) {
+    return <div className="min-h-screen" style={{ background: "#080600" }} />;
+  }
 
   return (
     <div className="min-h-screen flex" style={{ background: "#080600" }}>
@@ -139,22 +192,48 @@ export default function Login() {
             <div className="flex-1 h-px" style={{ background: `linear-gradient(to right,${GOLD}60,transparent)` }} />
           </div>
           <h2 className="text-2xl font-black text-white mb-1">Sign in to Nova Systems</h2>
-          <p className="text-xs mb-10" style={{ color: "rgba(255,255,255,0.35)" }}>
+          <p className="text-xs mb-8" style={{ color: "rgba(255,255,255,0.35)" }}>
             Your workspace, dashboards, and client tools live on Nova's secure platform.
           </p>
 
-          <a
-            href={platformLoginUrl}
-            className="w-full py-3.5 text-[11px] font-bold tracking-[0.2em] uppercase transition-all hover:opacity-85 flex items-center justify-center gap-2"
-            style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
-          >
-            <span>CONTINUE TO SECURE LOGIN</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </a>
+          {error && (
+            <div className="mb-5 px-4 py-3 rounded-lg text-xs" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171" }}>
+              {error}
+            </div>
+          )}
+          {info && (
+            <div className="mb-5 px-4 py-3 rounded-lg text-xs" style={{ background: `${GOLD}12`, border: `1px solid ${GOLD}40`, color: GOLD }}>
+              {info}
+            </div>
+          )}
 
-          <p className="text-center mt-6 text-[10px] leading-relaxed" style={{ color: "rgba(255,255,255,0.25)" }}>
-            Protected by encrypted authentication on nova-systems.agency.
-          </p>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-bold tracking-[0.15em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Email</label>
+              <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold tracking-[0.15em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Password</label>
+              <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 mt-2 text-[11px] font-bold tracking-[0.2em] uppercase transition-all hover:opacity-85 flex items-center justify-center gap-2"
+              style={{ background: GOLD_GRADIENT, color: "#0a0800", opacity: loading ? 0.6 : 1, border: "none", cursor: loading ? "default" : "pointer" }}
+            >
+              <span>{loading ? "SIGNING IN…" : "SIGN IN"}</span>
+              {!loading && <ArrowRight className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              className="w-full text-center text-[11px] py-1"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)" }}
+            >
+              Forgot password?
+            </button>
+          </form>
 
           <p className="text-center mt-8 text-xs" style={{ color: "rgba(255,255,255,0.25)" }}>
             Are you a client?{" "}

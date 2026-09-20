@@ -494,3 +494,288 @@ CREATE TABLE IF NOT EXISTS contracts (
 --                                photos, brand guides, etc.), path: [email]/[category]/[timestamp]-[filename]
 --                                Public read so confirmation emails/dashboard can link directly;
 --                                writes go through the service-role key only (api/business-intake.js).
+
+-- ============================================================================================
+-- STAGE 4 — MULTI-COMPANY ARCHITECTURE + RBAC (2026-09-12/13, NOVA-STAGE-4-MULTI-COMPANY-RBAC)
+-- Additive only. Safe to re-run. Does not alter or drop any existing table's data.
+--
+-- IDENTITY MODEL (corrected 2026-09-13 per Isaac's explicit direction — do not revisit without
+-- his authorization): there is NO third member_type. Every real authenticated user, Nova staff
+-- and client-side people alike, is member_type='staff', staff_user_id = auth.users.id. The
+-- actual business relationship (Nova admin vs. client owner vs. client employee, and which
+-- organization(s) they belong to) is determined entirely by ROLE plus which organization(s)
+-- they have an active organization_members ROW for, never by member_type, which stays a legacy
+-- label. organization_members_identity_check and organization_members_member_type_check are
+-- deliberately NOT modified by this section.
+--
+-- SCHEMA-SHAPE NOTE: the live permissions/role_permissions tables (already applied to
+-- production before this note was written) use surrogate UUID id primary keys with
+-- role_permissions.permission_id as a foreign key to permissions.id, not a direct
+-- permission_key TEXT reference, confirmed via PostgREST OpenAPI introspection. The CREATE
+-- TABLE statements below match that live shape. src/lib/OrgContext.jsx queries this shape via a
+-- PostgREST embed (role_permissions -> permissions(key)), already verified against production.
+--
+-- KNOWN PRE-EXISTING RISK, inherited, not introduced here, flagged for the tenant-isolation
+-- test rather than assumed either way: organizations/organization_members already carry a
+-- blanket policy from nova-wave-one's 2026-08-12 migration, staff_read_all_organizations and
+-- staff_read_all_members, granting ANY row with member_type='staff' (regardless of role or
+-- which org it is on) read access to EVERY organization. Under Isaac's corrected model a
+-- client-side person is ALSO member_type='staff' (distinguished only by role), so this
+-- pre-existing blanket policy may mean a client_owner row can read organizations it has no real
+-- relationship with. scripts/e2e_org_isolation_test.mjs checks this empirically.
+-- ============================================================================================
+
+-- LOCATIONS
+CREATE TABLE IF NOT EXISTS locations (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  address TEXT,
+  city TEXT,
+  state TEXT,
+  postal_code TEXT,
+  country TEXT DEFAULT 'US',
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS locations_organization_idx ON locations (organization_id);
+
+-- PERMISSIONS + ROLE_PERMISSIONS
+-- Keyed to organization_members.role's EXISTING CHECK-constrained values (nova_super_admin,
+-- nova_admin, nova_auditor, nova_marketing, nova_sales, nova_developer, client_owner,
+-- client_admin, client_marketing, client_employee, client_viewer). No parallel role vocabulary,
+-- no ALTER of a constraint another already-deployed app relies on.
+CREATE TABLE IF NOT EXISTS permissions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  key TEXT UNIQUE NOT NULL,
+  description TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  role TEXT NOT NULL,
+  permission_id UUID NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (role, permission_id)
+);
+
+INSERT INTO permissions (key, description) VALUES
+  ('overview.view',      'View the HQ Overview page'),
+  ('intelligence.view',  'View the Intelligence area (diagnostics, intake)'),
+  ('growth.view',        'View the Growth area (leads, content, referrals)'),
+  ('execution.view',     'View the Execution area'),
+  ('companies.view',     'View the Companies (organizations) area'),
+  ('admin.view',         'View the Admin area'),
+  ('members.view',       'View organization membership lists'),
+  ('members.manage',     'Invite/remove/change organization members'),
+  ('locations.view',     'View organization locations'),
+  ('locations.manage',   'Create/edit organization locations'),
+  ('documents.view',     'View documents/Nova Vault'),
+  ('documents.manage',   'Upload/delete documents'),
+  ('billing.view',       'View invoices/billing'),
+  ('billing.manage',     'Create/edit invoices'),
+  ('settings.view',      'View organization settings'),
+  ('settings.manage',    'Change organization settings')
+ON CONFLICT (key) DO NOTHING;
+
+-- Role -> permission bundles. nova_super_admin/nova_admin get everything (platform/Nova-wide
+-- operational roles). Every other role — Nova staff and client roles alike — gets ONLY the
+-- permission keys actually wired to a route today (overview/intelligence/growth/execution/
+-- companies/admin.view — confirmed via grep of src/App.jsx, the only 6 permission strings any
+-- frontend code checks). The finer-grained keys (members.*, locations.*, documents.*,
+-- billing.*, settings.*) are reference data only — nothing reads them yet — and are
+-- DELIBERATELY NOT granted to any client-facing role below (Stage 4.1, 2026-09-13/14):
+-- "documents.view"/"billing.view" etc. all point at Nova-global, non-organization-scoped data
+-- sources (api/client?resource=invoices etc. return ALL of Nova's records regardless of caller)
+-- with no tenant-scoped implementation behind them yet. Do not grant any of them to a
+-- client_* role until a real per-organization-scoped implementation exists to back them —
+-- granting the permission key first and scoping the data later is exactly the trap this
+-- comment exists to prevent.
+--
+-- STAGE 4.1 FIX (2026-09-13/14, NOVA-STAGE-4.1-CLIENT-ADMIN-SAFETY): client_owner/client_admin
+-- previously had admin.view (whatever applied this migration originally granted it) — admin.view
+-- gates Nova's own Invoices/Contracts/Nova Vault/Documents/Candidates pages, all Nova-global and
+-- not organization-scoped. Removed live via direct DELETE against role_permissions (13 rows:
+-- admin.view from client_owner/client_admin, plus the unwired members/locations/documents/
+-- billing/settings.view grants from client_owner/client_admin/client_marketing/client_employee)
+-- and corrected here so a fresh migration run reproduces the same safe baseline.
+INSERT INTO role_permissions (role, permission_id)
+SELECT r.role, p.id FROM permissions p, (VALUES ('nova_super_admin'), ('nova_admin')) AS r(role)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role, permission_id)
+SELECT v.role, p.id FROM permissions p JOIN (VALUES
+  ('nova_auditor',    'overview.view'), ('nova_auditor',    'intelligence.view'),
+  ('nova_marketing',  'overview.view'), ('nova_marketing',  'growth.view'),
+  ('nova_sales',      'overview.view'), ('nova_sales',      'growth.view'),
+  ('nova_developer',  'overview.view'), ('nova_developer',  'execution.view'),
+  ('client_owner',    'overview.view'), ('client_owner',    'growth.view'),
+  ('client_owner',    'intelligence.view'), ('client_owner', 'companies.view'),
+  ('client_owner',    'execution.view'),
+  ('client_admin',    'overview.view'), ('client_admin',    'growth.view'),
+  ('client_admin',    'intelligence.view'), ('client_admin', 'companies.view'),
+  ('client_admin',    'execution.view'),
+  ('client_marketing','overview.view'), ('client_marketing','growth.view'),
+  ('client_employee', 'overview.view'), ('client_employee', 'execution.view'),
+  ('client_viewer',   'overview.view')
+) AS v(role, key) ON v.key = p.key
+ON CONFLICT DO NOTHING;
+
+ALTER TABLE locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE permissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE role_permissions ENABLE ROW LEVEL SECURITY;
+
+-- permissions/role_permissions are a non-sensitive reference table, no tenant data, any
+-- authenticated user may read them.
+DROP POLICY IF EXISTS authenticated_read_permissions ON permissions;
+CREATE POLICY authenticated_read_permissions ON permissions FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS authenticated_read_role_permissions ON role_permissions;
+CREATE POLICY authenticated_read_role_permissions ON role_permissions FOR SELECT TO authenticated USING (true);
+
+-- LOCATIONS RLS: real per-organization membership, no blanket clause. Deliberately does NOT
+-- grant blanket access to every staff row, scoped to whether the caller has an active
+-- organization_members row for THIS specific organization, matching Isaac's corrected identity
+-- model (role + membership determine access, not member_type).
+DROP POLICY IF EXISTS members_read_locations ON locations;
+CREATE POLICY members_read_locations ON locations FOR SELECT TO authenticated
+  USING (EXISTS (
+    SELECT 1 FROM organization_members m
+    WHERE m.staff_user_id = auth.uid() AND m.status = 'active'
+      AND m.organization_id = locations.organization_id
+  ));
+
+-- HELPER FUNCTIONS (SECURITY DEFINER, minimal, explicit search_path). is_org_member and
+-- has_permission check real per-organization membership only, no member_type shortcut.
+-- is_platform_owner is the one deliberately org-agnostic check (a platform-wide role flag, not
+-- a data-access bypass).
+CREATE OR REPLACE FUNCTION is_platform_owner()
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM organization_members m
+    WHERE m.staff_user_id = auth.uid() AND m.role = 'nova_super_admin' AND m.status = 'active'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION is_org_member(target_org_id UUID)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM organization_members m
+    WHERE m.staff_user_id = auth.uid() AND m.status = 'active' AND m.organization_id = target_org_id
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION has_permission(target_org_id UUID, permission_key TEXT)
+RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM organization_members m
+    JOIN role_permissions rp ON rp.role = m.role
+    JOIN permissions p ON p.id = rp.permission_id AND p.key = permission_key
+    WHERE m.staff_user_id = auth.uid() AND m.status = 'active' AND m.organization_id = target_org_id
+  );
+$$;
+
+-- BOOTSTRAP: Isaac's real staff membership on Nova Systems. Looked up by email against the
+-- REAL auth.users table at migration-run time, never a guessed or hardcoded UUID. Covers both
+-- real accounts on file for Isaac. Idempotent: NOT EXISTS guard means running this twice
+-- creates nothing extra.
+INSERT INTO organization_members (organization_id, member_type, staff_user_id, role, status)
+SELECT o.id, 'staff', u.id, 'nova_super_admin', 'active'
+FROM organizations o
+JOIN auth.users u ON u.email IN ('isaac@nova-systems.app', 'isaac_0427@icloud.com')
+WHERE o.kind = 'nova_internal'
+  AND NOT EXISTS (
+    SELECT 1 FROM organization_members m WHERE m.staff_user_id = u.id AND m.organization_id = o.id
+  );
+
+-- ============================================================================================
+-- STAGE 5 — NOVA RUNS NOVA (2026-09-14, NOVA-STAGE-5-RUNS-NOVA)
+-- Additive only. Safe to re-run. Does not alter or drop any existing table's data.
+--
+-- Organization-scopes the real (not crmStore/localStorage) tables Nova's own operating data
+-- already lives in: leads, intake_submissions, contracts, client_invoices, clients, meetings,
+-- nova_tasks, referral_tracking. All confirmed live via direct PostgREST introspection before
+-- writing this, with actual row content inspected, not assumed:
+--   leads (1 row — Isaac's own test submission), intake_submissions (0), contracts (1 row,
+--   literally named "QA Test Client — DELETE ME"), client_invoices (0), clients (0), meetings
+--   (0), nova_tasks (0), referral_tracking (0). Every existing row in every one of these tables
+--   is unambiguously Nova's own data (there is no other real organization yet) — backfilled to
+--   the Nova Systems org below, not guessed.
+--
+-- blog_posts/portfolio are deliberately NOT organization-scoped here — they are the PUBLIC
+-- website's marketing content (blog_posts already has a `site` column defaulting to 'nova',
+-- confirming platform-global intent), not per-tenant business data (master prompt Section 71:
+-- "Some data may be platform-global... Some data is organization-specific" — these are the
+-- former).
+--
+-- No new permission keys were added (leads.view, pipeline.view, tasks.view, revenue.view etc.
+-- were considered per Section 43 but rejected as unnecessary proliferation) — the new Leads/
+-- Tasks/Revenue surfaces reuse the SAME permission that already gates their parent HQ area
+-- (growth.view for Leads/pipeline under Growth, execution.view for Tasks under Execution,
+-- overview.view for the Revenue summary on Overview), consistent with how every other child
+-- page under an area already works (e.g. Referrals/Blog/Portfolio all just check growth.view).
+-- ============================================================================================
+
+ALTER TABLE leads             ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE intake_submissions ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE contracts         ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE client_invoices   ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE clients           ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE meetings          ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE nova_tasks        ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE referral_tracking ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+
+CREATE INDEX IF NOT EXISTS leads_organization_idx             ON leads (organization_id);
+CREATE INDEX IF NOT EXISTS intake_submissions_organization_idx ON intake_submissions (organization_id);
+CREATE INDEX IF NOT EXISTS contracts_organization_idx          ON contracts (organization_id);
+CREATE INDEX IF NOT EXISTS client_invoices_organization_idx    ON client_invoices (organization_id);
+CREATE INDEX IF NOT EXISTS clients_organization_idx            ON clients (organization_id);
+CREATE INDEX IF NOT EXISTS meetings_organization_idx           ON meetings (organization_id);
+CREATE INDEX IF NOT EXISTS nova_tasks_organization_idx         ON nova_tasks (organization_id);
+CREATE INDEX IF NOT EXISTS referral_tracking_organization_idx  ON referral_tracking (organization_id);
+
+-- Backfill: every EXISTING row in these tables is Nova's own real data (verified by content
+-- above, not assumed) -> Nova Systems org. Future rows from a real second organization would
+-- need their own organization_id set at write time; nothing here retroactively reassigns
+-- anything once organization_id is non-null, so this is a one-time, idempotent backfill.
+UPDATE leads             SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND leads.organization_id IS NULL;
+UPDATE intake_submissions SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND intake_submissions.organization_id IS NULL;
+UPDATE contracts         SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND contracts.organization_id IS NULL;
+UPDATE client_invoices   SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND client_invoices.organization_id IS NULL;
+UPDATE clients           SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND clients.organization_id IS NULL;
+UPDATE meetings          SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND meetings.organization_id IS NULL;
+UPDATE nova_tasks        SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND nova_tasks.organization_id IS NULL;
+UPDATE referral_tracking SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND referral_tracking.organization_id IS NULL;
+
+ALTER TABLE leads             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE intake_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contracts         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE client_invoices   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clients           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meetings          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nova_tasks        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE referral_tracking ENABLE ROW LEVEL SECURITY;
+
+-- Real per-organization membership check (is_org_member, built in Stage 4) — no blanket
+-- member_type shortcut. All existing api/*.js handlers use the service-role key (bypasses RLS
+-- entirely), so enabling RLS here does not change any current server-side behavior — it only
+-- closes off direct browser/anon-key access to another organization's rows, matching the same
+-- pattern already applied to organizations/organization_members/locations.
+DROP POLICY IF EXISTS members_read_leads ON leads;
+CREATE POLICY members_read_leads ON leads FOR SELECT TO authenticated USING (is_org_member(organization_id));
+DROP POLICY IF EXISTS members_read_intake_submissions ON intake_submissions;
+CREATE POLICY members_read_intake_submissions ON intake_submissions FOR SELECT TO authenticated USING (is_org_member(organization_id));
+DROP POLICY IF EXISTS members_read_contracts ON contracts;
+CREATE POLICY members_read_contracts ON contracts FOR SELECT TO authenticated USING (is_org_member(organization_id));
+DROP POLICY IF EXISTS members_read_client_invoices ON client_invoices;
+CREATE POLICY members_read_client_invoices ON client_invoices FOR SELECT TO authenticated USING (is_org_member(organization_id));
+DROP POLICY IF EXISTS members_read_clients ON clients;
+CREATE POLICY members_read_clients ON clients FOR SELECT TO authenticated USING (is_org_member(organization_id));
+DROP POLICY IF EXISTS members_read_meetings ON meetings;
+CREATE POLICY members_read_meetings ON meetings FOR SELECT TO authenticated USING (is_org_member(organization_id));
+DROP POLICY IF EXISTS members_read_nova_tasks ON nova_tasks;
+CREATE POLICY members_read_nova_tasks ON nova_tasks FOR SELECT TO authenticated USING (is_org_member(organization_id));
+DROP POLICY IF EXISTS members_read_referral_tracking ON referral_tracking;
+CREATE POLICY members_read_referral_tracking ON referral_tracking FOR SELECT TO authenticated USING (is_org_member(organization_id));
+

@@ -75,10 +75,12 @@ export default function Company() {
           <div className="max-w-3xl mx-auto text-center">
             <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>OUR MISSION</p>
             <h2 className="text-3xl md:text-4xl font-black text-white mb-6 leading-tight">
-              Fortune 500 technology.<br />Built for every business.
+              Find the leaks.<br />Fix what matters.
             </h2>
             <p className="text-base leading-relaxed max-w-xl mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
-              We believe every business deserves access to the same technology that Fortune 500 companies use. We build it, manage it, and grow it — so you can focus on running your business.
+              We believe most businesses are losing customers, revenue, or time in places they can't
+              see. We investigate first, then build, manage, and grow only what the evidence says
+              actually matters — so you can focus on running your business.
             </p>
           </div>
         </section>

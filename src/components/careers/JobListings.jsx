@@ -6,10 +6,6 @@ const GOLD = "#D4A030";
 const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
 
 const ICONS = {
-  cto: Crown,
-  coo: Crown,
-  cpo: Crown,
-  cfo: Crown,
   "sales-rep": TrendingUp,
   "content-creator": Camera,
   "lead-gen": Globe,
@@ -23,7 +19,7 @@ export default function JobListings({ onApply }) {
         {/* Header */}
         <div className="mb-14">
           <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 12 }}>OPEN ROLES</p>
-          <h2 className="text-3xl md:text-4xl font-black text-white leading-tight">7 Positions Open</h2>
+          <h2 className="text-3xl md:text-4xl font-black text-white leading-tight">{JOBS.length} Positions Open</h2>
           <p className="mt-3 text-sm" style={{ color: "rgba(255,255,255,0.35)" }}>
             Isaac reviews every application himself. Be real, be specific — that's what gets noticed.
           </p>

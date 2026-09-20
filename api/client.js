@@ -767,7 +767,7 @@ async function handleDocuments(req, res) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
         max_tokens: 2000,
         system: [
           'You are a professional business document writer for Nova Systems, a Connecticut-based operational infrastructure company.',
@@ -787,7 +787,9 @@ async function handleDocuments(req, res) {
       return res.status(500).json({ error: data.error.message || 'AI generation failed' });
     }
 
-    const text = data.content?.[0]?.text || '';
+    // claude-sonnet-5 emits a leading `thinking` block before the `text` block, so the first
+    // content item isn't reliably the response text.
+    const text = data.content?.find((c) => c.type === 'text')?.text || '';
 
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY && (client_id || lead_id)) {
       try {

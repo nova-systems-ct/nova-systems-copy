@@ -1,10 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+}
+
 export default function FadeUp({ children, delay = 0 }) {
   const ref = useRef(null);
-  const [visible, setVisible] = useState(false);
+  // Skip the animated state entirely when the user has asked for reduced motion — the content
+  // renders visible and static from the first paint instead of waiting on an IntersectionObserver.
+  const [visible, setVisible] = useState(() => prefersReducedMotion());
+  const reduceMotion = prefersReducedMotion();
 
   useEffect(() => {
+    if (reduceMotion) return;
     const el = ref.current;
     if (!el) return;
     const observer = new IntersectionObserver(
@@ -13,7 +21,11 @@ export default function FadeUp({ children, delay = 0 }) {
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [reduceMotion]);
+
+  if (reduceMotion) {
+    return <div ref={ref}>{children}</div>;
+  }
 
   return (
     <div

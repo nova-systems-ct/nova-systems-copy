@@ -1,6 +1,20 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 const GOLD = "#D4A030";
+
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(
+    () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!mq) return;
+    const onChange = () => setReduced(mq.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+  return reduced;
+}
 
 const ALL_CITIES = [
   { name: "Hartford",    x: 168, y: 92 },
@@ -20,6 +34,7 @@ const CT_PATH = "M20,150 C15,110 40,60 90,40 C140,20 200,15 240,35 C265,48 270,7
 
 export default function ConnecticutMap({ cities, height = 280 }) {
   const shown = cities ? ALL_CITIES.filter((c) => cities.includes(c.name)) : ALL_CITIES;
+  const reduceMotion = usePrefersReducedMotion();
   return (
     <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
       <svg viewBox="0 0 300 260" width="100%" height={height} style={{ maxWidth: 420 }}>
@@ -27,8 +42,12 @@ export default function ConnecticutMap({ cities, height = 280 }) {
         {shown.map((c) => (
           <g key={c.name}>
             <circle cx={c.x} cy={c.y} r="8" fill={GOLD} fillOpacity="0.15">
-              <animate attributeName="r" values="6;10;6" dur="2.4s" repeatCount="indefinite" begin={`${Math.random()}s`} />
-              <animate attributeName="fill-opacity" values="0.2;0.02;0.2" dur="2.4s" repeatCount="indefinite" begin={`${Math.random()}s`} />
+              {!reduceMotion && (
+                <>
+                  <animate attributeName="r" values="6;10;6" dur="2.4s" repeatCount="indefinite" begin={`${Math.random()}s`} />
+                  <animate attributeName="fill-opacity" values="0.2;0.02;0.2" dur="2.4s" repeatCount="indefinite" begin={`${Math.random()}s`} />
+                </>
+              )}
             </circle>
             <circle cx={c.x} cy={c.y} r="3.5" fill={GOLD} stroke="#000" strokeWidth="1" />
             <text x={c.x} y={c.y - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="rgba(255,255,255,0.55)" fontFamily="inherit">

@@ -1,4 +1,5 @@
 import React from "react";
+import { JOBS } from "./jobs";
 
 const GOLD = "#D4A030";
 const GOLD_BRIGHT = "#F0C040";
@@ -44,7 +45,7 @@ export default function CareersHero() {
         <div className="flex items-center justify-center gap-6 mt-10">
           <div className="h-px flex-1 max-w-24" style={{ background: "rgba(255,255,255,0.08)" }} />
           <p style={{ color: "rgba(255,255,255,0.22)", fontSize: 10, letterSpacing: "0.25em", textTransform: "uppercase" }}>
-            7 POSITIONS OPEN
+            {JOBS.length} POSITIONS OPEN
           </p>
           <div className="h-px flex-1 max-w-24" style={{ background: "rgba(255,255,255,0.08)" }} />
         </div>
