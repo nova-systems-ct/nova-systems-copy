@@ -176,10 +176,10 @@ export default function Company() {
               ))}
             </div>
             <div className="flex items-center justify-center gap-3 mt-8">
-              <a href="#" className="w-10 h-10 rounded-lg flex items-center justify-center transition-all hover:scale-110" style={{ border: `1px solid ${GOLD}35`, background: `${GOLD}10` }}>
+              <a href="https://www.instagram.com/nova_systems27/" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-lg flex items-center justify-center transition-all hover:scale-110" style={{ border: `1px solid ${GOLD}35`, background: `${GOLD}10` }}>
                 <Instagram className="w-4 h-4" style={{ color: GOLD }} />
               </a>
-              <a href="#" className="w-10 h-10 rounded-lg flex items-center justify-center transition-all hover:scale-110" style={{ border: `1px solid ${GOLD}35`, background: `${GOLD}10` }}>
+              <a href="https://www.linkedin.com/company/nova-systems07/" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-lg flex items-center justify-center transition-all hover:scale-110" style={{ border: `1px solid ${GOLD}35`, background: `${GOLD}10` }}>
                 <Linkedin className="w-4 h-4" style={{ color: GOLD }} />
               </a>
             </div>
