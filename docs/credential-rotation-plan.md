@@ -14,6 +14,58 @@ provider once the new one verifies.
 
 ---
 
+## URGENT — act on these now, don't wait for the full post-build rotation
+
+Clearing a value out of local `.env.local` and a provider revoking/rotating a credential are two
+different, separate actions — clearing the local file only stops *this machine* from being able to
+use it; the credential itself is still live at the provider until you act there directly. The same
+goes for an API request coming back 401/invalid: that tells us the value we tried is no longer
+accepted right now, not that anyone deliberately revoked it — it could just as easily mean it was
+already rotated for an unrelated reason, or was never the right value to begin with. Neither local
+clearing nor a 401 is a substitute for actually revoking it at the provider.
+
+Four credentials were printed into this Claude Code session's own chat transcript on 2026-09-20
+(before this security review began) and should be treated as compromised regardless of what any
+validity check says:
+
+| Credential | Why urgent | Action | Status |
+|---|---|---|---|
+| Twilio Account SID + Auth Token | Chat-exposed | Twilio Console → Account → API keys & tokens → regenerate the Auth Token (this invalidates the exposed one immediately; the Account SID itself isn't rotatable, but it's only useful paired with a valid token) | **Not yet done — needs Isaac's action in the Twilio dashboard** |
+| Google API Key | Chat-exposed; confirmed still active via a live API call | Google Cloud Console → APIs & Services → Credentials → delete this key (it's unused in code — see below — so there's no integration to break) | **Not yet done — needs Isaac's action in Google Cloud Console** |
+| ElevenLabs API Key | Chat-exposed | ElevenLabs dashboard → Profile → API Keys → revoke | **Not yet done — needs Isaac's action** (already returns 401 on its own, but that's not the same as confirmed-revoked — see above) |
+| Deepgram API Key | Chat-exposed | Deepgram Console → API Keys → revoke | **Not yet done — needs Isaac's action** (same caveat as ElevenLabs) |
+
+I have no provider-dashboard access from this environment — I cannot revoke these myself. Local
+`.env.local` values for all four have already been cleared (variable names preserved), which stops
+local/dev use, but the values themselves remain valid-until-revoked at each provider until you act
+there directly.
+
+### Also check now: Vercel's stored environment variables
+
+I have no Vercel dashboard access either, so I can't see what's actually configured there —
+including for prior deployments. Please check directly, for all three Vercel environments
+(Production, Preview, Development), since a value can differ per environment:
+
+1. Vercel project → Settings → Environment Variables — confirm which of `TWILIO_ACCOUNT_SID`,
+   `TWILIO_AUTH_TOKEN`, `GOOGLE_API_KEY`, `ELEVENLABS_API_KEY`, `DEEPGRAM_API_KEY` are set there,
+   for which environment(s), and whether the values match the ones cleared locally (if they're the
+   same values, they're exposed the same way; if they differ, this local exposure doesn't extend to
+   production, but the values found invalid against each provider's own API might still need
+   attention for a different reason — see the "Local validity" notes throughout this document).
+2. Also worth checking on the same screen: `ANTHROPIC_API_KEY` and whether a `VITE_CLAUDE_API_KEY`
+   variable exists or ever existed (Vercel's environment-variable history/audit log, if available,
+   is the only way to check whether it was ever set in the past, not just now) — this is the
+   remaining open question from the original client-side-key exposure investigation.
+3. Vercel project → Deployments → (older deployments) — build logs occasionally echo environment
+   variable names during the build step; worth a scan for any of the above names appearing
+   alongside a real-looking value, though Vercel redacts recognized secret patterns from logs by
+   default.
+
+None of this requires pasting a value anywhere — just visually confirming what's configured and
+where, and taking the revoke/regenerate action directly in each provider's own interface.
+
+---
+
 ## Status legend
 
 - **Exposure**: `clean` (no evidence of exposure found), `chat-exposed` (a real value was printed
@@ -38,9 +90,15 @@ provider once the new one verifies.
 this session's own live testing, which is expected and does not print it).
 **Local validity**: active (confirmed working via the two e2e scripts above, run 2026-09-20).
 **Note**: this is the single most load-bearing credential in the whole platform — every
-dashboard resource, RLS policy, and this session's own test scripts depend on it. Rotate it
-**last**, once every other rotation is proven working, and immediately re-run both e2e scripts
-after rotating it.
+dashboard resource, RLS policy, and this session's own test scripts depend on it. Per Isaac's
+explicit instruction, **do not rotate this until a controlled replacement procedure is ready and
+its impact is understood** — regenerating it invalidates the old key immediately with no grace
+period, which would break every live `api/*.js` function and this session's own test scripts at
+once if done without a plan for the cutover. Rotate it **last**, once every other rotation is
+proven working, and immediately re-run both e2e scripts after rotating it. The public
+`VITE_SUPABASE_ANON_KEY` is safe to expose by design (RLS is the real access boundary, not
+secrecy of this key) and is not "a secret" merely because it appears in browser code — it does not
+carry the same do-not-rotate-casually caution as the service-role key above.
 
 ---
 
@@ -140,11 +198,13 @@ was chat-exposed.
 
 | Credential | Purpose | Install into | Dependent config | Verify | Confirm old is revoked |
 |---|---|---|---|---|---|
-| `ELEVENLABS_API_KEY` | Reserved for the not-yet-built voice-agent feature (see `docs/voice-agent-spec.md` — honestly documented as not started) | N/A until that feature is authorized and built | N/A | N/A | Already invalid (confirmed 401 against ElevenLabs' own API) — no action needed until this feature is actually built, at which point generate a fresh key rather than trying to revive this one |
-| `DEEPGRAM_API_KEY` | Same — reserved for the same not-yet-built feature | N/A | N/A | N/A | Already invalid (confirmed 401) — same as above |
+| `ELEVENLABS_API_KEY` | Reserved for the not-yet-built voice-agent feature (see `docs/voice-agent-spec.md` — honestly documented as not started) | N/A until that feature is authorized and built | N/A | N/A | **Still needs Isaac to revoke it directly in the ElevenLabs dashboard** (see the URGENT section above) — a 401 on a test request is not the same as confirmed-revoked; when this feature is actually built, generate a fresh key rather than assuming this one is safely dead |
+| `DEEPGRAM_API_KEY` | Same — reserved for the same not-yet-built feature | N/A | N/A | N/A | **Still needs Isaac to revoke it directly in the Deepgram console** — same caveat as ElevenLabs |
 
-**Exposure**: both **chat-exposed** this session. **Local validity**: both already invalid/dead.
-No urgency — these guard a feature that doesn't exist in the codebase yet (`api/nova-ai/` was
+**Exposure**: both **chat-exposed** this session — see the URGENT section above for the required
+action. **Local validity**: both return 401 when tested, but that only means today's test request
+was rejected, not that the credential has been provider-side revoked. These guard a feature that
+doesn't exist in the codebase yet (`api/nova-ai/` was
 confirmed not present). Generate real credentials only when that build is actually authorized.
 
 ---
@@ -169,19 +229,28 @@ again the moment any of those integrations gets authorized and built.
 
 ---
 
-## Suggested rotation order
+## Suggested order for installing FRESH replacement credentials (the full pre-production reset)
+
+This is separate from — and comes after — the URGENT revocations above. Revoking a chat-exposed
+credential is about shutting a door; installing its permanent replacement is part of the full
+reset Isaac is doing once the platform is otherwise built. Don't treat completing this section as
+a substitute for the URGENT section — do that first, regardless of where this list stands.
 
 1. **Stripe** (already-expired live key — least disruptive to rotate since nothing currently works
-   with it; also close the webhook fail-open gap by setting `STRIPE_WEBHOOK_SECRET` for the first
-   time).
-2. **Resend** and **Twilio** (both already invalid — currently silently degraded, not currently
-   depended upon working).
+   with it; also set `STRIPE_WEBHOOK_SECRET` for the first time now that the webhook fails closed
+   without it).
+2. **Resend** and **Twilio** (both already return invalid/401 on a test request against their own
+   provider APIs — see the "Local validity" note under each provider section for exactly what that
+   does and doesn't confirm; Twilio is additionally in the URGENT section above and needs a
+   dashboard revoke regardless of this step).
 3. **Anthropic** (currently unset locally; confirm Vercel's actual state directly first).
-4. **Google / ElevenLabs / Deepgram** (unused-in-code or already-dead; low urgency, rotate or
-   delete on your own timeline).
+4. **Google / ElevenLabs / Deepgram** (all three are in the URGENT section above — revoke first;
+   generate real replacements only once/if each feature they support is actually being built).
 5. **Supabase** last, once everything else is proven working post-rotation — re-run
    `scripts/e2e_api_client_auth_test.mjs` and `scripts/e2e_org_isolation_test.mjs` immediately
-   after, since the whole platform depends on this one.
+   after, since the whole platform depends on this one. Per Isaac's explicit instruction, do not
+   rotate this one until a controlled replacement procedure is ready and its impact — active
+   sessions, any code path relying on the current key — is understood.
 
 ## After installing each replacement
 

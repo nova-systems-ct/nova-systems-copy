@@ -98,6 +98,11 @@ export default function Invoices() {
       })
       const pdfDataUri = doc.output('datauristring')
 
+      // Real gaps here (e.g. Stripe/Resend not configured) must be visible to the staff member
+      // who just clicked "send" — silently swallowing a failed payment link or a skipped email
+      // would let them believe the client got a working invoice when they didn't.
+      const warnings = []
+
       let pay_link = ''
       try {
         const cs = await fetch('/api/stripe?action=checkout-session', {
@@ -106,7 +111,10 @@ export default function Invoices() {
         })
         const csData = await cs.json()
         if (cs.ok) pay_link = csData.url
-      } catch {}
+        else warnings.push('Payment link could not be created — ' + (csData.error || 'Stripe is not configured.'))
+      } catch {
+        warnings.push('Payment link could not be created — Stripe request failed.')
+      }
 
       let invoice_pdf_url = ''
       try {
@@ -126,16 +134,28 @@ export default function Invoices() {
       }
 
       if (form.client_email) {
-        await fetch('/api/notify?action=send-invoice', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ client_email: form.client_email, client_name: form.client_name, invoice_number, total, due_date: form.due_date, pay_link, pdf_base64: pdfDataUri }),
-        })
+        try {
+          const notifyRes = await fetch('/api/notify?action=send-invoice', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_email: form.client_email, client_name: form.client_name, invoice_number, total, due_date: form.due_date, pay_link, pdf_base64: pdfDataUri }),
+          })
+          const notifyData = await notifyRes.json().catch(() => ({}))
+          if (!notifyRes.ok || notifyData.warning) {
+            warnings.push(notifyData.warning || notifyData.error || 'Invoice email could not be sent.')
+          }
+        } catch {
+          warnings.push('Invoice email could not be sent — request failed.')
+        }
       }
 
       setCreating(false)
       setPreviewOpen(false)
       setForm(emptyForm)
       load()
+
+      if (warnings.length) {
+        alert(`Invoice ${invoice_number} was saved, but:\n\n${warnings.map(w => '- ' + w).join('\n')}`)
+      }
     } catch (e) {
       alert('Failed to send invoice: ' + e.message)
     }
