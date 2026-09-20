@@ -4,10 +4,8 @@ import { ChevronRight } from "lucide-react";
 import heroVideo1 from "@/assets/hero-video-1.mp4";
 import heroVideo2 from "@/assets/hero-video-2.mp4";
 import heroPoster from "@/assets/hero-poster.jpg";
+import { NAVY, GOLD, GOLD_BRIGHT, GOLD_DARK, GOLD_GRADIENT, GOLD_TEXT_GRADIENT } from "@/lib/theme";
 
-const GOLD = "#D4A030";
-const GOLD_BRIGHT = "#C8921A";
-const GOLD_DARK = "#8a6200";
 const VIDEOS = [heroVideo1, heroVideo2];
 
 // Phase 1 (2026-09-20): restored from the committed video-led hero (src/components/home/
@@ -74,7 +72,7 @@ export default function HeroSection() {
   );
 
   return (
-    <section className="relative min-h-screen md:h-screen overflow-hidden bg-black">
+    <section className="relative min-h-screen md:h-screen overflow-hidden" style={{ background: NAVY }}>
 
       {/* Mobile / small tablet (< md): full-bleed video background, no diagonal split — the
           original design had no mobile treatment at all; this is new. */}
@@ -148,7 +146,7 @@ export default function HeroSection() {
           >
             Your Business Is Losing{" "}
             <span style={{
-              background: `linear-gradient(90deg, ${GOLD} 0%, ${GOLD_BRIGHT} 50%, ${GOLD} 100%)`,
+              background: GOLD_TEXT_GRADIENT,
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
             }}>Opportunities You Can't See.</span>
@@ -163,7 +161,7 @@ export default function HeroSection() {
               to="/welcome"
               className="inline-flex items-center gap-3 font-bold uppercase tracking-widest transition-opacity hover:opacity-85"
               style={{
-                background: `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 40%, ${GOLD_BRIGHT} 60%, ${GOLD} 80%, ${GOLD_DARK} 100%)`,
+                background: GOLD_GRADIENT,
                 color: "#0a0800",
                 width: "fit-content",
                 fontSize: 12,

@@ -13,6 +13,7 @@ import Home from './pages/Home';
 // employee/admin tooling bundled in behind it. Home stays a static import since it's the page
 // almost every real visit and every audit run actually hits.
 const Solutions = lazy(() => import('./pages/Solutions'));
+const BusinessDiagnostic = lazy(() => import('./pages/BusinessDiagnostic'));
 const Pricing = lazy(() => import('./pages/Pricing'));
 const Company = lazy(() => import('./pages/Company'));
 const Login = lazy(() => import('./pages/Login'));
@@ -75,6 +76,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/solutions" element={<Solutions />} />
+            <Route path="/business-diagnostic" element={<BusinessDiagnostic />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/company" element={<Company />} />
             {/* Retired in favor of /welcome (Part 1 Phase 1) — this route stays so every

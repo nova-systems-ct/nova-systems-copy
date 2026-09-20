@@ -6,7 +6,9 @@ const GOLD = '#D4A030'
 const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
 const inp = { width: '100%', padding: '11px 14px', fontSize: 13, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 
-const DOC_TYPES = ['Proposal', 'Contract', 'Invoice', 'MOU', 'Custom']
+// Stage 6 security fix (2026-09-20): this list must match api/client.js's DOCUMENT_TYPES exactly
+// — that's the real server-side validation, not just this UI's dropdown.
+const DOC_TYPES = ['Proposal', 'Contract', 'Invoice', 'Scope of Work', 'Letter of Intent']
 
 export default function Documents() {
   const [clients, setClients] = useState([])
@@ -32,9 +34,13 @@ export default function Documents() {
   const entities = entityType === 'client' ? clients : leads
   const selectedEntity = entities.find(e => e.id === entityId)
 
+  // Stage 6 security fix (2026-09-20): this used to call api.anthropic.com directly from the
+  // browser with a VITE_CLAUDE_API_KEY — a client-side secret that would ship straight into the
+  // public JS bundle the moment that env var was ever set (confirmed via Phase 0 audit that it
+  // never was, so nothing was actually exposed live — but the risk was real and dormant). Routed
+  // through api/client.js's existing resource=documents handler instead, which does the same
+  // Anthropic call server-side with the real ANTHROPIC_API_KEY and never sends it to the browser.
   const generate = async () => {
-    const apiKey = import.meta.env.VITE_CLAUDE_API_KEY
-    if (!apiKey) { setError('VITE_CLAUDE_API_KEY not set. Add it to your .env file to use AI generation.'); return }
     if (!entityId) { setError('Please select a client or lead first.'); return }
     setGenerating(true)
     setError('')
@@ -44,40 +50,24 @@ export default function Documents() {
 
     const entityName = selectedEntity?.name || 'Unknown'
     const industry = selectedEntity?.industry || ''
-    const contact = entityType === 'client' ? selectedEntity?.owner_name : selectedEntity?.contact_name
-
-    const prompt = docType === 'Proposal'
-      ? `Write a professional business proposal from Nova Systems to ${entityName} (${industry}). Contact: ${contact || 'Decision Maker'}. ${description}. Include: executive summary, problem statement, our solution, pricing, next steps. Format cleanly.`
-      : docType === 'Contract'
-      ? `Write a professional service contract between Nova Systems (Isaac Nova, CT) and ${entityName}. ${description}. Include: scope of work, payment terms, duration, termination clause, confidentiality. Format as a legal-style contract.`
-      : docType === 'Invoice'
-      ? `Generate a professional invoice from Nova Systems to ${entityName}. ${description}. Include invoice number, date, itemized services, subtotal, total, payment instructions (Venmo/Zelle).`
-      : docType === 'MOU'
-      ? `Write a Memorandum of Understanding between Nova Systems and ${entityName}. ${description}. Include: purpose, scope of partnership, responsibilities of each party, timeline, signatures section.`
-      : `Write a professional business document for Nova Systems. Client/Lead: ${entityName}. ${description}. Format professionally.`
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api/client?resource=documents', {
         method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-          'content-type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-5',
-          max_tokens: 2000,
-          system: 'You are a professional business document writer for Nova Systems, a Connecticut-based operational infrastructure company. Generate professional, concise business documents.',
-          messages: [{ role: 'user', content: prompt }],
+          entity_name: entityName,
+          industry,
+          doc_type: docType,
+          description,
+          ...(entityType === 'client' ? { client_id: entityId } : { lead_id: entityId }),
         }),
       })
-      const data = await res.json()
-      if (data.error) throw new Error(data.error.message)
-      // claude-sonnet-5 emits a leading `thinking` block before the `text` block.
-      setResult(data.content?.find((c) => c.type === 'text')?.text || '')
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error || 'Generation failed.')
+      setResult(data.text || '')
     } catch (err) {
-      setError(err.message || 'Generation failed. Check your API key.')
+      setError(err.message || 'Generation failed. Please try again.')
     }
     setGenerating(false)
   }
