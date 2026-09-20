@@ -59,12 +59,16 @@ async function handleWebhook(req, res, rawBody) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const RESEND_KEY = process.env.RESEND_API_KEY;
 
-  if (WEBHOOK_SECRET) {
-    const ok = verifyStripeSignature(rawBody, req.headers['stripe-signature'], WEBHOOK_SECRET);
-    if (!ok) return res.status(400).json({ error: 'Invalid signature' });
-  } else {
-    console.warn('[stripe webhook] STRIPE_WEBHOOK_SECRET not set — skipping signature verification');
+  // 2026-09-20 security fix: this used to skip verification entirely when the secret was unset
+  // and still process the event — meaning anyone who knew (or guessed) an invoice_id/client_id
+  // could POST a forged checkout.session.completed body and get it marked Paid for free, no
+  // Stripe involvement required. Absent credentials must fail safely (reject), not fail open.
+  if (!WEBHOOK_SECRET) {
+    console.error('[stripe webhook] STRIPE_WEBHOOK_SECRET not set — rejecting unverifiable webhook');
+    return res.status(503).json({ error: 'Webhook verification is not configured.' });
   }
+  const ok = verifyStripeSignature(rawBody, req.headers['stripe-signature'], WEBHOOK_SECRET);
+  if (!ok) return res.status(400).json({ error: 'Invalid signature' });
 
   let event;
   try {
