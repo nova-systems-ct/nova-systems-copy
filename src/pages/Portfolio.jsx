@@ -5,7 +5,7 @@ import { X, Loader2, MapPin } from "lucide-react";
 import ConnecticutMap from "@/components/ConnecticutMap";
 import { useSEO } from "@/hooks/useSEO";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 const TABS = [
   { label: "All", value: "All" },
   { label: "Websites", value: "Websites" },
@@ -39,7 +39,7 @@ export default function Portfolio() {
   const filtered = tab === "All" ? items : items.filter((i) => i.category === tab);
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-navy">
       <Navbar />
       <main className="pt-16">
         <section className="py-20 px-6 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
@@ -85,7 +85,7 @@ export default function Portfolio() {
         </section>
 
         {/* Connecticut Focus */}
-        <section className="py-24 px-6 border-t" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, transparent 0%, rgba(212,160,48,0.03) 100%)" }}>
+        <section className="py-24 px-6 border-t" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, transparent 0%, rgba(201, 168, 76,0.03) 100%)" }}>
           <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-14 items-center">
             <div>
               <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 14 }}>

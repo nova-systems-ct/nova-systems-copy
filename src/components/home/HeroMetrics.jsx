@@ -1,7 +1,7 @@
 import React from "react";
 import { Users, ShieldCheck, Wrench, Clock } from "lucide-react";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 // Configurable, not hardcoded inline — swap this array for real numeric stats (audits completed,
 // revenue recovered, etc.) once Nova has real production volume to report. As of this build, the
@@ -22,7 +22,7 @@ export default function HeroMetrics() {
       style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}
     >
       {METRICS.map(({ icon: Icon, value, label }) => (
-        <div key={label} className="flex items-center gap-2.5 px-4 py-4" style={{ background: "#0a0a0a" }}>
+        <div key={label} className="flex items-center gap-2.5 px-4 py-4" style={{ background: "#04112B" }}>
           <Icon className="w-4 h-4 flex-shrink-0" style={{ color: GOLD }} />
           <div>
             <p className="text-sm font-black text-white leading-none">{value}</p>

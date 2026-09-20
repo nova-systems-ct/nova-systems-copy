@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { safeReturnTo } from "@/lib/returnTo";
 import { useSEO } from "@/hooks/useSEO";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 // Canonical landing point for every Supabase Auth redirect: magic links, signup confirmation, and
 // password-recovery links all land here. supabase-js's `detectSessionInUrl` (on by default)
@@ -57,7 +57,7 @@ export default function AuthCallback() {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#080600" }}>
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#04112B" }}>
       <div className="text-center">
         {status === "working" ? (
           <p className="text-xs uppercase tracking-[0.2em]" style={{ color: GOLD }}>Signing you in…</p>

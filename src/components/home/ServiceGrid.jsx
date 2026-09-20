@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Search, Bot, Phone, LayoutTemplate, Megaphone, BarChart3, ArrowRight } from "lucide-react";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 // Real destinations only — Wave One links to the actual product page (/waves); the rest point at
 // /solutions (no dedicated per-service pages exist yet) rather than a "#" placeholder.
@@ -17,7 +17,7 @@ const SERVICES = [
 
 export default function ServiceGrid() {
   return (
-    <section id="services" className="py-24 px-6 bg-black border-t scroll-mt-16" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+    <section id="services" className="py-24 px-6 bg-navy border-t scroll-mt-16" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16 max-w-2xl mx-auto">
           <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>What We Do</p>

@@ -1,8 +1,8 @@
 import React, { useState, useRef } from "react";
 import { CheckCircle, ArrowRight, Eye, EyeOff, Upload, X } from "lucide-react";
 
-const GOLD = "#D4A030";
-const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const inp = {
   width: "100%", padding: "13px 16px", fontSize: 13,

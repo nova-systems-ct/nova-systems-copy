@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Zap, Download } from 'lucide-react'
 
-const GOLD = '#D4A030'
+const GOLD = '#C9A84C'
 const STATUSES = ['new', 'reviewing', 'approved', 'rejected', 'waitlisted']
 const STATUS_STYLE = {
   new:        { bg: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)' },

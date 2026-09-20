@@ -17,7 +17,7 @@ export default function Careers() {
   });
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-navy">
       <Navbar />
       <main className="pt-16">
         <CareersHero />

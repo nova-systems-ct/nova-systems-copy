@@ -5,8 +5,8 @@ import Footer from "@/components/Footer";
 import { Clock, ArrowRight } from "lucide-react";
 import { useSEO } from "@/hooks/useSEO";
 
-const GOLD = "#D4A030";
-const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 export const CATEGORIES = ["All", "AI & Technology", "Connecticut Business", "Websites & SEO", "Social Media", "Branding & Identity", "Case Studies", "Tips & Strategy"];
 
@@ -48,13 +48,13 @@ export default function Insights() {
   const showFeatured = activeCategory === "All" && featured;
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-navy">
       <Navbar />
       <main className="pt-16">
 
         {/* Header */}
         <section className="py-20 px-6 border-b relative overflow-hidden" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(212,160,48,0.09) 0%, transparent 60%)" }} />
+          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(201, 168, 76,0.09) 0%, transparent 60%)" }} />
           <div className="max-w-6xl mx-auto relative text-center">
             <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 16 }}>INTELLIGENCE FOR CONNECTICUT BUSINESS</p>
             <h1 className="text-4xl md:text-6xl font-black leading-tight mb-4" style={{ color: GOLD }}>Nova Insights</h1>
@@ -126,7 +126,7 @@ export default function Insights() {
 function FeaturedCard({ post }) {
   return (
     <Link to={`/insights/${post.slug}`} className="block rounded-2xl overflow-hidden relative transition-all duration-300 hover:opacity-95"
-      style={{ background: "linear-gradient(135deg, rgba(212,160,48,0.08) 0%, #0a0a0a 65%)", border: `1px solid ${GOLD}35` }}>
+      style={{ background: "linear-gradient(135deg, rgba(201, 168, 76,0.08) 0%, #04112B 65%)", border: `1px solid ${GOLD}35` }}>
       <div className="absolute top-0 right-0 w-72 h-72 pointer-events-none" style={{ background: `radial-gradient(circle, ${GOLD}14 0%, transparent 70%)` }} />
       <div className="relative p-8 md:p-14">
         <div className="flex items-center gap-3 mb-6">

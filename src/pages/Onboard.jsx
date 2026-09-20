@@ -5,8 +5,8 @@ import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-
 import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, AlertTriangle, Loader2, Pen, Globe2 } from "lucide-react";
 import { generateContractPDF } from "@/utils/generatePdf";
 
-const GOLD = "#D4A030";
-const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
@@ -237,7 +237,7 @@ export default function Onboard() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0A0A0A", color: "#fff", fontFamily: "'Inter',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#04112B", color: "#fff", fontFamily: "'Inter',system-ui,sans-serif" }}>
       {/* Header */}
       <div style={{ padding: "24px 24px 0", maxWidth: 760, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
@@ -375,7 +375,7 @@ function Step2({ form, setForm, toggleArr, t }) {
         })}
       </div>
       {form.add_ons.length > 0 && (
-        <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "rgba(212,160,48,0.08)", border: `1px solid ${GOLD}35`, display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 8, background: "rgba(201, 168, 76,0.08)", border: `1px solid ${GOLD}35`, display: "flex", gap: 10, alignItems: "flex-start" }}>
           <AlertTriangle style={{ width: 14, height: 14, color: GOLD, flexShrink: 0, marginTop: 2 }} />
           <p style={{ fontSize: 12, color: GOLD, lineHeight: 1.6 }}>{t.addOnWarning}</p>
         </div>

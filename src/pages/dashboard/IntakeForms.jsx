@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { ClipboardList, Loader2, ExternalLink, Download, Calendar } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 
-const GOLD = '#D4A030'
+const GOLD = '#C9A84C'
 const STATUS_COLORS = {
   Active: { bg: 'rgba(34,197,94,0.12)', color: '#4ade80' },
   'Pending Payment': { bg: `${GOLD}15`, color: GOLD },

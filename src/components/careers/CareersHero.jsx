@@ -1,16 +1,16 @@
 import React from "react";
 import { JOBS } from "./jobs";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 const GOLD_BRIGHT = "#F0C040";
 
 export default function CareersHero() {
   return (
-    <section className="relative py-28 md:py-40 px-6 overflow-hidden bg-black">
+    <section className="relative py-28 md:py-40 px-6 overflow-hidden bg-navy">
       {/* Radial glow */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(212,160,48,0.10) 0%, transparent 60%)" }}
+        style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(201, 168, 76,0.10) 0%, transparent 60%)" }}
       />
       {/* Gold top line */}
       <div

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MessageCircle, X, Send, ArrowRight } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const STEPS = [
   { key: "intro",     bot: "Hi! I'm Nova Assistant. Whatever your business needs, we build it. What's your name?" },
@@ -154,7 +154,7 @@ export default function ChatBot() {
           position: "fixed", bottom: 20, right: 20, width: 56, height: 56, borderRadius: "50%",
           background: GOLD_GRADIENT, border: "none", cursor: "pointer", zIndex: 9999,
           display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: `0 8px 32px rgba(212,160,48,0.4)`,
+          boxShadow: `0 8px 32px rgba(201, 168, 76,0.4)`,
           transition: "transform 0.2s",
         }}
         onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.08)")}

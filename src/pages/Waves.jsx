@@ -10,9 +10,9 @@ import {
   UtensilsCrossed, Scissors, Stethoscope, HardHat, Building2, ShoppingBag,
 } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_BRIGHT = "#C8921A";
-const GOLD_DARK = "#8a6200";
+const GOLD = "#C9A84C";
+const GOLD_BRIGHT = "#E0C476";
+const GOLD_DARK = "#8a6b2a";
 const G = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 
 const TICKER_ITEMS = ["Nova Voice", "Nova Blue", "Nova Email", "Nova Social", "Nova Revive", "Nova Audit"];
@@ -64,7 +64,7 @@ export default function Waves() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-navy text-white">
       <style>{`
         @keyframes wavePulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(1.4); } }
         @keyframes waveTicker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
@@ -83,7 +83,7 @@ export default function Waves() {
 
       {/* SECTION 1 — HERO */}
       <section className="min-h-screen flex flex-col items-center justify-center text-center px-6 relative overflow-hidden pt-24 pb-16">
-        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 20%, rgba(212,160,48,0.14) 0%, transparent 62%)" }} />
+        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 20%, rgba(201, 168, 76,0.14) 0%, transparent 62%)" }} />
 
         <div className="relative flex items-center gap-2.5 mb-8">
           <span className="relative flex h-2.5 w-2.5">

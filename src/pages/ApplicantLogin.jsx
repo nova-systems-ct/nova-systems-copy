@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 
-const GOLD = "#D4A030";
-const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const inputStyle = {
   width: "100%", padding: "13px 16px", fontSize: 13,
@@ -145,7 +145,7 @@ export default function ApplicantLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-20">
+    <div className="min-h-screen bg-navy flex flex-col items-center justify-center px-6 py-20">
       {/* Logo */}
       <a href="/" className="flex items-center gap-3 mb-12">
         <svg width="28" height="28" viewBox="0 0 32 32" fill="none">

@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, CheckSquare, Square, Clock, AlertCircle } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const TASK_STATUS = {
   pending:     { label: "Pending",     color: "rgba(255,255,255,0.4)",  bg: "rgba(255,255,255,0.05)" },
@@ -50,7 +50,7 @@ export default function EmployeeDashboard() {
   const done = assignments.filter((a) => a.status === "done");
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-navy">
       <div className="max-w-3xl mx-auto px-6 py-12">
 
         {/* Header */}

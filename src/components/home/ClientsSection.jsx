@@ -2,14 +2,14 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 // No confirmed paying clients yet — do not list business names or logos here.
 // Swap this for a real logo grid (see git history for the CLIENTS-array pattern)
 // once there are verified clients willing to be named publicly.
 export default function ClientsSection() {
   return (
-    <section className="py-20 px-6 bg-black border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+    <section className="py-20 px-6 bg-navy border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
       <div className="max-w-2xl mx-auto text-center">
         <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>Early Access</p>
         <h2 className="text-3xl md:text-4xl font-black text-white leading-tight mb-4">

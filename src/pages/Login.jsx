@@ -7,9 +7,9 @@ import { useSEO } from "@/hooks/useSEO";
 import { supabase } from "@/lib/supabaseClient";
 import { safeReturnTo } from "@/lib/returnTo";
 
-const GOLD = "#D4A030";
-const GOLD_BRIGHT = "#C8921A";
-const GOLD_DARK = "#8a6200";
+const GOLD = "#C9A84C";
+const GOLD_BRIGHT = "#E0C476";
+const GOLD_DARK = "#8a6b2a";
 const GOLD_GRADIENT = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 const VIDEOS = [video1, video2];
 
@@ -110,11 +110,11 @@ export default function Login() {
   };
 
   if (checkingSession) {
-    return <div className="min-h-screen" style={{ background: "#080600" }} />;
+    return <div className="min-h-screen" style={{ background: "#04112B" }} />;
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: "#080600" }}>
+    <div className="min-h-screen flex" style={{ background: "#04112B" }}>
 
       {/* LEFT PANEL */}
       <div className="hidden lg:flex lg:w-3/5 relative flex-col justify-between p-14 overflow-hidden">
@@ -129,7 +129,7 @@ export default function Login() {
         <div className="absolute inset-0" style={{ zIndex: 1, background: "rgba(4,3,0,0.80)" }} />
         <div className="absolute inset-0 pointer-events-none" style={{
           zIndex: 2,
-          background: "radial-gradient(ellipse at 30% 40%, rgba(212,160,48,0.10) 0%, transparent 60%)",
+          background: "radial-gradient(ellipse at 30% 40%, rgba(201, 168, 76,0.10) 0%, transparent 60%)",
         }} />
 
         <div className="relative flex items-center gap-3" style={{ zIndex: 10 }}>

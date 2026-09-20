@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { Lock, FileText, Receipt, FolderOpen, Upload, Search, Download, Eye, Trash2, X, Loader2, HardDrive } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 
-const GOLD = '#D4A030'
-const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
+const GOLD = '#C9A84C'
+const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 
 const SIDEBAR = [
   { key: 'all',       label: 'All Documents', icon: FolderOpen },

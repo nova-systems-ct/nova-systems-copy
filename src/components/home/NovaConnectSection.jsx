@@ -2,8 +2,8 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { LayoutDashboard, FileCheck2, CreditCard, ArrowRight } from "lucide-react";
 
-const GOLD = "#D4A030";
-const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const FEATURES = [
   { icon: LayoutDashboard, title: "Real-Time Dashboard", desc: "See your services and metrics live." },
@@ -13,8 +13,8 @@ const FEATURES = [
 
 export default function NovaConnectSection() {
   return (
-    <section className="py-24 px-6 bg-black relative overflow-hidden border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-      <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 40%, rgba(212,160,48,0.06) 0%, transparent 65%)" }} />
+    <section className="py-24 px-6 bg-navy relative overflow-hidden border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 40%, rgba(201, 168, 76,0.06) 0%, transparent 65%)" }} />
       <div className="max-w-5xl mx-auto relative text-center">
         <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>CLIENT PORTAL</p>
         <h2 className="text-3xl md:text-5xl font-black text-white leading-tight mb-6">

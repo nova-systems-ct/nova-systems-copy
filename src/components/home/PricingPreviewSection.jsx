@@ -2,8 +2,8 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const PLANS = [
   { name: "STARTER", price: "$1,000", period: "/mo", tagline: "Starting at", desc: "Custom website, branding, local SEO", popular: false },
@@ -13,7 +13,7 @@ const PLANS = [
 
 export default function PricingPreviewSection() {
   return (
-    <section className="py-24 px-6 bg-black relative overflow-hidden">
+    <section className="py-24 px-6 bg-navy relative overflow-hidden">
       <div
         className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[180px] pointer-events-none"
         style={{ background: `radial-gradient(ellipse at top, ${GOLD}12 0%, transparent 70%)` }}
@@ -31,7 +31,7 @@ export default function PricingPreviewSection() {
               key={plan.name}
               className="relative rounded-xl p-8 flex flex-col transition-all duration-300"
               style={{
-                background: plan.popular ? "rgba(212,160,48,0.07)" : "rgba(255,255,255,0.025)",
+                background: plan.popular ? "rgba(201, 168, 76,0.07)" : "rgba(255,255,255,0.025)",
                 border: plan.popular ? `1px solid ${GOLD}55` : "1px solid rgba(255,255,255,0.08)",
                 transform: plan.popular ? "scale(1.03)" : "scale(1)",
               }}

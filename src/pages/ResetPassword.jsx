@@ -4,8 +4,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { safeReturnTo } from "@/lib/returnTo";
 import { useSEO } from "@/hooks/useSEO";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const inputStyle = {
   width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.04)",
@@ -55,7 +55,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#080600" }}>
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#04112B" }}>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-10">
           <svg width="40" height="40" viewBox="0 0 32 32" fill="none">

@@ -3,8 +3,8 @@ import { X, Sparkles, Loader2, Check, Pen } from 'lucide-react'
 import { saveDocument } from '../../lib/crmStore'
 import { authedFetch } from '../../lib/apiAuth'
 
-const GOLD = '#D4A030'
-const G    = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
+const GOLD = '#C9A84C'
+const G    = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 
 const DOC_TYPES = ['Proposal', 'Contract', 'Invoice', 'Scope of Work', 'Letter of Intent']
 

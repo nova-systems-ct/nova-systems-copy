@@ -7,9 +7,9 @@ import {
   Mic, MessageSquare, Mail as MailIcon, Share2, RefreshCcw, ClipboardCheck,
 } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_BRIGHT = "#C8921A";
-const GOLD_DARK = "#8a6200";
+const GOLD = "#C9A84C";
+const GOLD_BRIGHT = "#E0C476";
+const GOLD_DARK = "#8a6b2a";
 const G = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 
 const CT_CITIES = [

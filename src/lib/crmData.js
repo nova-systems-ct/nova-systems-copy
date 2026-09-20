@@ -1,6 +1,6 @@
 // Shared data layer for CRM — uses localStorage
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 // ── SEED DATA ──────────────────────────────────────────────────────────────────
 

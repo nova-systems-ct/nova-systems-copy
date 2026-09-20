@@ -13,6 +13,12 @@ module.exports = {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		colors: {
+  			// Phase 1 sitewide navy/gold migration (2026-09-20) — lets `bg-black`/`text-black`-style
+  			// utility classes become `bg-navy`/`text-navy` across every public page in one pass,
+  			// including opacity modifiers (`bg-navy/90`), matching src/lib/theme.js's NAVY (#04112B)
+  			// token used everywhere inline styles are used instead of utility classes.
+  			navy: '#04112B',
+  			gold: '#C9A84C',
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {

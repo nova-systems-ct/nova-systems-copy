@@ -5,7 +5,7 @@ import novaLogo from "@/assets/nova logo.png";
 import { useSEO } from "@/hooks/useSEO";
 import { generateLegalPDF } from "@/utils/generatePdf";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 export default function LegalPageLayout({ title, effectiveDate, sections, seoDescription }) {
   useSEO({ title: `${title} — Nova Systems`, description: seoDescription });

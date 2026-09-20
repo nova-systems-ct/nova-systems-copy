@@ -4,8 +4,8 @@ import { getClients } from '../../lib/crmStore'
 import { generateInvoicePDF } from '../../utils/generatePdf'
 import { authedFetch } from '../../lib/apiAuth'
 
-const GOLD = '#D4A030'
-const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
+const GOLD = '#C9A84C'
+const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 
 const inp = {
   width: '100%', padding: '10px 13px', fontSize: 13,

@@ -2,10 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, X, LogIn, ArrowRight } from "lucide-react";
 import novaLogo from "@/assets/nova logo.png";
-
-const GOLD = "#D4A030";
-const GOLD_BRIGHT = "#C8921A";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 40%, ${GOLD_BRIGHT} 60%, ${GOLD} 80%, #8a6200 100%)`;
+import { NAVY, GOLD, GOLD_BRIGHT, GOLD_GRADIENT } from "@/lib/theme";
 
 // Mapped to real, existing routes only — no dedicated "Case Studies" page exists separately from
 // Portfolio, so that label points at the closest real destination rather than a new page or a "#"
@@ -31,7 +28,7 @@ export default function Navbar() {
   const isActive = (path) => location.pathname === path;
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-md border-b border-white/8">
+    <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md border-b border-white/8" style={{ background: "rgba(4,17,43,0.92)" }}>
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-3">
           <img src={novaLogo} alt="Nova Systems" className="h-9 w-9 object-contain flex-shrink-0" />
@@ -98,7 +95,7 @@ export default function Navbar() {
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden bg-black border-t border-white/8 px-6 py-4 space-y-3">
+        <div className="md:hidden border-t border-white/8 px-6 py-4 space-y-3" style={{ background: NAVY }}>
           {navLinks.map((link) => (
             <Link
               key={link.label}

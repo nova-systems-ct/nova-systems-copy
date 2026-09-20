@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle, Eye, EyeOff, ArrowRight } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const inputStyle = {
   width: "100%", padding: "13px 16px", fontSize: 13,
@@ -62,7 +62,7 @@ export default function SetPassword() {
 
   if (!token || !account) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center px-6">
+      <div className="min-h-screen bg-navy flex items-center justify-center px-6">
         <div className="text-center">
           <p className="text-white/50 text-sm">Invalid or expired link.</p>
           <a href="/applicant-login" className="text-sm mt-4 inline-block" style={{ color: GOLD }}>Go to login →</a>
@@ -73,7 +73,7 @@ export default function SetPassword() {
 
   if (done) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center px-6">
+      <div className="min-h-screen bg-navy flex items-center justify-center px-6">
         <div className="text-center">
           <CheckCircle className="w-12 h-12 mx-auto mb-4" style={{ color: GOLD }} />
           <h2 className="text-2xl font-black text-white mb-2">Password set!</h2>
@@ -84,7 +84,7 @@ export default function SetPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 py-20">
+    <div className="min-h-screen bg-navy flex flex-col items-center justify-center px-6 py-20">
       <a href="/" className="flex items-center gap-3 mb-12">
         <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
           <rect x="1" y="1" width="30" height="30" rx="4" stroke={GOLD} strokeWidth="1.5" fill="none" />

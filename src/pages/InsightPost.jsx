@@ -8,8 +8,8 @@ import { useSEO } from "@/hooks/useSEO";
 import { Link2, Linkedin, Twitter, ArrowRight, Clock, Loader2 } from "lucide-react";
 import { CATEGORIES, readTime } from "./Insights";
 
-const GOLD = "#D4A030";
-const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 const REAL_CATEGORIES = CATEGORIES.filter((c) => c !== "All");
 
 export default function InsightPost() {
@@ -45,7 +45,7 @@ export default function InsightPost() {
 
   if (post === undefined) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-navy flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin" style={{ color: GOLD }} />
       </div>
     );
@@ -57,13 +57,13 @@ export default function InsightPost() {
   const copyLink = () => { navigator.clipboard?.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 1800); };
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-navy">
       <Navbar />
       <main className="pt-16">
 
         {/* Dark header */}
         <section className="py-16 px-6 border-b relative overflow-hidden" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(212,160,48,0.08) 0%, transparent 60%)" }} />
+          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(201, 168, 76,0.08) 0%, transparent 60%)" }} />
           <div className="max-w-4xl mx-auto relative">
             <span style={{ display: "inline-block", fontSize: 9, fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", padding: "6px 14px", borderRadius: 20, background: `${post.thumbnail_color || GOLD}20`, color: GOLD, border: `1px solid ${GOLD}40`, marginBottom: 20 }}>
               {post.category}
@@ -117,7 +117,7 @@ export default function InsightPost() {
               </div>
 
               {/* CTA box */}
-              <div className="mt-12 rounded-2xl p-8 md:p-10 text-center" style={{ background: "linear-gradient(135deg, rgba(212,160,48,0.12) 0%, rgba(0,0,0,0.3) 100%)", border: `1px solid ${GOLD}40` }}>
+              <div className="mt-12 rounded-2xl p-8 md:p-10 text-center" style={{ background: "linear-gradient(135deg, rgba(201, 168, 76,0.12) 0%, rgba(0,0,0,0.3) 100%)", border: `1px solid ${GOLD}40` }}>
                 <h3 className="text-xl md:text-2xl font-black text-white mb-3">Ready to apply this to your business?</h3>
                 <p className="text-sm mb-7" style={{ color: "rgba(255,255,255,0.45)" }}>Book a free strategy meeting and we'll map out exactly what your business needs.</p>
                 <Link to="/welcome" className="inline-flex items-center gap-2 text-sm font-bold tracking-wider uppercase px-8 py-4 rounded-lg hover:opacity-85 transition-all" style={{ background: G, color: "#0a0800" }}>
@@ -145,7 +145,7 @@ export default function InsightPost() {
                   <div className="space-y-4">
                     {related.map((r) => (
                       <Link key={r.id} to={`/insights/${r.slug}`} className="block group">
-                        <p className="text-sm font-semibold text-white leading-snug group-hover:text-[#D4A030] transition-colors">{r.title}</p>
+                        <p className="text-sm font-semibold text-white leading-snug group-hover:text-[#C9A84C] transition-colors">{r.title}</p>
                       </Link>
                     ))}
                   </div>

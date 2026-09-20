@@ -2,12 +2,12 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Eye } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 40%, #C8921A 60%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 40%, #E0C476 60%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 export default function AuditCTA() {
   return (
-    <section className="py-28 px-6 bg-black relative overflow-hidden border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+    <section className="py-28 px-6 bg-navy relative overflow-hidden border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
       <div
         className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
         style={{ width: 900, height: 500, background: `radial-gradient(ellipse, ${GOLD}10 0%, transparent 65%)` }}

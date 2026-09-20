@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, Clock, CheckCircle, XCircle, Calendar, MessageSquare, MapPin, Link2, Plus, Trash2, FileText } from "lucide-react";
 
-const GOLD = "#D4A030";
-const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const STATUS_CONFIG = {
   new:                 { label: "Application Received",     color: GOLD,      icon: Clock,        desc: "Your application is in the queue. Isaac will review it personally." },
@@ -73,7 +73,7 @@ export default function ApplicationStatus() {
     : "—";
 
   return (
-    <div className="min-h-screen bg-black px-6 py-16">
+    <div className="min-h-screen bg-navy px-6 py-16">
       <div className="max-w-xl mx-auto">
 
         {/* Header */}

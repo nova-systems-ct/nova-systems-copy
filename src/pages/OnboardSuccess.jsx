@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { CheckCircle2, ArrowRight } from "lucide-react";
 
-const GOLD = "#D4A030";
-const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 export default function OnboardSuccess() {
   const [params] = useSearchParams();
@@ -19,7 +19,7 @@ export default function OnboardSuccess() {
   }, [clientId]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0A0A0A", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Inter',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#04112B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Inter',system-ui,sans-serif" }}>
       <div style={{ maxWidth: 460, width: "100%", textAlign: "center" }}>
         <div style={{ width: 72, height: 72, borderRadius: "50%", background: `${GOLD}15`, border: `2px solid ${GOLD}60`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 28px" }}>
           <CheckCircle2 style={{ width: 34, height: 34, color: GOLD }} />

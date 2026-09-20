@@ -2,8 +2,8 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Bot, Globe, Palette, Workflow, Compass, ArrowRight } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const PILLARS = [
   {
@@ -35,7 +35,7 @@ const PILLARS = [
 
 export default function FivePillarsSection() {
   return (
-    <section className="py-24 px-6 bg-black border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+    <section className="py-24 px-6 bg-navy border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16 max-w-2xl mx-auto">
           <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>WHAT WE BUILD</p>

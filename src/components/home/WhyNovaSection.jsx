@@ -1,7 +1,7 @@
 import React from "react";
 import { TrendingDown, Users, Clock, Target, Compass, Gauge } from "lucide-react";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 const LOSING = [
   { icon: Target, label: "Leads" },
@@ -14,7 +14,7 @@ const LOSING = [
 
 export default function WhyNovaSection() {
   return (
-    <section id="why-nova" className="py-24 px-6 bg-black border-t scroll-mt-16" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+    <section id="why-nova" className="py-24 px-6 bg-navy border-t scroll-mt-16" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
       <div className="max-w-4xl mx-auto text-center">
         <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>Why Nova</p>
         <h2 className="text-3xl md:text-5xl font-black text-white leading-tight mb-8">

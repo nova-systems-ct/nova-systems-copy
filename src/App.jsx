@@ -64,7 +64,7 @@ const Contracts = lazy(() => import('./pages/dashboard/Contracts'));
 const RequirePermission = lazy(() => import('./components/dashboard/RequirePermission'));
 
 function RouteFallback() {
-  return <div style={{ minHeight: '100vh', background: '#0a0a0a' }} />
+  return <div style={{ minHeight: '100vh', background: '#04112B' }} />
 }
 
 function App() {

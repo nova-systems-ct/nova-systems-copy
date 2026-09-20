@@ -2,8 +2,8 @@ import React from "react";
 import { Crown, TrendingUp, Camera, Globe, ArrowRight } from "lucide-react";
 import { JOBS } from "./jobs";
 
-const GOLD = "#D4A030";
-const G = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const ICONS = {
   "sales-rep": TrendingUp,
@@ -13,7 +13,7 @@ const ICONS = {
 
 export default function JobListings({ onApply }) {
   return (
-    <section className="py-16 md:py-24 px-6 bg-black">
+    <section className="py-16 md:py-24 px-6 bg-navy">
       <div className="max-w-6xl mx-auto">
 
         {/* Header */}
@@ -43,7 +43,7 @@ function JobCard({ job, onApply }) {
     <div className="rounded-2xl p-8 flex flex-col gap-6 transition-all duration-300 group"
       style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = "rgba(212,160,48,0.04)";
+        e.currentTarget.style.background = "rgba(201, 168, 76,0.04)";
         e.currentTarget.style.borderColor = `${GOLD}50`;
         e.currentTarget.style.boxShadow = `0 8px 40px ${GOLD}10`;
       }}
@@ -85,7 +85,7 @@ function SalesJobCard({ job, onApply }) {
   return (
     <div
       className="md:col-span-2 rounded-2xl p-10 flex flex-col gap-6 relative overflow-hidden transition-all duration-300"
-      style={{ background: `linear-gradient(135deg, rgba(212,160,48,0.1) 0%, rgba(0,0,0,0.4) 60%)`, border: `1.5px solid ${GOLD}60`, boxShadow: `0 0 50px ${GOLD}14` }}
+      style={{ background: `linear-gradient(135deg, rgba(201, 168, 76,0.1) 0%, rgba(0,0,0,0.4) 60%)`, border: `1.5px solid ${GOLD}60`, boxShadow: `0 0 50px ${GOLD}14` }}
     >
       <div style={{ position: "absolute", top: 0, right: 0, width: 260, height: 260, background: `radial-gradient(circle, ${GOLD}18 0%, transparent 70%)`, pointerEvents: "none" }} />
 

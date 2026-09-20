@@ -1,7 +1,7 @@
 import React from "react";
 import { Search, Stethoscope, Hammer, Activity, TrendingUp } from "lucide-react";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 const STEPS = [
   { n: "01", icon: Search, title: "Audit", desc: "Find what's leaking." },
@@ -13,7 +13,7 @@ const STEPS = [
 
 export default function ProcessSection() {
   return (
-    <section id="process" className="py-24 px-6 bg-black border-t scroll-mt-16" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+    <section id="process" className="py-24 px-6 bg-navy border-t scroll-mt-16" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16 max-w-2xl mx-auto">
           <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>The Nova Process</p>
@@ -30,7 +30,7 @@ export default function ProcessSection() {
             <div key={n} className="relative text-center md:text-left">
               <div
                 className="mx-auto md:mx-0 mb-5 relative z-10 flex items-center justify-center"
-                style={{ width: 56, height: 56, borderRadius: "50%", background: "#0a0a0a", border: `1px solid ${GOLD}55` }}
+                style={{ width: 56, height: 56, borderRadius: "50%", background: "#04112B", border: `1px solid ${GOLD}55` }}
               >
                 <Icon className="w-5 h-5" style={{ color: GOLD }} />
               </div>

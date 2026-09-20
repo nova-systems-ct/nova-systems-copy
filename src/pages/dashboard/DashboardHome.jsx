@@ -20,7 +20,7 @@ function useRouteHealth() {
   return status
 }
 
-const GOLD = '#D4A030'
+const GOLD = '#C9A84C'
 
 const STAGE_COLORS = {
   'New Lead':        { bg: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.4)' },

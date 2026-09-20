@@ -2,8 +2,8 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Mic, MessageSquare, Mail, Share2, RefreshCcw, ClipboardCheck, ArrowRight } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 40%, #C8921A 60%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 40%, #E0C476 60%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 // Same six engines named on /waves — kept consistent with that page rather than inventing new
 // capability claims here (see src/pages/Waves.jsx ENGINES).
@@ -42,7 +42,7 @@ export default function WaveOneFeature() {
               <div key={label} className="absolute flex flex-col items-center gap-1.5" style={{ left: x - 26, top: y - 26 }}>
                 <div
                   className="w-[52px] h-[52px] rounded-full flex items-center justify-center"
-                  style={{ background: "#0a0a0a", border: `1px solid ${GOLD}45` }}
+                  style={{ background: "#04112B", border: `1px solid ${GOLD}45` }}
                 >
                   <Icon className="w-4 h-4" style={{ color: GOLD }} />
                 </div>

@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { X, ArrowRight } from "lucide-react";
 
-const GOLD = "#D4A030";
-const GOLD_BRIGHT = "#C8921A";
-const GOLD_DARK = "#8a6200";
+const GOLD = "#C9A84C";
+const GOLD_BRIGHT = "#E0C476";
+const GOLD_DARK = "#8a6b2a";
 const G = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 
 const SESSION_KEY = "nova_wave_one_popup_shown";
@@ -39,7 +39,7 @@ export default function WaveOnePopup() {
     >
       <div
         className="relative max-w-md w-full rounded-2xl p-8 md:p-10 text-center"
-        style={{ background: "#0a0800", border: `1px solid ${GOLD}55`, boxShadow: `0 0 60px rgba(212,160,48,0.15)` }}
+        style={{ background: "#0a0800", border: `1px solid ${GOLD}55`, boxShadow: `0 0 60px rgba(201, 168, 76,0.15)` }}
         onClick={(e) => e.stopPropagation()}
       >
         <button

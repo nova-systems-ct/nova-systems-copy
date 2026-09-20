@@ -3,8 +3,8 @@ import { Sparkles, Loader2, Send, Save, FileText } from 'lucide-react'
 import { getClients, getLeads, saveDocument, getDocuments } from '../../lib/crmStore'
 import { authedFetch } from '../../lib/apiAuth'
 
-const GOLD = '#D4A030'
-const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
+const GOLD = '#C9A84C'
+const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 const inp = { width: '100%', padding: '11px 14px', fontSize: 13, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 
 // Stage 6 security fix (2026-09-20): this list must match api/client.js's DOCUMENT_TYPES exactly

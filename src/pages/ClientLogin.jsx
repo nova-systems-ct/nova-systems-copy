@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Mail } from "lucide-react";
 import { useSEO } from "@/hooks/useSEO";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 // No working client portal exists in this repo yet: the old flow here hashed a password
 // client-side and checked it via /api/client?resource=auth, which never issued a session and had
@@ -19,11 +19,11 @@ export default function ClientLogin() {
   });
 
   return (
-    <div className="min-h-screen flex" style={{ background: "#080600" }}>
+    <div className="min-h-screen flex" style={{ background: "#04112B" }}>
 
       {/* LEFT PANEL */}
       <div className="hidden lg:flex lg:w-2/5 relative flex-col justify-between p-14 overflow-hidden">
-        <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(212,160,48,0.08) 0%, rgba(0,0,0,0.9) 70%)" }} />
+        <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, rgba(201, 168, 76,0.08) 0%, rgba(0,0,0,0.9) 70%)" }} />
         <div className="relative flex items-center gap-3">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
             <rect x="1" y="1" width="30" height="30" rx="4" stroke={GOLD} strokeWidth="1.5" fill="none" />

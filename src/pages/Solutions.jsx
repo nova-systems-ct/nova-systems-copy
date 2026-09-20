@@ -5,8 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { ChevronRight, Globe2, Bot, Palette, Check, ArrowRight, ArrowLeft } from "lucide-react";
 import { useSEO } from "@/hooks/useSEO";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const sections = [
   {
@@ -64,14 +64,14 @@ export default function Solutions() {
   });
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-navy">
       <Navbar />
       <main className="pt-16">
 
         {/* Hero */}
         <section className="relative py-28 px-6 overflow-hidden">
           <div className="absolute inset-0" style={{
-            background: "radial-gradient(ellipse at 30% 50%, rgba(212,160,48,0.09) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(212,160,48,0.04) 0%, transparent 55%)"
+            background: "radial-gradient(ellipse at 30% 50%, rgba(201, 168, 76,0.09) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(201, 168, 76,0.04) 0%, transparent 55%)"
           }} />
           <div className="max-w-4xl mx-auto relative">
             <button onClick={() => navigate(-1)}

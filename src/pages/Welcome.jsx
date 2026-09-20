@@ -6,9 +6,9 @@ import Footer from "@/components/Footer";
 import { useSEO } from "@/hooks/useSEO";
 import { INDUSTRIES } from "@/pages/intake/constants";
 
-const GOLD = "#D4A030";
-const GOLD_DARK = "#8a6200";
-const GOLD_BRIGHT = "#C8921A";
+const GOLD = "#C9A84C";
+const GOLD_DARK = "#8a6b2a";
+const GOLD_BRIGHT = "#E0C476";
 const G = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 
 // Phase 1 (2026-09-20): re-pointed from a cross-origin POST to nova-wave-one.vercel.app (a
@@ -179,7 +179,7 @@ export default function Welcome() {
   // Spec §7 — do not imply the audit has started. This has been reviewed by Nova, not started.
   if (done) {
     return (
-      <div className="min-h-screen" style={{ background: "#0a0a0a" }}>
+      <div className="min-h-screen" style={{ background: "#04112B" }}>
         <Navbar />
         <div className="flex items-center justify-center px-6 pt-16 pb-16" style={{ minHeight: "100vh" }}>
           <div className="max-w-md w-full text-center">
@@ -222,7 +222,7 @@ export default function Welcome() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: "#0a0a0a" }}>
+    <div className="min-h-screen" style={{ background: "#04112B" }}>
       <Navbar />
       <div className="px-6 pt-16 pb-14" style={{ maxWidth: 560, margin: "0 auto" }}>
         <div className="text-center mb-10">

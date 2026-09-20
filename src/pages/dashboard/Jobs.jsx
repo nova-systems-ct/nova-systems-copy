@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Users, UserPlus, X, Send, ExternalLink, Calendar } from 'lucide-react'
 
-const GOLD = '#D4A030'
-const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
+const GOLD = '#C9A84C'
+const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 const inp = { width: '100%', padding: '11px 14px', fontSize: 13, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 
 const STATUS_CFG = {
@@ -188,7 +188,7 @@ function ApplicantRow({ candidate: c, onClick }) {
       onClick={onClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: hov ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.025)', border: `1px solid ${hov ? 'rgba(212,160,48,0.25)' : 'rgba(255,255,255,0.07)'}`, borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s', flexWrap: 'wrap' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: hov ? 'rgba(255,255,255,0.045)' : 'rgba(255,255,255,0.025)', border: `1px solid ${hov ? 'rgba(201, 168, 76,0.25)' : 'rgba(255,255,255,0.07)'}`, borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s', flexWrap: 'wrap' }}
     >
       <div style={{ width: 36, height: 36, borderRadius: 9, background: G, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: '#0a0800', flexShrink: 0 }}>
         {(c.name || '?')[0].toUpperCase()}

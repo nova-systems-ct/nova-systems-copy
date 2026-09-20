@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-const GOLD = "#D4A030";
+const GOLD = "#C9A84C";
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(
@@ -38,7 +38,7 @@ export default function ConnecticutMap({ cities, height = 280 }) {
   return (
     <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
       <svg viewBox="0 0 300 260" width="100%" height={height} style={{ maxWidth: 420 }}>
-        <path d={CT_PATH} fill="rgba(212,160,48,0.06)" stroke={GOLD} strokeWidth="1.5" strokeOpacity="0.5" />
+        <path d={CT_PATH} fill="rgba(201, 168, 76,0.06)" stroke={GOLD} strokeWidth="1.5" strokeOpacity="0.5" />
         {shown.map((c) => (
           <g key={c.name}>
             <circle cx={c.x} cy={c.y} r="8" fill={GOLD} fillOpacity="0.15">

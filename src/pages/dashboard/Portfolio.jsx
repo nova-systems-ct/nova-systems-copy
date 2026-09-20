@@ -3,8 +3,8 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { Upload, Star, Trash2, Edit3, X, Check, Plus, ImageIcon, Loader2, AlertCircle, GripVertical, ArrowUpDown } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 
-const GOLD = '#D4A030'
-const G = `linear-gradient(135deg,#8a6200 0%,${GOLD} 35%,#C8921A 55%,${GOLD} 80%,#8a6200 100%)`
+const GOLD = '#C9A84C'
+const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 const CATEGORIES = ['Websites', 'Social Media', 'Branding', 'AI Systems', 'Signage and Print', 'Apparel and Uniforms', 'Other']
 const CLIENT_OPTIONS = ['Mars Hill Apologetics', 'TRIO Upward Bound', 'Flow Barbershop', 'Wepaa', 'Custom…']
 const CAT_COLORS = { Websites: '#60a5fa', Branding: '#a78bfa', 'Social Media': '#4ade80', 'AI Systems': '#22d3ee', 'Signage and Print': '#f97316', 'Apparel and Uniforms': '#f472b6', Other: GOLD }
@@ -196,7 +196,7 @@ export default function Portfolio() {
             <p style={{ color: '#f87171', fontSize: 13, fontWeight: 600 }}>Supabase setup required</p>
           </div>
           <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, lineHeight: 1.7, marginBottom: 12 }}>
-            Run this SQL in your Supabase dashboard → SQL Editor, then create a public storage bucket named <code style={{ color: GOLD, background: 'rgba(212,160,48,0.1)', padding: '1px 6px', borderRadius: 4 }}>portfolio</code>:
+            Run this SQL in your Supabase dashboard → SQL Editor, then create a public storage bucket named <code style={{ color: GOLD, background: 'rgba(201, 168, 76,0.1)', padding: '1px 6px', borderRadius: 4 }}>portfolio</code>:
           </p>
           <pre style={{ padding: '14px 18px', background: 'rgba(0,0,0,0.5)', borderRadius: 8, fontSize: 11, color: 'rgba(255,255,255,0.55)', overflowX: 'auto', lineHeight: 1.8 }}>
 {`-- See supabase/schema-update.sql for the full script
@@ -429,7 +429,7 @@ function PortfolioCard({ item, onDelete, onToggleFeatured, onEdit, onLightbox, d
 
   return (
     <div
-      style={{ borderRadius: 12, overflow: 'hidden', background: 'rgba(255,255,255,0.025)', border: `1px solid ${hov ? 'rgba(212,160,48,0.2)' : 'rgba(255,255,255,0.07)'}`, transition: 'border-color 0.15s' }}
+      style={{ borderRadius: 12, overflow: 'hidden', background: 'rgba(255,255,255,0.025)', border: `1px solid ${hov ? 'rgba(201, 168, 76,0.2)' : 'rgba(255,255,255,0.07)'}`, transition: 'border-color 0.15s' }}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}>
 

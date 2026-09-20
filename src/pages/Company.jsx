@@ -5,8 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { ChevronRight, MapPin, Phone, Mail, Award, Zap, ShieldCheck, Instagram, Linkedin, ArrowLeft } from "lucide-react";
 import { useSEO } from "@/hooks/useSEO";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const values = [
   {
@@ -34,14 +34,14 @@ export default function Company() {
   });
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-navy">
       <Navbar />
       <main className="pt-16">
 
         {/* Hero */}
         <section className="relative py-28 px-6 overflow-hidden">
           <div className="absolute inset-0" style={{
-            background: "radial-gradient(ellipse at 30% 55%, rgba(212,160,48,0.09) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(212,160,48,0.04) 0%, transparent 55%)"
+            background: "radial-gradient(ellipse at 30% 55%, rgba(201, 168, 76,0.09) 0%, transparent 60%), radial-gradient(ellipse at 80% 20%, rgba(201, 168, 76,0.04) 0%, transparent 55%)"
           }} />
           <div className="max-w-4xl mx-auto relative">
             <button onClick={() => navigate(-1)}
@@ -55,7 +55,7 @@ export default function Company() {
             <h1 className="text-4xl md:text-6xl font-black text-white leading-[1.05] tracking-tight mb-6">
               Driven by Innovation.<br />
               <span style={{
-                background: `linear-gradient(90deg, ${GOLD} 0%, #C8921A 50%, ${GOLD} 100%)`,
+                background: `linear-gradient(90deg, ${GOLD} 0%, #E0C476 50%, ${GOLD} 100%)`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
               }}>Engineered for Perfection.</span>

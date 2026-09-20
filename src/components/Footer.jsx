@@ -2,12 +2,11 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { Mail, Phone, MapPin, Linkedin, Instagram } from "lucide-react";
 import novaLogo from "@/assets/nova logo.png";
-
-const GOLD = "#D4A030";
+import { NAVY, GOLD } from "@/lib/theme";
 
 export default function Footer() {
   return (
-    <footer className="bg-black border-t px-6 pt-16 pb-8" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+    <footer className="border-t px-6 pt-16 pb-8" style={{ background: NAVY, borderColor: "rgba(255,255,255,0.08)" }}>
       <div className="max-w-7xl mx-auto">
 
         {/* Top row */}
@@ -51,7 +50,7 @@ export default function Footer() {
           <div>
             <p className="text-[9px] tracking-[0.25em] uppercase font-semibold mb-4" style={{ color: GOLD }}>PLATFORM</p>
             <div className="space-y-2.5">
-              {[["Solutions", "/solutions"], ["Nova Audit", "/request-audit"], ["Wave One", "/waves"], ["Case Studies", "/portfolio"], ["Insights", "/insights"], ["Careers", "/careers"], ["About", "/company"], ["Pricing", "/pricing"]].map(([label, path]) => (
+              {[["Solutions", "/solutions"], ["Business Diagnostic", "/business-diagnostic"], ["Wave One", "/waves"], ["Case Studies", "/portfolio"], ["Insights", "/insights"], ["Careers", "/careers"], ["About", "/company"], ["Pricing", "/pricing"]].map(([label, path]) => (
                 <Link key={label} to={path} className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>
                   {label}
                 </Link>

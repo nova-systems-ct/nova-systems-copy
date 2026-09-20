@@ -5,8 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { Check, ArrowRight, ArrowLeft, ChevronDown } from "lucide-react";
 import { useSEO } from "@/hooks/useSEO";
 
-const GOLD = "#D4A030";
-const GOLD_GRADIENT = `linear-gradient(135deg, #8a6200 0%, ${GOLD} 35%, #C8921A 55%, ${GOLD} 80%, #8a6200 100%)`;
+const GOLD = "#C9A84C";
+const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
 
 const plans = [
   {
@@ -70,14 +70,14 @@ export default function Pricing() {
   });
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen bg-navy">
       <Navbar />
       <main className="pt-16">
 
         {/* Hero */}
         <section className="relative py-24 px-6 overflow-hidden">
           <div className="absolute inset-0" style={{
-            background: "radial-gradient(ellipse at 50% 70%, rgba(212,160,48,0.10) 0%, transparent 60%)"
+            background: "radial-gradient(ellipse at 50% 70%, rgba(201, 168, 76,0.10) 0%, transparent 60%)"
           }} />
           <div className="max-w-4xl mx-auto relative">
             <button onClick={() => navigate(-1)}
@@ -93,7 +93,7 @@ export default function Pricing() {
             <h1 className="text-4xl md:text-6xl font-black text-white leading-[1.05] mb-5">
               Diagnosis First.<br />
               <span style={{
-                background: `linear-gradient(90deg, ${GOLD} 0%, #C8921A 50%, ${GOLD} 100%)`,
+                background: `linear-gradient(90deg, ${GOLD} 0%, #E0C476 50%, ${GOLD} 100%)`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
               }}>Pricing Second.</span>
@@ -113,7 +113,7 @@ export default function Pricing() {
                 key={plan.name}
                 className="relative rounded-xl p-8 flex flex-col transition-all duration-300"
                 style={{
-                  background: plan.popular ? "rgba(212,160,48,0.07)" : "rgba(255,255,255,0.025)",
+                  background: plan.popular ? "rgba(201, 168, 76,0.07)" : "rgba(255,255,255,0.025)",
                   border: plan.popular ? `1px solid ${GOLD}55` : "1px solid rgba(255,255,255,0.08)",
                   transform: plan.popular ? "scale(1.03)" : "scale(1)",
                 }}
