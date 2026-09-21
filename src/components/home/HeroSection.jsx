@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import heroVideo1 from "@/assets/hero-video-1.mp4";
 import heroVideo2 from "@/assets/hero-video-2.mp4";
 import heroPoster from "@/assets/hero-poster.jpg";
-import { NAVY, GOLD, GOLD_BRIGHT, GOLD_DARK, GOLD_GRADIENT, GOLD_TEXT_GRADIENT } from "@/lib/theme";
+import { NAVY, GOLD, GOLD_BRIGHT, GOLD_GRADIENT, GOLD_TEXT_GRADIENT } from "@/lib/theme";
 
 const VIDEOS = [heroVideo1, heroVideo2];
 
