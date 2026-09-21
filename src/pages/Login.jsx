@@ -1,8 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Bot, Globe, Palette, Workflow } from "lucide-react";
-import video1 from "@/assets/Video 1.mp4";
-import video2 from "@/assets/video 2.mp4";
+import loginVideo from "@/assets/video 2.mp4";
 import { useSEO } from "@/hooks/useSEO";
 import { supabase } from "@/lib/supabaseClient";
 import { safeReturnTo } from "@/lib/returnTo";
@@ -11,7 +10,8 @@ const GOLD = "#C9A84C";
 const GOLD_BRIGHT = "#E0C476";
 const GOLD_DARK = "#8a6b2a";
 const GOLD_GRADIENT = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
-const VIDEOS = [video1, video2];
+// 2026-09-21 (final video decision, repair task): single video, no rotation — "video 2.mp4" only,
+// used exactly as supplied (no re-encoding).
 
 const features = [
   { icon: Bot, label: "AI ECOSYSTEMS", sub: "Automated workflows and phone agents, live." },
@@ -30,7 +30,6 @@ export default function Login() {
   useSEO({ title: "Login — Nova Systems", description: "Secure access to your Nova Systems workspace." });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [vidIdx, setVidIdx] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
   const videoRef = useRef(null);
 
@@ -63,10 +62,10 @@ export default function Login() {
     const v = videoRef.current;
     if (!v) return;
     v.pause();
-    v.src = VIDEOS[vidIdx];
+    v.src = loginVideo;
     v.load();
     v.play().catch(() => {});
-  }, [vidIdx, reducedMotion, checkingSession]);
+  }, [reducedMotion, checkingSession]);
 
   // If a real session already exists, skip the form entirely and go straight to the destination.
   useEffect(() => {
@@ -139,7 +138,7 @@ export default function Login() {
           ref={videoRef}
           muted
           playsInline
-          onEnded={() => setVidIdx((i) => (i + 1) % VIDEOS.length)}
+          loop
           className="absolute inset-0 w-full h-full object-cover"
           style={{ zIndex: 0 }}
         />

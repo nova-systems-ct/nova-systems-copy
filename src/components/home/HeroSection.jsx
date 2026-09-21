@@ -1,36 +1,20 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
-import heroVideo1 from "@/assets/hero-video-1.mp4";
-import heroVideo2 from "@/assets/hero-video-2.mp4";
-import heroPoster from "@/assets/hero-poster.jpg";
+import heroVideo from "@/assets/video 3.mp4";
+import heroPoster from "@/assets/hero-poster-v3.jpg";
 import { BLACK, GOLD, GOLD_BRIGHT, GOLD_GRADIENT, GOLD_TEXT_GRADIENT } from "@/lib/theme";
 
-const VIDEOS = [heroVideo1, heroVideo2];
-
-// Phase 1 (2026-09-20): restored from the committed video-led hero (src/components/home/
-// HeroSection.jsx as of the 2026-08-03 commit), selectively recovered rather than a full repo
-// revert. Two real fixes applied on top of the original, not just a restore:
-//
-// 1. VIDEO QUALITY — the original pointed at `video 3.mp4`/`video 4.mp4`, confirmed via ffprobe
-//    to be genuine 960x540 source at ~0.6-1.1 Mbps — a real low-resolution source, not a CSS or
-//    compression-only issue (upscaling 960px to a >1200px-wide hero panel is what produced the
-//    blur). `Video 1.mp4`/`video 2.mp4` (already in this repo, used on the Login page) are real
-//    1280x720 at 3.3-3.6 Mbps — visually confirmed crisp by extracting and viewing frames from
-//    both pairs. Re-encoded copies of those (audio track stripped — always played muted, so it
-//    was dead weight; CRF 26, faststart) ship here as hero-video-1/2.mp4, ~1.7MB each instead of
-//    the 4-4.5MB originals, with no visible quality loss (verified by re-extracting and viewing
-//    a frame from the re-encoded file).
-// 2. MOBILE — the original had zero responsive handling at all: fixed absolute 58%/62% splits,
-//    no breakpoints, would render as an unreadable diagonal sliver on a phone. Rebuilt with a
-//    full-bleed single-layer video background below `md`, and the original diagonal split-panel
-//    treatment preserved at `md` and above.
-//
-// Also added: a real poster image (extracted frame, shown while the video loads and as the
-// entire background when reduced motion is preferred), and prefers-reduced-motion handling that
-// skips autoplay entirely rather than just visually hiding a still-playing video.
+// 2026-09-21 (final video decision, repair task): single video, no rotation — "video 3.mp4" only,
+// used exactly as supplied (not re-encoded; source is already a reasonable 1.36MB at 960x540, so
+// there was no size problem to solve here, and the instruction was explicit not to claim a
+// resolution improvement through re-encoding or CSS). Poster is a real extracted frame from this
+// same file (hero-poster-v3.jpg), not the old globe-video poster — the loading/reduced-motion
+// fallback has to match what actually plays. Two mounted <video> elements (mobile full-bleed +
+// desktop diagonal-split layers) still exist for the responsive treatment; each needs its own ref
+// (see the dual-ref bug fixed 2026-09-20 — one shared ref could only ever attach to one of the two
+// actual DOM nodes) even though both now always play the same single file.
 export default function HeroSection() {
-  const [vidIdx, setVidIdx] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
   const mobileVideoRef = useRef(null);
   const desktopVideoRef = useRef(null);
@@ -43,22 +27,17 @@ export default function HeroSection() {
     return () => mq.removeEventListener?.("change", onChange);
   }, []);
 
-  // Bug found 2026-09-20 (real repair task): a single `videoLayer` JSX element (one ref) was
-  // reused at both the mobile and desktop render sites below — React mounts that as two separate
-  // DOM <video> nodes, but a single ref can only ever point at one of them. Whichever didn't win
-  // the ref sat with no src set, permanently. Fixed by giving each breakpoint's video its own ref
-  // and having this effect drive both, so mobile and desktop each really do get a real src.
   useEffect(() => {
     if (reducedMotion) return;
     for (const ref of [mobileVideoRef, desktopVideoRef]) {
       const v = ref.current;
       if (!v) continue;
       v.pause();
-      v.src = VIDEOS[vidIdx];
+      v.src = heroVideo;
       v.load();
       v.play().catch(() => {});
     }
-  }, [vidIdx, reducedMotion]);
+  }, [reducedMotion]);
 
   return (
     <section className="relative min-h-screen md:h-screen overflow-hidden" style={{ background: BLACK }}>
@@ -74,9 +53,9 @@ export default function HeroSection() {
             muted
             playsInline
             autoPlay
+            loop
             preload="auto"
             poster={heroPoster}
-            onEnded={() => setVidIdx((i) => (i + 1) % VIDEOS.length)}
             className="absolute inset-0 w-full h-full object-cover"
           />
         )}
@@ -97,9 +76,9 @@ export default function HeroSection() {
             muted
             playsInline
             autoPlay
+            loop
             preload="auto"
             poster={heroPoster}
-            onEnded={() => setVidIdx((i) => (i + 1) % VIDEOS.length)}
             className="absolute inset-0 w-full h-full object-cover"
           />
         )}
