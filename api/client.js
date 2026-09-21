@@ -20,7 +20,10 @@ import { requireStaff } from './_auth.js';
 //                                 POST upsert         [admin.view]
 //   blog       &op=posts                             PUBLIC (&admin=true variant: [growth.view])
 //              &op=admin                              [growth.view] (POST { action: save|delete })
-//   documents                    [admin.view]          POST generate a document with Claude
+//   documents                    [admin.view]          GET list saved documents / POST generate
+//                                                        with Claude, or { action:'mark-sent', id }
+//   newsletter                   [growth.view]          GET { subscribers, sent } / POST
+//                                                        { action:'add-subscriber'|'record-send' }
 //   auth                         retired — always 410 (see note above handler())
 
 const BLOG_CATEGORIES = ['AI and Technology', 'Connecticut Business', 'Case Studies', 'News', 'Tips and Strategy'];
@@ -733,8 +736,60 @@ async function handleBlogAdmin(req, res) {
 }
 
 // --------------------------------------------------------------- documents
+// Repair task (2026-09-21): Documents.jsx's "Saved Documents" list previously read
+// localStorage('nova_crm_docs') only — real generations were written server-side to the
+// `documents` table (see the POST branch below) but never read back, so the UI showed a
+// different, purely-local, per-browser history than what was actually saved. This GET branch
+// and the mark-sent action make Supabase the one real source of truth for both.
+async function handleDocumentsList(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 60, 60_000)) return;
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(200).json([]);
+
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/documents?order=created_at.desc`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+    if (!r.ok) { console.error('[client:documents list] Supabase error:', r.status, await r.text()); return res.status(200).json([]); }
+    return res.status(200).json(await r.json());
+  } catch (err) {
+    console.error('[client:documents list] Error:', err.message);
+    return res.status(200).json([]);
+  }
+}
+
+async function handleDocumentMarkSent(req, res) {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const id = sanitize(req.body?.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/documents?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json', Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ status: 'sent' }),
+    });
+    if (!r.ok) { console.error('[client:documents mark-sent] Error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to update document' }); }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[client:documents mark-sent] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to update document' });
+  }
+}
+
 async function handleDocuments(req, res) {
+  if (req.method === 'GET') return handleDocumentsList(req, res);
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.body?.action === 'mark-sent') return handleDocumentMarkSent(req, res);
   if (!rateLimit(req, res, 10, 60_000)) return;
 
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
@@ -799,15 +854,16 @@ async function handleDocuments(req, res) {
     // content item isn't reliably the response text.
     const text = data.content?.find((c) => c.type === 'text')?.text || '';
 
+    let savedDoc = null;
     if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY && (client_id || lead_id)) {
       try {
-        await fetch(`${process.env.SUPABASE_URL}/rest/v1/documents`, {
+        const saveRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/documents`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
             Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-            Prefer: 'return=minimal',
+            Prefer: 'return=representation',
           },
           body: JSON.stringify({
             client_id: client_id || null,
@@ -819,17 +875,114 @@ async function handleDocuments(req, res) {
             created_at: new Date().toISOString(),
           }),
         });
-        console.log('[client:documents] Draft saved to Supabase');
+        if (saveRes.ok) {
+          const rows = await saveRes.json();
+          savedDoc = rows[0] || null;
+          console.log('[client:documents] Draft saved to Supabase');
+        } else {
+          console.error('[client:documents] Save error:', saveRes.status, await saveRes.text());
+        }
       } catch (err) {
         console.error('[client:documents] Supabase save (non-fatal):', err.message);
       }
     }
 
-    res.status(200).json({ text });
+    res.status(200).json({ text, document: savedDoc });
   } catch (err) {
     console.error('[client:documents] Error:', err.message);
     res.status(500).json({ error: 'Failed to generate document' });
   }
+}
+
+// -------------------------------------------------------------- newsletter
+// Repair task (2026-09-21): Newsletter.jsx was 100% localStorage (crmStore's nova_nl_subscribers/
+// nova_nl_sent) — subscribers and send history existed only in whichever browser added them,
+// invisible to Isaac on another device and lost if storage was ever cleared. This is the real
+// backing store (see supabase/schema-update.sql's newsletter_subscribers/newsletter_sends
+// section — same "append to the migration file, Isaac runs it manually" pattern as every other
+// schema change in this project). The actual per-subscriber send loop still runs from the
+// frontend against api/notify.js — unchanged here — this only makes the roster and the sent-log
+// real and shared instead of per-browser fiction.
+async function handleNewsletter(req, res) {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(200).json({ subscribers: [], sent: [] });
+    try {
+      const [subRes, sentRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/newsletter_subscribers?order=created_at.desc`, {
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        }),
+        fetch(`${SUPABASE_URL}/rest/v1/newsletter_sends?order=sent_at.desc`, {
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        }),
+      ]);
+      const subscribers = subRes.ok ? await subRes.json() : [];
+      const sent = sentRes.ok ? await sentRes.json() : [];
+      if (!subRes.ok) console.error('[client:newsletter] subscribers error:', subRes.status, await subRes.text().catch(() => ''));
+      if (!sentRes.ok) console.error('[client:newsletter] sent error:', sentRes.status, await sentRes.text().catch(() => ''));
+      return res.status(200).json({ subscribers, sent });
+    } catch (err) {
+      console.error('[client:newsletter] Error:', err.message);
+      return res.status(200).json({ subscribers: [], sent: [] });
+    }
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const b = req.body || {};
+  const action = sanitize(b.action, 30);
+
+  if (action === 'add-subscriber') {
+    const email = sanitizeEmail(b.email);
+    if (!email) return res.status(400).json({ error: 'A valid email is required' });
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/newsletter_subscribers`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json', Prefer: 'return=representation,resolution=ignore-duplicates',
+        },
+        body: JSON.stringify({ email }),
+      });
+      if (!r.ok) { console.error('[client:newsletter] add-subscriber error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to add subscriber' }); }
+      const rows = await r.json();
+      if (!rows.length) return res.status(200).json({ ok: false, reason: 'duplicate' });
+      return res.status(200).json({ ok: true, subscriber: rows[0] });
+    } catch (err) {
+      console.error('[client:newsletter] Error:', err.message);
+      return res.status(500).json({ error: 'Failed to add subscriber' });
+    }
+  }
+
+  if (action === 'record-send') {
+    const subject = sanitize(b.subject, 300);
+    const body = sanitize(b.body, 20000);
+    const recipient_count = Number(b.recipient_count) || 0;
+    if (!subject) return res.status(400).json({ error: 'subject is required' });
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/newsletter_sends`, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json', Prefer: 'return=representation',
+        },
+        body: JSON.stringify({ subject, body, recipient_count, sent_at: new Date().toISOString() }),
+      });
+      if (!r.ok) { console.error('[client:newsletter] record-send error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to record send' }); }
+      const rows = await r.json();
+      return res.status(200).json({ ok: true, send: rows[0] });
+    } catch (err) {
+      console.error('[client:newsletter] Error:', err.message);
+      return res.status(500).json({ error: 'Failed to record send' });
+    }
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
 }
 
 // Nova Connect client portal login — checks against client_accounts.
@@ -905,6 +1058,10 @@ export default async function handler(req, res) {
     case 'documents':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleDocuments(req, res);
+
+    case 'newsletter':
+      if (!(await requireStaff(req, res, 'growth.view'))) return;
+      return handleNewsletter(req, res);
 
     case 'auth':
       return res.status(410).json({ error: 'This login method has been retired.' });

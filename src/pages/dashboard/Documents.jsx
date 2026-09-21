@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Sparkles, Loader2, Send, Save, FileText } from 'lucide-react'
-import { getClients, getLeads, saveDocument, getDocuments } from '../../lib/crmStore'
 import { authedFetch } from '../../lib/apiAuth'
+import { supabase } from '../../lib/supabaseClient'
+import { useOrg } from '../../lib/OrgContext'
 
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
@@ -11,7 +12,36 @@ const inp = { width: '100%', padding: '11px 14px', fontSize: 13, background: 'rg
 // — that's the real server-side validation, not just this UI's dropdown.
 const DOC_TYPES = ['Proposal', 'Contract', 'Invoice', 'Scope of Work', 'Letter of Intent']
 
+// Repair task (2026-09-21): the client/lead pickers used to come from crmStore's fake seeded
+// localStorage data, so "generating a document" for a real client would still list only the
+// three hardcoded fictional accounts. clients/leads are now real, org-scoped Supabase queries
+// (same pattern as Leads.jsx / Invoices.jsx) — normalized to a common {id,name,email,industry}
+// shape here since real `clients` rows use business_name/full_name while `leads` already has a
+// plain `name` column.
+async function loadClients(currentOrgId) {
+  if (!supabase || !currentOrgId) return []
+  const { data, error } = await supabase
+    .from('clients')
+    .select('id,business_name,full_name,email,business_type')
+    .eq('organization_id', currentOrgId)
+    .order('created_at', { ascending: false })
+  if (error) { console.error('[Documents] clients load error:', error.message); return [] }
+  return (data || []).map(c => ({ id: c.id, name: c.business_name || c.full_name || c.email, email: c.email, industry: c.business_type || '' }))
+}
+
+async function loadLeads(currentOrgId) {
+  if (!supabase || !currentOrgId) return []
+  const { data, error } = await supabase
+    .from('leads')
+    .select('id,name,email,industry')
+    .eq('organization_id', currentOrgId)
+    .order('created_at', { ascending: false })
+  if (error) { console.error('[Documents] leads load error:', error.message); return [] }
+  return data || []
+}
+
 export default function Documents() {
+  const { currentOrg } = useOrg()
   const [clients, setClients] = useState([])
   const [leads, setLeads] = useState([])
   const [docs, setDocs] = useState([])
@@ -22,15 +52,24 @@ export default function Documents() {
   const [generating, setGenerating] = useState(false)
   const [result, setResult] = useState('')
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
+  const [savedDocument, setSavedDocument] = useState(null)
   const [sendingEmail, setSendingEmail] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
 
+  const loadDocs = () => {
+    authedFetch('/api/client?resource=documents')
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => setDocs(Array.isArray(rows) ? rows : []))
+      .catch(() => setDocs([]))
+  }
+
   useEffect(() => {
-    setClients(getClients())
-    setLeads(getLeads())
-    setDocs(getDocuments())
-  }, [])
+    if (!currentOrg) return
+    loadClients(currentOrg.id).then(setClients)
+    loadLeads(currentOrg.id).then(setLeads)
+  }, [currentOrg?.id])
+
+  useEffect(() => { loadDocs() }, [])
 
   const entities = entityType === 'client' ? clients : leads
   const selectedEntity = entities.find(e => e.id === entityId)
@@ -46,7 +85,7 @@ export default function Documents() {
     setGenerating(true)
     setError('')
     setResult('')
-    setSaved(false)
+    setSavedDocument(null)
     setEmailSent(false)
 
     const entityName = selectedEntity?.name || 'Unknown'
@@ -67,28 +106,18 @@ export default function Documents() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error || 'Generation failed.')
       setResult(data.text || '')
+      // The server already persists a real `documents` row when a client/lead is attached (see
+      // api/client.js's handleDocuments) — there is no separate local "save" step anymore.
+      if (data.document) { setSavedDocument(data.document); loadDocs() }
     } catch (err) {
       setError(err.message || 'Generation failed. Please try again.')
     }
     setGenerating(false)
   }
 
-  const saveDoc = () => {
-    if (!result) return
-    saveDocument({
-      ...(entityType === 'client' ? { client_id: entityId } : { lead_id: entityId }),
-      entity_name: selectedEntity?.name || '',
-      type: docType,
-      content: result,
-      sent: false,
-    })
-    setDocs(getDocuments())
-    setSaved(true)
-  }
-
   const sendToClient = async () => {
     if (!result || !selectedEntity) return
-    const email = entityType === 'client' ? selectedEntity.email : selectedEntity.email
+    const email = selectedEntity.email
     if (!email) { setError('No email on file for this client/lead.'); return }
     setSendingEmail(true)
     try {
@@ -103,16 +132,12 @@ export default function Documents() {
         }),
       })
       setEmailSent(true)
-      if (saved) {
-        const docs2 = getDocuments()
-        // mark the latest doc as sent
-        const latest = docs2[0]
-        if (latest) {
-          const all = JSON.parse(localStorage.getItem('nova_crm_docs') || '[]')
-          const updated = all.map(d => d.id === latest.id ? { ...d, sent: true } : d)
-          localStorage.setItem('nova_crm_docs', JSON.stringify(updated))
-          setDocs(getDocuments())
-        }
+      if (savedDocument) {
+        await authedFetch('/api/client?resource=documents', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'mark-sent', id: savedDocument.id }),
+        })
+        loadDocs()
       }
     } catch {}
     setSendingEmail(false)
@@ -190,10 +215,12 @@ export default function Documents() {
               <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4 }}>Generated {docType}</p>
               {selectedEntity && <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>{selectedEntity.name}</p>}
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={saveDoc} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: saved ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.05)', border: `1px solid ${saved ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 7, color: saved ? '#4ade80' : 'rgba(255,255,255,0.5)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                <Save style={{ width: 13, height: 13 }} /> {saved ? 'Saved' : 'Save to Record'}
-              </button>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {/* Saving now happens automatically server-side the moment the document is
+                  generated (see api/client.js's handleDocuments) — no separate manual save step. */}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: savedDocument ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.05)', border: `1px solid ${savedDocument ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 7, color: savedDocument ? '#4ade80' : 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+                <Save style={{ width: 13, height: 13 }} /> {savedDocument ? 'Saved to Records' : 'Not saved (no client/lead attached)'}
+              </span>
               <button onClick={sendToClient} disabled={sendingEmail || !selectedEntity?.email} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: emailSent ? 'rgba(34,197,94,0.12)' : G, border: emailSent ? '1px solid rgba(34,197,94,0.3)' : 'none', borderRadius: 7, color: emailSent ? '#4ade80' : '#0a0800', fontSize: 12, fontWeight: 700, cursor: sendingEmail || !selectedEntity?.email ? 'not-allowed' : 'pointer', opacity: !selectedEntity?.email ? 0.5 : 1, fontFamily: 'inherit' }}>
                 <Send style={{ width: 13, height: 13 }} /> {emailSent ? 'Sent!' : sendingEmail ? 'Sending…' : 'Send to Client'}
               </button>
@@ -224,7 +251,7 @@ export default function Documents() {
                   <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{d.type} — {d.entity_name}</p>
                   <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 2 }}>{new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                 </div>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: d.sent ? 'rgba(34,197,94,0.1)' : `${GOLD}10`, color: d.sent ? '#4ade80' : GOLD, border: `1px solid ${d.sent ? 'rgba(34,197,94,0.3)' : GOLD + '30'}` }}>{d.sent ? 'Sent' : 'Draft'}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20, background: d.status === 'sent' ? 'rgba(34,197,94,0.1)' : `${GOLD}10`, color: d.status === 'sent' ? '#4ade80' : GOLD, border: `1px solid ${d.status === 'sent' ? 'rgba(34,197,94,0.3)' : GOLD + '30'}` }}>{d.status === 'sent' ? 'Sent' : 'Draft'}</span>
               </div>
             ))}
           </div>

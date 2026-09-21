@@ -852,3 +852,45 @@ ALTER TABLE contact_submissions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS members_read_contact_submissions ON contact_submissions;
 CREATE POLICY members_read_contact_submissions ON contact_submissions FOR SELECT TO authenticated USING (is_org_member(organization_id));
 
+
+-- =============================================================================================
+-- Repair task (2026-09-21): Newsletter.jsx was 100% localStorage (crmStore's nova_nl_subscribers/
+-- nova_nl_sent) — subscribers and send history existed only in whichever browser added them,
+-- invisible cross-device/cross-staff and lost on cleared storage. Real tables below, following
+-- the same organization_id-nullable-with-backfill pattern as wave_one_applications/
+-- contact_submissions above (api/client.js's handleNewsletter doesn't set organization_id on
+-- write yet — same known, documented gap as those two tables, not a new one).
+-- =============================================================================================
+
+CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email           TEXT NOT NULL UNIQUE,
+  organization_id UUID REFERENCES organizations(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS newsletter_subscribers_organization_idx ON newsletter_subscribers (organization_id);
+
+UPDATE newsletter_subscribers SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND newsletter_subscribers.organization_id IS NULL;
+
+ALTER TABLE newsletter_subscribers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS members_read_newsletter_subscribers ON newsletter_subscribers;
+CREATE POLICY members_read_newsletter_subscribers ON newsletter_subscribers FOR SELECT TO authenticated USING (is_org_member(organization_id));
+
+CREATE TABLE IF NOT EXISTS newsletter_sends (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subject          TEXT NOT NULL,
+  body             TEXT,
+  recipient_count  INTEGER NOT NULL DEFAULT 0,
+  organization_id  UUID REFERENCES organizations(id),
+  sent_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS newsletter_sends_organization_idx ON newsletter_sends (organization_id);
+CREATE INDEX IF NOT EXISTS newsletter_sends_sent_idx         ON newsletter_sends (sent_at DESC);
+
+UPDATE newsletter_sends SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND newsletter_sends.organization_id IS NULL;
+
+ALTER TABLE newsletter_sends ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS members_read_newsletter_sends ON newsletter_sends;
+CREATE POLICY members_read_newsletter_sends ON newsletter_sends FOR SELECT TO authenticated USING (is_org_member(organization_id));

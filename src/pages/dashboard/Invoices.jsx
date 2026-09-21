@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, X, Trash2, Loader2, Receipt, Send, Eye, CheckCircle2, Download } from 'lucide-react'
-import { getClients } from '../../lib/crmStore'
 import { generateInvoicePDF } from '../../utils/generatePdf'
 import { authedFetch } from '../../lib/apiAuth'
+import { supabase } from '../../lib/supabaseClient'
+import { useOrg } from '../../lib/OrgContext'
 
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
@@ -24,7 +25,19 @@ function nextInvoiceNumber(existing) {
 
 const emptyForm = { client_id: '', client_name: '', client_email: '', line_items: [{ description: '', amount: '', quantity: 1 }], due_date: '', notes: '', deposit_amount: '' }
 
+// Repair task (2026-09-21): this page previously resolved every client name/dropdown off
+// crmStore's fake seeded localStorage clients (Mars Hill/Flow Barbershop/TRIO Upward Bound) — so
+// a real invoice against a real client_id would still display one of three hardcoded fictional
+// names in the list, and the "Create Invoice" client picker never offered a real client at all.
+// The real `clients` table (Stage 5: organization_id + RLS via is_org_member()) is queried
+// directly here, the same already-proven pattern Leads.jsx uses. It will legitimately show an
+// empty dropdown today since zero real clients exist yet — that's the honest state, not a bug.
+function clientDisplayName(c) {
+  return c?.business_name || c?.full_name || c?.email || 'Unnamed client'
+}
+
 export default function Invoices() {
+  const { currentOrg } = useOrg()
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -34,7 +47,23 @@ export default function Invoices() {
   const [clientFilter, setClientFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFilter, setDateFilter] = useState('')
-  const clients = getClients()
+  const [clients, setClients] = useState([])
+
+  useEffect(() => {
+    if (!supabase || !currentOrg) return
+    let active = true
+    supabase
+      .from('clients')
+      .select('id,business_name,full_name,email')
+      .eq('organization_id', currentOrg.id)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!active) return
+        if (error) { console.error('[Invoices] clients load error:', error.message); return }
+        setClients(data || [])
+      })
+    return () => { active = false }
+  }, [currentOrg?.id])
 
   const load = async () => {
     setLoading(true)
@@ -76,7 +105,7 @@ export default function Invoices() {
 
   const selectClient = (id) => {
     const c = clients.find(c => c.id === id)
-    setForm(f => ({ ...f, client_id: id, client_name: c?.name || '', client_email: c?.email || '' }))
+    setForm(f => ({ ...f, client_id: id, client_name: c ? clientDisplayName(c) : '', client_email: c?.email || '' }))
   }
 
   const sendInvoice = async () => {
@@ -202,7 +231,7 @@ export default function Invoices() {
                 <label style={lbl}>Client</label>
                 <select value={form.client_id} onChange={e => selectClient(e.target.value)} style={{ ...inp, appearance: 'none', cursor: 'pointer' }}>
                   <option value="" style={{ background: '#111' }}>Select a client…</option>
-                  {clients.map(c => <option key={c.id} value={c.id} style={{ background: '#111' }}>{c.name}</option>)}
+                  {clients.map(c => <option key={c.id} value={c.id} style={{ background: '#111' }}>{clientDisplayName(c)}</option>)}
                 </select>
               </div>
               <div>
@@ -270,7 +299,7 @@ export default function Invoices() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
           <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} style={{ ...inp, width: 'auto', appearance: 'none', cursor: 'pointer' }}>
             <option value="" style={{ background: '#111' }}>All Clients</option>
-            {clients.map(c => <option key={c.id} value={c.id} style={{ background: '#111' }}>{c.name}</option>)}
+            {clients.map(c => <option key={c.id} value={c.id} style={{ background: '#111' }}>{clientDisplayName(c)}</option>)}
           </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: 'auto', appearance: 'none', cursor: 'pointer' }}>
             <option value="" style={{ background: '#111' }}>All Statuses</option>
@@ -289,7 +318,7 @@ export default function Invoices() {
             return (
               <div key={inv.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr 120px', padding: '14px 20px', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
                 <span style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{inv.invoice_number}</span>
-                <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{clients.find(c => c.id === inv.client_id)?.name || '—'}</span>
+                <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{clients.find(c => c.id === inv.client_id) && clientDisplayName(clients.find(c => c.id === inv.client_id)) || '—'}</span>
                 <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600 }}>${Number(inv.total || 0).toLocaleString()}</span>
                 <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>{inv.due_date || '—'}</span>
                 <span style={{ fontSize: 9, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: sc.bg, color: sc.color, width: 'fit-content', textTransform: 'uppercase' }}>{inv.status}</span>

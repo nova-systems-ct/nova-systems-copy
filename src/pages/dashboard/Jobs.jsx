@@ -31,28 +31,23 @@ export default function Jobs() {
   const [addForm, setAddForm] = useState({ name: '', email: '', phone: '' })
   const [addLoading, setAddLoading] = useState(false)
 
+  // Repair task (2026-09-21): this used to seed from localStorage('nova_applications') and let
+  // any locally-cached status/notes permanently override real Supabase data on every load —
+  // meaning a status change made on one device/browser could never be overwritten by a change
+  // made anywhere else, and a cleared cache lost nothing real but a stale cache silently hid real
+  // updates. Supabase (via applications-status writes in api/intake.js's update-application
+  // action) is now the one source of truth; no localStorage read/write remains here.
+  const [loadError, setLoadError] = useState(false)
   const load = async () => {
-    const local = JSON.parse(localStorage.getItem('nova_applications') || '[]')
-    setCandidates(local) // show local immediately
     try {
       const res = await authedFetch('/api/intake?action=applications')
-      if (!res.ok) return
+      if (!res.ok) { setLoadError(true); return }
       const sbApps = await res.json()
-      if (!Array.isArray(sbApps) || sbApps.length === 0) return
-      // Merge: local overrides Supabase for mutable fields (status, notes, interviewDate)
-      const localMap = Object.fromEntries(local.map(a => [a.id, a]))
-      const merged = sbApps.map(sb => {
-        const loc = localMap[sb.id]
-        // If local has a more recent status update, keep local; otherwise use Supabase
-        return loc ? { ...sb, ...loc } : sb
-      })
-      const sbIds = new Set(sbApps.map(a => a.id))
-      const localOnly = local.filter(a => !sbIds.has(a.id))
-      const all = [...merged, ...localOnly]
-      all.sort((a, b) => new Date(b.submittedAt || b.submitted_at || 0) - new Date(a.submittedAt || a.submitted_at || 0))
-      localStorage.setItem('nova_applications', JSON.stringify(all))
-      setCandidates(all)
-    } catch {}
+      setLoadError(false)
+      setCandidates(Array.isArray(sbApps) ? sbApps : [])
+    } catch {
+      setLoadError(true)
+    }
   }
   useEffect(() => { load() }, [])
 
@@ -121,6 +116,12 @@ export default function Jobs() {
           </div>
         ))}
       </div>
+
+      {loadError && (
+        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
+          <p style={{ color: '#f87171', fontSize: 13 }}>Couldn't load applications from the server. Showing nothing rather than stale local data.</p>
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>

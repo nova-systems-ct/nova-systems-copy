@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ExternalLink, Save, Check } from 'lucide-react'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
@@ -41,30 +42,67 @@ export default function JobDetail() {
   const [notes, setNotes] = useState('')
   const [notesSaved, setNotesSaved] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [notFound, setNotFound] = useState(false)
 
+  // Repair task (2026-09-21): this page used to read purely from localStorage('nova_applications')
+  // — a cache Jobs.jsx populated on its own mount — so a direct link or a page refresh landing
+  // here first (cache empty) always bounced to /dashboard/jobs even for a real applicant. Now
+  // fetches its own copy from the same real endpoint Jobs.jsx uses, so this page works standalone.
   useEffect(() => {
-    const all = JSON.parse(localStorage.getItem('nova_applications') || '[]')
-    const c = all.find(a => a.id === id)
-    if (!c) { navigate('/dashboard/jobs'); return }
-    setCandidate(c)
-    setStatus(c.status || 'new')
-    setNotes(c.adminNotes || '')
+    let active = true
+    authedFetch('/api/intake?action=applications')
+      .then(r => r.ok ? r.json() : [])
+      .then(all => {
+        if (!active) return
+        const c = Array.isArray(all) ? all.find(a => a.id === id) : null
+        if (!c) { setNotFound(true); return }
+        setCandidate(c)
+        setStatus(c.status || 'new')
+        setNotes(c.adminNotes || '')
+      })
+      .catch(() => { if (active) setNotFound(true) })
+    return () => { active = false }
   }, [id])
 
+  if (notFound) { navigate('/dashboard/jobs'); return null }
   if (!candidate) return null
 
-  const persist = (patch) => {
-    const all = JSON.parse(localStorage.getItem('nova_applications') || '[]')
-    const updated = all.map(a => a.id === id ? { ...a, ...patch } : a)
-    localStorage.setItem('nova_applications', JSON.stringify(updated))
+  // Persists status/notes/interview changes to the real `applications` row via
+  // api/intake.js's update-application action — this used to only ever write to localStorage,
+  // invisible cross-device/to other staff and lost on cleared storage. Errors are surfaced, not
+  // swallowed, so a failed save doesn't silently look successful in the UI.
+  const persist = async (patch) => {
     setCandidate(c => ({ ...c, ...patch }))
+    // Local candidate state uses the camelCase shape handleListApplications() normalizes to
+    // (interviewDate/interviewTime/adminNotes) — the server's update-application action expects
+    // the real snake_case applications-table columns, so translate rather than send the patch as-is.
+    const serverPatch = { id }
+    if ('status' in patch) serverPatch.status = patch.status
+    if ('interviewDate' in patch) serverPatch.interview_date = patch.interviewDate
+    if ('interviewTime' in patch) serverPatch.interview_time = patch.interviewTime
+    if ('adminNotes' in patch) serverPatch.admin_notes = patch.adminNotes
+    try {
+      const r = await authedFetch('/api/intake?action=update-application', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(serverPatch),
+      })
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}))
+        throw new Error(data.error || 'Save failed')
+      }
+      return true
+    } catch (e) {
+      alert('Could not save this change: ' + e.message + '. Please try again.')
+      return false
+    }
   }
 
   const handleStatusChange = async (newStatus) => {
     if (newStatus === 'interview_scheduled') { setShowInterview(true); return }
     setUpdating(true)
     setStatus(newStatus)
-    persist({ status: newStatus })
+    const ok = await persist({ status: newStatus })
+    if (!ok) { setStatus(candidate.status || 'new'); setUpdating(false); return }
     try {
       if (newStatus === 'hired') {
         const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -100,7 +138,8 @@ export default function JobDetail() {
     setUpdating(true)
     const dateFormatted = new Date(`${interviewDate}T${interviewTime}`).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
     setStatus('interview_scheduled')
-    persist({ status: 'interview_scheduled', interviewDate, interviewTime })
+    const ok = await persist({ status: 'interview_scheduled', interviewDate, interviewTime })
+    if (!ok) { setUpdating(false); return }
     setShowInterview(false)
     try {
       await fetch('/api/notify?action=contact', {
@@ -115,8 +154,9 @@ export default function JobDetail() {
     setUpdating(false)
   }
 
-  const saveNotes = () => {
-    persist({ adminNotes: notes })
+  const saveNotes = async () => {
+    const ok = await persist({ adminNotes: notes })
+    if (!ok) return
     setNotesSaved(true)
     setTimeout(() => setNotesSaved(false), 2000)
   }

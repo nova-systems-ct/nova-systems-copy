@@ -1,14 +1,20 @@
 import { useState, useEffect } from 'react'
 import { Send, Plus, Users } from 'lucide-react'
-import { getSubscribers, addSubscriber, getSentNewsletters, saveSentNewsletter } from '../../lib/crmStore'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 const inp = { width: '100%', padding: '11px 14px', fontSize: 13, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 
+// Repair task (2026-09-21): this page was 100% localStorage (crmStore's nova_nl_subscribers/
+// nova_nl_sent) — subscribers added on one device were invisible everywhere else, and cleared
+// storage silently erased the whole list with no way to tell. Real backing tables (see
+// supabase/schema-update.sql's newsletter_subscribers/newsletter_sends section, and
+// api/client.js's `newsletter` resource) — shared, persisted, and visible to every staff member.
 export default function Newsletter() {
   const [subscribers, setSubscribers] = useState([])
   const [sent, setSent] = useState([])
+  const [loadError, setLoadError] = useState(false)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
@@ -17,17 +23,33 @@ export default function Newsletter() {
   const [addLoading, setAddLoading] = useState(false)
   const [addResult, setAddResult] = useState('')
 
-  useEffect(() => {
-    setSubscribers(getSubscribers())
-    setSent(getSentNewsletters())
-  }, [])
+  const load = () => {
+    authedFetch('/api/client?resource=newsletter')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => {
+        setSubscribers(Array.isArray(data.subscribers) ? data.subscribers : [])
+        setSent(Array.isArray(data.sent) ? data.sent : [])
+        setLoadError(false)
+      })
+      .catch(() => setLoadError(true))
+  }
+  useEffect(() => { load() }, [])
 
   const handleAddSubscriber = async () => {
     if (!addEmail) return
     setAddLoading(true)
-    const ok = addSubscriber(addEmail)
-    setSubscribers(getSubscribers())
-    setAddResult(ok ? 'Added!' : 'Already subscribed.')
+    try {
+      const r = await authedFetch('/api/client?resource=newsletter', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add-subscriber', email: addEmail }),
+      })
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) { setAddResult(data.error || 'Could not add subscriber.') }
+      else if (data.ok === false && data.reason === 'duplicate') { setAddResult('Already subscribed.') }
+      else { setAddResult('Added!'); load() }
+    } catch {
+      setAddResult('Could not add subscriber.')
+    }
     setAddEmail('')
     setAddLoading(false)
     setTimeout(() => setAddResult(''), 2500)
@@ -57,8 +79,13 @@ export default function Newsletter() {
       } catch (e) { lastError = e.message }
     }
 
-    saveSentNewsletter({ subject, body, recipient_count: successCount })
-    setSent(getSentNewsletters())
+    try {
+      await authedFetch('/api/client?resource=newsletter', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'record-send', subject, body, recipient_count: successCount }),
+      })
+    } catch {}
+    load()
     setSendResult({ success: successCount, total: subscribers.length, error: lastError })
     if (successCount === subscribers.length) { setSubject(''); setBody('') }
     setSending(false)
@@ -71,6 +98,12 @@ export default function Newsletter() {
         <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Newsletter Manager</h1>
         <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, marginTop: 4 }}>{subscribers.length} subscriber{subscribers.length !== 1 ? 's' : ''}</p>
       </div>
+
+      {loadError && (
+        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, padding: '12px 16px', marginBottom: 24 }}>
+          <p style={{ color: '#f87171', fontSize: 13 }}>Couldn't load newsletter data — the newsletter_subscribers/newsletter_sends migration may not be applied to the database yet.</p>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 24, alignItems: 'start' }}>
         {/* Compose */}

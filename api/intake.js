@@ -12,6 +12,7 @@ import { requireStaff } from './_auth.js';
 //   submit-application     POST  submit a job application
 //   check-applicant          POST  applicant portal login (own account only)
 //   applications                GET  [admin.view] list job applications — includes applicant PII
+//   update-application            POST  [admin.view] update an application's status/notes/interview
 
 async function hashPassword(pw) {
   const crypto = await import('crypto');
@@ -622,6 +623,53 @@ async function handleListApplications(req, res) {
   }
 }
 
+// Repair task (2026-09-21): Jobs.jsx/JobDetail.jsx previously wrote status/notes/interview
+// changes ONLY to localStorage (`nova_applications`) — never back to Supabase. That meant any
+// change was invisible cross-device and to any other staff member, and would silently vanish if
+// the browser's storage was cleared. This is the real, persisted write path those pages now call.
+const VALID_APPLICATION_STATUSES = ['new', 'reviewing', 'interview_scheduled', 'hired', 'declined'];
+
+async function handleUpdateApplication(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const b = req.body || {};
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  const patch = {};
+  if ('status' in b) {
+    const status = sanitize(b.status, 30);
+    if (!VALID_APPLICATION_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    patch.status = status;
+  }
+  if ('admin_notes' in b) patch.admin_notes = sanitize(b.admin_notes, 5000);
+  if ('interview_date' in b) patch.interview_date = sanitize(b.interview_date, 20) || null;
+  if ('interview_time' in b) patch.interview_time = sanitize(b.interview_time, 20) || null;
+
+  if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json', Prefer: 'return=minimal',
+      },
+      body: JSON.stringify(patch),
+    });
+    if (!r.ok) { console.error('[intake:update-application] Supabase error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to update application' }); }
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[intake:update-application] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to update application' });
+  }
+}
+
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
 
@@ -640,6 +688,9 @@ export default async function handler(req, res) {
     case 'applications':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleListApplications(req, res);
+    case 'update-application':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleUpdateApplication(req, res);
     default:
       return res.status(400).json({ error: `Unknown action: ${action}` });
   }
