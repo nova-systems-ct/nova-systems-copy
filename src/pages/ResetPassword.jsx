@@ -55,7 +55,7 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#04112B" }}>
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0A0A0A" }}>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-10">
           <svg width="40" height="40" viewBox="0 0 32 32" fill="none">

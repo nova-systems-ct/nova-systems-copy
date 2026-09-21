@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import heroVideo1 from "@/assets/hero-video-1.mp4";
 import heroVideo2 from "@/assets/hero-video-2.mp4";
 import heroPoster from "@/assets/hero-poster.jpg";
-import { NAVY, GOLD, GOLD_BRIGHT, GOLD_GRADIENT, GOLD_TEXT_GRADIENT } from "@/lib/theme";
+import { BLACK, GOLD, GOLD_BRIGHT, GOLD_GRADIENT, GOLD_TEXT_GRADIENT } from "@/lib/theme";
 
 const VIDEOS = [heroVideo1, heroVideo2];
 
@@ -32,7 +32,8 @@ const VIDEOS = [heroVideo1, heroVideo2];
 export default function HeroSection() {
   const [vidIdx, setVidIdx] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const videoRef = useRef(null);
+  const mobileVideoRef = useRef(null);
+  const desktopVideoRef = useRef(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -42,42 +43,43 @@ export default function HeroSection() {
     return () => mq.removeEventListener?.("change", onChange);
   }, []);
 
+  // Bug found 2026-09-20 (real repair task): a single `videoLayer` JSX element (one ref) was
+  // reused at both the mobile and desktop render sites below — React mounts that as two separate
+  // DOM <video> nodes, but a single ref can only ever point at one of them. Whichever didn't win
+  // the ref sat with no src set, permanently. Fixed by giving each breakpoint's video its own ref
+  // and having this effect drive both, so mobile and desktop each really do get a real src.
   useEffect(() => {
     if (reducedMotion) return;
-    const v = videoRef.current;
-    if (!v) return;
-    v.pause();
-    v.src = VIDEOS[vidIdx];
-    v.load();
-    v.play().catch(() => {});
+    for (const ref of [mobileVideoRef, desktopVideoRef]) {
+      const v = ref.current;
+      if (!v) continue;
+      v.pause();
+      v.src = VIDEOS[vidIdx];
+      v.load();
+      v.play().catch(() => {});
+    }
   }, [vidIdx, reducedMotion]);
 
-  const videoLayer = reducedMotion ? (
-    <img
-      src={heroPoster}
-      alt=""
-      className="absolute inset-0 w-full h-full object-cover"
-    />
-  ) : (
-    <video
-      ref={videoRef}
-      muted
-      playsInline
-      autoPlay
-      preload="auto"
-      poster={heroPoster}
-      onEnded={() => setVidIdx((i) => (i + 1) % VIDEOS.length)}
-      className="absolute inset-0 w-full h-full object-cover"
-    />
-  );
-
   return (
-    <section className="relative min-h-screen md:h-screen overflow-hidden" style={{ background: NAVY }}>
+    <section className="relative min-h-screen md:h-screen overflow-hidden" style={{ background: BLACK }}>
 
       {/* Mobile / small tablet (< md): full-bleed video background, no diagonal split — the
           original design had no mobile treatment at all; this is new. */}
       <div className="absolute inset-0 md:hidden" style={{ zIndex: 5 }}>
-        {videoLayer}
+        {reducedMotion ? (
+          <img src={heroPoster} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <video
+            ref={mobileVideoRef}
+            muted
+            playsInline
+            autoPlay
+            preload="auto"
+            poster={heroPoster}
+            onEnded={() => setVidIdx((i) => (i + 1) % VIDEOS.length)}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
         <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.68)" }} />
         <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 30%, rgba(0,0,0,0.55) 100%)" }} />
       </div>
@@ -87,7 +89,20 @@ export default function HeroSection() {
         className="hidden md:block absolute inset-0"
         style={{ zIndex: 5, clipPath: "polygon(62% 0%, 100% 0%, 100% 100%, 40% 100%)" }}
       >
-        {videoLayer}
+        {reducedMotion ? (
+          <img src={heroPoster} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <video
+            ref={desktopVideoRef}
+            muted
+            playsInline
+            autoPlay
+            preload="auto"
+            poster={heroPoster}
+            onEnded={() => setVidIdx((i) => (i + 1) % VIDEOS.length)}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
         <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.60)" }} />
         <div className="absolute inset-0" style={{ background: "linear-gradient(to right, rgba(0,0,0,0.45) 0%, transparent 30%)" }} />
         <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 65%, rgba(0,0,0,0.6) 100%)" }} />

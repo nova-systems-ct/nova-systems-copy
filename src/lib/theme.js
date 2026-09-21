@@ -1,25 +1,25 @@
 // Nova Systems — shared design tokens.
 //
-// Approved palette (Isaac, confirmed explicitly twice on 2026-09-20 for the entire public
-// website, not just Nova HQ): deep navy, metallic gold, white, black. Semantic tokens instead of
-// scattering hex values — per-file redeclaration of these same constants (previously ~60 files
-// each defined their own local `GOLD = "#D4A030"`, the pre-migration gold) is exactly what this
-// file replaces.
+// Approved palette (Isaac, corrected 2026-09-20 — supersedes the earlier navy-and-gold spec):
+// BLACK, WHITE, and GOLD only. No navy, no blue anywhere — backgrounds, hover/focus/loading
+// states, and mobile views included.
 //
-// Migration note (2026-09-20): the sitewide pass is done — every public page's `bg-black`/
-// `#0a0a0a`/`#080600` background and `#D4A030`-family gold has been swapped to these values
-// (bulk hex swap across ~60 files, not a per-file switch to importing this module — most files
-// still locally redeclare `const GOLD = "#C9A84C"` etc. rather than importing NAVY/GOLD from
-// here; only the newest files, HeroSection.jsx/BusinessDiagnostic.jsx/Navbar.jsx/Footer.jsx,
-// actually import this module). A handful of pages were deliberately left out because they're a
-// separate, legitimately light-themed surface, not an oversight: LegalPageLayout.jsx (Terms/
-// Privacy/Service Agreement — white background by design, for readability) and WavesForm.jsx
-// (light card-based form flow). See docs/implementation-status.md for the fuller record.
+// NAVY is kept as an exported name only so every file that already imports it (rather than
+// redeclaring its own local hex) keeps working without an import-site rewrite — its VALUE now
+// equals BLACK. This is the "fix the shared token" approach: any current or future `NAVY` usage
+// automatically renders black. Prefer importing BLACK directly in new code; NAVY is a compatibility
+// alias, not a real second color.
+//
+// Migration note (2026-09-20, black/white/gold correction): swept every raw `#04112B` hex, the
+// `navy` Tailwind color (tailwind.config.js), and the handful of navy-toned rgba()/hex accents
+// found in Navbar.jsx and DashboardLayout.jsx. A handful of pages stay intentionally outside this
+// system, not by oversight: LegalPageLayout.jsx (Terms/Privacy/Service Agreement — white
+// background by design, for readability) and WavesForm.jsx (light card-based form flow).
 
-export const NAVY = "#04112B";
+export const BLACK = "#0A0A0A";
+export const NAVY = BLACK; // compatibility alias — see note above; do not reintroduce a real navy value here
 export const GOLD = "#C9A84C";
 export const WHITE = "#FAFAFA";
-export const BLACK = "#0A0A0A";
 
 // Lighter/darker gold steps for gradients, matching the existing gradient pattern used
 // throughout the codebase (a dark->bright->dark sweep on buttons/accents).

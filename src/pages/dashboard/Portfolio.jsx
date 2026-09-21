@@ -7,7 +7,7 @@ const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 const CATEGORIES = ['Websites', 'Social Media', 'Branding', 'AI Systems', 'Signage and Print', 'Apparel and Uniforms', 'Other']
 const CLIENT_OPTIONS = ['Mars Hill Apologetics', 'TRIO Upward Bound', 'Flow Barbershop', 'Wepaa', 'Custom…']
-const CAT_COLORS = { Websites: '#60a5fa', Branding: '#a78bfa', 'Social Media': '#4ade80', 'AI Systems': '#22d3ee', 'Signage and Print': '#f97316', 'Apparel and Uniforms': '#f472b6', Other: GOLD }
+const CAT_COLORS = { Websites: '#C9A84C', Branding: '#a78bfa', 'Social Media': '#4ade80', 'AI Systems': '#22d3ee', 'Signage and Print': '#f97316', 'Apparel and Uniforms': '#f472b6', Other: GOLD }
 
 const inp = {
   width: '100%', padding: '10px 13px', fontSize: 13,

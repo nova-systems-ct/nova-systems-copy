@@ -237,7 +237,7 @@ export default function Onboard() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#04112B", color: "#fff", fontFamily: "'Inter',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0A0A0A", color: "#fff", fontFamily: "'Inter',system-ui,sans-serif" }}>
       {/* Header */}
       <div style={{ padding: "24px 24px 0", maxWidth: 760, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>

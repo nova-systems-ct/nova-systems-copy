@@ -22,7 +22,7 @@ export default function HeroMetrics() {
       style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.1)" }}
     >
       {METRICS.map(({ icon: Icon, value, label }) => (
-        <div key={label} className="flex items-center gap-2.5 px-4 py-4" style={{ background: "#04112B" }}>
+        <div key={label} className="flex items-center gap-2.5 px-4 py-4" style={{ background: "#0A0A0A" }}>
           <Icon className="w-4 h-4 flex-shrink-0" style={{ color: GOLD }} />
           <div>
             <p className="text-sm font-black text-white leading-none">{value}</p>

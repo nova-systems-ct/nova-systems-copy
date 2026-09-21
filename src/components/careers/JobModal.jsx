@@ -32,7 +32,7 @@ export default function JobModal({ job, onClose }) {
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-3xl"
         style={{
-          background: "#04112B", border: `1px solid ${GOLD}35`,
+          background: "#0A0A0A", border: `1px solid ${GOLD}35`,
           borderRadius: 20, boxShadow: `0 20px 80px rgba(0,0,0,0.6), 0 0 60px ${GOLD}0d`,
           position: "relative", overflow: "hidden",
         }}

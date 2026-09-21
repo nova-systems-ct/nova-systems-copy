@@ -17,7 +17,7 @@ const STATUS_COLORS = {
   Signed:  { bg: 'rgba(34,197,94,0.12)', color: '#4ade80' },
   Paid:    { bg: 'rgba(34,197,94,0.12)', color: '#4ade80' },
   Pending: { bg: `${GOLD}15`, color: GOLD },
-  Active:  { bg: 'rgba(96,165,250,0.12)', color: '#60a5fa' },
+  Active:  { bg: 'rgba(201, 168, 76,0.12)', color: '#C9A84C' },
 }
 
 const inp = {

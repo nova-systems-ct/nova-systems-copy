@@ -30,7 +30,7 @@ export default function ProcessSection() {
             <div key={n} className="relative text-center md:text-left">
               <div
                 className="mx-auto md:mx-0 mb-5 relative z-10 flex items-center justify-center"
-                style={{ width: 56, height: 56, borderRadius: "50%", background: "#04112B", border: `1px solid ${GOLD}55` }}
+                style={{ width: 56, height: 56, borderRadius: "50%", background: "#0A0A0A", border: `1px solid ${GOLD}55` }}
               >
                 <Icon className="w-5 h-5" style={{ color: GOLD }} />
               </div>

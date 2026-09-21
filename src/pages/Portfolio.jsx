@@ -15,7 +15,7 @@ const TABS = [
   { label: "Signage and Print", value: "Signage and Print" },
   { label: "Apparel", value: "Apparel and Uniforms" },
 ];
-const CAT_COLORS = { Websites: '#60a5fa', Branding: '#a78bfa', 'Social Media': '#4ade80', 'AI Systems': '#22d3ee', 'Signage and Print': '#f97316', 'Apparel and Uniforms': '#f472b6', Other: GOLD };
+const CAT_COLORS = { Websites: '#C9A84C', Branding: '#a78bfa', 'Social Media': '#4ade80', 'AI Systems': '#22d3ee', 'Signage and Print': '#f97316', 'Apparel and Uniforms': '#f472b6', Other: GOLD };
 
 export default function Portfolio() {
   const [items, setItems] = useState([]);

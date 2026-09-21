@@ -51,15 +51,22 @@ export default function Login() {
 
   const destination = safeReturnTo(searchParams.get("returnTo"));
 
+  // Bug found 2026-09-20 (real repair task): this effect's dependency array didn't include
+  // checkingSession, but the <video> element (and therefore videoRef.current) doesn't exist in
+  // the DOM until AFTER checkingSession flips to false (see the early-return below). On first
+  // mount the effect ran once with a null ref and did nothing; since vidIdx/reducedMotion never
+  // changed afterward, it never got a second chance to run once the ref was actually available —
+  // the video sat with no src set, permanently. Adding checkingSession here makes the effect
+  // re-run the moment the real video element exists.
   useEffect(() => {
-    if (reducedMotion) return;
+    if (reducedMotion || checkingSession) return;
     const v = videoRef.current;
     if (!v) return;
     v.pause();
     v.src = VIDEOS[vidIdx];
     v.load();
     v.play().catch(() => {});
-  }, [vidIdx, reducedMotion]);
+  }, [vidIdx, reducedMotion, checkingSession]);
 
   // If a real session already exists, skip the form entirely and go straight to the destination.
   useEffect(() => {
@@ -120,11 +127,11 @@ export default function Login() {
   };
 
   if (checkingSession) {
-    return <div className="min-h-screen" style={{ background: "#04112B" }} />;
+    return <div className="min-h-screen" style={{ background: "#0A0A0A" }} />;
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: "#04112B" }}>
+    <div className="min-h-screen flex" style={{ background: "#0A0A0A" }}>
 
       {/* LEFT PANEL */}
       <div className="hidden lg:flex lg:w-3/5 relative flex-col justify-between p-14 overflow-hidden">

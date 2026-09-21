@@ -179,7 +179,7 @@ export default function Welcome() {
   // Spec §7 — do not imply the audit has started. This has been reviewed by Nova, not started.
   if (done) {
     return (
-      <div className="min-h-screen" style={{ background: "#04112B" }}>
+      <div className="min-h-screen" style={{ background: "#0A0A0A" }}>
         <Navbar />
         <div className="flex items-center justify-center px-6 pt-16 pb-16" style={{ minHeight: "100vh" }}>
           <div className="max-w-md w-full text-center">
@@ -225,7 +225,7 @@ export default function Welcome() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: "#04112B" }}>
+    <div className="min-h-screen" style={{ background: "#0A0A0A" }}>
       <Navbar />
       <div className="px-6 pt-16 pb-14" style={{ maxWidth: 560, margin: "0 auto" }}>
         <div className="text-center mb-10">

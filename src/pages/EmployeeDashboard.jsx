@@ -7,7 +7,7 @@ const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 
 
 const TASK_STATUS = {
   pending:     { label: "Pending",     color: "rgba(255,255,255,0.4)",  bg: "rgba(255,255,255,0.05)" },
-  in_progress: { label: "In Progress", color: "#60a5fa",               bg: "rgba(59,130,246,0.08)" },
+  in_progress: { label: "In Progress", color: "#C9A84C",               bg: "rgba(59,130,246,0.08)" },
   done:        { label: "Done",        color: "#4ade80",               bg: "rgba(34,197,94,0.08)" },
 };
 

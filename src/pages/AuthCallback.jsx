@@ -57,7 +57,7 @@ export default function AuthCallback() {
   }, []);
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#04112B" }}>
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0A0A0A" }}>
       <div className="text-center">
         {status === "working" ? (
           <p className="text-xs uppercase tracking-[0.2em]" style={{ color: GOLD }}>Signing you in…</p>

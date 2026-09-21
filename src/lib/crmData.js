@@ -192,7 +192,7 @@ export const STAGE_LABELS = {
 
 export const STAGE_COLORS = {
   new_contact:   { bg: `${GOLD}15`, border: `${GOLD}35`, color: GOLD },
-  proposal_sent: { bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.35)", color: "#60a5fa" },
+  proposal_sent: { bg: "rgba(59,130,246,0.12)", border: "rgba(59,130,246,0.35)", color: "#C9A84C" },
   demo_shown:    { bg: "rgba(167,139,250,0.12)", border: "rgba(167,139,250,0.35)", color: "#a78bfa" },
   negotiating:   { bg: "rgba(251,146,60,0.12)", border: "rgba(251,146,60,0.35)", color: "#fb923c" },
   closed_won:    { bg: "rgba(34,197,94,0.12)", border: "rgba(34,197,94,0.35)", color: "#4ade80" },

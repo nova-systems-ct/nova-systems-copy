@@ -9,7 +9,7 @@ const inp = { width: '100%', padding: '10px 13px', fontSize: 13, background: 'rg
 const STATUSES = ['new', 'reviewing', 'interview_scheduled', 'hired', 'declined']
 const STATUS_CFG = {
   new:                 { label: 'New',               color: GOLD,      bg: `${GOLD}14`,             border: `${GOLD}35` },
-  reviewing:           { label: 'Reviewing',         color: '#60a5fa', bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.3)' },
+  reviewing:           { label: 'Reviewing',         color: '#C9A84C', bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.3)' },
   interview_scheduled: { label: 'Interview Scheduled', color: '#a78bfa', bg: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.3)' },
   hired:               { label: 'Hired',             color: '#4ade80', bg: 'rgba(34,197,94,0.1)',   border: 'rgba(34,197,94,0.3)' },
   declined:            { label: 'Declined',          color: '#f87171', bg: 'rgba(239,68,68,0.08)',  border: 'rgba(239,68,68,0.25)' },
@@ -155,7 +155,7 @@ export default function JobDetail() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 24 }}>
             <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 14 }}>Contact</p>
-            <Detail label="Email" value={c.email && <a href={`mailto:${c.email}`} style={{ color: '#60a5fa' }}>{c.email}</a>} />
+            <Detail label="Email" value={c.email && <a href={`mailto:${c.email}`} style={{ color: '#C9A84C' }}>{c.email}</a>} />
             <Detail label="Phone" value={c.phone} />
             <Detail label="Applied" value={date} />
             {(c.portfolioUrl || c.portfolio_url) && <Detail label="Portfolio" value={<a href={c.portfolioUrl || c.portfolio_url} target="_blank" rel="noreferrer" style={{ color: GOLD, display: 'flex', alignItems: 'center', gap: 4 }}><ExternalLink style={{ width: 12, height: 12 }} /> View Portfolio</a>} />}

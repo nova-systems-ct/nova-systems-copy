@@ -54,7 +54,7 @@ function SuccessScreen({ form }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-16" style={{ background: "#04112B" }}>
+    <div className="min-h-screen flex items-center justify-center px-6 py-16" style={{ background: "#0A0A0A" }}>
       <style>{`@keyframes pulseGold { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
       <div className="max-w-lg w-full text-center">
         <img src={novaLogo} alt="Nova Systems" style={{ width: 44, height: 44, objectFit: "contain", margin: "0 auto 20px" }} />
@@ -113,7 +113,7 @@ function SuccessScreen({ form }) {
 
 function IntroScreen({ onBegin }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center" style={{ background: "#04112B" }}>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center" style={{ background: "#0A0A0A" }}>
       <style>{`@keyframes introFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
       <div style={{ maxWidth: 620, animation: "introFadeUp 0.7s ease-out" }}>
         <img src={novaLogo} alt="Nova Systems" style={{ width: 64, height: 64, objectFit: "contain", margin: "0 auto 32px" }} />
@@ -236,7 +236,7 @@ export default function Intake() {
   }, [step, started]);
 
   useEffect(() => {
-    document.body.style.background = "#04112B";
+    document.body.style.background = "#0A0A0A";
     return () => { document.body.style.background = ""; };
   }, []);
 
@@ -328,7 +328,7 @@ export default function Intake() {
   const minutesRemaining = Math.max(2, (SECTION_TITLES.length - step) * 2);
 
   return (
-    <div className="min-h-screen" style={{ background: "#04112B" }}>
+    <div className="min-h-screen" style={{ background: "#0A0A0A" }}>
       <style>{`@keyframes intakeStepIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }`}</style>
 
       <div className="sticky top-0 z-40" style={{ background: "rgba(10,10,10,0.95)", backdropFilter: "blur(8px)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>

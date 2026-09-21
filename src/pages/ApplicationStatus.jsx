@@ -7,7 +7,7 @@ const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD}
 
 const STATUS_CONFIG = {
   new:                 { label: "Application Received",     color: GOLD,      icon: Clock,        desc: "Your application is in the queue. Isaac will review it personally." },
-  reviewing:           { label: "Under Review",             color: "#60a5fa",  icon: Clock,        desc: "Isaac is actively reviewing your application. Stay tuned." },
+  reviewing:           { label: "Under Review",             color: "#C9A84C",  icon: Clock,        desc: "Isaac is actively reviewing your application. Stay tuned." },
   interview_scheduled: { label: "Interview Scheduled",      color: "#a78bfa",  icon: Calendar,     desc: "Your interview has been scheduled. Check below for details." },
   hired:               { label: "Hired — Welcome Aboard!", color: "#4ade80",  icon: CheckCircle,  desc: "You're officially part of the Nova Systems team." },
   declined:            { label: "Not Selected",             color: "#f87171",  icon: XCircle,      desc: "We've moved forward with another candidate. Thank you for applying." },
@@ -239,7 +239,7 @@ export default function ApplicationStatus() {
                   <Link2 className="w-3 h-3" style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     {link.label && link.label !== link.url && <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, marginBottom: 2 }}>{link.label}</p>}
-                    <a href={link.url} target="_blank" rel="noreferrer" style={{ color: "#60a5fa", fontSize: 12, wordBreak: "break-all" }}>{link.url}</a>
+                    <a href={link.url} target="_blank" rel="noreferrer" style={{ color: "#C9A84C", fontSize: 12, wordBreak: "break-all" }}>{link.url}</a>
                   </div>
                   <button onClick={() => removeLink(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.2)", padding: 4, flexShrink: 0 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#f87171")}

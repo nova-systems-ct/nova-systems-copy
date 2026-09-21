@@ -19,7 +19,7 @@ export default function ClientLogin() {
   });
 
   return (
-    <div className="min-h-screen flex" style={{ background: "#04112B" }}>
+    <div className="min-h-screen flex" style={{ background: "#0A0A0A" }}>
 
       {/* LEFT PANEL */}
       <div className="hidden lg:flex lg:w-2/5 relative flex-col justify-between p-14 overflow-hidden">

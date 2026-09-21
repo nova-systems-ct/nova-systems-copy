@@ -126,7 +126,7 @@ export default function Insights() {
 function FeaturedCard({ post }) {
   return (
     <Link to={`/insights/${post.slug}`} className="block rounded-2xl overflow-hidden relative transition-all duration-300 hover:opacity-95"
-      style={{ background: "linear-gradient(135deg, rgba(201, 168, 76,0.08) 0%, #04112B 65%)", border: `1px solid ${GOLD}35` }}>
+      style={{ background: "linear-gradient(135deg, rgba(201, 168, 76,0.08) 0%, #0A0A0A 65%)", border: `1px solid ${GOLD}35` }}>
       <div className="absolute top-0 right-0 w-72 h-72 pointer-events-none" style={{ background: `radial-gradient(circle, ${GOLD}14 0%, transparent 70%)` }} />
       <div className="relative p-8 md:p-14">
         <div className="flex items-center gap-3 mb-6">

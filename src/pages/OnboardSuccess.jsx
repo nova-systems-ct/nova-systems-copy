@@ -22,7 +22,7 @@ export default function OnboardSuccess() {
   }, [clientId]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#04112B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Inter',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0A0A0A", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Inter',system-ui,sans-serif" }}>
       <div style={{ maxWidth: 460, width: "100%", textAlign: "center" }}>
         <div style={{ width: 72, height: 72, borderRadius: "50%", background: `${GOLD}15`, border: `2px solid ${GOLD}60`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 28px" }}>
           <CheckCircle2 style={{ width: 34, height: 34, color: GOLD }} />

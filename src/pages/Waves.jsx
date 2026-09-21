@@ -19,7 +19,7 @@ const TICKER_ITEMS = ["Nova Voice", "Nova Blue", "Nova Email", "Nova Social", "N
 
 const ENGINES = [
   { name: "Nova Voice", color: "#a78bfa", Icon: Mic, desc: "AI phone agent answering every call 24/7 in English and Spanish. Never miss a lead again.", stat: "24/7 coverage, EN + ES" },
-  { name: "Nova Blue", color: "#60a5fa", Icon: MessageSquare, desc: "AI SMS agent following up with every lead automatically.", stat: "98% of texts read within 3 minutes" },
+  { name: "Nova Blue", color: "#C9A84C", Icon: MessageSquare, desc: "AI SMS agent following up with every lead automatically.", stat: "98% of texts read within 3 minutes" },
   { name: "Nova Email", color: "#2dd4bf", Icon: MailIcon, desc: "AI managing your entire inbox. Every inquiry answered professionally.", stat: "Replies in under 2 minutes" },
   { name: "Nova Social", color: "#e879f9", Icon: Share2, desc: "AI handling every Instagram, TikTok, Facebook, and LinkedIn DM and comment.", stat: "Turns attention into appointments", gradient: "linear-gradient(135deg,#f472b6,#a78bfa)" },
   { name: "Nova Revive", color: "#fb923c", Icon: RefreshCcw, desc: "AI reactivating every dead lead in your database.", stat: "Recovers revenue you already paid for" },

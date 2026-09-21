@@ -42,7 +42,7 @@ export default function WaveOneFeature() {
               <div key={label} className="absolute flex flex-col items-center gap-1.5" style={{ left: x - 26, top: y - 26 }}>
                 <div
                   className="w-[52px] h-[52px] rounded-full flex items-center justify-center"
-                  style={{ background: "#04112B", border: `1px solid ${GOLD}45` }}
+                  style={{ background: "#0A0A0A", border: `1px solid ${GOLD}45` }}
                 >
                   <Icon className="w-4 h-4" style={{ color: GOLD }} />
                 </div>

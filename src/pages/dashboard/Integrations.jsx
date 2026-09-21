@@ -19,7 +19,7 @@ const GOLD = '#C9A84C'
 const STATUS_META = {
   not_connected: { label: 'Not Connected', color: '#f87171', Icon: XCircle },
   disconnected: { label: 'Disconnected', color: '#f87171', Icon: XCircle },
-  connected: { label: 'Connected', color: '#60a5fa', Icon: Circle },
+  connected: { label: 'Connected', color: '#C9A84C', Icon: Circle },
   tested: { label: 'Tested', color: '#4ade80', Icon: CheckCircle2 },
   degraded: { label: 'Degraded', color: '#fb923c', Icon: AlertTriangle },
   authorization_required: { label: 'Authorization Required', color: '#fbbf24', Icon: AlertTriangle },

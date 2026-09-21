@@ -9,7 +9,7 @@ const STATUS_STYLE = {
   reviewing:  { bg: `${GOLD}15`,              color: GOLD },
   approved:   { bg: 'rgba(34,197,94,0.12)',   color: '#4ade80' },
   rejected:   { bg: 'rgba(239,68,68,0.1)',    color: '#f87171' },
-  waitlisted: { bg: 'rgba(96,165,250,0.1)',   color: '#60a5fa' },
+  waitlisted: { bg: 'rgba(201, 168, 76,0.1)',   color: '#C9A84C' },
 }
 
 function toCsvValue(v) {

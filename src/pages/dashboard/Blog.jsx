@@ -5,7 +5,7 @@ import { authedFetch } from '../../lib/apiAuth'
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 const CATEGORIES = ['AI and Technology', 'Connecticut Business', 'Case Studies', 'News', 'Tips and Strategy']
-const SWATCHES = ['#C49A3C', '#C9A84C', '#60a5fa', '#a78bfa', '#4ade80', '#f97316', '#f87171']
+const SWATCHES = ['#C49A3C', '#C9A84C', '#C9A84C', '#a78bfa', '#4ade80', '#f97316', '#f87171']
 
 const inp = {
   width: '100%', padding: '11px 14px', fontSize: 13,

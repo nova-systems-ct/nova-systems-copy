@@ -9,7 +9,7 @@ const inp = { width: '100%', padding: '11px 14px', fontSize: 13, background: 'rg
 
 const STATUS_CFG = {
   new:                 { label: 'New',       color: GOLD,       bg: `${GOLD}14`,              border: `${GOLD}35` },
-  reviewing:           { label: 'Reviewing', color: '#60a5fa',  bg: 'rgba(59,130,246,0.1)',   border: 'rgba(59,130,246,0.3)' },
+  reviewing:           { label: 'Reviewing', color: '#C9A84C',  bg: 'rgba(59,130,246,0.1)',   border: 'rgba(59,130,246,0.3)' },
   interview_scheduled: { label: 'Interview', color: '#a78bfa',  bg: 'rgba(167,139,250,0.1)',  border: 'rgba(167,139,250,0.3)' },
   hired:               { label: 'Hired',     color: '#4ade80',  bg: 'rgba(34,197,94,0.1)',    border: 'rgba(34,197,94,0.3)' },
   declined:            { label: 'Declined',  color: '#f87171',  bg: 'rgba(239,68,68,0.08)',   border: 'rgba(239,68,68,0.25)' },
@@ -202,7 +202,7 @@ function ApplicantRow({ candidate: c, onClick }) {
         <span style={{ fontSize: 11, color: c.ownsCamera === 'yes' || c.equipment_owned ? '#4ade80' : 'rgba(255,255,255,0.25)', background: c.ownsCamera === 'yes' || c.equipment_owned ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.04)', padding: '2px 8px', borderRadius: 4, border: `1px solid ${c.ownsCamera === 'yes' || c.equipment_owned ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.08)'}` }}>
           {c.ownsCamera === 'yes' || c.equipment_owned ? '📷 Camera' : 'No camera'}
         </span>
-        {(c.portfolioUrl || c.portfolio_url) && <a href={c.portfolioUrl || c.portfolio_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#60a5fa', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}><ExternalLink style={{ width: 10, height: 10 }} />Portfolio</a>}
+        {(c.portfolioUrl || c.portfolio_url) && <a href={c.portfolioUrl || c.portfolio_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#C9A84C', fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}><ExternalLink style={{ width: 10, height: 10 }} />Portfolio</a>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>
           <Calendar style={{ width: 10, height: 10 }} />{date}
         </div>

@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabaseClient'
 import { useAuthGuard } from '../../hooks/useAuthGuard'
 import { useOrg } from '../../lib/OrgContext'
 
-const NAVY = '#04112B'
+const NAVY = '#0A0A0A'
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#e0c476 55%,${GOLD} 80%,#8a6b2a 100%)`
 
@@ -69,7 +69,7 @@ function OrgSwitcher() {
       {open && (
         <div
           role="listbox"
-          style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 8, background: '#0a1d3f', border: `1px solid ${GOLD}35`, borderRadius: 10, padding: 6, zIndex: 60, boxShadow: '0 12px 30px rgba(0,0,0,0.4)' }}
+          style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 8, background: '#0A0A0A', border: `1px solid ${GOLD}35`, borderRadius: 10, padding: 6, zIndex: 60, boxShadow: '0 12px 30px rgba(0,0,0,0.4)' }}
         >
           {organizations.map((org) => (
             <button
@@ -211,7 +211,7 @@ export default function DashboardLayout() {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, background: 'rgba(4,17,43,0.96)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="md:hidden" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, background: 'rgba(10,10,10,0.96)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>{orgName}</span>
         <button
           onClick={() => setOpen(o => !o)}

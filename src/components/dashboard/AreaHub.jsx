@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 
-const NAVY = '#04112B'
+const NAVY = '#0A0A0A'
 const GOLD = '#C9A84C'
 
 // Shared landing-page shell for a Nova HQ top-level area (Intelligence/Growth/Execution/Admin).
