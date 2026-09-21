@@ -119,15 +119,24 @@ async function handleSubmit(req, res) {
     priority_engines, notes: notes || null, status: 'new',
   };
 
+  // The database write is the actual submission — unlike the SMS/email below, this is not
+  // optional. 2026-09-20: this table didn't exist at all until this same audit added it via
+  // supabase/schema-update.sql; every prior submission failed here, was logged and swallowed, and
+  // still got a 200 {ok:true} back. Fail loudly now instead — a real applicant deserves to know
+  // their application didn't go through, not a false confirmation.
   try {
     const r = await supabaseFetch('wave_one_applications', {
       method: 'POST',
       headers: { Prefer: 'return=minimal' },
       body: JSON.stringify(record),
     });
-    if (!r.ok) console.error('[waves-intake] Supabase save error:', r.status, await r.text());
+    if (!r.ok) {
+      console.error('[waves-intake] Supabase save error:', r.status, await r.text());
+      return res.status(502).json({ error: 'We could not save your application right now. Please try again or email hello@nova-systems.app so nothing is lost.' });
+    }
   } catch (err) {
-    console.error('[waves-intake] Supabase error (non-fatal):', err.message);
+    console.error('[waves-intake] Supabase error:', err.message);
+    return res.status(502).json({ error: 'We could not save your application right now. Please try again or email hello@nova-systems.app so nothing is lost.' });
   }
 
   const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;

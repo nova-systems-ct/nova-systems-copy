@@ -779,3 +779,47 @@ CREATE POLICY members_read_nova_tasks ON nova_tasks FOR SELECT TO authenticated 
 DROP POLICY IF EXISTS members_read_referral_tracking ON referral_tracking;
 CREATE POLICY members_read_referral_tracking ON referral_tracking FOR SELECT TO authenticated USING (is_org_member(organization_id));
 
+-- =============================================================================================
+-- BUG FIX (2026-09-20, found during the security audit): wave_one_applications was never
+-- created. api/waves-intake.js has referenced this exact table name since it was written — every
+-- real /waves/form submission has silently failed to save (Supabase 404, caught, logged,
+-- swallowed) while the API still returned 200 {ok:true} to the visitor. Confirmed via the live
+-- PostgREST schema: no wave_one_applications table exists, and the applications/clients tables
+-- (the ones exposed by the separate unauthenticated-endpoint findings from this same audit) are
+-- both empty — nothing real was lost from THAT exposure, but this is a distinct, ongoing
+-- data-loss bug: real applicants who filled out the Wave One form believed they'd applied, and
+-- nothing was ever recorded. Run this once, then every future submission actually persists.
+-- =============================================================================================
+
+CREATE TABLE IF NOT EXISTS wave_one_applications (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  first_name       TEXT NOT NULL,
+  last_name        TEXT NOT NULL,
+  phone            TEXT NOT NULL,
+  email            TEXT NOT NULL,
+  company_name     TEXT NOT NULL,
+  website          TEXT,
+  city             TEXT,
+  industry         TEXT,
+  biggest_problem  TEXT,
+  revenue_range    TEXT,
+  priority_engines TEXT[] DEFAULT '{}',
+  notes            TEXT,
+  status           TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'reviewing', 'approved', 'rejected', 'waitlisted')),
+  organization_id  UUID REFERENCES organizations(id),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS wave_one_applications_organization_idx ON wave_one_applications (organization_id);
+CREATE INDEX IF NOT EXISTS wave_one_applications_created_idx      ON wave_one_applications (created_at DESC);
+
+-- Backfilled to Nova's own org for consistency with every other table above — api/waves-intake.js
+-- doesn't currently set organization_id on insert (matches its pre-Stage-4 origin), so every row
+-- starts NULL and would need the same backfill pattern repeated after a real second organization
+-- exists and that handler is updated to set it at write time.
+UPDATE wave_one_applications SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND wave_one_applications.organization_id IS NULL;
+
+ALTER TABLE wave_one_applications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS members_read_wave_one_applications ON wave_one_applications;
+CREATE POLICY members_read_wave_one_applications ON wave_one_applications FOR SELECT TO authenticated USING (is_org_member(organization_id));
+
