@@ -19,82 +19,101 @@ import { requireStaff } from './_auth.js';
 // api/nova-audit — that cross-origin hand-off was replaced with a real local api/welcome.js
 // earlier this same build; this file was never part of that path in the current codebase.
 
+const CONTACT_CATEGORIES = ['general', 'sales', 'support', 'careers', 'press', 'other'];
+
+// 2026-09-20 rewrite: this used to be a pure email relay with no database persistence at all —
+// correct only as long as Resend stays configured. With it currently disconnected as part of the
+// credential reset, a submission that only sends an email loses the message entirely. The
+// database write is now the real, required action (same pattern as /welcome and /waves/form);
+// email is best-effort on top of it, and the response honestly reflects which parts actually
+// happened rather than a single ok:true covering both.
 async function handleContact(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res)) return;
 
-  const API_KEY = process.env.RESEND_API_KEY;
-  console.log('[notify:contact] API_KEY present:', !!API_KEY);
-
-  if (!API_KEY) {
-    return res.status(500).json({ error: 'Email service not configured' });
-  }
-
-  const subject     = sanitize(req.body?.subject, 200);
-  const body        = sanitize(req.body?.body, 5000);
-  const replyTo     = sanitizeEmail(req.body?.replyTo || req.body?.email);
-  const confirmTo   = sanitizeEmail(req.body?.confirmTo);
-  const confirmName = sanitize(req.body?.confirmName || req.body?.name, 100);
   const name        = sanitize(req.body?.name, 100);
   const email       = sanitizeEmail(req.body?.email);
-  const company     = sanitize(req.body?.company, 200);
   const phone       = sanitize(req.body?.phone, 50);
-  const message     = sanitize(req.body?.message, 3000);
+  const company     = sanitize(req.body?.company, 200);
+  const category    = CONTACT_CATEGORIES.includes(req.body?.category) ? req.body.category : 'general';
+  const message     = sanitize(req.body?.message || req.body?.body, 5000);
+  // Legacy callers (ChatBot) pass replyTo/confirmTo/confirmName/subject instead of the Contact
+  // page's own field names — kept working rather than forcing every caller to migrate at once.
+  const replyTo     = sanitizeEmail(req.body?.replyTo) || email;
+  const confirmTo   = sanitizeEmail(req.body?.confirmTo) || email;
+  const confirmName = sanitize(req.body?.confirmName, 100) || name || 'there';
+  const subject     = sanitize(req.body?.subject, 200);
 
-  if (!email && !replyTo && !confirmTo) {
-    return res.status(400).json({ error: 'Valid email is required' });
+  if (!name || !email || !message) {
+    return res.status(400).json({ error: 'Name, email, and message are required' });
   }
 
-  const FROM  = 'Nova Systems <noreply@nova-systems.app>';
-  const DEST  = 'Isaac_0427@icloud.com';
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return res.status(500).json({ error: 'We could not save your message right now. Please email hello@nova-systems.app directly so nothing is lost.' });
+  }
 
-  const emailBody =
-    body ||
-    [
-      name    && `Name: ${name}`,
-      email   && `Email: ${email}`,
-      company && `Company: ${company}`,
-      phone   && `Phone: ${phone}`,
-      message && `\nMessage:\n${message}`,
-    ].filter(Boolean).join('\n') ||
-    '(no details provided)';
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/contact_submissions`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, phone: phone || null, company: company || null, category, message }),
+    });
+    if (!r.ok) {
+      console.error('[notify:contact] Supabase save error:', r.status, await r.text());
+      return res.status(502).json({ error: 'We could not save your message right now. Please email hello@nova-systems.app directly so nothing is lost.' });
+    }
+  } catch (err) {
+    console.error('[notify:contact] Supabase error:', err.message);
+    return res.status(502).json({ error: 'We could not save your message right now. Please email hello@nova-systems.app directly so nothing is lost.' });
+  }
 
-  const emailSubject = subject || 'New Submission — Nova Systems';
+  // Everything below is best-effort notification on top of the now-persisted message — a failure
+  // here no longer means the submission itself was lost.
+  const API_KEY = process.env.RESEND_API_KEY;
+  if (!API_KEY) {
+    return res.status(200).json({ ok: true, warning: 'Saved — email notification skipped (Resend not configured)' });
+  }
 
+  const FROM = 'Nova Systems <noreply@nova-systems.app>';
+  const DEST = 'Isaac_0427@icloud.com';
+  const emailBody = [
+    `Category: ${category}`,
+    `Name: ${name}`,
+    `Email: ${email}`,
+    company && `Company: ${company}`,
+    phone   && `Phone: ${phone}`,
+    `\nMessage:\n${message}`,
+  ].filter(Boolean).join('\n');
+
+  let alertSent = false;
   try {
     const r1 = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: FROM,
-        to: [DEST],
-        subject: emailSubject,
-        text: emailBody,
-        ...(replyTo || email ? { reply_to: replyTo || email } : {}),
+        from: FROM, to: [DEST], subject: subject || `New Contact — ${name}`, text: emailBody,
+        ...(replyTo ? { reply_to: replyTo } : {}),
       }),
     });
-    const r1Body = await r1.text();
-    console.log('[notify:contact] Resend response:', r1.status, r1Body);
-    if (!r1.ok) return res.status(500).json({ error: 'Failed to send email', details: r1Body });
+    alertSent = r1.ok;
+    if (!r1.ok) console.error('[notify:contact] Resend alert error:', r1.status, await r1.text());
   } catch (err) {
-    console.error('[notify:contact] Fetch error:', err.message);
-    return res.status(500).json({ error: 'Network error contacting Resend' });
+    console.error('[notify:contact] Resend alert fetch error:', err.message);
   }
 
-  const confirmEmail = confirmTo || email;
-  const confirmNameStr = confirmName || name || 'there';
-
-  if (confirmEmail) {
+  if (confirmTo) {
     try {
       await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from: FROM,
-          to: [confirmEmail],
+          to: [confirmTo],
           subject: 'We received your request — Nova Systems',
           text: [
-            `Hi ${confirmNameStr},`,
+            `Hi ${confirmName},`,
             '',
             'Thanks for reaching out to Nova Systems. Isaac will personally review your request and get back to you within 24 hours.',
             '',
@@ -109,7 +128,7 @@ async function handleContact(req, res) {
     }
   }
 
-  return res.status(200).json({ ok: true });
+  return res.status(200).json({ ok: true, ...(alertSent ? {} : { warning: 'Saved — email alert could not be sent' }) });
 }
 
 async function handleBookDemo(req, res) {

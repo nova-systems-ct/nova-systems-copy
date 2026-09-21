@@ -823,3 +823,32 @@ ALTER TABLE wave_one_applications ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS members_read_wave_one_applications ON wave_one_applications;
 CREATE POLICY members_read_wave_one_applications ON wave_one_applications FOR SELECT TO authenticated USING (is_org_member(organization_id));
 
+-- =============================================================================================
+-- Contact page (2026-09-20): api/notify.js's `contact` action was a pure email relay with no
+-- database persistence at all — correct when Resend is configured, but with it currently
+-- disconnected as part of the credential reset, a submission that only sends an email loses the
+-- message entirely. Per Isaac's explicit instruction, the database write is now the real,
+-- required action; the email is best-effort on top of it, matching every other public form in
+-- this codebase (/welcome, /waves/form).
+-- =============================================================================================
+
+CREATE TABLE IF NOT EXISTS contact_submissions (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            TEXT NOT NULL,
+  email           TEXT NOT NULL,
+  phone           TEXT,
+  company         TEXT,
+  category        TEXT NOT NULL DEFAULT 'general' CHECK (category IN ('general', 'sales', 'support', 'careers', 'press', 'other')),
+  message         TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new', 'read', 'replied')),
+  organization_id UUID REFERENCES organizations(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS contact_submissions_organization_idx ON contact_submissions (organization_id);
+CREATE INDEX IF NOT EXISTS contact_submissions_created_idx      ON contact_submissions (created_at DESC);
+
+ALTER TABLE contact_submissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS members_read_contact_submissions ON contact_submissions;
+CREATE POLICY members_read_contact_submissions ON contact_submissions FOR SELECT TO authenticated USING (is_org_member(organization_id));
+

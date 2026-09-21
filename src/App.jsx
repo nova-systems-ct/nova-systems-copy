@@ -14,6 +14,7 @@ import Home from './pages/Home';
 // almost every real visit and every audit run actually hits.
 const Solutions = lazy(() => import('./pages/Solutions'));
 const BusinessDiagnostic = lazy(() => import('./pages/BusinessDiagnostic'));
+const Contact = lazy(() => import('./pages/Contact'));
 const Pricing = lazy(() => import('./pages/Pricing'));
 const Company = lazy(() => import('./pages/Company'));
 const Login = lazy(() => import('./pages/Login'));
@@ -79,6 +80,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/solutions" element={<Solutions />} />
             <Route path="/business-diagnostic" element={<BusinessDiagnostic />} />
+            <Route path="/contact" element={<Contact />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/company" element={<Company />} />
             {/* Retired in favor of /welcome (Part 1 Phase 1) — this route stays so every

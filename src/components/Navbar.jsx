@@ -23,6 +23,7 @@ export default function Navbar() {
     { label: "Case Studies", path: "/portfolio" },
     { label: "Pricing", path: "/pricing" },
     { label: "About", path: "/company" },
+    { label: "Contact", path: "/contact" },
   ];
 
   const isActive = (path) => location.pathname === path;

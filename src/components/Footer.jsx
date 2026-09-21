@@ -62,6 +62,7 @@ export default function Footer() {
             <p className="text-[9px] tracking-[0.25em] uppercase font-semibold mb-4" style={{ color: GOLD }}>GET STARTED</p>
             <div className="space-y-2.5">
               <Link to="/welcome" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Book a Meeting</Link>
+              <Link to="/contact" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Contact Us</Link>
               <Link to="/client-login" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Client Login</Link>
               <Link to="/login" className="block text-xs transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.38)" }}>Team Login</Link>
             </div>

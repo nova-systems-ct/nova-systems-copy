@@ -53,21 +53,22 @@ export default function ChatBot() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Returns whether the message actually reached Isaac — never assumed. This has no durable
-  // storage of its own (it's a pure email relay via api/notify.js's `contact` action, which fails
-  // outright when Resend isn't configured), so a failed call here means the chat lead genuinely
-  // wasn't captured anywhere, not just "the confirmation email didn't send."
+  // Returns whether the message actually reached Isaac in some real, verifiable form. As of
+  // 2026-09-20, api/notify.js's `contact` action persists to a real contact_submissions table
+  // first (the required action) and only treats email as best-effort on top of it — so "false"
+  // here now means the save itself failed (rare), not just that a best-effort email didn't send.
   const sendNotification = async (d) => {
     try {
       const res = await fetch("/api/notify?action=contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: d.name || "Unknown",
           email: d.email,
           confirmTo: d.email,
           confirmName: d.name,
           subject: `Nova Chat Lead: ${d.name || "Unknown"}`,
-          body: `Chat Lead:\nName: ${d.name || "-"}\nBusiness: ${d.business || "-"}\nChallenge: ${d.challenge || "-"}\nAvailable: ${d.day || "-"}\nEmail: ${d.email || "-"}`,
+          message: `Business: ${d.business || "-"}\nChallenge: ${d.challenge || "-"}\nAvailable: ${d.day || "-"}`,
         }),
       });
       return res.ok;
