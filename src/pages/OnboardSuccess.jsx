@@ -12,9 +12,12 @@ export default function OnboardSuccess() {
 
   useEffect(() => {
     if (!clientId) return;
-    fetch("/api/intake?action=clients")
+    // Scoped by id server-side (api/intake.js's `clients` action) — this page is reached right
+    // after payment, before any session exists, so it can only ever ask for its own record, never
+    // the full client list.
+    fetch(`/api/intake?action=clients&id=${encodeURIComponent(clientId)}`)
       .then((r) => r.json())
-      .then((list) => setClient(Array.isArray(list) ? list.find((c) => c.id === clientId) : null))
+      .then((c) => setClient(c || null))
       .catch(() => {});
   }, [clientId]);
 
@@ -28,7 +31,7 @@ export default function OnboardSuccess() {
         <h1 style={{ fontSize: 30, fontWeight: 900, marginBottom: 14 }}>Welcome to Nova Systems.</h1>
         <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 14, lineHeight: 1.7, marginBottom: 32 }}>
           {client?.tier_name ? <>Your <strong style={{ color: GOLD }}>{client.tier_name}</strong> plan is now active.</> : "Your plan is now active."}
-          {" "}A confirmation email with your client portal login has been sent to your inbox.
+          {" "}If a confirmation email doesn't arrive shortly, you can log in directly below — your payment is already confirmed either way.
         </p>
 
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 22, marginBottom: 28, textAlign: "left" }}>

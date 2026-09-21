@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, X, Loader2, FileSignature, Send, Download, Link2, Check } from 'lucide-react'
 import { CONTRACT_TYPES } from '../../data/contractTemplates'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
@@ -35,7 +36,7 @@ export default function Contracts() {
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/contracts?action=list')
+      const r = await authedFetch('/api/contracts?action=list')
       const data = await r.json()
       setContracts(Array.isArray(data) ? data : [])
     } catch { setContracts([]) }
@@ -58,7 +59,7 @@ export default function Contracts() {
     if (!form.client_name || !form.client_email || !form.contract_type) return
     setSending(true)
     try {
-      const r = await fetch('/api/contracts?action=create', {
+      const r = await authedFetch('/api/contracts?action=create', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })

@@ -1,19 +1,23 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
+import { requireStaff } from './_auth.js';
 
 // Combined email / notification endpoint — dispatch via ?action=
-//   contact          POST  general contact-form email (+ confirmation)
-//   book-demo        POST  demo request email
-//   client-message   POST  message to a client (saved + emailed)
-//   send-invoice     POST  invoice email to a client
-//   list             GET   admin notifications feed
+//   contact          POST  public — general contact-form email (+ confirmation)
+//   book-demo        POST  public — demo request email
+//   client-message   POST  [admin.view] message to a client (saved + emailed) — the client_email
+//                            to send to is caller-supplied, so this must never be reachable
+//                            unauthenticated (an open relay for arbitrary outbound email otherwise)
+//   send-invoice     POST  public — called by the already-staff-gated dashboard invoice flow, but
+//                            this action itself just sends one email for a caller-provided invoice;
+//                            left public rather than double-gating since api/client.js's invoices
+//                            resource is what actually protects invoice creation
+//   list             GET   [admin.view] admin notifications feed
 //
-// /welcome used to post here as `welcome-lead` — it wrote straight to a separate `leads` table
-// and emailed an intake link with no human review step, which violated the Part 1 spec's
-// approval-gated flow (see PART_1_CUSTOMER_FOUNDATION.md §6-7). /welcome now posts to
-// nova-wave-one's api/nova-audit `request_audit` action instead (same needs_review/approve
-// pipeline /request-audit already used), so this action was removed rather than fixed in place.
+// 2026-09-20 correction: the comment previously here said /welcome posts to nova-wave-one's
+// api/nova-audit — that cross-origin hand-off was replaced with a real local api/welcome.js
+// earlier this same build; this file was never part of that path in the current codebase.
 
 async function handleContact(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -376,9 +380,13 @@ export default async function handler(req, res) {
   switch (action) {
     case 'contact':        return handleContact(req, res);
     case 'book-demo':       return handleBookDemo(req, res);
-    case 'client-message':   return handleClientMessage(req, res);
+    case 'client-message':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleClientMessage(req, res);
     case 'send-invoice':      return handleSendInvoice(req, res);
-    case 'list':                return handleList(req, res);
+    case 'list':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleList(req, res);
     default:
       return res.status(400).json({ error: `Unknown action: ${action}` });
   }

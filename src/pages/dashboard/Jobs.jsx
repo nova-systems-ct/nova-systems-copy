@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Users, UserPlus, X, Send, ExternalLink, Calendar } from 'lucide-react'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
@@ -34,7 +35,7 @@ export default function Jobs() {
     const local = JSON.parse(localStorage.getItem('nova_applications') || '[]')
     setCandidates(local) // show local immediately
     try {
-      const res = await fetch('/api/intake?action=applications')
+      const res = await authedFetch('/api/intake?action=applications')
       if (!res.ok) return
       const sbApps = await res.json()
       if (!Array.isArray(sbApps) || sbApps.length === 0) return

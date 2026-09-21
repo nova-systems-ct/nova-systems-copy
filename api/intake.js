@@ -2,14 +2,16 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
 import { uploadToVault } from './_vaultStorage.js';
+import { requireStaff } from './_auth.js';
 
 // Combined intake endpoint — dispatch via ?action=
 //   save-client         POST  save /welcome wizard steps before payment
 //   welcome-complete     POST  finalize client account after payment
-//   clients               GET  list clients created via the wizard
+//   clients               GET  &id=<uuid> public: one client's own record (e.g. OnboardSuccess.jsx
+//                                right after payment) — no id: [intelligence.view] full list
 //   submit-application     POST  submit a job application
-//   check-applicant          POST  applicant portal login
-//   applications                GET  list job applications (admin)
+//   check-applicant          POST  applicant portal login (own account only)
+//   applications                GET  [admin.view] list job applications — includes applicant PII
 
 async function hashPassword(pw) {
   const crypto = await import('crypto');
@@ -218,15 +220,23 @@ async function handleListClients(req, res) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(200).json([]);
 
+  // Public path: a specific id (e.g. OnboardSuccess.jsx reading its own just-created record off
+  // the URL right after payment) is scoped to exactly that row server-side — never the full table
+  // filtered client-side, which is what this used to do (and what the unscoped path below still
+  // requires staff auth for).
+  const id = typeof req.query?.id === 'string' ? sanitize(req.query.id, 100) : '';
+
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/clients?order=created_at.desc`, {
+    const qs = id ? `id=eq.${encodeURIComponent(id)}&limit=1` : 'order=created_at.desc';
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/clients?${qs}`, {
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
     });
-    if (!r.ok) { console.error('[intake:clients] Supabase error:', r.status, await r.text()); return res.status(200).json([]); }
-    return res.status(200).json(await r.json());
+    if (!r.ok) { console.error('[intake:clients] Supabase error:', r.status, await r.text()); return res.status(200).json(id ? null : []); }
+    const rows = await r.json();
+    return res.status(200).json(id ? (rows[0] || null) : rows);
   } catch (err) {
     console.error('[intake:clients] Error:', err.message);
-    return res.status(200).json([]);
+    return res.status(200).json(id ? null : []);
   }
 }
 
@@ -572,7 +582,6 @@ async function handleListApplications(req, res) {
       why_nova: r.why_nova_systems || '',
       availability: r.availability || '',
       expected_pay: r.expected_pay || '',
-      password_hash: r.password_hash || '',
       portfolio_url: r.portfolio_url || '',
       owns_camera: r.owns_camera || '',
       camera_specs: r.camera_specs || '',
@@ -621,10 +630,16 @@ export default async function handler(req, res) {
   switch (action) {
     case 'save-client':          return handleSaveClient(req, res);
     case 'welcome-complete':      return handleWelcomeComplete(req, res);
-    case 'clients':                return handleListClients(req, res);
+    case 'clients':
+      // Scoped-by-id lookup is public (a client reading their own just-created record); the full,
+      // unscoped list is real PII across every client and requires staff auth.
+      if (!req.query?.id && !(await requireStaff(req, res, 'intelligence.view'))) return;
+      return handleListClients(req, res);
     case 'submit-application':      return handleSubmitApplication(req, res);
     case 'check-applicant':          return handleCheckApplicant(req, res);
-    case 'applications':              return handleListApplications(req, res);
+    case 'applications':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleListApplications(req, res);
     default:
       return res.status(400).json({ error: `Unknown action: ${action}` });
   }

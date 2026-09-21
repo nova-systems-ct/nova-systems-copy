@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Zap, Download } from 'lucide-react'
+import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
 const STATUSES = ['new', 'reviewing', 'approved', 'rejected', 'waitlisted']
@@ -40,7 +41,7 @@ export default function WaveOne() {
 
   const load = () => {
     setLoading(true)
-    fetch('/api/waves-intake?action=list').then(r => r.json()).then(data => setApps(Array.isArray(data) ? data : [])).catch(() => setApps([])).finally(() => setLoading(false))
+    authedFetch('/api/waves-intake?action=list').then(r => r.json()).then(data => setApps(Array.isArray(data) ? data : [])).catch(() => setApps([])).finally(() => setLoading(false))
     fetch('/api/waves-intake?action=spots').then(r => r.json()).then(d => setSpots(String(d?.spots_remaining ?? ''))).catch(() => {})
   }
   useEffect(load, [])
@@ -48,7 +49,7 @@ export default function WaveOne() {
   const updateStatus = async (id, status) => {
     setApps(prev => prev.map(a => a.id === id ? { ...a, status } : a))
     try {
-      await fetch('/api/waves-intake?action=update-status', {
+      await authedFetch('/api/waves-intake?action=update-status', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }),
       })
     } catch {}
@@ -59,7 +60,7 @@ export default function WaveOne() {
     if (!Number.isFinite(n) || n < 0) return
     setSavingSpots(true)
     try {
-      await fetch('/api/waves-intake?action=set-spots', {
+      await authedFetch('/api/waves-intake?action=set-spots', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ spots_remaining: n }),
       })
     } catch {}

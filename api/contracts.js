@@ -3,13 +3,15 @@ import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { twilioRequest } from './_twilio.js';
 import { uploadToVault } from './_vaultStorage.js';
+import { requireStaff } from './_auth.js';
 
 // Digital document signing — dispatch via ?action=:
-//   create   POST  dashboard creates a contract + emails the client their signing link
-//   list     GET   dashboard contracts table (pending/signed, dates)
-//   get      GET   public /sign/:contract_id loads the contract to display
+//   create   POST  [admin.view] dashboard creates a contract + emails the client their signing link
+//   list     GET   [admin.view] dashboard contracts table (pending/signed, dates) — every client's
+//                   contract, so this is exactly the kind of listing that needs staff auth
+//   get      GET   public /sign/:contract_id loads the contract to display — scoped to one id
 //   sign     POST  public /sign/:contract_id submits the signature, generates + stores
-//                   the signed PDF, and notifies both client and Isaac
+//                   the signed PDF, and notifies both client and Isaac — also scoped to one id
 
 const CONTRACT_TYPES = ['Digital Foundation', 'Growth Package', 'Custom'];
 const ISAAC_EMAIL = 'Isaac_0427@icloud.com';
@@ -297,8 +299,12 @@ export default async function handler(req, res) {
   const action = typeof req.query?.action === 'string' ? req.query.action : '';
 
   switch (action) {
-    case 'create': return handleCreate(req, res);
-    case 'list':   return handleList(req, res);
+    case 'create':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleCreate(req, res);
+    case 'list':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleList(req, res);
     case 'get':    return handleGet(req, res);
     case 'sign':   return handleSign(req, res);
     default:

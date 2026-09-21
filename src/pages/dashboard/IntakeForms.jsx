@@ -40,7 +40,7 @@ export default function IntakeForms() {
   const [meetingsLoading, setMeetingsLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/intake?action=clients')
+    authedFetch('/api/intake?action=clients')
       .then(r => r.json())
       .then(data => setClients(Array.isArray(data) ? data : []))
       .catch(() => setClients([]))

@@ -2,6 +2,7 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
 import { twilioRequest } from './_twilio.js';
+import { requireStaff } from './_auth.js';
 
 const VALID_PRIORITY_ENGINES = ['Nova Voice', 'Nova Blue', 'Nova Email', 'Nova Social', 'Nova Revive', 'Nova Audit'];
 
@@ -239,12 +240,23 @@ async function handleSubmit(req, res) {
   return res.status(200).json({ ok: true });
 }
 
+// spots (read remaining count) and the default submit action are public — everything else is the
+// /dashboard/wave-one staff view (growth.view), including full applicant PII in `list`.
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
   const action = typeof req.query?.action === 'string' ? req.query.action : '';
   if (action === 'spots') return handleSpots(req, res);
-  if (action === 'list') return handleList(req, res);
-  if (action === 'update-status') return handleUpdateStatus(req, res);
-  if (action === 'set-spots') return handleSetSpots(req, res);
+  if (action === 'list') {
+    if (!(await requireStaff(req, res, 'growth.view'))) return;
+    return handleList(req, res);
+  }
+  if (action === 'update-status') {
+    if (!(await requireStaff(req, res, 'growth.view'))) return;
+    return handleUpdateStatus(req, res);
+  }
+  if (action === 'set-spots') {
+    if (!(await requireStaff(req, res, 'growth.view'))) return;
+    return handleSetSpots(req, res);
+  }
   return handleSubmit(req, res);
 }
