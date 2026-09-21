@@ -33,6 +33,8 @@ const Welcome = lazy(() => import('./pages/Welcome'));
 const Intake = lazy(() => import('./pages/Intake'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Privacy = lazy(() => import('./pages/Privacy'));
+const CookiePolicy = lazy(() => import('./pages/CookiePolicy'));
+const Accessibility = lazy(() => import('./pages/Accessibility'));
 const ServiceAgreement = lazy(() => import('./pages/ServiceAgreement'));
 const Sign = lazy(() => import('./pages/Sign'));
 const SignSuccess = lazy(() => import('./pages/SignSuccess'));
@@ -102,6 +104,8 @@ function App() {
             <Route path="/intake" element={<Intake />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/cookies" element={<CookiePolicy />} />
+            <Route path="/accessibility" element={<Accessibility />} />
             <Route path="/service-agreement" element={<ServiceAgreement />} />
             <Route path="/sign/:contract_id" element={<Sign />} />
             <Route path="/sign/:contract_id/success" element={<SignSuccess />} />

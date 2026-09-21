@@ -99,6 +99,10 @@ export default function Footer() {
             <Link to="/privacy" className="text-[10px] transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.25)" }}>Privacy Policy</Link>
             <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
             <Link to="/terms" className="text-[10px] transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.25)" }}>Terms of Service</Link>
+            <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+            <Link to="/cookies" className="text-[10px] transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.25)" }}>Cookie Policy</Link>
+            <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+            <Link to="/accessibility" className="text-[10px] transition-colors hover:text-white" style={{ color: "rgba(255,255,255,0.25)" }}>Accessibility</Link>
           </div>
           <div className="flex items-center gap-1 order-1 md:order-2">
             <div className="w-1 h-1 rounded-full" style={{ background: GOLD }} />

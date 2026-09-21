@@ -31,7 +31,15 @@ const SECTIONS = [
     body: "We retain your information for as long as reasonably necessary to provide Services, maintain business records, and comply with legal, tax, and accounting obligations. If you ask us to delete your information, we will do so except where we are required or permitted to retain it by law.",
   },
   {
-    heading: "8. Contact Information",
+    heading: "8. Job Applicants",
+    body: "If you apply for a position with Nova Systems, we collect the information you submit in your application — name, contact information, resume or portfolio content, references, and your answers to application questions — to evaluate your candidacy and communicate with you about the position. This information is used only for recruiting and hiring purposes and is not used for marketing. We do not sell applicant information. Reference contact information you provide is used only to contact the references you named, for the purpose you provided them.",
+  },
+  {
+    heading: "9. Cookies",
+    body: "The public Nova Systems website does not use tracking, analytics, or advertising cookies, and does not load any third-party tracking script. The only cookie used anywhere on this platform is a single first-party, strictly necessary cookie set inside the staff dashboard (not on public pages) to remember whether a staff member's navigation sidebar is expanded or collapsed — it identifies no one and carries no tracking purpose. See our Cookie Policy for detail.",
+  },
+  {
+    heading: "10. Contact Information",
     body: "For privacy-related questions or requests, contact us at hello@nova-systems.app or by text at (203) 706-0504.",
   },
 ];

@@ -31,7 +31,16 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [vidIdx, setVidIdx] = useState(0);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const videoRef = useRef(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReducedMotion(mq.matches);
+    const onChange = (e) => setReducedMotion(e.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,13 +52,14 @@ export default function Login() {
   const destination = safeReturnTo(searchParams.get("returnTo"));
 
   useEffect(() => {
+    if (reducedMotion) return;
     const v = videoRef.current;
     if (!v) return;
     v.pause();
     v.src = VIDEOS[vidIdx];
     v.load();
     v.play().catch(() => {});
-  }, [vidIdx]);
+  }, [vidIdx, reducedMotion]);
 
   // If a real session already exists, skip the form entirely and go straight to the destination.
   useEffect(() => {
