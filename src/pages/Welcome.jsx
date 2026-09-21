@@ -203,13 +203,16 @@ export default function Welcome() {
               </ol>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {/* Points at the existing .agency booking page directly for now — a .nova-native
-                  /meeting route (spec §18) is Phase 3; swap this back to an internal Link once
-                  that lands. */}
-              <a href="https://nova-wave-one.vercel.app/book" target="_blank" rel="noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 28px", background: G, color: "#0a0800", borderRadius: 9, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", textDecoration: "none" }}>
-                Book a 1-on-1 <ArrowRight style={{ width: 14, height: 14 }} />
-              </a>
+              {/* 2026-09-20: was pointing at the decommissioned nova-wave-one.vercel.app/book —
+                  VITE_CALCOM_URL already existed as real, configured booking-link infrastructure
+                  but was never actually wired into any page. Only render the button when it's
+                  configured, rather than link to a dead/placeholder destination either way. */}
+              {import.meta.env.VITE_CALCOM_URL && (
+                <a href={import.meta.env.VITE_CALCOM_URL} target="_blank" rel="noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 28px", background: G, color: "#0a0800", borderRadius: 9, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", textDecoration: "none" }}>
+                  Book a 1-on-1 <ArrowRight style={{ width: 14, height: 14 }} />
+                </a>
+              )}
               <Link to="/" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "14px 28px", color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", textDecoration: "none", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 9 }}>
                 Return to Nova
               </Link>
