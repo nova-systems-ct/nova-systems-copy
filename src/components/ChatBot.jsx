@@ -10,8 +10,13 @@ const STEPS = [
   { key: "business",  bot: () => "Got it. What do you need — a website, AI automation, social media, branding, or something custom?" },
   { key: "challenge", bot: () => "That's exactly what we help with. I'd love to connect you with Isaac for a free strategy meeting. What day this week works best for you?" },
   { key: "day",       bot: () => "Perfect. What's the best email to send your calendar invite to?" },
-  { key: "email",     bot: (email) => `Done! I've sent your info to Isaac. He'll reach out to ${email} within 24 hours to confirm your meeting. Talk soon!` },
+  // Real outcome text is filled in after the actual API call resolves (see sendNotification) —
+  // this placeholder is never shown as-is.
+  { key: "email",     bot: () => "One moment..." },
 ];
+
+const SENT_MESSAGE = (email) => `Done! I've sent your info to Isaac. He'll reach out to ${email} within 24 hours to confirm your meeting. Talk soon!`;
+const FAILED_MESSAGE = "I couldn't send that through just now — our messaging system is temporarily unavailable. Please use the form at /welcome instead, or call (203) 706-0504 directly. Sorry about that!";
 
 function BotBubble({ text }) {
   return (
@@ -48,16 +53,27 @@ export default function ChatBot() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendNotification = (d) => {
-    fetch("/api/notify?action=contact", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: "Isaac_0427@icloud.com",
-        subject: `Nova Chat Lead: ${d.name || "Unknown"}`,
-        body: `Chat Lead:\nName: ${d.name || "-"}\nBusiness: ${d.business || "-"}\nChallenge: ${d.challenge || "-"}\nAvailable: ${d.day || "-"}\nEmail: ${d.email || "-"}`,
-      }),
-    }).catch(() => {});
+  // Returns whether the message actually reached Isaac — never assumed. This has no durable
+  // storage of its own (it's a pure email relay via api/notify.js's `contact` action, which fails
+  // outright when Resend isn't configured), so a failed call here means the chat lead genuinely
+  // wasn't captured anywhere, not just "the confirmation email didn't send."
+  const sendNotification = async (d) => {
+    try {
+      const res = await fetch("/api/notify?action=contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: d.email,
+          confirmTo: d.email,
+          confirmName: d.name,
+          subject: `Nova Chat Lead: ${d.name || "Unknown"}`,
+          body: `Chat Lead:\nName: ${d.name || "-"}\nBusiness: ${d.business || "-"}\nChallenge: ${d.challenge || "-"}\nAvailable: ${d.day || "-"}\nEmail: ${d.email || "-"}`,
+        }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   };
 
   const handleSend = () => {
@@ -73,17 +89,20 @@ export default function ChatBot() {
 
     const nextStep = step + 1;
     if (nextStep < STEPS.length) {
+      const isLastStep = nextStep === STEPS.length - 1;
       setStep(nextStep);
-      const botFn = STEPS[nextStep].bot;
-      const botText = typeof botFn === "function" ? botFn(val, newData) : botFn;
-      setTimeout(() => {
-        setMessages((m) => [...m, { type: "bot", text: botText }]);
-        if (nextStep === STEPS.length - 1) {
-          newData.email = val;
-          sendNotification(newData);
+      if (!isLastStep) {
+        const botFn = STEPS[nextStep].bot;
+        const botText = typeof botFn === "function" ? botFn(val, newData) : botFn;
+        setTimeout(() => setMessages((m) => [...m, { type: "bot", text: botText }]), 550);
+      } else {
+        newData.email = val;
+        setTimeout(async () => {
+          const sent = await sendNotification(newData);
+          setMessages((m) => [...m, { type: "bot", text: sent ? SENT_MESSAGE(val) : FAILED_MESSAGE }]);
           setDone(true);
-        }
-      }, 550);
+        }, 550);
+      }
     }
   };
 
