@@ -241,6 +241,16 @@ async function handleListClients(req, res) {
   }
 }
 
+// Repair task (2026-09-23): the `portfolios` storage bucket this used to upload into did not
+// actually exist in production (confirmed live via the Storage Admin API — every bucket this
+// codebase references, including this one, 404'd) — every application submitted to date has
+// silently had NO resume/portfolio file saved, even when the applicant successfully attached
+// one, because this function's own upload request failed and was caught, not because of
+// anything wrong on the applicant's end. Storing a *path* now (not a constructed public URL) —
+// this bucket must be created PRIVATE (see docs handed to Isaac alongside this change), and
+// access happens only through a fresh, short-lived signed URL generated on demand by an admin
+// action (see handleResumeSignedUrl below), never a permanent public link. This is what "private
+// uploads" in the master build prompt's Careers/application spec actually requires.
 async function uploadPortfolioFile(SUPABASE_URL, SUPABASE_SERVICE_KEY, email, base64) {
   const ALLOWED_PORTFOLIO_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm', 'application/pdf'];
   const match = base64.match(/^data:([^;]+);base64,(.+)$/s);
@@ -254,10 +264,10 @@ async function uploadPortfolioFile(SUPABASE_URL, SUPABASE_SERVICE_KEY, email, ba
 
   const ext = mimeType.split('/')[1].replace('quicktime', 'mov');
   const safeEmail = email.replace(/[^a-z0-9@._-]/gi, '_');
-  const filename = `${safeEmail}/${Date.now()}.${ext}`;
+  const path = `${safeEmail}/${Date.now()}.${ext}`;
 
   try {
-    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/portfolios/${filename}`, {
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/object/portfolios/${path}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
@@ -267,7 +277,7 @@ async function uploadPortfolioFile(SUPABASE_URL, SUPABASE_SERVICE_KEY, email, ba
       body: buffer,
     });
     if (!r.ok) { console.error('[intake:submit-application] Portfolio upload error:', r.status, await r.text()); return null; }
-    return `${SUPABASE_URL}/storage/v1/object/public/portfolios/${filename}`;
+    return path; // caller stores this in applications.portfolio_file_path — never a public URL
   } catch (e) {
     console.error('[intake:submit-application] Portfolio upload error:', e.message);
     return null;
@@ -347,9 +357,9 @@ async function handleSubmitApplication(req, res) {
   if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
   if (!position)       return res.status(400).json({ error: 'Position is required' });
 
-  let portfolio_file_url = null;
+  let portfolio_file_path = null;
   if (portfolio_file_base64 && SUPABASE_URL && SUPABASE_SERVICE_KEY) {
-    portfolio_file_url = await uploadPortfolioFile(SUPABASE_URL, SUPABASE_SERVICE_KEY, email, portfolio_file_base64);
+    portfolio_file_path = await uploadPortfolioFile(SUPABASE_URL, SUPABASE_SERVICE_KEY, email, portfolio_file_base64);
   }
 
   if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
@@ -358,7 +368,7 @@ async function handleSubmitApplication(req, res) {
         id, name, email, phone, position, status: 'new', password_hash: password_hash || null,
         city: city || null,
         portfolio_links: portfolio_links || null,
-        portfolio_file_url,
+        portfolio_file_path,
         submitted_at: new Date().toISOString(),
       };
       for (const [column] of EXTRA_FIELDS) record[column] = extra[column] || null;
@@ -405,7 +415,7 @@ async function handleSubmitApplication(req, res) {
     ...EXTRA_FIELDS.filter(([column]) => extra[column]).map(([column, label]) => `${label}: ${cap(extra[column])}`),
     '',
     portfolio_links ? `PORTFOLIO LINKS:\n${portfolio_links}` : 'PORTFOLIO LINKS: None provided',
-    portfolio_file_url ? `PORTFOLIO FILE: ${portfolio_file_url}` : (portfolio_file_name ? `PORTFOLIO FILE: ${portfolio_file_name} (upload failed, see logs)` : ''),
+    portfolio_file_path ? 'PORTFOLIO FILE: uploaded — view it from the applicant\'s record in the dashboard (private file, no public link)' : (portfolio_file_name ? `PORTFOLIO FILE: ${portfolio_file_name} (upload failed, see logs)` : ''),
     '',
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     'Review at: nova-systems.app/dashboard/candidates',
@@ -472,74 +482,12 @@ async function handleSubmitApplication(req, res) {
   return res.status(200).json({ ok: true });
 }
 
-async function handleCheckApplicant(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!rateLimit(req, res, 5, 60_000)) return; // strict: 5 login attempts/min per IP
-
-  const email         = sanitizeEmail(req.body?.email || '');
-  const password_hash = sanitize(req.body?.password_hash || '', 128);
-
-  if (!email || !password_hash) {
-    return res.status(400).json({ error: 'Email and password required' });
-  }
-
-  console.log('[intake:check-applicant] Checking email:', email);
-
-  const SUPABASE_URL        = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-    console.log('[intake:check-applicant] Supabase not configured — signaling localStorage fallback');
-    return res.status(200).json({ mode: 'localStorage' });
-  }
-
-  let rows;
-  try {
-    const url = `${SUPABASE_URL}/rest/v1/applications?email=eq.${encodeURIComponent(email)}&select=id,email,name,position,status,password_hash`;
-    const sbRes = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_SERVICE_KEY,
-        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-      },
-    });
-
-    if (!sbRes.ok) {
-      const txt = await sbRes.text();
-      console.error('[intake:check-applicant] Supabase query error:', sbRes.status, txt);
-      return res.status(502).json({ error: 'Database error — try again' });
-    }
-
-    rows = await sbRes.json();
-  } catch (err) {
-    console.error('[intake:check-applicant] Fetch error:', err.message);
-    return res.status(502).json({ error: 'Database unreachable — try again' });
-  }
-
-  console.log('[intake:check-applicant] Rows found for email:', rows.length);
-
-  if (rows.length === 0) {
-    console.log('[intake:check-applicant] No account found for:', email);
-    return res.status(200).json({ result: 'no_account' });
-  }
-
-  const row = rows.find((r) => r.password_hash === password_hash);
-  console.log('[intake:check-applicant] Hash match:', !!row);
-
-  if (!row) {
-    return res.status(200).json({ result: 'wrong_password' });
-  }
-
-  return res.status(200).json({
-    result: 'ok',
-    application: {
-      id:       row.id,
-      email:    row.email,
-      name:     row.name,
-      position: row.position,
-      status:   row.status,
-    },
-  });
-}
+// handleCheckApplicant removed 2026-09-23 — it compared a client-computed SHA-256 password hash
+// server-side and returned a no_account/wrong_password result split with no real session ever
+// issued: the same category of security relic as api/client.js's old `auth` resource ("Nova
+// Connect"), and disabled the same way (410, see the dispatcher below) rather than secured.
+// Replaced by real Supabase Auth (ApplicantLogin.jsx signs in via supabase.auth.signInWithPassword;
+// see invite-applicant/my-application below for how an applicant gets a real account at all).
 
 async function handleListApplications(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -584,6 +532,7 @@ async function handleListApplications(req, res) {
       availability: r.availability || '',
       expected_pay: r.expected_pay || '',
       portfolio_url: r.portfolio_url || '',
+      portfolio_file_path: r.portfolio_file_path || '', // private — never a public URL; see resume-signed-url action
       owns_camera: r.owns_camera || '',
       camera_specs: r.camera_specs || '',
       has_editing_exp: r.has_editing_exp || '',
@@ -608,6 +557,8 @@ async function handleListApplications(req, res) {
       reference_3_phone: r.reference_3_phone || '',
       reference_3_email: r.reference_3_email || '',
       resume_name: r.resume_name || '',
+      auth_user_id: r.auth_user_id || null,
+      invited_at: r.invited_at || null,
       submittedAt: r.submitted_at,
       submitted_at: r.submitted_at,
       status_messages: r.status_messages || [],
@@ -670,6 +621,222 @@ async function handleUpdateApplication(req, res) {
   }
 }
 
+// ------------------------------------------------------------- hiring workflow
+// Careers -> application (above) -> administrator review (Jobs.jsx/JobDetail.jsx, existing) ->
+// secure account invitation (below) -> Academy enrollment (api/academy.js, existing) -> practical
+// approval (api/academy.js, existing) -> approved working agreement (api/contracts.js, extended)
+// -> administrator-controlled representative activation (below). Every step after "secure
+// account invitation" runs through the SAME canonical Supabase Auth / organization_members
+// system the rest of the app already uses — a candidate is a real organization_members row with
+// role='nova_sales_candidate' (granted ONLY academy.view; see
+// supabase/hiring-workflow-migration-standalone.sql), not a separate identity system.
+
+async function fetchAuthUserByEmail(SUPABASE_URL, SUPABASE_KEY, email) {
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (!r.ok) return null;
+  const data = await r.json();
+  const users = data.users || (Array.isArray(data) ? data : []);
+  // Supabase's admin list-users `email` filter has been observed to not strictly filter (see
+  // this project's own login-diagnosis notes) — match exactly, don't trust it as pre-filtered.
+  return users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || null;
+}
+
+async function handleInviteApplicant(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 15, 60_000)) return;
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const application_id = sanitize(req.body?.id, 100);
+  if (!application_id) return res.status(400).json({ error: 'id is required' });
+
+  const appRes = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(application_id)}&limit=1`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  const appRows = appRes.ok ? await appRes.json() : [];
+  const application = appRows[0];
+  if (!application) return res.status(404).json({ error: 'Application not found' });
+
+  try {
+    let authUser = application.auth_user_id ? null : await fetchAuthUserByEmail(SUPABASE_URL, SUPABASE_KEY, application.email);
+    let isNewAuthUser = false;
+
+    if (!application.auth_user_id && !authUser) {
+      // GoTrue's admin invite endpoint creates the user AND sends the real "invite" email
+      // (magic link) using Nova's own configured mail settings — never a plaintext password.
+      const redirectTo = `${(req.headers.origin && req.headers.origin.startsWith('https://')) ? req.headers.origin : 'https://nova-systems.app'}/auth/callback?returnTo=${encodeURIComponent('/dashboard/academy')}`;
+      const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/invite?redirect_to=${encodeURIComponent(redirectTo)}`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: application.email }),
+      });
+      if (!inviteRes.ok) {
+        const errText = await inviteRes.text();
+        console.error('[intake:invite-applicant] Invite error:', inviteRes.status, errText);
+        return res.status(500).json({ error: 'Failed to send invitation email' });
+      }
+      authUser = await inviteRes.json();
+      isNewAuthUser = true;
+    }
+
+    const authUserId = application.auth_user_id || authUser?.id;
+    if (!authUserId) return res.status(500).json({ error: 'Could not resolve an auth account for this applicant' });
+
+    // Find (or bootstrap) the Nova Systems organization to attach the candidate membership to.
+    const orgRes = await fetch(`${SUPABASE_URL}/rest/v1/organizations?kind=eq.nova_internal&limit=1`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+    const orgRows = orgRes.ok ? await orgRes.json() : [];
+    const novaOrgId = orgRows[0]?.id;
+    if (!novaOrgId) return res.status(500).json({ error: 'Nova Systems organization not found — cannot create candidate membership' });
+
+    // Idempotent: if a membership already exists for this user on this org, leave its role
+    // alone (an admin may have already activated them — never downgrade a real rep back to
+    // candidate just by re-inviting).
+    const existingMemberRes = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?organization_id=eq.${novaOrgId}&staff_user_id=eq.${authUserId}&limit=1`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+    const existingMembers = existingMemberRes.ok ? await existingMemberRes.json() : [];
+    if (!existingMembers.length) {
+      await fetch(`${SUPABASE_URL}/rest/v1/organization_members`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ organization_id: novaOrgId, member_type: 'staff', staff_user_id: authUserId, role: 'nova_sales_candidate', status: 'active' }),
+      });
+    }
+
+    await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(application_id)}`, {
+      method: 'PATCH',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ auth_user_id: authUserId, invited_at: new Date().toISOString() }),
+    });
+
+    return res.status(200).json({ ok: true, auth_user_id: authUserId, invited_new_account: isNewAuthUser });
+  } catch (err) {
+    console.error('[intake:invite-applicant] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to invite applicant' });
+  }
+}
+
+// Applicant self-service: returns only the caller's OWN application (matched by auth_user_id,
+// never a client-supplied id) plus their Academy enrollment summary and any working-agreement
+// contract status. Gated by requireStaff() with NO specific permission — deliberately: a
+// candidate's organization_members row only ever grants academy.view, never admin.view/
+// growth.view/etc., so "any active member" is safe here precisely because the row-ownership
+// check below (auth_user_id = caller.id) is what actually restricts the data, not the role.
+async function handleMyApplication(req, res, caller) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(200).json(null);
+
+  const appRes = await fetch(`${SUPABASE_URL}/rest/v1/applications?auth_user_id=eq.${encodeURIComponent(caller.id)}&limit=1`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  const appRows = appRes.ok ? await appRes.json() : [];
+  const application = appRows[0];
+  if (!application) return res.status(200).json(null);
+
+  const contractRes = await fetch(`${SUPABASE_URL}/rest/v1/contracts?application_id=eq.${encodeURIComponent(application.id)}&order=created_at.desc&limit=1`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  const contracts = contractRes.ok ? await contractRes.json() : [];
+
+  return res.status(200).json({
+    id: application.id, name: application.name, email: application.email, position: application.position,
+    status: application.status, submitted_at: application.submitted_at,
+    interview_date: application.interview_date, interview_time: application.interview_time,
+    status_messages: application.status_messages || [],
+    agreement: contracts[0] || null,
+  });
+}
+
+async function handleResumeSignedUrl(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const id = sanitize(req.query?.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  const appRes = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(id)}&select=portfolio_file_path&limit=1`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  const appRows = appRes.ok ? await appRes.json() : [];
+  const path = appRows[0]?.portfolio_file_path;
+  if (!path) return res.status(404).json({ error: 'No file on file for this application' });
+
+  try {
+    const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/portfolios/${path}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: 300 }), // 5 minutes — regenerated fresh on every view, never stored
+    });
+    if (!signRes.ok) { console.error('[intake:resume-signed-url] Sign error:', signRes.status, await signRes.text()); return res.status(500).json({ error: 'Failed to generate a signed link' }); }
+    const { signedURL } = await signRes.json();
+    return res.status(200).json({ ok: true, url: `${SUPABASE_URL}/storage/v1${signedURL}` });
+  } catch (err) {
+    console.error('[intake:resume-signed-url] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to generate a signed link' });
+  }
+}
+
+// Administrator-controlled representative activation: flips a candidate's role from
+// 'nova_sales_candidate' (academy.view only) to 'nova_sales' (overview.view + growth.view +
+// academy.view — real rep access). Deliberately does NOT auto-trigger off Academy completion or
+// a signed agreement — those are shown to the admin as context, but the decision to activate
+// stays a human one, per the master prompt's explicit "do not promise work/classification/
+// commission solely because training is passed."
+async function handleActivateRepresentative(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 15, 60_000)) return;
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const application_id = sanitize(req.body?.id, 100);
+  if (!application_id) return res.status(400).json({ error: 'id is required' });
+
+  const appRes = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(application_id)}&limit=1`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  const appRows = appRes.ok ? await appRes.json() : [];
+  const application = appRows[0];
+  if (!application?.auth_user_id) return res.status(400).json({ error: 'This applicant has not been invited yet — nothing to activate' });
+
+  try {
+    const memberRes = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?staff_user_id=eq.${application.auth_user_id}&role=eq.nova_sales_candidate`, {
+      method: 'PATCH',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ role: 'nova_sales' }),
+    });
+    if (!memberRes.ok) { console.error('[intake:activate-representative] Update error:', memberRes.status, await memberRes.text()); return res.status(500).json({ error: 'Failed to activate representative' }); }
+    const updated = await memberRes.json();
+    if (!updated.length) return res.status(400).json({ error: 'No pending candidate membership found for this applicant — they may already be activated' });
+
+    await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(application_id)}`, {
+      method: 'PATCH',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'hired' }),
+    });
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[intake:activate-representative] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to activate representative' });
+  }
+}
+
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
 
@@ -684,13 +851,31 @@ export default async function handler(req, res) {
       if (!req.query?.id && !(await requireStaff(req, res, 'intelligence.view'))) return;
       return handleListClients(req, res);
     case 'submit-application':      return handleSubmitApplication(req, res);
-    case 'check-applicant':          return handleCheckApplicant(req, res);
+    // check-applicant retired 2026-09-23 — replaced by real Supabase Auth (see ApplicantLogin.jsx
+    // and the invite-applicant/my-application actions below). It compared a client-computed
+    // SHA-256 hash server-side with no real session issued — a genuine security relic, same
+    // category as api/client.js's old `auth` resource, disabled the same way rather than secured.
+    case 'check-applicant':          return res.status(410).json({ error: 'This login method has been retired. Applicants now sign in with a real Nova Systems account — see your invitation email.' });
     case 'applications':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleListApplications(req, res);
     case 'update-application':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleUpdateApplication(req, res);
+    case 'invite-applicant':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleInviteApplicant(req, res);
+    case 'my-application': {
+      const caller = await requireStaff(req, res);
+      if (!caller) return;
+      return handleMyApplication(req, res, caller);
+    }
+    case 'resume-signed-url':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleResumeSignedUrl(req, res);
+    case 'activate-representative':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleActivateRepresentative(req, res);
     default:
       return res.status(400).json({ error: `Unknown action: ${action}` });
   }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
 const GOLD = "#C9A84C";
 const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
@@ -13,60 +14,35 @@ const inputStyle = {
   boxSizing: "border-box", fontFamily: "inherit",
 };
 
-// SHA-256 — must match exactly how ApplicationForm.jsx hashes on submit
-async function hashPassword(pw) {
-  const data = new TextEncoder().encode(pw);
-  const buf  = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-// localStorage fallback — used when Supabase is not yet configured
-function checkLocalStorage(email, password_hash) {
-  console.log("[applicant-login] Falling back to localStorage check");
-
-  const apps = JSON.parse(localStorage.getItem("nova_applications") || "[]");
-  console.log("[applicant-login] localStorage applications count:", apps.length);
-
-  const emailMatch = apps.find((a) => a.email?.toLowerCase() === email.toLowerCase());
-  console.log("[applicant-login] Email found in localStorage:", !!emailMatch);
-
-  if (!emailMatch) return { result: "no_account" };
-
-  const fullMatch = apps.find(
-    (a) => a.email?.toLowerCase() === email.toLowerCase() && a.password_hash === password_hash
-  );
-  console.log("[applicant-login] Hash match in localStorage:", !!fullMatch);
-
-  if (!fullMatch) return { result: "wrong_password" };
-
-  return {
-    result: "ok",
-    application: {
-      id:       fullMatch.id,
-      email:    fullMatch.email,
-      name:     fullMatch.name,
-      position: fullMatch.position,
-      status:   fullMatch.status,
-    },
-  };
-}
-
+// Repair task (2026-09-23): this page used to hash a password client-side (SHA-256) and compare
+// it server-side against applications.password_hash via api/intake.js's now-retired
+// check-applicant action — a real security relic (no session was ever issued) with a
+// localStorage fallback on top of that. Real Supabase Auth now, same signInWithPassword pattern
+// as Login.jsx/ClientLogin.jsx. An applicant can only sign in here AFTER an administrator has
+// reviewed and invited them (see api/intake.js's invite-applicant action) — before that, there
+// is no account to sign into, by design: invitation is a deliberate, admin-gated step, not
+// something the applicant self-serves at submission time.
 export default function ApplicantLogin() {
   const navigate = useNavigate();
   const [email, setEmail]     = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw]   = useState(false);
   const [error, setError]     = useState("");
+  const [info, setInfo]       = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    const session = JSON.parse(localStorage.getItem("nova_applicant_session") || "null");
-    if (session) {
-      if (session.isEmployee) navigate("/employee-dashboard");
-      else navigate("/application-status");
+    let active = true;
+    async function check() {
+      if (!supabase) { setCheckingSession(false); return; }
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      if (data?.session) navigate("/application-status", { replace: true });
+      else setCheckingSession(false);
     }
+    check();
+    return () => { active = false; };
   }, []);
 
   const focus = (e) => (e.target.style.borderColor = `${GOLD}70`);
@@ -77,72 +53,39 @@ export default function ApplicantLogin() {
     setError("");
     setLoading(true);
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const pw_hash = await hashPassword(password);
-
-    console.log("[applicant-login] Attempting login for:", normalizedEmail);
-    console.log("[applicant-login] Password hash computed:", pw_hash.slice(0, 12) + "...");
-
-    let outcome;
-
-    try {
-      const res = await fetch("/api/intake?action=check-applicant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail, password_hash: pw_hash }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Server error ${res.status}`);
-      }
-
-      const data = await res.json();
-      console.log("[applicant-login] API response:", data.mode || data.result);
-
-      if (data.mode === "localStorage") {
-        // Supabase not configured — fall back to localStorage
-        outcome = checkLocalStorage(normalizedEmail, pw_hash);
-      } else {
-        outcome = data;
-      }
-    } catch (err) {
-      console.error("[applicant-login] API call failed:", err.message);
-      // Network error — fall back to localStorage so local dev still works
-      outcome = checkLocalStorage(normalizedEmail, pw_hash);
+    if (!supabase) {
+      setError("Sign-in is not configured. Contact hello@nova-systems.app.");
+      setLoading(false);
+      return;
     }
 
-    console.log("[applicant-login] Final outcome:", outcome?.result);
-
+    const { data, error: authErr } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(), password,
+    });
     setLoading(false);
-
-    if (outcome.result === "no_account") {
-      setError("No account found. Please apply first at /careers");
+    if (!authErr && data?.session) {
+      navigate("/application-status", { replace: true });
       return;
     }
-
-    if (outcome.result === "wrong_password") {
-      setError("Incorrect password. Try again or re-apply at /careers if you forgot it.");
-      return;
-    }
-
-    if (outcome.result === "ok") {
-      localStorage.setItem(
-        "nova_applicant_session",
-        JSON.stringify({
-          id:            outcome.application.id,
-          email:         outcome.application.email,
-          applicationId: outcome.application.id,
-          isEmployee:    outcome.application.isEmployee || false,
-        })
-      );
-      navigate("/application-status");
-      return;
-    }
-
-    // Fallback for unexpected API response
-    setError("Something went wrong. Please try again.");
+    setError("Incorrect email or password, or no invitation has been sent to this address yet.");
   };
+
+  const handleForgotPassword = async () => {
+    setError("");
+    setInfo("");
+    if (!supabase) return;
+    const target = email.trim();
+    if (!target) { setError("Enter your email above first, then press \"Forgot password?\""); return; }
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/auth/callback?returnTo=${encodeURIComponent("/application-status")}`,
+    });
+    if (resetErr) setError("Could not send a reset email right now. Please try again shortly.");
+    else setInfo("If that email has an invited account, a reset link is on its way.");
+  };
+
+  if (checkingSession) {
+    return <div className="min-h-screen" style={{ background: "#0A0A0A" }} />;
+  }
 
   return (
     <div className="min-h-screen bg-navy flex flex-col items-center justify-center px-6 py-20">
@@ -161,7 +104,7 @@ export default function ApplicantLogin() {
         </p>
         <h1 className="text-3xl font-black text-white text-center mb-2">Check Your Status</h1>
         <p className="text-sm text-center mb-10" style={{ color: "rgba(255,255,255,0.35)" }}>
-          Sign in with the email and password you created during your application.
+          Sign in with the Nova Systems account from your invitation email.
         </p>
 
         <form
@@ -206,6 +149,12 @@ export default function ApplicantLogin() {
               {error}
             </p>
           )}
+          {info && (
+            <p className="text-xs px-3 py-2.5 rounded-lg"
+              style={{ background: `${GOLD}12`, color: GOLD, border: `1px solid ${GOLD}40`, lineHeight: 1.5 }}>
+              {info}
+            </p>
+          )}
 
           <button
             type="submit" disabled={loading}
@@ -216,11 +165,22 @@ export default function ApplicantLogin() {
               ? <div className="w-4 h-4 border-2 border-[#0a0800]/30 border-t-[#0a0800] rounded-full animate-spin" />
               : <><span>SIGN IN</span><ArrowRight className="w-4 h-4" /></>}
           </button>
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            className="w-full text-center text-[11px] py-1"
+            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)" }}
+          >
+            Forgot password?
+          </button>
         </form>
 
         <p className="text-center text-xs mt-6" style={{ color: "rgba(255,255,255,0.2)" }}>
-          Don&apos;t have an account?{" "}
-          <a href="/careers" style={{ color: GOLD }}>Apply for a position first</a>
+          Haven&apos;t applied yet?{" "}
+          <a href="/careers" style={{ color: GOLD }}>Apply for a position</a>
+        </p>
+        <p className="text-center text-xs mt-2" style={{ color: "rgba(255,255,255,0.15)" }}>
+          Already applied but no invitation yet? An administrator will email you once your application has been reviewed.
         </p>
       </div>
     </div>

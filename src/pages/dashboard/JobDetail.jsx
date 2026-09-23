@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, Save, Check } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Save, Check, Mail, GraduationCap, FileSignature, UserCheck, FileText } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
@@ -44,6 +44,19 @@ export default function JobDetail() {
   const [updating, setUpdating] = useState(false)
   const [notFound, setNotFound] = useState(false)
 
+  // Hiring workflow: Careers -> application -> administrator review (this page) -> secure
+  // account invitation -> Academy enrollment -> practical approval -> working agreement ->
+  // administrator-controlled representative activation. See api/intake.js's invite-applicant/
+  // my-application/resume-signed-url/activate-representative actions.
+  const [inviting, setInviting] = useState(false)
+  const [inviteResult, setInviteResult] = useState('')
+  const [resumeLoading, setResumeLoading] = useState(false)
+  const [academyStatus, setAcademyStatus] = useState(null) // null=unknown, []=none, [rows]
+  const [creatingAgreement, setCreatingAgreement] = useState(false)
+  const [agreement, setAgreement] = useState(null)
+  const [activating, setActivating] = useState(false)
+  const [activateResult, setActivateResult] = useState('')
+
   // Repair task (2026-09-21): this page used to read purely from localStorage('nova_applications')
   // — a cache Jobs.jsx populated on its own mount — so a direct link or a page refresh landing
   // here first (cache empty) always bounced to /dashboard/jobs even for a real applicant. Now
@@ -64,8 +77,88 @@ export default function JobDetail() {
     return () => { active = false }
   }, [id])
 
+  // Once we know whether this candidate has been invited, load their Academy progress (admin
+  // overview, filtered client-side to this one person — avoids a 13th top-level API function)
+  // and any existing working agreement.
+  useEffect(() => {
+    if (!candidate?.auth_user_id) return
+    authedFetch('/api/academy?action=admin-overview')
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => setAcademyStatus(Array.isArray(rows) ? rows.filter(r => r.staff_user_id === candidate.auth_user_id) : []))
+      .catch(() => setAcademyStatus([]))
+  }, [candidate?.auth_user_id])
+
+  useEffect(() => {
+    if (!candidate?.id) return
+    authedFetch('/api/contracts?action=list')
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => setAgreement(Array.isArray(rows) ? rows.find(c => c.application_id === candidate.id) || null : null))
+      .catch(() => {})
+  }, [candidate?.id])
+
   if (notFound) { navigate('/dashboard/jobs'); return null }
   if (!candidate) return null
+
+  const handleInvite = async () => {
+    setInviting(true)
+    setInviteResult('')
+    try {
+      const r = await authedFetch('/api/intake?action=invite-applicant', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+      })
+      const data = await r.json()
+      if (!r.ok) { setInviteResult(data.error || 'Failed to invite.'); setInviting(false); return }
+      setCandidate(c => ({ ...c, auth_user_id: data.auth_user_id }))
+      setInviteResult(data.invited_new_account ? 'Invitation email sent.' : 'Account linked (already existed).')
+    } catch (e) {
+      setInviteResult('Failed to invite: ' + e.message)
+    }
+    setInviting(false)
+  }
+
+  const handleViewResume = async () => {
+    setResumeLoading(true)
+    try {
+      const r = await authedFetch(`/api/intake?action=resume-signed-url&id=${encodeURIComponent(id)}`)
+      const data = await r.json()
+      if (r.ok && data.url) window.open(data.url, '_blank', 'noreferrer')
+      else alert(data.error || 'No file on record.')
+    } catch (e) {
+      alert('Could not open file: ' + e.message)
+    }
+    setResumeLoading(false)
+  }
+
+  const handleCreateAgreement = async () => {
+    setCreatingAgreement(true)
+    try {
+      const r = await authedFetch('/api/contracts?action=create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_name: candidate.name, client_email: candidate.email, contract_type: 'Sales Representative Agreement', application_id: id }),
+      })
+      const data = await r.json()
+      if (r.ok && data.contract) setAgreement(data.contract)
+      else alert(data.error || 'Failed to create agreement.')
+    } catch (e) {
+      alert('Failed to create agreement: ' + e.message)
+    }
+    setCreatingAgreement(false)
+  }
+
+  const handleActivate = async () => {
+    setActivating(true)
+    setActivateResult('')
+    try {
+      const r = await authedFetch('/api/intake?action=activate-representative', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+      })
+      const data = await r.json()
+      setActivateResult(r.ok ? 'Activated as a Nova Systems representative.' : (data.error || 'Failed to activate.'))
+    } catch (e) {
+      setActivateResult('Failed to activate: ' + e.message)
+    }
+    setActivating(false)
+  }
 
   // Persists status/notes/interview changes to the real `applications` row via
   // api/intake.js's update-application action — this used to only ever write to localStorage,
@@ -105,18 +198,18 @@ export default function JobDetail() {
     if (!ok) { setStatus(candidate.status || 'new'); setUpdating(false); return }
     try {
       if (newStatus === 'hired') {
-        const token = Math.random().toString(36).slice(2) + Date.now().toString(36)
-        const accounts = JSON.parse(localStorage.getItem('nova_employee_accounts') || '[]')
-        if (!accounts.find(a => a.applicationId === id)) {
-          accounts.push({ id: crypto.randomUUID(), applicationId: id, email: candidate.email, name: candidate.name, password: null, token, isEmployee: true })
-          localStorage.setItem('nova_employee_accounts', JSON.stringify(accounts))
-        }
+        // Repair task (2026-09-23): this used to mint a token into localStorage('nova_employee_
+        // accounts') — a per-browser, non-Supabase, itself-insecure scheme that only ever worked
+        // on whichever browser happened to run this code, and emailed a link pointing at it. That
+        // whole mechanism is removed, not extended. Real account creation is now the separate,
+        // deliberate "Invite to Create Account" action below — marking someone "Hired" here is
+        // just a status change; it does not by itself grant any account or access.
         await fetch('/api/notify?action=contact', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: 'Nova Systems HR', email: 'isaac_0427@icloud.com',
-            subject: `Offer Letter: ${candidate.name} — ${candidate.position}`,
-            message: `Congratulations ${candidate.name}! You have been hired for ${candidate.position} at Nova Systems. Please set up your employee account at nova-systems.app/set-password?token=${token}`,
+            subject: `${candidate.name} marked Hired — ${candidate.position}`,
+            message: `${candidate.name} (${candidate.email}) was marked Hired for ${candidate.position}. Use "Invite to Create Account" on their record in the dashboard to send them real Nova Systems sign-in access.`,
           }),
         })
       } else if (newStatus === 'declined') {
@@ -198,7 +291,14 @@ export default function JobDetail() {
             <Detail label="Email" value={c.email && <a href={`mailto:${c.email}`} style={{ color: '#C9A84C' }}>{c.email}</a>} />
             <Detail label="Phone" value={c.phone} />
             <Detail label="Applied" value={date} />
-            {(c.portfolioUrl || c.portfolio_url) && <Detail label="Portfolio" value={<a href={c.portfolioUrl || c.portfolio_url} target="_blank" rel="noreferrer" style={{ color: GOLD, display: 'flex', alignItems: 'center', gap: 4 }}><ExternalLink style={{ width: 12, height: 12 }} /> View Portfolio</a>} />}
+            {(c.portfolioUrl || c.portfolio_url) && <Detail label="Portfolio Link" value={<a href={c.portfolioUrl || c.portfolio_url} target="_blank" rel="noreferrer" style={{ color: GOLD, display: 'flex', alignItems: 'center', gap: 4 }}><ExternalLink style={{ width: 12, height: 12 }} /> View Portfolio</a>} />}
+            {c.portfolio_file_path && (
+              <Detail label="Uploaded File" value={
+                <button onClick={handleViewResume} disabled={resumeLoading} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: GOLD, cursor: 'pointer', padding: 0, fontFamily: 'inherit', fontSize: 13 }}>
+                  <FileText style={{ width: 12, height: 12 }} /> {resumeLoading ? 'Generating link…' : 'View File (private, opens a 5-minute link)'}
+                </button>
+              } />
+            )}
           </div>
 
           <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 24 }}>
@@ -263,6 +363,84 @@ export default function JobDetail() {
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Hiring workflow: invite -> Academy -> agreement -> activation */}
+        <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 24, marginTop: 16 }}>
+          <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 16 }}>Hiring Workflow</p>
+
+          {/* Step: invite */}
+          <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Mail style={{ width: 13, height: 13, color: candidate.auth_user_id ? '#4ade80' : 'rgba(255,255,255,0.3)' }} />
+              <p style={{ fontSize: 11, fontWeight: 700, color: candidate.auth_user_id ? '#4ade80' : 'rgba(255,255,255,0.5)' }}>
+                {candidate.auth_user_id ? 'Account Invited' : 'No Account Yet'}
+              </p>
+            </div>
+            {!candidate.auth_user_id && (
+              <button onClick={handleInvite} disabled={inviting} style={{ width: '100%', padding: '9px 14px', background: G, border: 'none', borderRadius: 7, color: '#0a0800', fontSize: 11, fontWeight: 700, cursor: inviting ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+                {inviting ? 'Sending Invitation…' : 'Invite to Create Account'}
+              </button>
+            )}
+            {inviteResult && <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>{inviteResult}</p>}
+          </div>
+
+          {/* Step: Academy */}
+          {candidate.auth_user_id && (
+            <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <GraduationCap style={{ width: 13, height: 13, color: GOLD }} />
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>Sales Academy</p>
+              </div>
+              {academyStatus === null ? (
+                <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>Loading…</p>
+              ) : academyStatus.length === 0 ? (
+                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>No programs started yet.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {academyStatus.map(a => (
+                    <p key={a.id} style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>
+                      {a.academy_programs?.title}: <span style={{ color: a.status === 'completed' ? '#4ade80' : GOLD }}>{a.status}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step: working agreement */}
+          {candidate.auth_user_id && (
+            <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <FileSignature style={{ width: 13, height: 13, color: agreement?.status === 'signed' ? '#4ade80' : 'rgba(255,255,255,0.3)' }} />
+                <p style={{ fontSize: 11, fontWeight: 700, color: agreement?.status === 'signed' ? '#4ade80' : 'rgba(255,255,255,0.5)' }}>
+                  {agreement ? (agreement.status === 'signed' ? 'Agreement Signed' : 'Agreement Sent — Awaiting Signature') : 'No Working Agreement'}
+                </p>
+              </div>
+              {!agreement && (
+                <button onClick={handleCreateAgreement} disabled={creatingAgreement} style={{ width: '100%', padding: '9px 14px', background: 'rgba(255,255,255,0.05)', border: `1px solid ${GOLD}40`, borderRadius: 7, color: GOLD, fontSize: 11, fontWeight: 700, cursor: creatingAgreement ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+                  {creatingAgreement ? 'Sending…' : 'Send Working Agreement'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Step: activation */}
+          {candidate.auth_user_id && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <UserCheck style={{ width: 13, height: 13, color: 'rgba(255,255,255,0.3)' }} />
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)' }}>Representative Activation</p>
+              </div>
+              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, lineHeight: 1.6, marginBottom: 10 }}>
+                Activation is your decision — it is not automatic from training or a signed agreement, shown above only as context.
+              </p>
+              <button onClick={handleActivate} disabled={activating} style={{ width: '100%', padding: '9px 14px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 7, color: '#4ade80', fontSize: 11, fontWeight: 700, cursor: activating ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+                {activating ? 'Activating…' : 'Activate as Representative'}
+              </button>
+              {activateResult && <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>{activateResult}</p>}
             </div>
           )}
         </div>

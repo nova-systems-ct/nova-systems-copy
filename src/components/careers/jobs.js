@@ -26,7 +26,6 @@ export const JOBS = [
       "Self-motivated",
       "Spanish speaking is a major plus",
     ],
-    hasPassword: false,
     hasPortfolio: false,
     pitch: {
       headline: "Close Deals. Keep the Commission. Build Your Own Income.",
@@ -75,7 +74,6 @@ export const JOBS = [
       "Portfolio of past content required",
       "Connecticut based preferred",
     ],
-    hasPassword: true,
     hasPortfolio: true,
     portfolioLabel: "Portfolio (video files or links)",
     fields: [
@@ -104,7 +102,6 @@ export const JOBS = [
       "Email and internet access",
       "No experience required — full training provided",
     ],
-    hasPassword: false,
     hasPortfolio: false,
     fields: [
       { column: "city", label: "City and State", type: "text", required: true, placeholder: "Anywhere — this role is remote" },

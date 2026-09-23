@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Clock, CheckCircle, XCircle, Calendar, MessageSquare, MapPin, Link2, Plus, Trash2, FileText } from "lucide-react";
+import { LogOut, Clock, CheckCircle, XCircle, Calendar, MessageSquare, MapPin, GraduationCap, FileSignature } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+import { authedFetch } from "@/lib/apiAuth";
 
 const GOLD = "#C9A84C";
 const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
@@ -15,61 +17,62 @@ const STATUS_CONFIG = {
 
 const STATUS_ORDER = ["new", "reviewing", "interview_scheduled", "hired"];
 
+// Repair task (2026-09-23): this page used to read a stale, per-browser localStorage cache of
+// `nova_applications` — a change made by staff (status, interview date, notes) in the dashboard
+// was invisible here forever unless this exact browser happened to have re-fetched it. Now
+// fetches the caller's own real record fresh on every load, ownership-scoped server-side by the
+// real Supabase Auth session (api/intake.js's my-application action) — not a client-supplied id.
 export default function ApplicationStatus() {
   const navigate = useNavigate();
-  const [session, setSession] = useState(null);
   const [application, setApplication] = useState(null);
-  const [portfolioLinks, setPortfolioLinks] = useState([]);
-  const [newLink, setNewLink] = useState("");
-  const [linkLabel, setLinkLabel] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    const s = JSON.parse(localStorage.getItem("nova_applicant_session") || "null");
-    if (!s) { navigate("/applicant-login"); return; }
-    setSession(s);
-    const apps = JSON.parse(localStorage.getItem("nova_applications") || "[]");
-    const app = apps.find((a) => a.id === s.applicationId);
-    setApplication(app || null);
-    setPortfolioLinks(app?.portfolio_links || []);
+    let active = true;
+    async function load() {
+      if (!supabase) { setError(true); setLoading(false); return; }
+      const { data } = await supabase.auth.getSession();
+      if (!data?.session) { navigate("/applicant-login"); return; }
+      try {
+        const r = await authedFetch("/api/intake?action=my-application");
+        if (!active) return;
+        if (!r.ok) { setError(true); setLoading(false); return; }
+        const app = await r.json();
+        if (!app) { setError(true); setLoading(false); return; }
+        setApplication(app);
+      } catch {
+        if (active) setError(true);
+      }
+      if (active) setLoading(false);
+    }
+    load();
+    return () => { active = false; };
   }, []);
 
-  const persistApp = (patch) => {
-    const apps = JSON.parse(localStorage.getItem("nova_applications") || "[]");
-    const updated = apps.map((a) => a.id === application.id ? { ...a, ...patch } : a);
-    localStorage.setItem("nova_applications", JSON.stringify(updated));
-    setApplication((prev) => ({ ...prev, ...patch }));
-  };
-
-  const addLink = () => {
-    if (!newLink.trim()) return;
-    const entry = { url: newLink.trim(), label: linkLabel.trim() || newLink.trim(), added_at: new Date().toISOString() };
-    const links = [...portfolioLinks, entry];
-    setPortfolioLinks(links);
-    persistApp({ portfolio_links: links });
-    setNewLink("");
-    setLinkLabel("");
-  };
-
-  const removeLink = (idx) => {
-    const links = portfolioLinks.filter((_, i) => i !== idx);
-    setPortfolioLinks(links);
-    persistApp({ portfolio_links: links });
-  };
-
-  const logout = () => {
-    localStorage.removeItem("nova_applicant_session");
+  const logout = async () => {
+    if (supabase) await supabase.auth.signOut();
     navigate("/applicant-login");
   };
 
-  if (!session) return null;
+  if (loading) return <div className="min-h-screen" style={{ background: "#0A0A0A" }} />;
 
-  const status = application?.status || "new";
+  if (error || !application) {
+    return (
+      <div className="min-h-screen bg-navy flex flex-col items-center justify-center px-6 text-center">
+        <p className="text-white text-sm mb-4">We couldn&apos;t find an application linked to this account.</p>
+        <a href="/careers" style={{ color: GOLD, fontSize: 13 }}>Apply at /careers</a>
+      </div>
+    );
+  }
+
+  const status = application.status || "new";
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.new;
   const StatusIcon = config.icon;
   const declined = status === "declined";
-  const messages = application?.status_messages || (application?.adminMessage ? [{ message: application.adminMessage, date: application.submittedAt }] : []);
-  const submittedDate = application?.submittedAt
-    ? new Date(application.submittedAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+  const messages = application.status_messages || [];
+  const submittedDate = application.submitted_at
+    ? new Date(application.submitted_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
     : "—";
 
   return (
@@ -114,7 +117,6 @@ export default function ApplicationStatus() {
           <div style={{ borderRadius: 14, padding: 24, marginBottom: 20, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
             <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: 20 }}>PROGRESS</p>
             <div style={{ position: "relative" }}>
-              {/* Connector line */}
               <div style={{ position: "absolute", left: 14, top: 14, bottom: 14, width: 1, background: "rgba(255,255,255,0.06)" }} />
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 {STATUS_ORDER.map((s, i) => {
@@ -141,7 +143,7 @@ export default function ApplicationStatus() {
         )}
 
         {/* Interview details */}
-        {status === "interview_scheduled" && (application?.interviewDate || application?.interview_date) && (
+        {status === "interview_scheduled" && application.interview_date && (
           <div style={{ borderRadius: 14, padding: 24, marginBottom: 20, background: "rgba(167,139,250,0.06)", border: "1px solid rgba(167,139,250,0.2)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
               <Calendar className="w-4 h-4" style={{ color: "#a78bfa" }} />
@@ -151,8 +153,7 @@ export default function ApplicationStatus() {
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                 <Calendar className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
                 <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13 }}>
-                  {application.interviewDate || application.interview_date}
-                  {(application.interviewTime || application.interview_time) && ` at ${application.interviewTime || application.interview_time}`}
+                  {application.interview_date}{application.interview_time && ` at ${application.interview_time}`}
                 </p>
               </div>
               <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
@@ -186,97 +187,36 @@ export default function ApplicationStatus() {
           </div>
         )}
 
-        {/* Application details */}
-        {application && (
+        {/* Working agreement */}
+        {application.agreement && (
           <div style={{ borderRadius: 14, padding: 24, marginBottom: 20, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-            <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: 16 }}>APPLICATION DETAILS</p>
-            {[
-              ["Name", application.name],
-              ["Position", application.position],
-              ["Email", application.email],
-              ["Submitted", submittedDate],
-            ].map(([label, value]) => (
-              <div key={label} style={{ display: "flex", gap: 16, padding: "9px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)", width: 72, flexShrink: 0, paddingTop: 2 }}>{label}</p>
-                <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 13 }}>{value}</p>
-              </div>
-            ))}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <FileSignature className="w-4 h-4" style={{ color: GOLD }} />
+              <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase" }}>WORKING AGREEMENT</p>
+            </div>
+            {application.agreement.status === "signed" ? (
+              <p style={{ color: "#4ade80", fontSize: 13 }}>Signed — thank you.</p>
+            ) : (
+              <a href={`/sign/${application.agreement.id}`} style={{ display: "inline-block", padding: "10px 18px", background: G, borderRadius: 8, color: "#0a0800", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+                Review &amp; Sign Agreement
+              </a>
+            )}
           </div>
         )}
 
-        {/* Portfolio links */}
-        <div style={{ borderRadius: 14, padding: 24, marginBottom: 20, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-            <Link2 className="w-4 h-4" style={{ color: GOLD }} />
-            <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase" }}>YOUR PORTFOLIO</p>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-            <input
-              value={linkLabel}
-              onChange={(e) => setLinkLabel(e.target.value)}
-              placeholder="Label (e.g. 'Instagram' or 'Design Work')"
-              style={{ width: "100%", padding: "9px 12px", fontSize: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, color: "#fff", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
-            />
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                value={newLink}
-                onChange={(e) => setNewLink(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addLink()}
-                placeholder="https://..."
-                style={{ flex: 1, padding: "9px 12px", fontSize: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, color: "#fff", outline: "none", fontFamily: "inherit" }}
-              />
-              <button onClick={addLink} disabled={!newLink.trim()} style={{ padding: "9px 14px", background: newLink.trim() ? G : "#111", border: "none", borderRadius: 7, color: newLink.trim() ? "#0a0800" : "#444", fontSize: 12, fontWeight: 700, cursor: newLink.trim() ? "pointer" : "not-allowed", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
-                <Plus className="w-3 h-3" /> Add
-              </button>
+        {/* Nova Sales Academy */}
+        <div style={{ borderRadius: 14, padding: 24, marginBottom: 20, background: `${GOLD}08`, border: `1px solid ${GOLD}25`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <GraduationCap className="w-5 h-5" style={{ color: GOLD }} />
+            <div>
+              <p style={{ color: GOLD, fontSize: 13, fontWeight: 700 }}>Nova Sales Academy</p>
+              <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 2 }}>Training becomes available once you're invited to a Nova Systems account.</p>
             </div>
           </div>
-          {portfolioLinks.length === 0 ? (
-            <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No links added yet. Add your portfolio, social media, or work samples.</p>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {portfolioLinks.map((link, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-                  <Link2 className="w-3 h-3" style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {link.label && link.label !== link.url && <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, marginBottom: 2 }}>{link.label}</p>}
-                    <a href={link.url} target="_blank" rel="noreferrer" style={{ color: "#C9A84C", fontSize: 12, wordBreak: "break-all" }}>{link.url}</a>
-                  </div>
-                  <button onClick={() => removeLink(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.2)", padding: 4, flexShrink: 0 }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#f87171")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.2)")}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <a href="/dashboard/academy" style={{ padding: "9px 16px", background: "rgba(255,255,255,0.06)", border: `1px solid ${GOLD}40`, borderRadius: 7, color: GOLD, fontSize: 12, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>
+            Open Academy
+          </a>
         </div>
-
-        {/* Documents from Isaac */}
-        {(application?.documents || []).length > 0 && (
-          <div style={{ borderRadius: 14, padding: 24, marginBottom: 20, background: "rgba(255,255,255,0.025)", border: `1px solid ${GOLD}25` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-              <FileText className="w-4 h-4" style={{ color: GOLD }} />
-              <p style={{ color: GOLD, fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase" }}>DOCUMENTS FROM ISAAC</p>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {(application.documents || []).map((doc, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 10 }}>
-                  <FileText className="w-4 h-4" style={{ color: GOLD, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>{doc.name || "Document"}</p>
-                    {doc.uploaded_at && <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 2 }}>{new Date(doc.uploaded_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>}
-                  </div>
-                  {doc.url && (
-                    <a href={doc.url} target="_blank" rel="noreferrer" style={{ padding: "6px 12px", background: `${GOLD}15`, border: `1px solid ${GOLD}35`, borderRadius: 6, color: GOLD, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
-                      View
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         <p style={{ textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 32 }}>
           Questions? Email <span style={{ color: GOLD }}>hello@nova-systems.app</span>

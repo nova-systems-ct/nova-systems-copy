@@ -13,7 +13,7 @@ import { requireStaff } from './_auth.js';
 //   sign     POST  public /sign/:contract_id submits the signature, generates + stores
 //                   the signed PDF, and notifies both client and Isaac — also scoped to one id
 
-const CONTRACT_TYPES = ['Digital Foundation', 'Growth Package', 'Custom'];
+const CONTRACT_TYPES = ['Digital Foundation', 'Growth Package', 'Custom', 'Sales Representative Agreement'];
 const ISAAC_EMAIL = 'Isaac_0427@icloud.com';
 const SIGN_LINK_EXPIRY_DAYS = 7;
 
@@ -32,6 +32,9 @@ async function handleCreate(req, res) {
   const client_email = sanitizeEmail(b.client_email);
   const contract_type = CONTRACT_TYPES.includes(b.contract_type) ? b.contract_type : '';
   const custom_notes = sanitize(b.custom_notes, 4000);
+  const application_id = sanitize(b.application_id, 100) || null; // links a working agreement to
+  // the candidate it belongs to (see api/intake.js's hiring workflow) — optional, every other
+  // contract type simply omits it.
 
   if (!client_name || !client_email) return res.status(400).json({ error: 'Client name and email are required' });
   if (!contract_type) return res.status(400).json({ error: 'A valid contract type is required' });
@@ -44,7 +47,7 @@ async function handleCreate(req, res) {
         apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/json', Prefer: 'return=representation',
       },
-      body: JSON.stringify({ client_name, client_email, contract_type, custom_notes, status: 'pending' }),
+      body: JSON.stringify({ client_name, client_email, contract_type, custom_notes, application_id, status: 'pending' }),
     });
     if (!r.ok) {
       console.error('[contracts:create] Supabase save error:', r.status, await r.text());
@@ -73,7 +76,7 @@ async function handleCreate(req, res) {
           text: [
             `Hi ${client_name},`,
             '',
-            'your Digital Foundation Agreement from Nova Systems is ready for your review and signature.',
+            `your ${contract_type} from Nova Systems is ready for your review and signature.`,
             '',
             `Please click the link below to read and sign your contract: ${signLink}`,
             '',

@@ -134,8 +134,11 @@ export default function Contracts() {
             </div>
 
             <div>
-              <label style={lbl}>Custom Notes {form.contract_type === 'Digital Foundation' ? '(optional)' : '(defines the scope and terms shown on the contract)'}</label>
-              <textarea rows={4} value={form.custom_notes} onChange={e => setForm(f => ({ ...f, custom_notes: e.target.value }))} style={{ ...inp, resize: 'vertical' }} placeholder={form.contract_type === 'Digital Foundation' ? 'Any notes for this client (not shown on the standard agreement)...' : 'Describe the scope, pricing, and terms for this agreement...'} />
+              {/* Digital Foundation and Sales Representative Agreement both have real canned
+                  sections (no {{custom_notes}} placeholder) — only Growth Package/Custom render
+                  whatever's typed here as the actual scope/terms text. */}
+              <label style={lbl}>Custom Notes {['Digital Foundation', 'Sales Representative Agreement'].includes(form.contract_type) ? '(optional)' : '(defines the scope and terms shown on the contract)'}</label>
+              <textarea rows={4} value={form.custom_notes} onChange={e => setForm(f => ({ ...f, custom_notes: e.target.value }))} style={{ ...inp, resize: 'vertical' }} placeholder={['Digital Foundation', 'Sales Representative Agreement'].includes(form.contract_type) ? 'Any notes for this client (not shown on the standard agreement)...' : 'Describe the scope, pricing, and terms for this agreement...'} />
             </div>
 
             <button

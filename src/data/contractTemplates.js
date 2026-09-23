@@ -60,6 +60,52 @@ const DIGITAL_FOUNDATION = {
   ],
 }
 
+// Sales Representative Agreement (2026-09-23) — used for the hiring workflow's "approved working
+// agreement" step (api/contracts.js, application_id-linked). Deliberately does NOT state a
+// commission percentage, classification (employee/contractor), or any other business fact this
+// codebase has no authorization to invent — those are covered by "your individual compensation
+// agreement" and flagged below as pending Isaac's/counsel's completion, per the master build
+// prompt's explicit rule against inventing missing business facts and its legal-matrix guidance
+// that generated text is not legal advice.
+const SALES_REP_AGREEMENT = {
+  title: 'Nova Systems — Sales Representative Working Agreement',
+  intro: 'This agreement is between Nova Systems LLC, Waterbury Connecticut and the representative named above, confirming the terms of their work representing Nova Systems.',
+  sections: [
+    {
+      heading: 'Role',
+      body: 'The representative will identify, qualify, and pursue prospective Nova Systems clients, following the standards and process covered in the Nova Sales Academy (Nova Fundamentals through Ethics, Commission Rules, and Final Assessment) and Nova’s current approved scripts, pricing, and positioning.',
+    },
+    {
+      heading: 'Relationship and Classification',
+      body: 'The specific nature of this working relationship (including employee vs. independent contractor classification, hours, and exclusivity) is defined in a separate, individually reviewed compensation and classification schedule provided to the representative — not stated generically here — and should be confirmed with Nova Systems and, where appropriate, independent counsel before relying on it.',
+    },
+    {
+      heading: 'Compensation',
+      body: 'Commission rates, payment triggers, and payout timing are governed entirely by the representative’s individual signed compensation schedule, not by this agreement or by anything stated informally. Commission is owed only on deals that are verified and, where applicable, actually collected — never on a verbal agreement alone. A representative may not self-approve, alter, or influence their own commission record.',
+    },
+    {
+      heading: 'Conduct and Ethics',
+      body: 'The representative agrees to Nova’s ethics standards covered in Academy Program 10: no false claims, invented results, fabricated urgency, or unapproved guarantees, and no pricing, timeline, or outcome promises beyond what Nova has actually approved for the relevant scope.',
+    },
+    {
+      heading: 'Data Protection and Confidentiality',
+      body: 'The representative agrees to handle all prospect and client data exclusively within Nova’s own systems — never exporting or sharing it to a personal device, personal account, or outside party — and to keep confidential any non-public information about Nova’s business, pricing, or clients encountered while representing Nova Systems.',
+    },
+    {
+      heading: 'Training Requirement',
+      body: 'Representative status depends on satisfactory completion of the applicable Nova Sales Academy programs, including any practical assessment a program requires, subject to Nova’s review. Completing training does not, by itself, guarantee continued engagement, a specific commission rate, or any particular classification.',
+    },
+    {
+      heading: 'Termination',
+      body: 'Either party may end this working relationship at any time, consistent with the classification and terms defined in the representative’s individual compensation and classification schedule referenced above.',
+    },
+    {
+      heading: 'Electronic Signature',
+      body: 'By signing below the representative agrees to all terms above. This electronic signature is legally binding under the Electronic Signatures in Global and National Commerce Act (E-SIGN Act) and Connecticut state law.',
+    },
+  ],
+}
+
 // No canned legal text was provided for these tiers yet — the specifics of
 // scope and pricing live in the custom_notes Isaac fills in when sending the
 // contract, and are rendered as their own section below the intro.
@@ -77,12 +123,13 @@ function customNotesTemplate(title) {
   }
 }
 
-export const CONTRACT_TYPES = ['Digital Foundation', 'Growth Package', 'Custom']
+export const CONTRACT_TYPES = ['Digital Foundation', 'Growth Package', 'Custom', 'Sales Representative Agreement']
 
 export const CONTRACT_TEMPLATES = {
   'Digital Foundation': DIGITAL_FOUNDATION,
   'Growth Package': customNotesTemplate('Nova Systems — Growth Package Agreement'),
   Custom: customNotesTemplate('Nova Systems — Custom Agreement'),
+  'Sales Representative Agreement': SALES_REP_AGREEMENT,
 }
 
 // Resolves a contract's template, substituting the {{custom_notes}} placeholder

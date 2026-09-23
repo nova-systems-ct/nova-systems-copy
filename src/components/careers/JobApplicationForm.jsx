@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { CheckCircle, ArrowRight, Eye, EyeOff, Upload, X } from "lucide-react";
+import { CheckCircle, Upload, X } from "lucide-react";
 
 const GOLD = "#C9A84C";
 const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
@@ -71,12 +71,6 @@ function Checkboxes({ value = [], onChange, options }) {
   );
 }
 
-async function hashPassword(pw) {
-  const data = new TextEncoder().encode(pw);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 export default function JobApplicationForm({ job }) {
   const fileRef = useRef(null);
   const focus = (e) => (e.target.style.borderColor = `${GOLD}70`);
@@ -85,8 +79,6 @@ export default function JobApplicationForm({ job }) {
   const initialFields = Object.fromEntries(job.fields.map((f) => [f.column, f.type === "checkboxes" ? [] : ""]));
   const [contact, setContact] = useState({ name: "", email: "", phone: "" });
   const [values, setValues] = useState(initialFields);
-  const [password, setPassword] = useState({ password: "", confirmPassword: "" });
-  const [showPw, setShowPw] = useState(false);
   const [portfolioLinks, setPortfolioLinks] = useState("");
   const [portfolioFile, setPortfolioFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -107,15 +99,8 @@ export default function JobApplicationForm({ job }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-
-    if (job.hasPassword) {
-      if (password.password.length < 8) { setError("Password must be at least 8 characters."); return; }
-      if (password.password !== password.confirmPassword) { setError("Passwords do not match."); return; }
-    }
-
     setLoading(true);
 
-    const password_hash = job.hasPassword ? await hashPassword(password.password) : "";
     const appId = crypto.randomUUID();
 
     let portfolio_file_base64 = "";
@@ -139,17 +124,17 @@ export default function JobApplicationForm({ job }) {
       id: appId,
       name: contact.name, email: contact.email, phone: contact.phone,
       position: job.title, status: "new",
-      password_hash,
       ...fieldValues,
       portfolio_links: job.hasPortfolio ? portfolioLinks : (fieldValues.portfolio_links || ""),
       portfolio_file_name,
       submittedAt: new Date().toISOString(),
     };
 
-    const existing = JSON.parse(localStorage.getItem("nova_applications") || "[]");
-    existing.unshift(payload);
-    localStorage.setItem("nova_applications", JSON.stringify(existing));
-
+    // Repair task (2026-09-23): this used to also write the submission into
+    // localStorage('nova_applications') — a second, purely local, per-browser copy that nothing
+    // reads anymore now that Jobs.jsx/JobDetail.jsx/ApplicationStatus.jsx all fetch real data
+    // from the server. The real Supabase applications table (written by the request below) is
+    // the only copy that exists now.
     try {
       const res = await fetch("/api/intake?action=submit-application", {
         method: "POST",
@@ -179,16 +164,12 @@ export default function JobApplicationForm({ job }) {
           APPLICATION RECEIVED
         </p>
         <h3 className="text-2xl font-black text-white mb-4">You're in the pipeline.</h3>
-        <p className="text-sm leading-relaxed mb-8 max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
+        <p className="text-sm leading-relaxed mb-2 max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.4)" }}>
           Isaac will personally review your application. A confirmation email was sent to <strong style={{ color: "rgba(255,255,255,0.6)" }}>{contact.email}</strong>.
         </p>
-        {job.hasPassword && (
-          <a href="/application-status"
-            className="inline-flex items-center gap-2 text-xs font-bold tracking-wider uppercase px-6 py-3 rounded-lg hover:opacity-85 transition-all"
-            style={{ background: G, color: "#0a0800" }}>
-            CHECK APPLICATION STATUS <ArrowRight className="w-3.5 h-3.5" />
-          </a>
-        )}
+        <p className="text-xs leading-relaxed max-w-md mx-auto" style={{ color: "rgba(255,255,255,0.25)" }}>
+          If your application moves forward, you&apos;ll receive a separate email invitation with a real Nova Systems account to track your status and access training.
+        </p>
       </div>
     );
   }
@@ -204,34 +185,9 @@ export default function JobApplicationForm({ job }) {
           <input required type="tel" value={contact.phone} onChange={setContactField("phone")} style={inp} placeholder="+1 (860) 000-0000" onFocus={focus} onBlur={blur} />
         </Field>
       </div>
-      <Field label={`Email Address *${job.hasPassword ? " (used to log in to check status)" : ""}`}>
+      <Field label="Email Address *">
         <input required type="email" value={contact.email} onChange={setContactField("email")} style={inp} placeholder="jane@email.com" onFocus={focus} onBlur={blur} />
       </Field>
-
-      {job.hasPassword && (
-        <>
-          <SectionDivider title="Create Account Password" />
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: -10, lineHeight: 1.6 }}>
-            This password lets you log in at <span style={{ color: GOLD }}>nova-systems.app/application-status</span> to track your application status.
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <Field label="Password * (min 8 characters)">
-              <div style={{ position: "relative" }}>
-                <input required type={showPw ? "text" : "password"} minLength={8} value={password.password}
-                  onChange={(e) => setPassword((p) => ({ ...p, password: e.target.value }))} style={{ ...inp, paddingRight: 44 }} placeholder="••••••••" onFocus={focus} onBlur={blur} />
-                <button type="button" onClick={() => setShowPw(!showPw)}
-                  style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.3)", padding: 0 }}>
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </Field>
-            <Field label="Confirm Password *">
-              <input required type={showPw ? "text" : "password"} value={password.confirmPassword}
-                onChange={(e) => setPassword((p) => ({ ...p, confirmPassword: e.target.value }))} style={inp} placeholder="••••••••" onFocus={focus} onBlur={blur} />
-            </Field>
-          </div>
-        </>
-      )}
 
       <SectionDivider title="Position Details" />
       {job.fields.map((f) => (
