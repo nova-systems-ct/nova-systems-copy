@@ -66,6 +66,10 @@ const Referrals = lazy(() => import('./pages/dashboard/Referrals'));
 const IntakeForms = lazy(() => import('./pages/dashboard/IntakeForms'));
 const WaveOne = lazy(() => import('./pages/dashboard/WaveOne'));
 const Contracts = lazy(() => import('./pages/dashboard/Contracts'));
+const Academy = lazy(() => import('./pages/dashboard/Academy'));
+const AcademyProgram = lazy(() => import('./pages/dashboard/AcademyProgram'));
+const AcademyAdmin = lazy(() => import('./pages/dashboard/AcademyAdmin'));
+const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate'));
 const RequirePermission = lazy(() => import('./components/dashboard/RequirePermission'));
 
 function RouteFallback() {
@@ -138,7 +142,12 @@ function App() {
               <Route path="portfolio" element={<RequirePermission permission="growth.view"><Portfolio /></RequirePermission>} />
               <Route path="integrations" element={<RequirePermission permission="admin.view"><Integrations /></RequirePermission>} />
               <Route path="team" element={<RequirePermission permission="admin.view"><Team /></RequirePermission>} />
+              <Route path="academy" element={<RequirePermission permission="academy.view"><Academy /></RequirePermission>} />
+              <Route path="academy/admin" element={<RequirePermission permission="admin.view"><AcademyAdmin /></RequirePermission>} />
+              <Route path="academy/:id" element={<RequirePermission permission="academy.view"><AcademyProgram /></RequirePermission>} />
             </Route>
+
+            <Route path="/verify-certificate" element={<VerifyCertificate />} />
 
             <Route path="*" element={<PageNotFound />} />
           </Routes>

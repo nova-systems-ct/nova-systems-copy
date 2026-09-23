@@ -330,6 +330,79 @@ export function generateIntakeSummaryPDF(data) {
   return doc
 }
 
+// Nova Sales Academy certificate — deliberately NOT the standard header()/footer() invoice-style
+// layout; this is meant to look like an internal credential/diploma, landscape-oriented. Only
+// called after the server (api/academy.js's issue-certificate action) has already verified
+// eligibility and minted the real certificate_number/verification_code — this function just
+// renders data that's already been verified, it never decides eligibility itself.
+export function generateCertificatePDF({ holderName, programTitle, certificateNumber, verificationCode, issuedAt }) {
+  const doc = new jsPDF({ orientation: 'landscape' })
+  const W = 297, H = 210
+
+  doc.setFillColor(10, 10, 10)
+  doc.rect(0, 0, W, H, 'F')
+  doc.setDrawColor(...GOLD)
+  doc.setLineWidth(1.2)
+  doc.rect(8, 8, W - 16, H - 16)
+  doc.setLineWidth(0.4)
+  doc.rect(12, 12, W - 24, H - 24)
+
+  doc.setTextColor(...GOLD)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.text('NOVA SYSTEMS LLC', W / 2, 34, { align: 'center' })
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.text('nova-systems.app  ·  Waterbury, Connecticut', W / 2, 41, { align: 'center' })
+
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(26)
+  doc.text('CERTIFICATE OF COMPLETION', W / 2, 66, { align: 'center' })
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(11)
+  doc.setTextColor(200, 200, 200)
+  doc.text('This certifies that', W / 2, 84, { align: 'center' })
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(22)
+  doc.setTextColor(...GOLD)
+  doc.text(String(holderName || 'Nova Systems Representative'), W / 2, 100, { align: 'center' })
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(11)
+  doc.setTextColor(200, 200, 200)
+  doc.text('has successfully completed the Nova Sales Academy program', W / 2, 114, { align: 'center' })
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(16)
+  doc.setTextColor(255, 255, 255)
+  doc.text(String(programTitle || ''), W / 2, 128, { align: 'center' })
+
+  const issued = issuedAt ? new Date(issuedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(10)
+  doc.setTextColor(180, 180, 180)
+  doc.text(`Issued ${issued}`, W / 2, 140, { align: 'center' })
+
+  doc.setDrawColor(...GOLD)
+  doc.setLineWidth(0.3)
+  doc.line(W / 2 - 50, 168, W / 2 + 50, 168)
+  doc.setFontSize(9)
+  doc.setTextColor(...GOLD)
+  doc.text('Isaac Nova, Founder — Nova Systems LLC', W / 2, 175, { align: 'center' })
+
+  doc.setFontSize(8)
+  doc.setTextColor(130, 130, 130)
+  doc.text(`Certificate No. ${certificateNumber || ''}`, W / 2, 186, { align: 'center' })
+  doc.text(`Verification code ${verificationCode || ''} — verify at nova-systems.app/verify-certificate`, W / 2, 192, { align: 'center' })
+  doc.setFontSize(7)
+  doc.text('This is a Nova-issued internal credential, not an independent third-party accreditation.', W / 2, 200, { align: 'center' })
+
+  return doc
+}
+
 export function generateInvoicePDF({ invoiceNumber, clientName, clientEmail, lineItems, subtotal, tax, total, dueDate, notes }) {
   const doc = new jsPDF()
   header(doc, `Invoice ${invoiceNumber}`)
