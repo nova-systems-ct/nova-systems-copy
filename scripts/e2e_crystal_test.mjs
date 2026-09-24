@@ -100,6 +100,13 @@ async function main() {
     console.error('Status:', probe.status, await probe.text());
     process.exit(1);
   }
+  const evidenceProbe = await adminFetch('/rest/v1/crystal_service_catalog?select=evidence_requirements&limit=1');
+  if (!evidenceProbe.ok) {
+    console.error('crystal_service_catalog.evidence_requirements is not queryable —');
+    console.error('supabase/crystal-evidence-requirements-migration-standalone.sql has not been applied yet.');
+    console.error('Status:', evidenceProbe.status, await evidenceProbe.text());
+    process.exit(1);
+  }
 
   const { default: handler } = await import('../api/client.js');
   const suffix = Date.now();
@@ -305,6 +312,54 @@ async function main() {
       const res = mockRes();
       await handler(req, res);
       log('EVIDENCE PRESENT: the assigned worker can now mark the job complete', res.statusCode === 200 && !!res._json?.completion, `status=${res.statusCode}`);
+    }
+
+    // ---- 10b. CONFIGURABLE EVIDENCE: a service configured checklist-only can complete with NO
+    // photo at all — "an uploaded after-photo alone does not prove completion... make evidence
+    // requirements configurable by service instead of requiring an after-photo for every
+    // conceivable job." Setup uses direct inserts for the service/job (the full quote->estimate
+    // booking flow is already proven above) to isolate exactly this behavior. ----
+    let checklistOnlyServiceId = null, checklistOnlyJobId = null;
+    {
+      const svcRes = await adminFetch('/rest/v1/crystal_service_catalog', {
+        method: 'POST', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ organization_id: orgAId, name: 'Lawn Mowing (checklist-only)', evidence_requirements: { requires_checklist_complete: true, requires_after_photo: false } }),
+      });
+      [checklistOnlyServiceId] = (await svcRes.json()).map((r) => r.id);
+      cleanup.push(() => adminFetch(`/rest/v1/crystal_service_catalog?id=eq.${checklistOnlyServiceId}`, { method: 'DELETE' }));
+      const jobRes = await adminFetch('/rest/v1/crystal_jobs', {
+        method: 'POST', headers: { Prefer: 'return=representation' },
+        body: JSON.stringify({ organization_id: orgAId, customer_id: customerId, service_catalog_id: checklistOnlyServiceId, status: 'assigned' }),
+      });
+      [checklistOnlyJobId] = (await jobRes.json()).map((r) => r.id);
+      cleanup.push(() => adminFetch(`/rest/v1/crystal_jobs?id=eq.${checklistOnlyJobId}`, { method: 'DELETE' }));
+      await adminFetch('/rest/v1/crystal_job_assignments', { method: 'POST', body: JSON.stringify({ job_id: checklistOnlyJobId, worker_user_id: worker1.id }) });
+    }
+    {
+      const req = mockReq({ method: 'POST', query: { resource: 'crystal', op: 'jobs' }, headers: { authorization: `Bearer ${opsSession.access_token}` }, body: { action: 'add-checklist-item', organization_id: orgAId, id: checklistOnlyJobId, label: 'Mow front and back' } });
+      const res = mockRes();
+      await handler(req, res);
+      log('Checklist item added to the checklist-only-service job', res.statusCode === 200, `status=${res.statusCode}`);
+    }
+    {
+      const req = mockReq({ method: 'POST', query: { resource: 'crystal', op: 'jobs' }, headers: { authorization: `Bearer ${worker1Session.access_token}` }, body: { action: 'complete', organization_id: orgAId, id: checklistOnlyJobId } });
+      const res = mockRes();
+      await handler(req, res);
+      log('CONFIGURABLE EVIDENCE: completion is refused while a required checklist item is still incomplete (even with zero photo requirement)', res.statusCode === 400, `status=${res.statusCode}`);
+    }
+    {
+      const itemsRes = await adminFetch(`/rest/v1/crystal_job_checklist_items?job_id=eq.${checklistOnlyJobId}&select=id`);
+      const [item] = await itemsRes.json();
+      const req = mockReq({ method: 'POST', query: { resource: 'crystal', op: 'jobs' }, headers: { authorization: `Bearer ${worker1Session.access_token}` }, body: { action: 'checklist-item', organization_id: orgAId, id: checklistOnlyJobId, item_id: item.id } });
+      const res = mockRes();
+      await handler(req, res);
+      log('Checklist item marked complete', res.statusCode === 200, `status=${res.statusCode}`);
+    }
+    {
+      const req = mockReq({ method: 'POST', query: { resource: 'crystal', op: 'jobs' }, headers: { authorization: `Bearer ${worker1Session.access_token}` }, body: { action: 'complete', organization_id: orgAId, id: checklistOnlyJobId } });
+      const res = mockRes();
+      await handler(req, res);
+      log('CONFIGURABLE EVIDENCE: with the checklist done and NO after-photo required by this service\'s policy, completion succeeds with zero photos', res.statusCode === 200 && !!res._json?.completion, `status=${res.statusCode} body=${JSON.stringify(res._json)}`);
     }
 
     // ---- 11. Completion approved (customer side, staff-recorded) -> billing -> feedback ----

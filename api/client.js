@@ -2769,7 +2769,15 @@ async function handleCrystalCatalog(req, res) {
       currency: sanitize(b.currency, 10) || 'USD',
       service_areas: Array.isArray(b.service_areas) ? b.service_areas.map((a) => sanitize(String(a), 50)) : [],
       active: b.active !== false,
+      // Configurable per-service completion evidence policy — {} (unset) makes the 'complete'
+      // action fall back to the SAFEST default (checklist + photo required), never to nothing.
+      evidence_requirements: b.evidence_requirements && typeof b.evidence_requirements === 'object' ? {
+        requires_checklist_complete: b.evidence_requirements.requires_checklist_complete !== false,
+        requires_after_photo: b.evidence_requirements.requires_after_photo !== false,
+        min_after_photos: Number.isFinite(Number(b.evidence_requirements.min_after_photos)) ? Number(b.evidence_requirements.min_after_photos) : 1,
+      } : undefined,
     };
+    if (record.evidence_requirements === undefined) delete record.evidence_requirements;
     if (!record.name) return res.status(400).json({ error: 'name is required' });
     if (id) {
       const r = await sbWrite(`crystal_service_catalog?id=eq.${encodeURIComponent(id)}`, 'PATCH', { ...record, version: sanitize(b.version, 10) ? Number(b.version) + 1 : undefined });
@@ -3004,6 +3012,7 @@ async function handleCrystalJobs(req, res, caller) {
       estimate_id: estimateId,
       customer_id: quote.customer_id,
       property_id: quote.property_id,
+      service_catalog_id: quote.service_catalog_id || null, // denormalized for completion-evidence lookup
       scheduled_at: sanitize(b.scheduled_at, 40) || null,
       duration_minutes: Number.isFinite(Number(b.duration_minutes)) ? Number(b.duration_minutes) : null,
       travel_notes: sanitize(b.travel_notes, 2000) || null,
@@ -3083,16 +3092,39 @@ async function handleCrystalJobs(req, res, caller) {
 
   if (action === 'complete') {
     // "AI cannot declare physical work completed without authorized evidence" — enforced here, not
-    // just described: completion requires a real assigned worker AND at least one 'after' photo
-    // already on file. No evidence, no completion, regardless of who's asking.
+    // just described: completion requires a real assigned worker AND real evidence. What counts
+    // as "real evidence" is CONFIGURABLE per service (crystal_service_catalog.evidence_requirements)
+    // rather than one blanket "after photo required for everything" rule — a service with no
+    // configured policy falls back to the SAFEST default (checklist complete + at least one after
+    // photo), never to "nothing required." An approved checklist item that's still marked
+    // incomplete blocks completion just as much as a missing photo does, when the service requires it.
     const isAssigned = await isWorkerAssignedToJob(caller.id, id);
     if (!isAssigned) return res.status(403).json({ error: 'Only a worker assigned to this job can mark it complete' });
-    const mediaRes = await sbSelect(`crystal_job_media?job_id=eq.${encodeURIComponent(id)}&kind=eq.after&limit=1`);
-    const mediaRows = mediaRes.ok ? await mediaRes.json() : [];
-    if (!mediaRows.length) return res.status(400).json({ error: 'At least one "after" photo is required as evidence before a job can be marked complete' });
     const jobRes = await sbSelect(`crystal_jobs?id=eq.${encodeURIComponent(id)}&limit=1`);
     const jobRows = jobRes.ok ? await jobRes.json() : [];
     if (!jobRows.length) return res.status(404).json({ error: 'Job not found' });
+    const job = jobRows[0];
+
+    let requirements = { requires_checklist_complete: true, requires_after_photo: true, min_after_photos: 1 }; // safe default
+    if (job.service_catalog_id) {
+      const svcRes = await sbSelect(`crystal_service_catalog?id=eq.${encodeURIComponent(job.service_catalog_id)}&limit=1`);
+      const svcRows = svcRes.ok ? await svcRes.json() : [];
+      const configured = svcRows[0]?.evidence_requirements;
+      if (configured && Object.keys(configured).length > 0) requirements = { requires_checklist_complete: true, requires_after_photo: true, min_after_photos: 1, ...configured };
+    }
+
+    if (requirements.requires_checklist_complete) {
+      const checklistRes = await sbSelect(`crystal_job_checklist_items?job_id=eq.${encodeURIComponent(id)}&required=eq.true&completed=eq.false&limit=1`);
+      const incompleteRows = checklistRes.ok ? await checklistRes.json() : [];
+      if (incompleteRows.length) return res.status(400).json({ error: 'This service requires all required checklist items to be completed before the job can be marked complete' });
+    }
+    if (requirements.requires_after_photo) {
+      const minPhotos = Number.isFinite(Number(requirements.min_after_photos)) ? Number(requirements.min_after_photos) : 1;
+      const mediaRes = await sbSelect(`crystal_job_media?job_id=eq.${encodeURIComponent(id)}&kind=eq.after`);
+      const mediaRows = mediaRes.ok ? await mediaRes.json() : [];
+      if (mediaRows.length < minPhotos) return res.status(400).json({ error: `This service requires at least ${minPhotos} "after" photo(s) as evidence before a job can be marked complete` });
+    }
+
     const completionRes = await sbWrite('crystal_completion_reviews', 'POST', { job_id: id, completed_by: caller.id, completion_notes: sanitize(b.notes, 2000) || null });
     if (!completionRes.ok) {
       const text = await completionRes.text();
