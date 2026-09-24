@@ -1,105 +1,153 @@
 # Nova Product Build — State Checkpoint
 
-Last updated: 2026-09-23, after commit `69fef38` plus the login-path verification work below
-(pending commit). Written per the master execution prompt's §23 requirement to maintain a real,
-resumable checkpoint rather than claim unattended progress across a session boundary this
-environment cannot actually cross.
+Last updated: 2026-09-23, commit `9af43eb`. Written per the master execution prompt's §23
+requirement to maintain a real, resumable checkpoint rather than claim unattended progress across
+a session boundary this environment cannot actually cross.
 
 ## Where this build actually is
 
 This is a genuinely large scope — 24 sections describing what amounts to a full multi-tenant
 SaaS platform. It has not been built in one pass, and claiming otherwise would violate the master
-prompt's own explicit instructions ("do not return... a new list of future tasks" as a substitute
-for implementation, but also never claim completion without evidence). See
-`docs/requirement-matrix.md` for the full module-by-module status. In short: the identity/tenancy
-foundation, the dashboard shell, the Sales Academy, and the hiring pipeline are real and either
-live-verified or locally-verified-and-waiting-on-owner-setup. The Audit engine, Wave One (as
-actually specified in §10), voice agents, CRM pipelines, Installation Center, Crystal, Zion
-Studio, marketing automation, Integration Center, and durable worker infrastructure have not been
-started.
+prompt's own explicit instructions. See `docs/requirement-matrix.md` for the full module-by-module
+status (source of truth; this document is the narrative checkpoint, not a duplicate of it).
 
-## This session's real work (2026-09-23)
+As of this update: identity/tenancy, the dashboard shell, Sales Academy, hiring pipeline, shared
+CRM foundations (businesses/contacts/deals), the product catalog, the order lifecycle, the full
+Nova Audit domain (cases/evidence/findings/recommendations/reports/deliveries/outcomes, with a
+real, independently unit-tested deadline clock), and Zion Studio (journal/facts/ideas/scripts/
+production/review) are all real, tested code. Five migration files are written, safety-reviewed,
+and NOT yet applied to production (this environment has no DDL access — never has, this whole
+project). Three storage buckets are specified and NOT yet created (blocked by this session's own
+permission system, not bypassed). Voice/phone infrastructure, the Installation Center UI, Crystal,
+marketing automation, the Integration Center/Approval Inbox, and durable worker infrastructure
+have not been started.
 
-1. **Restored confidence in the login path at the system level** — not by re-asserting an
-   unverified theory, but by re-checking from scratch per the master prompt's explicit
-   instruction not to assume the earlier VITE_SUPABASE_URL diagnosis was the only cause:
-   - Confirmed (again) production URL/CSP/anon-key are all correct.
-   - Wrote `scripts/e2e_login_path_test.mjs` (new, permanent, re-runnable) — 12/12 passing
-     against the live database: wrong-password rejection, real session issuance, session
-     persistence, sign-out, a user with zero organization memberships provably has zero access
-     (via `is_org_member()`/`has_permission()` called as that real user, not service-role), a
-     *revoked* membership (`status != 'active'`) also provably has zero access despite a real
-     row existing, and a control case (active membership) passes both checks — proving the
-     revocation checks aren't just always returning false.
-   - Ran a real Playwright browser session against **live production**
-     (`https://nova-systems.app/login`) with a throwaway owner-role test account: real sign-in
-     reached `/dashboard`, rendered real content, survived a page refresh without bouncing to
-     `/login`, an unauthenticated direct hit to `/dashboard/admin` correctly redirected to
-     `/login`, and zero console errors throughout. This is real, live, browser-level evidence,
-     not a mocked test.
-   - **Conclusion**: the login/authorization system itself works correctly, end to end, for any
-     correctly provisioned account. Isaac's specific inability to log in is a separate, already
-     root-caused issue: his `isaac@nova-systems.app` address is rejected by Supabase's own
-     `/auth/v1/recover` endpoint (`email_address_invalid`) for reasons only visible in the
-     Supabase Dashboard's Auth settings — not a DNS problem (the domain has a valid MX record),
-     not a code problem, not fixable from this environment. His `isaac_0427@icloud.com` address
-     successfully received a real reset email in an earlier session.
-2. **Wrote `docs/requirement-matrix.md`** — module-level status against verified evidence, per
-   §3's explicit requirement.
-3. **Wrote this checkpoint document** — per §23's explicit requirement.
+## How schema-dependent work is being tested (no Docker/local Postgres in this environment)
+
+The master prompt requires testing schema-dependent features against an isolated local/test
+database rather than production. This environment has neither Docker nor a local Postgres
+install (checked directly — `docker`, `psql`, `postgres`, `pg_ctl` all absent). The real substitute
+used throughout this session:
+
+- **Schema/constraint validation**: `pg-mem`, an in-process Postgres-compatible engine, actually
+  executes every new migration's DDL and proves real constraint behavior (FK rejection, CHECK
+  rejection, UNIQUE rejection) — not just "the SQL parses." One real, confirmed pg-mem-specific
+  limitation was found and documented (it does not implement standard SQL's NULL-satisfies-CHECK
+  semantics) — isolated with a standalone reproduction before being treated as a pg-mem quirk
+  rather than a schema defect, and worked around in the *tests*, never in the schema itself.
+  Scripts: `scripts/validate_crm_order_audit_schema.mjs` (8/8), `scripts/validate_zion_schema.mjs`
+  (6/6).
+- **Pure business logic**: the Audit deadline clock (`api/_auditClock.js`) has zero database
+  dependency and is unit-tested directly — `scripts/unit_audit_clock_test.mjs`, 13/13, including a
+  real business-hours weekend-skip case and the "a pause extends the deadline by exactly its own
+  duration" invariant the master prompt explicitly requires.
+- **Live authorization/integration proof**: real e2e scripts (`scripts/e2e_crm_order_audit_test.mjs`,
+  `scripts/e2e_zion_studio_test.mjs`, plus the pre-existing `e2e_academy_auth_test.mjs`/
+  `e2e_hiring_workflow_test.mjs`) run against the actual Supabase project using real throwaway
+  orgs/users, cleaned up after. All four currently fail fast with a clear "table not found" error
+  — an honest, correct result, since none of their target migrations have been applied yet. This
+  is not being reported as a pass.
+
+Every pre-existing permanent regression suite (org isolation 8/8, API client auth 22/22, login
+path 12/12) has been re-run after every change this session and still passes — no regressions.
+
+## This session's real work (2026-09-23, chronological)
+
+1. **Login path re-verified from scratch**, not re-asserted — production URL/CSP/anon-key
+   re-checked; `scripts/e2e_login_path_test.mjs` (new, 12/12 live) plus a real Playwright run
+   against live production proving the system itself works end to end. Isaac's own account issue
+   (Supabase rejecting `isaac@nova-systems.app` for recovery, `email_address_invalid`, not a DNS
+   problem) is unchanged and still owner-blocked.
+2. **Isaac's iCloud membership directly verified**, per explicit instruction that a working
+   reset path alone is insufficient proof: queried `organization_members` for
+   `isaac_0427@icloud.com` and confirmed a real, pre-existing `nova_super_admin` row (created in
+   the original Stage 4 bootstrap, not created by this check) on the real Nova Systems org.
+   Nothing to fix — the established authorization process already produced the correct result.
+3. **Vault signed-link lifetime corrected**, per explicit instruction not to treat a long-lived
+   bearer link as equivalent to a permission check at the moment of access: re-verified that
+   invoices/contracts already email the PDF as a direct attachment (never a link to this bucket),
+   dropped the default signed-URL lifetime from 30 days to 5 minutes, stopped persisting any URL
+   at upload time at all, and wired `NovaVault.jsx` to mint a fresh link on every view/download
+   click via the existing `resign` action.
+4. **Shared CRM/Order foundations** (§6/§12): businesses (search-before-create identity
+   resolution, ambiguous matches surfaced, never auto-merged), contacts, deals (full pipeline +
+   stage history), a versioned product catalog (seeded with Nova Audit Digital/360 and a
+   separately-versioned `communications-crm-bundle` entry — reconciling the Wave One naming
+   collision at the data-model level without touching the legacy `WaveOne.jsx` page), and the full
+   17-state order lifecycle (unapproved product pricing is never invented). Every handler checks
+   the caller's real permission on the *specific* organization via `has_permission()` called with
+   the caller's own token — real object-level authorization, not the older invoices/referrals
+   handlers' "any staff with the permission string, any org" gap.
+5. **Nova Audit workflow** (§8/§9): the full case/evidence/finding/recommendation/report/
+   delivery/outcome domain, immutable approved report versions, and a real, pure, independently
+   tested deadline clock distinguishing waiting_for_client/queue/active/at_risk/overdue/
+   reviewer_wait/paused/completed exactly as specified.
+6. **Zion Studio** (§16): journal (private-by-default, author-scoped), facts (unconfirmed until
+   Isaac explicitly confirms — enforced, not just described), ideas (can only cite already-
+   confirmed facts), scripts, storyboards, videos (full field list from §16), review/approval
+   (approve/request-changes/reject/schedule). **A real authorization gap was found and fixed
+   before this shipped**: the first draft gated every action at "any active staff member," which
+   would have let a low-privilege role reach Nova's real content tooling — fixed to require
+   `growth.view` for everything except the ownership-scoped journal/facts, and covered by a test
+   written specifically to prove the fix, not just that the code runs.
+7. **Requirement matrix and this checkpoint updated** to reflect all of the above against actual
+   evidence — not narrated separately from the code that backs each claim.
 
 ## What was deliberately NOT attempted this session
 
-Sections 8-19 (Audit engine, Wave One-as-specified, voice agents, CRM, Installation Center,
-Crystal, Zion Studio, marketing automation, Integration Center, durable workers) were not
-started. Each is a substantial, independent domain — the Audit engine alone needs a real schema
-for cases/evidence/findings/recommendations/reports that doesn't share much structure with
-anything currently in this database. Starting any of them shallowly in the remaining space of one
-session would produce exactly the "scaffold with no real domain logic" the master prompt
-explicitly prohibits. Real progress on the next module needs its own properly-scoped session.
+Voice/phone infrastructure (§11) needs a real hosted persistent-connection runtime decision before
+any code is worth writing — Vercel's serverless functions cannot host live call audio, and no
+telephony provider is configured. The Installation Center's actual UI/workflow (sandbox tests,
+activation authority, pause/offboard, the two-independent-test-org isolation proof) is not built —
+only its underlying data model (product catalog + order lifecycle) is. Crystal, marketing
+automation, the unified Integration Center/Approval Inbox, and durable worker/queue infrastructure
+are all still zero-implementation. Starting any of these shallowly would produce exactly the
+"scaffold with no real domain logic" the master prompt prohibits — each needs its own properly-
+scoped pass.
 
 ## Exact next task
 
-Per §23's dependency order, item 2 ("shared tenancy, data contracts, event/job foundations,
-private storage and test database") is largely already satisfied by the existing
-organizations/organization_members/permissions foundation (R03) — the one genuinely open piece of
-"foundations" work is **private storage** (R09: the three missing buckets) and an **event/job
-foundation** (R19: this app has zero worker/queue infrastructure today, which sections 8, 10, 11,
-16, and 17 all depend on for anything that can't complete inside one HTTP request).
-
-Recommended next session's concrete task: **resolve R09 (buckets) and R02 (Isaac's account) with
-Isaac directly** — both are pure owner-action blockers with nothing left for this environment to
-investigate — then begin **R10, the Nova Audit domain model** (§8), since it's the next
-dependency-ordered module (§23 step 4) and the current `/business-diagnostic` page is
-marketing-copy-only with no real backing schema.
+Per §23's dependency order and the requirement matrix's own "not started" list, the next
+dependency-ready module that does NOT require live provider credentials or a hosting decision is
+the **Integration Center registry** (§19) — a real table of provider/organization/connection-state/
+last-test/error records, with statuses exactly as specified (`not implemented` / `not connected` /
+`authorization required` / `connected` / `operation-tested` / `degraded` / `disconnected`), and the
+**Approval Inbox** (§19) unifying the review/approval pattern already built three times
+independently this session (Audit report approval, Zion video approval, and implicitly order
+acceptance) into one real, reusable service. Both are buildable and fully locally-testable right
+now, exactly like everything else in this checkpoint.
 
 ## Owner-action items currently blocking further automated progress
 
-1. **Run two SQL migration files** in the Supabase SQL Editor (both reviewed for safety — every
+1. **Run five SQL migration files** in the Supabase SQL Editor (all reviewed for safety — every
    statement is additive, `IF NOT EXISTS`/`ON CONFLICT`, zero destructive statements):
    - `supabase/academy-migration-standalone.sql`
    - `supabase/hiring-workflow-migration-standalone.sql`
-2. **Create three Storage buckets** (this session's own permission system blocked me from doing
-   this directly — flagged as a shared-resource modification, not bypassed):
+   - `supabase/crm-order-audit-migration-standalone.sql`
+   - `supabase/zion-studio-migration-standalone.sql`
+   - (the equivalent sections are also appended to the cumulative `supabase/schema-update.sql`
+     for the historical record, but the four standalone files above are the ones meant to be run)
+2. **Create three Storage buckets** (this session's own permission system blocked direct creation
+   — flagged as a shared-resource modification, not bypassed):
    - `portfolios` — **private**, ~5MB file size limit (resumes/application uploads)
    - `nova-vault` — **private**, ~10MB file size limit (invoices, signed contracts, generated
-     documents — this bucket is used by `api/_vaultStorage.js` and currently constructs a public
-     URL that will need to become a signed URL once the bucket is actually private; that specific
-     follow-up code change has NOT been made yet and should happen in the same session as bucket
-     creation, not before)
+     documents — code already updated to use short-lived on-demand signed URLs, not a permanent
+     public link, so this is purely bucket creation now, no further code change needed first)
    - `portfolio` — **public**, ~5MB file size limit (marketing case-study images, intentionally
      public)
 3. **Investigate `isaac@nova-systems.app`'s Supabase Auth rejection** in Dashboard →
-   Authentication → Email / URL Configuration, or use `isaac_0427@icloud.com` (already has a
-   working reset path) going forward.
+   Authentication → Email / URL Configuration, or use `isaac_0427@icloud.com` (confirmed correct
+   membership, already has a working reset path) going forward.
 4. **Formally approve or reject the 80% Academy quiz-passing threshold** — currently a proposed
-   default in `api/academy.js`'s `SCORE_THRESHOLD_PERCENT` constant.
-5. **Reconcile the "Wave One" name collision** (R06 vs. R11 in the requirement matrix) before any
-   work on §10 begins — the existing `WaveOne.jsx` page and the master prompt's Wave One
-   communications bundle are different things sharing a name.
-6. **Supply Zion's existing character reference assets** before any Zion Studio rendering work
-   can begin (§16 explicitly requires this — building a new character would violate the
-   instruction to preserve the existing one).
+   default in `api/academy.js`'s `SCORE_THRESHOLD_PERCENT` constant. Does not block other work.
+5. **Supply Zion's existing character reference assets** before the render step can produce
+   anything — every other part of the Studio is built and works without them.
+6. **A hosting/runtime decision for voice/phone and durable workers** (§11/§20) before any of
+   that code is worth writing — current architecture is 100% short-lived Vercel serverless
+   functions, which cannot host live call audio or long-running background jobs.
 
-After the SQL files run, `node scripts/e2e_academy_auth_test.mjs` and
-`node scripts/e2e_hiring_workflow_test.mjs` give real, immediate pass/fail evidence for R07/R08.
+After the SQL files run: `node scripts/e2e_academy_auth_test.mjs`,
+`node scripts/e2e_hiring_workflow_test.mjs`, `node scripts/e2e_crm_order_audit_test.mjs`, and
+`node scripts/e2e_zion_studio_test.mjs` each give real, immediate, live pass/fail evidence for
+their respective domains — none of this has been claimed as passing against production, and won't
+be until these actually run and are reported honestly either way.
