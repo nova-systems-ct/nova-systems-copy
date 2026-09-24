@@ -1,8 +1,8 @@
 # Nova Product Build — State Checkpoint
 
-Last updated: 2026-09-24, commit pending (post-Crystal). Written per the master execution
-prompt's §23 requirement to maintain a real, resumable checkpoint rather than claim unattended
-progress across a session boundary this environment cannot actually cross.
+Last updated: 2026-09-24, commit pending (post-Marketing-Automation). Written per the master
+execution prompt's §23 requirement to maintain a real, resumable checkpoint rather than claim
+unattended progress across a session boundary this environment cannot actually cross.
 
 **Canonical specification**: [`NOVA_PRODUCT_ONLY_MASTER_EXECUTION_PROMPT.md`](../NOVA_PRODUCT_ONLY_MASTER_EXECUTION_PROMPT.md)
 (recovered 2026-09-24 verbatim from this session's own saved transcript after a prior context
@@ -207,6 +207,31 @@ path 12/12) has been re-run after every change this session and still passes —
     proves the two explicit isolation requirements Isaac asked for: cross-org separation and
     worker-level isolation (an unassigned worker sees nothing in "mine," cannot self-assign, and
     cannot complete a job they're not on).
+15. **Marketing automation built (§17, restored scope) — with a real mid-build correction worth
+    recording**: the first draft of this migration created brand-new `marketing_brands`/
+    `marketing_content_items`/`marketing_platform_posts` tables. Before applying it, the live
+    database was checked directly and found to ALREADY contain real, seeded `marketing_brands`
+    rows (two actual brand identities — "Isaac / Zion — Personal" and "Nova Systems — Company,"
+    with real content_pillars/voice_notes/never_say/always_say, dated 2026-08-12, predating this
+    session) plus empty `content_ideas`/`content_assets` tables clearly designed for this exact
+    purpose (content_ideas even already had a `journey_entry_id` column pointing at Zion's
+    journal). A full repo grep confirmed zero application code read or wrote any of them — schema
+    without a workflow, not a competing implementation. Per the master prompt's own "reconcile
+    existing product definitions rather than silently overwriting them" rule, the migration was
+    **rewritten before ever being applied** to extend those three real tables via `ALTER TABLE ADD
+    COLUMN IF NOT EXISTS` instead of creating parallel ones, and `api/client.js`'s handlers were
+    rewritten to match — pg-mem validated 8/8 against the REAL pre-existing shape (seeded with the
+    actual existing row structure, not an idealized fresh schema). Only `marketing_campaigns` and
+    `marketing_publishing_adapters` (exact §19 status vocabulary, every platform honestly seeded
+    `not_implemented`) are genuinely new tables. Implements the real content pipeline
+    (idea→brief→drafted→fact_checked→approved, `admin.view`-gated approval, fact-check requires
+    real source_notes) and per-platform variants where `publish_mode` is derived from the real
+    adapter state, never client-asserted (an unconnected platform is always forced to
+    `manual_export`, an honest human handoff, never claimed as a real publish). Newsletter
+    suppression is real: a new public `unsubscribe` action actually flips `subscribed=false` in
+    the database. `scripts/e2e_marketing_automation_test.mjs` proves all of this and fails fast
+    correctly. No frontend page built yet for this domain — flagged honestly as remaining scope,
+    same as Crystal's estimate-builder/job-detail UI.
 
 ## What has deliberately NOT been attempted
 
@@ -234,11 +259,10 @@ provider-specific code is worth writing.
 
 ## Owner-action items currently blocking further automated progress
 
-1. **Run nine SQL migration files** in the Supabase SQL Editor, in this order (all reviewed for
-   safety; eight are purely additive — `IF NOT EXISTS`/`ON CONFLICT`, zero destructive statements —
-   and one, `marketing-content-workflow`, contains a single, narrow, idempotent UPDATE that only
-   backfills its own brand-new column on the existing `blog_posts` table, explained in the file's
-   own header comment):
+1. **Run ten SQL migration files** in the Supabase SQL Editor, in this order (all reviewed for
+   safety; every statement is either `IF NOT EXISTS`-additive or a narrow, idempotent UPDATE/
+   backfill on a column this same file just added — never touching pre-existing data — explained
+   in each file's own header comment):
    - `supabase/academy-migration-standalone.sql`
    - `supabase/hiring-workflow-migration-standalone.sql`
    - `supabase/crm-order-audit-migration-standalone.sql`
@@ -247,9 +271,13 @@ provider-specific code is worth writing.
    - `supabase/installation-center-migration-standalone.sql` (depends on `orders` from the
      crm-order-audit migration — run that one first)
    - `supabase/marketing-content-workflow-migration-standalone.sql` (alters the existing, live
-     `blog_posts` table — safe, additive columns plus the one backfill UPDATE described above)
+     `blog_posts` table)
    - `supabase/durable-jobs-migration-standalone.sql`
    - `supabase/crystal-migration-standalone.sql`
+   - `supabase/marketing-automation-migration-standalone.sql` (alters the existing, live
+     `marketing_brands`/`content_ideas`/`content_assets` tables — real, seeded `marketing_brands`
+     rows already exist and are preserved untouched; see the file's own header for how that
+     reconciliation was discovered)
    - (older sections are also appended to the cumulative `supabase/schema-update.sql` for the
      historical record, but every standalone file above is what's actually meant to be run — that
      cumulative file has NOT been kept in sync with the CRM/Zion/Approvals/Installation/Marketing/
@@ -283,8 +311,9 @@ After the SQL files run: `node scripts/e2e_academy_auth_test.mjs`,
 `node scripts/e2e_hiring_workflow_test.mjs`, `node scripts/e2e_crm_order_audit_test.mjs`,
 `node scripts/e2e_zion_studio_test.mjs`, `node scripts/e2e_approval_inbox_test.mjs`,
 `node scripts/e2e_installation_center_test.mjs`, `node scripts/e2e_marketing_content_workflow_test.mjs`,
-and `node scripts/e2e_crystal_test.mjs` each give real, immediate, live pass/fail evidence for their
-respective domains — none of this has been claimed as passing against production, and won't be
-until these actually run and are reported honestly either way. `node scripts/unit_job_queue_test.mjs`
+`node scripts/e2e_crystal_test.mjs`, and `node scripts/e2e_marketing_automation_test.mjs` each give
+real, immediate, live pass/fail evidence for their respective domains — none of this has been
+claimed as passing against production, and won't be until these actually run and are reported
+honestly either way. `node scripts/unit_job_queue_test.mjs`
 and `node worker/index.mjs --local --enqueue-demo --once` already pass/run today with zero
 dependency on the migrations above.

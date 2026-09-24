@@ -93,6 +93,24 @@ import { computeCaseClockStatus } from './_auditClock.js';
 //          &op=feedback           [execution.view] GET ?job_id= / POST {job_id, customer_id,
 //                                             rating, comments}
 //          &op=recurring          [execution.view] GET / POST {action:'create'|'pause'|'resume', ...}
+//   marketing &op=brands          [growth.view] GET / POST {action:'create'|'update', ...} —
+//                                             unknown approval_policy always defaults to
+//                                             'draft_only', never a permissive default
+//            &op=campaigns        [growth.view] GET / POST {action:'create'|'update-status', ...}
+//            &op=content          [growth.view; 'approve' additionally requires admin.view] GET
+//                                             ?status= / POST {action:'create'|'update-draft'|
+//                                             'fact-check'|'approve'|'reject', ...} — idea ->
+//                                             brief -> drafted -> fact_checked -> approved;
+//                                             fact-check requires real source_notes on file,
+//                                             approve requires fact_checked first
+//            &op=platform-posts   [growth.view] GET ?content_item_id= / POST {action:'create'|
+//                                             'export'|'mark-published', ...} — can only be
+//                                             created for an already-approved content item;
+//                                             publish_mode is derived from the real adapter state,
+//                                             never client-asserted
+//            &op=adapters         [growth.view] GET — read-only; a platform only ever shows
+//                                             connected/operation_tested once real, tested
+//                                             integration code sets it, never via this API
 //   approvals                    [admin.view]      GET aggregates pending audit reports + zion
 //                                             videos + generic approval_requests into one inbox /
 //                                             POST {action:'create'|'approve'|'reject'|'revoke', id}
@@ -1152,6 +1170,27 @@ async function handleNewsletter(req, res) {
     } catch (err) {
       console.error('[client:newsletter] Error:', err.message);
       return res.status(500).json({ error: 'Failed to add subscriber' });
+    }
+  }
+
+  if (action === 'unsubscribe') {
+    // Real suppression (§17: "Newsletter subscribers, preferences and suppression... stop-on-
+    // reply, unsubscribe..."), not a decorative link — flips subscribed=false for real, keyed by
+    // email since this is reached from a public unsubscribe link, not an authenticated session.
+    const email = sanitizeEmail(b.email);
+    if (!email) return res.status(400).json({ error: 'A valid email is required' });
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/newsletter_subscribers?email=eq.${encodeURIComponent(email)}`, {
+        method: 'PATCH',
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ subscribed: false, unsubscribed_at: new Date().toISOString() }),
+      });
+      if (!r.ok) { console.error('[client:newsletter] unsubscribe error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to unsubscribe' }); }
+      const rows = await r.json();
+      return res.status(200).json({ ok: true, unsubscribed: rows.length > 0 });
+    } catch (err) {
+      console.error('[client:newsletter] Error:', err.message);
+      return res.status(500).json({ error: 'Failed to unsubscribe' });
     }
   }
 
@@ -3063,6 +3102,288 @@ async function handleCrystalRecurring(req, res) {
   return res.status(400).json({ error: `Unknown action: ${action}` });
 }
 
+// =============================================================================================
+// Autonomous marketing and content operations (2026-09-24, master prompt §17, restored scope
+// beyond blog review/scheduling). Schema: supabase/marketing-automation-migration-standalone.sql
+// — NOT yet applied to production.
+//
+// RECONCILED with real, pre-existing tables rather than a fresh parallel domain: the live database
+// was checked directly and already contains real, seeded `marketing_brands` rows (two actual brand
+// identities — "Isaac / Zion — Personal" and "Nova Systems — Company" — with content_pillars/
+// voice_notes/never_say/always_say, created 2026-08-12) plus empty, never-wired-up `content_ideas`
+// and `content_assets` tables clearly designed for this exact purpose. No application code
+// anywhere in this repo read or wrote any of them before this — they were schema without a
+// workflow, not a competing implementation. See the migration file's own header for the full
+// discovery. handleMarketingBrands/Content/PlatformPosts below target the REAL column names
+// (key/kind/voice_notes/content_pillars/never_say/always_say on marketing_brands; pillar/title on
+// content_ideas; platform/caption/script/hashtags on content_assets), extended with this session's
+// new workflow columns, not an invented parallel schema.
+//
+// Real API-based auto-publishing to any of the 5 social platforms does not exist —
+// marketing_publishing_adapters starts every platform 'not_implemented' and stays that way until
+// real provider credentials and a tested connection exist. content_assets defaults to
+// publish_mode='manual_export': a real human downloads the prepared caption/media and posts it by
+// hand, honestly tracked as a handoff, never presented as an automatic publish that didn't happen.
+// =============================================================================================
+
+async function handleMarketingBrands(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const r = await sbSelect(`marketing_brands?organization_id=eq.${encodeURIComponent(orgId)}&order=name.asc`);
+    if (!r.ok) { console.error('[client:marketing brands] error:', await r.text()); return res.status(500).json({ error: 'Failed to load brands' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  const action = sanitize(b.action, 20);
+  if (action === 'create' || action === 'update') {
+    const id = sanitize(b.id, 100);
+    const record = {
+      organization_id: orgId,
+      key: sanitize(b.key, 50) || null,
+      name: sanitize(b.name, 100),
+      kind: sanitize(b.kind, 30) || null, // e.g. 'personal' (Zion) | 'company' (Nova) — the real existing distinction
+      voice_notes: sanitize(b.voice_notes, 4000) || null,
+      content_pillars: Array.isArray(b.content_pillars) ? b.content_pillars.map((c) => sanitize(String(c), 200)) : [],
+      never_say: sanitize(b.never_say, 4000) || null,
+      always_say: sanitize(b.always_say, 4000) || null,
+      audience: sanitize(b.audience, 2000) || null,
+      cadence: sanitize(b.cadence, 200) || null,
+      budget_cents: Number.isFinite(Number(b.budget_cents)) ? Number(b.budget_cents) : null,
+      // "Unknown policy means draft-only" — enforced here, not left to a client-supplied default.
+      approval_policy: ['draft_only', 'per_action', 'standing_policy'].includes(b.approval_policy) ? b.approval_policy : 'draft_only',
+      destination_accounts: b.destination_accounts && typeof b.destination_accounts === 'object' ? b.destination_accounts : {},
+      updated_at: new Date().toISOString(),
+    };
+    if (!record.name) return res.status(400).json({ error: 'name is required' });
+    const path = action === 'update' && id ? `marketing_brands?id=eq.${encodeURIComponent(id)}` : 'marketing_brands';
+    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    if (!r.ok) { console.error('[client:marketing brands] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save brand' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, brand: rows[0] });
+  }
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+async function handleMarketingCampaigns(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const r = await sbSelect(`marketing_campaigns?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`);
+    if (!r.ok) { console.error('[client:marketing campaigns] error:', await r.text()); return res.status(500).json({ error: 'Failed to load campaigns' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  const action = sanitize(b.action, 20);
+  if (action === 'create') {
+    const brandId = sanitize(b.brand_id, 100);
+    if (!brandId || !sanitize(b.name, 200)) return res.status(400).json({ error: 'brand_id and name are required' });
+    const r = await sbWrite('marketing_campaigns', 'POST', {
+      organization_id: orgId, brand_id: brandId, name: sanitize(b.name, 200), goal: sanitize(b.goal, 1000) || null,
+      is_template: b.is_template === true, start_date: sanitize(b.start_date, 20) || null, end_date: sanitize(b.end_date, 20) || null,
+    });
+    if (!r.ok) { console.error('[client:marketing campaigns] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create campaign' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, campaign: rows[0] });
+  }
+  if (action === 'update-status') {
+    const id = sanitize(b.id, 100);
+    const status = sanitize(b.status, 20);
+    if (!id || !['draft', 'active', 'paused', 'completed'].includes(status)) return res.status(400).json({ error: 'id and a valid status are required' });
+    const r = await sbWrite(`marketing_campaigns?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status });
+    if (!r.ok) { console.error('[client:marketing campaigns] update-status error:', await r.text()); return res.status(500).json({ error: 'Failed to update campaign' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, campaign: rows[0] });
+  }
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// The actual content pipeline: idea -> brief -> drafted -> fact_checked -> approved -> scheduled
+// -> published. Approval requires admin.view specifically (same elevated-gate pattern as blog
+// content and Installation activation), fact-checking is a distinct, separately recorded step —
+// content cannot reach 'approved' without having passed through 'fact_checked' first.
+async function handleMarketingContent(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const status = sanitize(req.query?.status, 30);
+    let path = `content_ideas?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`;
+    if (status) path += `&status=eq.${encodeURIComponent(status)}`;
+    const r = await sbSelect(path);
+    if (!r.ok) { console.error('[client:marketing content] error:', await r.text()); return res.status(500).json({ error: 'Failed to load content' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const brandId = sanitize(b.brand_id, 100);
+    const contentType = sanitize(b.content_type, 20);
+    if (!brandId || !['social_post', 'article', 'video', 'email'].includes(contentType) || !sanitize(b.title, 300)) {
+      return res.status(400).json({ error: 'brand_id, a valid content_type, and title are required' });
+    }
+    const r = await sbWrite('content_ideas', 'POST', {
+      organization_id: orgId, brand_id: brandId, campaign_id: sanitize(b.campaign_id, 100) || null,
+      journey_entry_id: sanitize(b.journey_entry_id, 100) || null, // optional link back to a Zion journal entry
+      pillar: sanitize(b.pillar, 100) || null,
+      title: sanitize(b.title, 300), content_type: contentType, notes: sanitize(b.notes, 20000) || null,
+      source_notes: sanitize(b.source_notes, 4000) || null, status: 'idea', created_by: caller.id,
+    });
+    if (!r.ok) { console.error('[client:marketing content] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create content idea' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, item: rows[0] });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  const existingRes = await sbSelect(`content_ideas?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+  const existingRows = existingRes.ok ? await existingRes.json() : [];
+  if (!existingRows.length) return res.status(404).json({ error: 'Content idea not found' });
+  const existing = existingRows[0];
+
+  if (action === 'update-draft') {
+    if (!['idea', 'brief', 'drafted'].includes(existing.status)) return res.status(400).json({ error: `Cannot edit content in status ${existing.status}` });
+    const patch = { updated_at: new Date().toISOString(), status: 'drafted' };
+    if (b.notes !== undefined) patch.notes = sanitize(b.notes, 20000);
+    if (b.source_notes !== undefined) patch.source_notes = sanitize(b.source_notes, 4000);
+    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
+    if (!r.ok) { console.error('[client:marketing content] update-draft error:', await r.text()); return res.status(500).json({ error: 'Failed to update content' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, item: rows[0] });
+  }
+
+  if (action === 'fact-check') {
+    if (existing.status !== 'drafted') return res.status(400).json({ error: `Cannot fact-check from status ${existing.status} — content must be drafted first` });
+    if (!sanitize(existing.source_notes, 1) && !sanitize(b.source_notes, 1)) {
+      return res.status(400).json({ error: 'source_notes (the factual basis for this content) are required before it can pass fact-checking' });
+    }
+    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'fact_checked', fact_checked_by: caller.id, fact_checked_at: new Date().toISOString(), source_notes: sanitize(b.source_notes, 4000) || existing.source_notes });
+    if (!r.ok) { console.error('[client:marketing content] fact-check error:', await r.text()); return res.status(500).json({ error: 'Failed to record fact-check' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, item: rows[0] });
+  }
+
+  if (action === 'approve') {
+    if (!(await requireStaff(req, res, 'admin.view'))) return;
+    if (existing.status !== 'fact_checked') return res.status(400).json({ error: `Cannot approve from status ${existing.status} — content must be fact-checked first` });
+    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:marketing content] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve content' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, item: rows[0] });
+  }
+
+  if (action === 'reject') {
+    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'rejected' });
+    if (!r.ok) { console.error('[client:marketing content] reject error:', await r.text()); return res.status(500).json({ error: 'Failed to reject content' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, item: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// Per-platform adaptations of an approved content idea, stored as content_assets rows (the real,
+// pre-existing table this reconciles with — see the header comment above). An asset can only be
+// created once its parent idea is actually 'approved' — no platform-specific copy goes out for
+// content that never passed review, regardless of which platform or publish_mode is involved.
+async function handleMarketingPlatformPosts(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const ideaId = sanitize(req.query?.content_item_id, 100);
+    if (!ideaId) return res.status(400).json({ error: 'content_item_id is required' });
+    const r = await sbSelect(`content_assets?idea_id=eq.${encodeURIComponent(ideaId)}&order=created_at.asc`);
+    if (!r.ok) { console.error('[client:marketing platform posts] error:', await r.text()); return res.status(500).json({ error: 'Failed to load platform posts' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const ideaId = sanitize(b.content_item_id, 100);
+    const platform = sanitize(b.platform, 20);
+    if (!ideaId || !['tiktok', 'instagram', 'linkedin', 'youtube', 'facebook', 'email'].includes(platform)) {
+      return res.status(400).json({ error: 'content_item_id and a valid platform are required' });
+    }
+    const ideaRes = await sbSelect(`content_ideas?id=eq.${encodeURIComponent(ideaId)}&limit=1`);
+    const ideaRows = ideaRes.ok ? await ideaRes.json() : [];
+    if (!ideaRows.length) return res.status(404).json({ error: 'Content idea not found' });
+    if (ideaRows[0].status !== 'approved') return res.status(400).json({ error: 'Only approved content can get a platform-specific variant' });
+
+    // publish_mode is derived from the real adapter state, never client-asserted — an unconnected
+    // platform is always manual_export regardless of what the caller requests.
+    let publishMode = 'manual_export';
+    if (platform !== 'email') {
+      const adapterRes = await sbSelect(`marketing_publishing_adapters?platform=eq.${encodeURIComponent(platform)}&limit=1`);
+      const adapterRows = adapterRes.ok ? await adapterRes.json() : [];
+      if (adapterRows[0]?.state === 'connected' || adapterRows[0]?.state === 'operation_tested') publishMode = 'api';
+    }
+    const r = await sbWrite('content_assets', 'POST', {
+      organization_id: ideaRows[0].organization_id, brand_id: ideaRows[0].brand_id, idea_id: ideaId, platform,
+      caption: sanitize(b.caption, 5000) || null, script: sanitize(b.script, 20000) || null,
+      hashtags: Array.isArray(b.hashtags) ? b.hashtags.map((h) => sanitize(String(h), 100)) : [],
+      media_url: sanitize(b.media_ref, 500) || null, destination_account: sanitize(b.destination_account, 200) || null,
+      publish_mode: publishMode, status: 'pending', generated_by: caller.id,
+    });
+    if (!r.ok) { console.error('[client:marketing platform posts] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create platform post' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, post: rows[0] });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  if (action === 'export') {
+    // A real human downloads the prepared media/copy and posts it by hand — this records that
+    // handoff honestly, never claims it was actually published anywhere.
+    const r = await sbWrite(`content_assets?id=eq.${encodeURIComponent(id)}&publish_mode=eq.manual_export`, 'PATCH', { status: 'exported' });
+    if (!r.ok) { console.error('[client:marketing platform posts] export error:', await r.text()); return res.status(500).json({ error: 'Failed to record export' }); }
+    const rows = await r.json();
+    if (!rows.length) return res.status(400).json({ error: 'Not found, or this post is not in manual_export mode' });
+    return res.status(200).json({ ok: true, post: rows[0] });
+  }
+
+  if (action === 'mark-published') {
+    // For manual_export posts this is the real human confirming they actually posted it — for
+    // 'api' posts this would be set by the real provider webhook/response once that integration
+    // exists (it doesn't yet; every adapter is not_implemented today).
+    const providerPostId = sanitize(b.provider_post_id, 200) || null;
+    const r = await sbWrite(`content_assets?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'published', published_at: new Date().toISOString(), provider_post_id: providerPostId });
+    if (!r.ok) { console.error('[client:marketing platform posts] mark-published error:', await r.text()); return res.status(500).json({ error: 'Failed to mark published' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, post: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+async function handleMarketingAdapters(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 60, 60_000)) return;
+  // Read-only by design — a state like 'connected'/'operation_tested' is only ever set by real,
+  // tested integration code (not written yet for any of these 5 platforms), never by a hand-edit
+  // through this API. See the migration's own seed data and header comment.
+  const r = await sbSelect('marketing_publishing_adapters?order=platform.asc');
+  if (!r.ok) { console.error('[client:marketing adapters] error:', await r.text()); return res.status(500).json({ error: 'Failed to load adapter status' }); }
+  return res.status(200).json(await r.json());
+}
+
 // Nova Connect client portal login — checks against client_accounts.
 // handleAuth ("Nova Connect" client login) removed 2026-09-20 — confirmed dead (no live frontend
 // call, see src/pages/ClientLogin.jsx) and a real liability while it existed: unauthenticated,
@@ -3140,6 +3461,10 @@ export default async function handler(req, res) {
       return handleDocuments(req, res);
 
     case 'newsletter':
+      // 'unsubscribe' is reached from a real public unsubscribe link in an email, not an
+      // authenticated staff session — PUBLIC by design, everything else on this resource stays
+      // growth.view-gated.
+      if (req.method === 'POST' && req.body?.action === 'unsubscribe') return handleNewsletter(req, res);
       if (!(await requireStaff(req, res, 'growth.view'))) return;
       return handleNewsletter(req, res);
 
@@ -3238,6 +3563,17 @@ export default async function handler(req, res) {
       if (op === 'feedback') return handleCrystalFeedback(req, res);
       if (op === 'recurring') return handleCrystalRecurring(req, res);
       return res.status(400).json({ error: `Unknown crystal op: ${op}` });
+    }
+
+    case 'marketing': {
+      const caller = await requireStaff(req, res, 'growth.view');
+      if (!caller) return;
+      if (op === 'brands') return handleMarketingBrands(req, res);
+      if (op === 'campaigns') return handleMarketingCampaigns(req, res);
+      if (op === 'content') return handleMarketingContent(req, res, caller);
+      if (op === 'platform-posts') return handleMarketingPlatformPosts(req, res, caller);
+      if (op === 'adapters') return handleMarketingAdapters(req, res);
+      return res.status(400).json({ error: `Unknown marketing op: ${op}` });
     }
 
     case 'auth':
