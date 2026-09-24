@@ -1,10 +1,11 @@
-import { Target, HandCoins, Zap, Newspaper, LayoutGrid, Mail, GraduationCap } from 'lucide-react'
+import { Target, HandCoins, Zap, Newspaper, LayoutGrid, Mail, GraduationCap, Building2 } from 'lucide-react'
 import AreaHub from '../../components/dashboard/AreaHub'
 import { useOrg } from '../../lib/OrgContext'
 
-// Leads, pipeline, and acquisition/content tools. CRM, campaigns, social, and reviews are future
-// builds — this holds what's real today: real leads (Stage 5), referral tracking, Wave One
-// applications, the public-facing content tools (blog, portfolio, newsletter), and Sales Academy.
+// Leads, pipeline, and acquisition/content tools. Shared CRM foundations (businesses, contacts,
+// deals) shipped 2026-09-23 — see api/client.js's `crm` resource and
+// supabase/crm-order-audit-migration-standalone.sql (not yet applied to production; the CRM page
+// will show a load error until it is). Campaigns/social/reviews remain future builds.
 export default function Growth() {
   // Academy is gated by its own permission (academy.view — Nova-internal roles only, never
   // client_* roles), independent of growth.view, so a viewer without it should not see a card
@@ -12,6 +13,12 @@ export default function Growth() {
   const { hasPermission } = useOrg()
 
   const items = [
+    {
+      label: 'CRM',
+      description: 'Businesses (identity resolution) and the deal pipeline.',
+      icon: Building2,
+      path: '/dashboard/crm',
+    },
     {
       label: 'Leads',
       description: 'Real leads from /welcome and /intake, with pipeline status.',

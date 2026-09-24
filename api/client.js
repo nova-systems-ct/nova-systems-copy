@@ -3,6 +3,7 @@ import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
+import { computeCaseClockStatus } from './_auditClock.js';
 
 // Combined client-dashboard endpoint — dispatch via ?resource= (and ?op= for
 // resources with more than one sub-route). All handlers use the Supabase SERVICE ROLE key
@@ -24,6 +25,25 @@ import { requireStaff } from './_auth.js';
 //                                                        with Claude, or { action:'mark-sent', id }
 //   newsletter                   [growth.view]          GET { subscribers, sent } / POST
 //                                                        { action:'add-subscriber'|'record-send' }
+//   crm  &op=businesses          [growth.view]           GET ?q= search/list / POST
+//                                                        { action:'create'|'update', ... }
+//       &op=contacts             [growth.view]           GET ?business_id= / POST { action:... }
+//       &op=deals                [growth.view]           GET ?pipeline=&stage= / POST
+//                                                        { action:'create'|'update-stage', ... }
+//   orders                       [growth.view]           GET / POST { action:'create'|
+//                                                        'update-status', ... }
+//   products                     [growth.view]           GET — read-only catalog listing
+//   audit  &op=cases             [intelligence.view]      GET ?id= / POST { action:'create'|
+//                                                        'update-status'|'pause'|'resume', ... }
+//         &op=evidence           [intelligence.view]      GET ?case_id= / POST {action:'create'}
+//         &op=findings           [intelligence.view]      GET ?case_id= / POST {action:'create'}
+//         &op=recommendations    [intelligence.view]      GET ?case_id= / POST {action:'create'}
+//         &op=reports            [intelligence.view]      GET ?case_id= / POST {action:
+//                                                        'create-draft'|'approve'} — approving
+//                                                        never edits a row in place, only ever
+//                                                        inserts a new immutable version
+//         &op=deliveries         [intelligence.view]      POST {action:'record'}
+//         &op=outcomes           [intelligence.view]      POST {action:'create'}
 //   auth                         retired — always 410 (see note above handler())
 
 const BLOG_CATEGORIES = ['AI and Technology', 'Connecticut Business', 'Case Studies', 'News', 'Tips and Strategy'];
@@ -1018,6 +1038,674 @@ async function handleNewsletter(req, res) {
   return res.status(400).json({ error: `Unknown action: ${action}` });
 }
 
+// =============================================================================================
+// Shared CRM/Order foundations + Nova Audit workflow (2026-09-23, master build prompt §6/§8/§9).
+// Schema: supabase/crm-order-audit-migration-standalone.sql — NOT yet applied to production.
+//
+// Unlike the older invoices/referrals/intake-requests handlers above (which read/write across
+// every organization with no per-request org check — a known, previously-flagged gap, not a
+// pattern to repeat), every handler below requires an explicit organization_id and verifies the
+// CALLER actually has the stated permission on THAT SPECIFIC org before touching any data. That
+// check reuses the real has_permission() Postgres function, called with the caller's OWN access
+// token (not the service-role key), which is the exact same function real RLS policies and
+// requireStaff()'s permission check already depend on — not a second, hand-rolled, easier-to-get-
+// wrong implementation of the same idea.
+// =============================================================================================
+
+function sbEnv() {
+  return { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY };
+}
+
+function callerToken(req) {
+  const h = req.headers['authorization'] || '';
+  return h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+}
+
+// Verifies the CALLER (their own token, not service role) really has `permission` on `orgId` —
+// object-level authorization, not just "did they have the resource-level permission somewhere."
+async function requireOrgAccess(req, res, orgId, permission) {
+  const { url, key } = sbEnv();
+  const token = callerToken(req);
+  if (!orgId) { res.status(400).json({ error: 'organization_id is required' }); return false; }
+  try {
+    const r = await fetch(`${url}/rest/v1/rpc/has_permission`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_org_id: orgId, permission_key: permission }),
+    });
+    const allowed = r.ok && (await r.json()) === true;
+    if (!allowed) { res.status(403).json({ error: 'Insufficient permissions for this organization' }); return false; }
+    return true;
+  } catch (err) {
+    console.error('[client:requireOrgAccess] Error:', err.message);
+    res.status(502).json({ error: 'Authorization check failed' });
+    return false;
+  }
+}
+
+async function sbSelect(path) {
+  const { url, key } = sbEnv();
+  return fetch(`${url}/rest/v1/${path}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+}
+async function sbWrite(path, method, body) {
+  const { url, key } = sbEnv();
+  return fetch(`${url}/rest/v1/${path}`, {
+    method, headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(body),
+  });
+}
+
+// ------------------------------------------------------------------------------- crm: businesses
+// "Resolve business identity from name, website and location. Show ambiguous matches for
+// selection; never combine similarly named firms." — this returns CANDIDATES; the caller (staff
+// member, via the frontend) decides whether to reuse one or create a new row. Nothing here ever
+// auto-merges two businesses.
+async function handleCrmBusinesses(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const q = sanitize(req.query?.q, 200);
+    let path = `businesses?organization_id=eq.${encodeURIComponent(orgId)}&order=name.asc`;
+    if (q) path += `&or=(name.ilike.*${encodeURIComponent(q)}*,website.ilike.*${encodeURIComponent(q)}*)`;
+    const r = await sbSelect(path);
+    if (!r.ok) { console.error('[client:crm businesses] error:', await r.text()); return res.status(500).json({ error: 'Failed to search businesses' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create' || action === 'update') {
+    const id = sanitize(b.id, 100);
+    const record = {
+      organization_id: orgId,
+      name: sanitize(b.name, 200),
+      aliases: Array.isArray(b.aliases) ? b.aliases.map((a) => sanitize(a, 200)) : [],
+      website: sanitize(b.website, 300) || null,
+      confirmed_website: b.confirmed_website === true,
+      phone: sanitize(b.phone, 30) || null,
+      address_line: sanitize(b.address_line, 300) || null,
+      city: sanitize(b.city, 100) || null,
+      state: sanitize(b.state, 50) || null,
+      postal_code: sanitize(b.postal_code, 20) || null,
+      industry: sanitize(b.industry, 100) || null,
+      confidence: ['unconfirmed', 'likely', 'confirmed'].includes(b.confidence) ? b.confidence : 'unconfirmed',
+      notes: sanitize(b.notes, 2000) || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (!record.name) return res.status(400).json({ error: 'name is required' });
+    const path = action === 'update' && id ? `businesses?id=eq.${encodeURIComponent(id)}` : 'businesses';
+    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    if (!r.ok) { console.error('[client:crm businesses] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save business' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, business: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// ---------------------------------------------------------------------------------- crm: contacts
+async function handleCrmContacts(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const businessId = sanitize(req.query?.business_id, 100);
+    let path = `crm_contacts?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`;
+    if (businessId) path += `&business_id=eq.${encodeURIComponent(businessId)}`;
+    const r = await sbSelect(path);
+    if (!r.ok) { console.error('[client:crm contacts] error:', await r.text()); return res.status(500).json({ error: 'Failed to load contacts' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create' || action === 'update') {
+    const id = sanitize(b.id, 100);
+    const record = {
+      organization_id: orgId,
+      business_id: sanitize(b.business_id, 100) || null,
+      name: sanitize(b.name, 200),
+      email: b.email ? sanitizeEmail(b.email) : null,
+      phone: sanitize(b.phone, 30) || null,
+      title: sanitize(b.title, 150) || null,
+      sms_consent: b.sms_consent === true,
+      email_consent: b.email_consent === true,
+      do_not_contact: b.do_not_contact === true,
+      source: sanitize(b.source, 100) || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (!record.name) return res.status(400).json({ error: 'name is required' });
+    const path = action === 'update' && id ? `crm_contacts?id=eq.${encodeURIComponent(id)}` : 'crm_contacts';
+    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    if (!r.ok) { console.error('[client:crm contacts] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save contact' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, contact: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// ------------------------------------------------------------------------------------ crm: deals
+const DEAL_STAGES = ['new', 'assigned', 'attempted', 'connected', 'qualified', 'discovery', 'proposal', 'accepted', 'payment_condition_satisfied', 'onboarding', 'lost', 'disqualified', 'nurture', 'paused'];
+
+async function handleCrmDeals(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    let path = `crm_deals?organization_id=eq.${encodeURIComponent(orgId)}&order=updated_at.desc`;
+    const pipeline = sanitize(req.query?.pipeline, 30);
+    if (pipeline) path += `&pipeline=eq.${encodeURIComponent(pipeline)}`;
+    const r = await sbSelect(path);
+    if (!r.ok) { console.error('[client:crm deals] error:', await r.text()); return res.status(500).json({ error: 'Failed to load deals' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const record = {
+      organization_id: orgId,
+      business_id: sanitize(b.business_id, 100) || null,
+      contact_id: sanitize(b.contact_id, 100) || null,
+      lead_id: sanitize(b.lead_id, 100) || null,
+      pipeline: ['nova_sales', 'client_sales', 'crystal_service'].includes(b.pipeline) ? b.pipeline : 'nova_sales',
+      stage: 'new',
+      stage_history: [{ stage: 'new', at: new Date().toISOString(), by: caller.email }],
+      owner_user_id: sanitize(b.owner_user_id, 100) || caller.id,
+      value_cents: Number.isFinite(Number(b.value_cents)) ? Number(b.value_cents) : null,
+      currency: sanitize(b.currency, 10) || 'USD',
+      source: sanitize(b.source, 100) || null,
+    };
+    const r = await sbWrite('crm_deals', 'POST', record);
+    if (!r.ok) { console.error('[client:crm deals] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create deal' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, deal: rows[0] });
+  }
+
+  if (action === 'update-stage') {
+    const id = sanitize(b.id, 100);
+    const stage = sanitize(b.stage, 30);
+    if (!id) return res.status(400).json({ error: 'id is required' });
+    if (!DEAL_STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage' });
+
+    const existingRes = await sbSelect(`crm_deals?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+    const existingRows = existingRes.ok ? await existingRes.json() : [];
+    if (!existingRows.length) return res.status(404).json({ error: 'Deal not found' });
+    const existing = existingRows[0];
+
+    const history = Array.isArray(existing.stage_history) ? existing.stage_history : [];
+    history.push({ stage, at: new Date().toISOString(), by: caller.email });
+    const isClosed = ['lost', 'disqualified'].includes(stage);
+    const patch = {
+      stage, stage_history: history, updated_at: new Date().toISOString(),
+      lost_reason: stage === 'lost' ? sanitize(b.lost_reason, 500) || existing.lost_reason : existing.lost_reason,
+      closed_at: isClosed ? new Date().toISOString() : existing.closed_at,
+    };
+    const r = await sbWrite(`crm_deals?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
+    if (!r.ok) { console.error('[client:crm deals] update-stage error:', await r.text()); return res.status(500).json({ error: 'Failed to update deal stage' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, deal: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// ------------------------------------------------------------------------------------- products
+async function handleProducts(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 60, 60_000)) return;
+  const r = await sbSelect('products?order=category.asc,name.asc');
+  if (!r.ok) { console.error('[client:products] error:', await r.text()); return res.status(500).json({ error: 'Failed to load catalog' }); }
+  return res.status(200).json(await r.json());
+}
+
+// ---------------------------------------------------------------------------------------- orders
+const ORDER_STATUSES = ['draft', 'scoped', 'awaiting_acceptance', 'accepted', 'waiting_for_inputs', 'ready_for_work', 'in_progress', 'review', 'delivered', 'installed', 'monitoring', 'support', 'closed', 'paused', 'cancelled', 'refunded', 'disputed'];
+
+async function handleOrders(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const r = await sbSelect(`orders?organization_id=eq.${encodeURIComponent(orgId)}&order=updated_at.desc`);
+    if (!r.ok) { console.error('[client:orders] error:', await r.text()); return res.status(500).json({ error: 'Failed to load orders' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const productId = sanitize(b.product_id, 100);
+    if (!productId) return res.status(400).json({ error: 'product_id is required' });
+    const prodRes = await sbSelect(`products?id=eq.${encodeURIComponent(productId)}&limit=1`);
+    const prodRows = prodRes.ok ? await prodRes.json() : [];
+    if (!prodRows.length) return res.status(404).json({ error: 'Product not found' });
+    const product = prodRows[0];
+
+    const record = {
+      organization_id: orgId,
+      business_id: sanitize(b.business_id, 100) || null,
+      deal_id: sanitize(b.deal_id, 100) || null,
+      product_id: productId,
+      product_version: product.version,
+      scope: b.scope && typeof b.scope === 'object' ? b.scope : {},
+      // Unknown pricing must never be invented — leave null rather than guess, per the master
+      // prompt's explicit instruction. Only a value the caller actually provided is stored, and
+      // even then only once the product's pricing_config has been marked approved.
+      price_cents: product.pricing_approved && Number.isFinite(Number(b.price_cents)) ? Number(b.price_cents) : null,
+      currency: sanitize(b.currency, 10) || 'USD',
+      owner_user_id: caller.id,
+      status: 'draft',
+      status_history: [{ status: 'draft', at: new Date().toISOString(), by: caller.email }],
+      inputs: {},
+    };
+    const r = await sbWrite('orders', 'POST', record);
+    if (!r.ok) { console.error('[client:orders] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create order' }); }
+    const rows = await r.json();
+    const orderId = rows[0]?.id;
+    if (orderId) await sbWrite('order_events', 'POST', { order_id: orderId, event_type: 'created', actor_user_id: caller.id, detail: { product_id: productId } });
+    return res.status(200).json({ ok: true, order: rows[0] });
+  }
+
+  if (action === 'update-status') {
+    const id = sanitize(b.id, 100);
+    const status = sanitize(b.status, 30);
+    if (!id) return res.status(400).json({ error: 'id is required' });
+    if (!ORDER_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+
+    const existingRes = await sbSelect(`orders?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+    const existingRows = existingRes.ok ? await existingRes.json() : [];
+    if (!existingRows.length) return res.status(404).json({ error: 'Order not found' });
+    const existing = existingRows[0];
+
+    const history = Array.isArray(existing.status_history) ? existing.status_history : [];
+    history.push({ status, at: new Date().toISOString(), by: caller.email });
+    const isTerminal = ['closed', 'cancelled', 'refunded'].includes(status);
+    const patch = { status, status_history: history, updated_at: new Date().toISOString(), closed_at: isTerminal ? new Date().toISOString() : existing.closed_at };
+    const r = await sbWrite(`orders?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
+    if (!r.ok) { console.error('[client:orders] update-status error:', await r.text()); return res.status(500).json({ error: 'Failed to update order' }); }
+    await sbWrite('order_events', 'POST', { order_id: id, event_type: 'status_changed', actor_user_id: caller.id, detail: { from: existing.status, to: status } });
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, order: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// ===================================================================== Nova Audit workflow
+async function loadAuditCase(id, orgId) {
+  const r = await sbSelect(`audit_cases?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+  const rows = r.ok ? await r.json() : [];
+  return rows[0] || null;
+}
+
+async function handleAuditCases(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+    const id = sanitize(req.query?.id, 100);
+    if (id) {
+      const c = await loadAuditCase(id, orgId);
+      if (!c) return res.status(404).json({ error: 'Case not found' });
+      const clock = computeCaseClockStatus({
+        status: c.status, startConditionMetAt: c.start_condition_met_at, targetHours: c.target_hours,
+        clockBasis: c.clock_basis, timezone: c.timezone, pausedAt: c.paused_at, totalPausedSeconds: c.total_paused_seconds,
+      });
+      return res.status(200).json({ ...c, clock });
+    }
+    const r = await sbSelect(`audit_cases?organization_id=eq.${encodeURIComponent(orgId)}&order=updated_at.desc`);
+    if (!r.ok) { console.error('[client:audit cases] error:', await r.text()); return res.status(500).json({ error: 'Failed to load cases' }); }
+    const cases = await r.json();
+    const withClocks = cases.map((c) => ({
+      ...c,
+      clock: computeCaseClockStatus({
+        status: c.status, startConditionMetAt: c.start_condition_met_at, targetHours: c.target_hours,
+        clockBasis: c.clock_basis, timezone: c.timezone, pausedAt: c.paused_at, totalPausedSeconds: c.total_paused_seconds,
+      }),
+    }));
+    return res.status(200).json(withClocks);
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const scope = ['digital', '360'].includes(b.scope) ? b.scope : 'digital';
+    const targetHours = Number.isFinite(Number(b.target_hours)) ? Number(b.target_hours) : (scope === 'digital' ? 72 : 240);
+    const record = {
+      organization_id: orgId,
+      business_id: sanitize(b.business_id, 100) || null,
+      order_id: sanitize(b.order_id, 100) || null,
+      scope,
+      status: 'intake',
+      clock_basis: ['elapsed', 'business_hours'].includes(b.clock_basis) ? b.clock_basis : 'elapsed',
+      timezone: sanitize(b.timezone, 60) || 'America/New_York',
+      target_hours: targetHours,
+      owner_user_id: sanitize(b.owner_user_id, 100) || caller.id,
+    };
+    const r = await sbWrite('audit_cases', 'POST', record);
+    if (!r.ok) { console.error('[client:audit cases] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create case' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, case: rows[0] });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  const existing = await loadAuditCase(id, orgId);
+  if (!existing) return res.status(404).json({ error: 'Case not found' });
+
+  // The clock only starts running once intake/access requirements are actually satisfied — this
+  // is the one explicit transition that sets start_condition_met_at, and it's set exactly once.
+  if (action === 'mark-ready') {
+    if (existing.start_condition_met_at) return res.status(400).json({ error: 'This case has already started its clock' });
+    const startAt = new Date().toISOString();
+    const patch = { status: 'researching', start_condition_met_at: startAt, updated_at: startAt };
+    const r = await sbWrite(`audit_cases?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
+    if (!r.ok) { console.error('[client:audit cases] mark-ready error:', await r.text()); return res.status(500).json({ error: 'Failed to start the case clock' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, case: rows[0] });
+  }
+
+  if (action === 'update-status') {
+    const status = sanitize(b.status, 30);
+    const VALID = ['intake', 'inputs_pending', 'ready', 'researching', 'evidence_gathered', 'findings_drafted', 'report_draft', 'qa_review', 'approved', 'delivered', 'customer_decision', 'implementation', 'outcome_tracking', 'closed'];
+    if (!VALID.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    const r = await sbWrite(`audit_cases?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status, updated_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:audit cases] update-status error:', await r.text()); return res.status(500).json({ error: 'Failed to update case' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, case: rows[0] });
+  }
+
+  // Pause/resume — "do not silently extend deadlines or reset the clock": pausing records the
+  // real moment paused; resuming adds exactly that elapsed duration to total_paused_seconds and
+  // clears paused_at, so computeDueAt's math (see api/_auditClock.js) reflects real wall-clock
+  // pause time, nothing invented or rounded in the case's favor.
+  if (action === 'pause') {
+    if (existing.paused_at) return res.status(400).json({ error: 'Case is already paused' });
+    const pausedAt = new Date().toISOString();
+    const reason = sanitize(b.reason, 500) || null;
+    await sbWrite('audit_case_pause_events', 'POST', { case_id: id, paused_at: pausedAt, reason, actor_user_id: caller.id });
+    const r = await sbWrite(`audit_cases?id=eq.${encodeURIComponent(id)}`, 'PATCH', { paused_at: pausedAt, pause_reason: reason, updated_at: pausedAt });
+    if (!r.ok) { console.error('[client:audit cases] pause error:', await r.text()); return res.status(500).json({ error: 'Failed to pause case' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, case: rows[0] });
+  }
+
+  if (action === 'resume') {
+    if (!existing.paused_at) return res.status(400).json({ error: 'Case is not currently paused' });
+    const resumedAt = new Date();
+    const pausedDurationSeconds = Math.max(0, Math.round((resumedAt.getTime() - new Date(existing.paused_at).getTime()) / 1000));
+    const newTotalPaused = (existing.total_paused_seconds || 0) + pausedDurationSeconds;
+
+    const openPauseRes = await sbSelect(`audit_case_pause_events?case_id=eq.${encodeURIComponent(id)}&resumed_at=is.null&order=paused_at.desc&limit=1`);
+    const openPauseRows = openPauseRes.ok ? await openPauseRes.json() : [];
+    if (openPauseRows[0]) await sbWrite(`audit_case_pause_events?id=eq.${encodeURIComponent(openPauseRows[0].id)}`, 'PATCH', { resumed_at: resumedAt.toISOString() });
+
+    const r = await sbWrite(`audit_cases?id=eq.${encodeURIComponent(id)}`, 'PATCH', {
+      paused_at: null, pause_reason: null, total_paused_seconds: newTotalPaused, updated_at: resumedAt.toISOString(),
+    });
+    if (!r.ok) { console.error('[client:audit cases] resume error:', await r.text()); return res.status(500).json({ error: 'Failed to resume case' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, case: rows[0], paused_seconds_added: pausedDurationSeconds });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+async function handleAuditEvidence(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+    const caseId = sanitize(req.query?.case_id, 100);
+    if (!caseId) return res.status(400).json({ error: 'case_id is required' });
+    if (!(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+    const r = await sbSelect(`audit_evidence?case_id=eq.${encodeURIComponent(caseId)}&order=capture_date.desc`);
+    if (!r.ok) { console.error('[client:audit evidence] error:', await r.text()); return res.status(500).json({ error: 'Failed to load evidence' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+  const caseId = sanitize(b.case_id, 100);
+  if (!caseId || !(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+
+  const record = {
+    case_id: caseId,
+    source: sanitize(b.source, 300),
+    method: sanitize(b.method, 200) || null,
+    observation: sanitize(b.observation, 3000),
+    snapshot_path: sanitize(b.snapshot_path, 400) || null, // private storage path only — never a public URL
+    author: sanitize(b.author, 150) || caller.email,
+    source_quality: ['high', 'medium', 'low', 'unavailable'].includes(b.source_quality) ? b.source_quality : null,
+    confidence: ['high', 'medium', 'low'].includes(b.confidence) ? b.confidence : null,
+    privacy_level: b.privacy_level === 'client_visible' ? 'client_visible' : 'internal',
+  };
+  if (!record.source || !record.observation) return res.status(400).json({ error: 'source and observation are required' });
+  const r = await sbWrite('audit_evidence', 'POST', record);
+  if (!r.ok) { console.error('[client:audit evidence] create error:', await r.text()); return res.status(500).json({ error: 'Failed to save evidence' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, evidence: rows[0] });
+}
+
+async function handleAuditFindings(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+    const caseId = sanitize(req.query?.case_id, 100);
+    if (!caseId) return res.status(400).json({ error: 'case_id is required' });
+    if (!(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+    const r = await sbSelect(`audit_findings?case_id=eq.${encodeURIComponent(caseId)}&order=created_at.desc`);
+    if (!r.ok) { console.error('[client:audit findings] error:', await r.text()); return res.status(500).json({ error: 'Failed to load findings' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+  const caseId = sanitize(b.case_id, 100);
+  if (!caseId || !(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+
+  const statementType = sanitize(b.statement_type, 20);
+  if (!['observed_fact', 'stated_claim', 'inference', 'estimate'].includes(statementType)) {
+    return res.status(400).json({ error: 'statement_type must be one of observed_fact, stated_claim, inference, estimate' });
+  }
+  const record = {
+    case_id: caseId,
+    title: sanitize(b.title, 300),
+    statement_type: statementType,
+    detail: sanitize(b.detail, 3000),
+    priority: ['high', 'medium', 'low'].includes(b.priority) ? b.priority : null,
+  };
+  if (!record.title || !record.detail) return res.status(400).json({ error: 'title and detail are required' });
+  const r = await sbWrite('audit_findings', 'POST', record);
+  if (!r.ok) { console.error('[client:audit findings] create error:', await r.text()); return res.status(500).json({ error: 'Failed to save finding' }); }
+  const rows = await r.json();
+  const findingId = rows[0]?.id;
+
+  const evidenceIds = Array.isArray(b.evidence_ids) ? b.evidence_ids.map((e) => sanitize(e, 100)).filter(Boolean) : [];
+  for (const evidenceId of evidenceIds) {
+    await sbWrite('audit_finding_evidence', 'POST', { finding_id: findingId, evidence_id: evidenceId });
+  }
+  return res.status(200).json({ ok: true, finding: rows[0] });
+}
+
+async function handleAuditRecommendations(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+    const caseId = sanitize(req.query?.case_id, 100);
+    if (!caseId) return res.status(400).json({ error: 'case_id is required' });
+    if (!(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+    const r = await sbSelect(`audit_recommendations?case_id=eq.${encodeURIComponent(caseId)}&order=priority_rank.asc.nullslast`);
+    if (!r.ok) { console.error('[client:audit recommendations] error:', await r.text()); return res.status(500).json({ error: 'Failed to load recommendations' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+  const caseId = sanitize(b.case_id, 100);
+  if (!caseId || !(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+
+  const record = {
+    case_id: caseId,
+    finding_id: sanitize(b.finding_id, 100) || null,
+    mechanism: sanitize(b.mechanism, 2000),
+    impact_estimate: sanitize(b.impact_estimate, 1000) || null,
+    effort_range: sanitize(b.effort_range, 200) || null,
+    cost_range: sanitize(b.cost_range, 200) || null,
+    dependencies: sanitize(b.dependencies, 1000) || null,
+    owner: sanitize(b.owner, 200) || null,
+    uncertainty: sanitize(b.uncertainty, 1000) || null,
+    verification_plan: sanitize(b.verification_plan, 1000) || null,
+    priority_rank: Number.isFinite(Number(b.priority_rank)) ? Number(b.priority_rank) : null,
+  };
+  if (!record.mechanism) return res.status(400).json({ error: 'mechanism is required' });
+  const r = await sbWrite('audit_recommendations', 'POST', record);
+  if (!r.ok) { console.error('[client:audit recommendations] create error:', await r.text()); return res.status(500).json({ error: 'Failed to save recommendation' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, recommendation: rows[0] });
+}
+
+// Immutable approved report versions — "edited versions require new review." create-draft always
+// inserts a new version number; approve only flips draft->approved on a specific version, and
+// this handler refuses to ever touch an already-approved row, enforced here in application code
+// exactly because expressing it portably as a DB trigger wasn't done in this pass (see
+// docs/PRODUCT_BUILD_STATE.md).
+async function handleAuditReports(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+    const caseId = sanitize(req.query?.case_id, 100);
+    if (!caseId) return res.status(400).json({ error: 'case_id is required' });
+    if (!(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+    const r = await sbSelect(`audit_reports?case_id=eq.${encodeURIComponent(caseId)}&order=version.desc`);
+    if (!r.ok) { console.error('[client:audit reports] error:', await r.text()); return res.status(500).json({ error: 'Failed to load reports' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+  const caseId = sanitize(b.case_id, 100);
+  if (!caseId || !(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create-draft') {
+    const existingRes = await sbSelect(`audit_reports?case_id=eq.${encodeURIComponent(caseId)}&order=version.desc&limit=1`);
+    const existingRows = existingRes.ok ? await existingRes.json() : [];
+    const nextVersion = (existingRows[0]?.version || 0) + 1;
+    const content = b.content && typeof b.content === 'object' ? b.content : {};
+    const r = await sbWrite('audit_reports', 'POST', { case_id: caseId, version: nextVersion, status: 'draft', content });
+    if (!r.ok) { console.error('[client:audit reports] create-draft error:', await r.text()); return res.status(500).json({ error: 'Failed to create report draft' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, report: rows[0] });
+  }
+
+  if (action === 'approve') {
+    const id = sanitize(b.id, 100);
+    if (!id) return res.status(400).json({ error: 'id is required' });
+    const reportRes = await sbSelect(`audit_reports?id=eq.${encodeURIComponent(id)}&case_id=eq.${encodeURIComponent(caseId)}&limit=1`);
+    const reportRows = reportRes.ok ? await reportRes.json() : [];
+    if (!reportRows.length) return res.status(404).json({ error: 'Report version not found' });
+    if (reportRows[0].status === 'approved') return res.status(400).json({ error: 'This version is already approved and immutable — create a new draft instead' });
+    const r = await sbWrite(`audit_reports?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:audit reports] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve report' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, report: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+async function handleAuditDeliveries(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+  const reportId = sanitize(b.report_id, 100);
+  if (!reportId) return res.status(400).json({ error: 'report_id is required' });
+
+  const record = {
+    report_id: reportId,
+    delivery_method: sanitize(b.delivery_method, 100) || 'email',
+    provider_accepted_at: b.provider_accepted ? new Date().toISOString() : null,
+    delivered_at: b.delivered ? new Date().toISOString() : null,
+    failed_at: b.failed ? new Date().toISOString() : null,
+    failure_reason: sanitize(b.failure_reason, 500) || null,
+  };
+  const r = await sbWrite('audit_deliveries', 'POST', record);
+  if (!r.ok) { console.error('[client:audit deliveries] create error:', await r.text()); return res.status(500).json({ error: 'Failed to record delivery' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, delivery: rows[0] });
+}
+
+async function handleAuditOutcomes(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+  const caseId = sanitize(b.case_id, 100);
+  if (!caseId || !(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+
+  const record = {
+    case_id: caseId,
+    metric: sanitize(b.metric, 200),
+    baseline_period: sanitize(b.baseline_period, 200) || null,
+    comparison_period: sanitize(b.comparison_period, 200) || null,
+    baseline_value: Number.isFinite(Number(b.baseline_value)) ? Number(b.baseline_value) : null,
+    comparison_value: Number.isFinite(Number(b.comparison_value)) ? Number(b.comparison_value) : null,
+    confounders: sanitize(b.confounders, 1000) || null,
+  };
+  if (!record.metric) return res.status(400).json({ error: 'metric is required' });
+  const r = await sbWrite('audit_outcomes', 'POST', record);
+  if (!r.ok) { console.error('[client:audit outcomes] create error:', await r.text()); return res.status(500).json({ error: 'Failed to save outcome' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, outcome: rows[0] });
+}
+
 // Nova Connect client portal login — checks against client_accounts.
 // handleAuth ("Nova Connect" client login) removed 2026-09-20 — confirmed dead (no live frontend
 // call, see src/pages/ClientLogin.jsx) and a real liability while it existed: unauthenticated,
@@ -1096,6 +1784,45 @@ export default async function handler(req, res) {
     case 'newsletter':
       if (!(await requireStaff(req, res, 'growth.view'))) return;
       return handleNewsletter(req, res);
+
+    // crm/orders/products/audit: a baseline "is this a real, active staff member at all" check
+    // happens here (401 if not — matches every other resource's auth-vs-authorization split);
+    // the SPECIFIC organization_id's permission is then checked inside each handler via
+    // requireOrgAccess() (403 if the real membership doesn't cover that org), which is real
+    // object-level authorization, not just "did they have this permission somewhere."
+    case 'crm': {
+      const caller = await requireStaff(req, res);
+      if (!caller) return;
+      if (op === 'businesses') return handleCrmBusinesses(req, res);
+      if (op === 'contacts') return handleCrmContacts(req, res);
+      if (op === 'deals') return handleCrmDeals(req, res, caller);
+      return res.status(400).json({ error: `Unknown crm op: ${op}` });
+    }
+
+    case 'orders': {
+      const caller = await requireStaff(req, res);
+      if (!caller) return;
+      return handleOrders(req, res, caller);
+    }
+
+    case 'products': {
+      const caller = await requireStaff(req, res);
+      if (!caller) return;
+      return handleProducts(req, res);
+    }
+
+    case 'audit': {
+      const caller = await requireStaff(req, res);
+      if (!caller) return;
+      if (op === 'cases') return handleAuditCases(req, res, caller);
+      if (op === 'evidence') return handleAuditEvidence(req, res, caller);
+      if (op === 'findings') return handleAuditFindings(req, res);
+      if (op === 'recommendations') return handleAuditRecommendations(req, res);
+      if (op === 'reports') return handleAuditReports(req, res, caller);
+      if (op === 'deliveries') return handleAuditDeliveries(req, res);
+      if (op === 'outcomes') return handleAuditOutcomes(req, res);
+      return res.status(400).json({ error: `Unknown audit op: ${op}` });
+    }
 
     case 'auth':
       return res.status(410).json({ error: 'This login method has been retired.' });

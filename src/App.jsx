@@ -70,6 +70,9 @@ const Academy = lazy(() => import('./pages/dashboard/Academy'));
 const AcademyProgram = lazy(() => import('./pages/dashboard/AcademyProgram'));
 const AcademyAdmin = lazy(() => import('./pages/dashboard/AcademyAdmin'));
 const VerifyCertificate = lazy(() => import('./pages/VerifyCertificate'));
+const CRM = lazy(() => import('./pages/dashboard/CRM'));
+const AuditCases = lazy(() => import('./pages/dashboard/AuditCases'));
+const AuditCaseDetail = lazy(() => import('./pages/dashboard/AuditCaseDetail'));
 const RequirePermission = lazy(() => import('./components/dashboard/RequirePermission'));
 
 function RouteFallback() {
@@ -145,6 +148,9 @@ function App() {
               <Route path="academy" element={<RequirePermission permission="academy.view"><Academy /></RequirePermission>} />
               <Route path="academy/admin" element={<RequirePermission permission="admin.view"><AcademyAdmin /></RequirePermission>} />
               <Route path="academy/:id" element={<RequirePermission permission="academy.view"><AcademyProgram /></RequirePermission>} />
+              <Route path="crm" element={<RequirePermission permission="growth.view"><CRM /></RequirePermission>} />
+              <Route path="audit" element={<RequirePermission permission="intelligence.view"><AuditCases /></RequirePermission>} />
+              <Route path="audit/:id" element={<RequirePermission permission="intelligence.view"><AuditCaseDetail /></RequirePermission>} />
             </Route>
 
             <Route path="/verify-certificate" element={<VerifyCertificate />} />

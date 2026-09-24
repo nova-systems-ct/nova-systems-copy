@@ -43,6 +43,7 @@ export default function NovaVault() {
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [preview, setPreview] = useState(null)
+  const [resigningId, setResigningId] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadForm, setUploadForm] = useState({ client_name: '', doc_type: 'Client File', category: 'files' })
@@ -84,6 +85,44 @@ export default function NovaVault() {
     invoicesPaid: docs.filter(d => d.type === 'Invoice' && d.status === 'Paid').length,
     storage: docs.reduce((sum, d) => sum + (Number(d.file_size) || 0), 0),
   }), [docs])
+
+  // Repair task (2026-09-23, revised per explicit correction): vault_documents.file_url is no
+  // longer a persisted, potentially-stale link — every view/download now mints a fresh,
+  // short-lived signed URL at the moment it's actually needed, via the admin-only `resign`
+  // action. This is a real authorization check performed at access time, not a long-lived bearer
+  // link that only ever proved authorization once, back when it was first created.
+  const getFreshUrl = async (doc) => {
+    setResigningId(doc.id)
+    try {
+      const r = await authedFetch('/api/client?resource=vault&op=resign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: doc.id, storage_path: doc.storage_path }),
+      })
+      const data = await r.json()
+      if (!r.ok || !data.file_url) throw new Error(data.error || 'Could not generate a link')
+      return data.file_url
+    } finally {
+      setResigningId(null)
+    }
+  }
+
+  const handleDownload = async (doc) => {
+    try {
+      const url = await getFreshUrl(doc)
+      window.open(url, '_blank', 'noreferrer')
+    } catch (e) {
+      alert('Could not open file: ' + e.message)
+    }
+  }
+
+  const handlePreview = async (doc) => {
+    try {
+      const url = await getFreshUrl(doc)
+      setPreview({ ...doc, freshUrl: url })
+    } catch (e) {
+      alert('Could not open file: ' + e.message)
+    }
+  }
 
   const handleDelete = async (doc) => {
     if (!window.confirm(`Delete "${doc.file_name}"? This cannot be undone.`)) return
@@ -199,8 +238,8 @@ export default function NovaVault() {
                     <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>{doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span>
                     <span style={{ fontSize: 9, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: sc.bg, color: sc.color, width: 'fit-content', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{doc.status}</span>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <IconBtn icon={Eye} onClick={() => setPreview(doc)} />
-                      <IconBtn icon={Download} as="a" href={doc.file_url} />
+                      <IconBtn icon={Eye} onClick={() => handlePreview(doc)} disabled={resigningId === doc.id} />
+                      <IconBtn icon={Download} onClick={() => handleDownload(doc)} disabled={resigningId === doc.id} />
                       <IconBtn icon={Trash2} onClick={() => handleDelete(doc)} red />
                     </div>
                   </div>
@@ -249,7 +288,7 @@ export default function NovaVault() {
               <p style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>{preview.file_name}</p>
               <button onClick={() => setPreview(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.3)' }}><X style={{ width: 18, height: 18 }} /></button>
             </div>
-            <iframe title="preview" src={preview.file_url} style={{ flex: 1, width: '100%', border: 'none', borderRadius: 8, background: '#fff' }} />
+            <iframe title="preview" src={preview.freshUrl} style={{ flex: 1, width: '100%', border: 'none', borderRadius: 8, background: '#fff' }} />
           </div>
         </div>
       )}
@@ -269,12 +308,11 @@ function StatCard({ icon: Icon, label, value }) {
   )
 }
 
-function IconBtn({ icon: Icon, onClick, href, as, red }) {
-  const Comp = as || 'button'
+function IconBtn({ icon: Icon, onClick, red, disabled }) {
   return (
-    <Comp onClick={onClick} href={href} target={href ? '_blank' : undefined} rel={href ? 'noreferrer' : undefined}
-      style={{ width: 28, height: 28, borderRadius: 6, background: red ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', border: `1px solid ${red ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.1)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: red ? '#f87171' : 'rgba(255,255,255,0.5)', textDecoration: 'none' }}>
+    <button onClick={onClick} disabled={disabled} type="button"
+      style={{ width: 28, height: 28, borderRadius: 6, background: red ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', border: `1px solid ${red ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.1)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1, color: red ? '#f87171' : 'rgba(255,255,255,0.5)', textDecoration: 'none' }}>
       <Icon style={{ width: 12, height: 12 }} />
-    </Comp>
+    </button>
   )
 }

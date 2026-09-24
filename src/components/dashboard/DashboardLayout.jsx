@@ -30,9 +30,9 @@ const ROLE_LABELS = {
 // <RequirePermission> so direct navigation can't bypass this.
 const NAV = [
   { to: '/dashboard',              label: 'Overview',     icon: LayoutDashboard, exact: true, permission: 'overview.view' },
-  { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit,    match: ['/dashboard/intelligence', '/dashboard/intake-forms'], permission: 'intelligence.view' },
-  { to: '/dashboard/growth',       label: 'Growth',        icon: TrendingUp,      match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy'], permission: 'growth.view' },
-  { to: '/dashboard/execution',    label: 'Execution',     icon: PlayCircle,      match: ['/dashboard/execution'], permission: 'execution.view' },
+  { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit,    match: ['/dashboard/intelligence', '/dashboard/intake-forms', '/dashboard/audit'], permission: 'intelligence.view' },
+  { to: '/dashboard/growth',       label: 'Growth',        icon: TrendingUp,      match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/leads'], permission: 'growth.view' },
+  { to: '/dashboard/execution',    label: 'Execution',     icon: PlayCircle,      match: ['/dashboard/execution', '/dashboard/tasks'], permission: 'execution.view' },
   { to: '/dashboard/companies',    label: 'Companies',     icon: Building2,       match: ['/dashboard/companies'], permission: 'companies.view' },
   { to: '/dashboard/admin',        label: 'Admin',         icon: ShieldCheck,     match: ['/dashboard/admin', '/dashboard/jobs', '/dashboard/invoices', '/dashboard/contracts', '/dashboard/nova-vault', '/dashboard/documents'], permission: 'admin.view' },
 ]
