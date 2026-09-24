@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { BookOpen, Lightbulb, FileCheck2, Plus, Loader2, CheckCircle2, XCircle, Clock, Video, AlertTriangle } from 'lucide-react'
+import { BookOpen, Lightbulb, FileCheck2, Plus, Loader2, CheckCircle2, XCircle, Clock, Video, AlertTriangle, CalendarDays, Send, BarChart3, DollarSign, IdCard } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
@@ -24,7 +24,7 @@ export default function ZionStudio() {
       </div>
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: '1px solid rgba(255,255,255,0.07)', overflowX: 'auto' }}>
-        {[['journal', 'Journal', BookOpen], ['ideas', 'Ideas & Scripts', Lightbulb], ['review', 'Review', FileCheck2]].map(([key, label, Icon]) => (
+        {[['journal', 'Journal', BookOpen], ['ideas', 'Ideas & Scripts', Lightbulb], ['review', 'Review', FileCheck2], ['calendar', 'Calendar', CalendarDays], ['published', 'Published', Send], ['analytics', 'Analytics', BarChart3], ['revenue', 'Revenue', DollarSign], ['bible', 'Profile Bible', IdCard]].map(([key, label, Icon]) => (
           <button key={key} onClick={() => setTab(key)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === key ? GOLD : 'transparent'}`, color: tab === key ? GOLD : 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
             <Icon style={{ width: 13, height: 13 }} /> {label}
           </button>
@@ -34,6 +34,11 @@ export default function ZionStudio() {
       {tab === 'journal' && <JournalTab />}
       {tab === 'ideas' && <IdeasTab />}
       {tab === 'review' && <ReviewTab />}
+      {tab === 'calendar' && <CalendarTab />}
+      {tab === 'published' && <PublishedTab />}
+      {tab === 'analytics' && <AnalyticsTab />}
+      {tab === 'revenue' && <RevenueTab />}
+      {tab === 'bible' && <ProfileBibleTab />}
     </div>
   )
 }
@@ -362,9 +367,270 @@ function ReviewTab() {
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 16px', background: 'rgba(201,168,76,0.06)', border: `1px solid ${GOLD}20`, borderRadius: 10 }}>
         <AlertTriangle style={{ width: 14, height: 14, color: GOLD, flexShrink: 0, marginTop: 2 }} />
         <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, lineHeight: 1.6 }}>
-          No video-rendering provider or character reference asset is connected yet — "Request Render" reports this honestly rather than faking a result. Publishing adapters (TikTok/Instagram/etc.) are not built.
+          No video-rendering provider or character reference asset is connected yet — "Request Render" reports this honestly rather than faking a result. Publishing adapters (TikTok/Instagram/LinkedIn/YouTube/Facebook) are implemented but await real account authorization — no connect UI is built yet.
         </p>
       </div>
+    </div>
+  )
+}
+
+// Calendar: real aggregation of scheduled Zion videos + scheduled marketing content
+// (api/client.js's handleZionCalendar) — not a Zion-only view pretending to show everything.
+function CalendarTab() {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    authedFetch('/api/client?resource=zion&op=calendar')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error('Failed to load calendar')))
+      .then(setItems).catch((e) => setError(e.message)).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <Loader2 style={{ width: 22, height: 22, animation: 'spin 1s linear infinite', color: GOLD }} />
+  if (error) return <p style={{ color: '#f87171', fontSize: 13 }}>{error}</p>
+  if (!items.length) return <EmptyState text="Nothing scheduled yet." />
+  return (
+    <div>
+      {items.map((it) => (
+        <div key={`${it.kind}-${it.id}`} style={CARD}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{it.label}</p>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: `${GOLD}18`, color: GOLD, textTransform: 'uppercase' }}>{it.kind === 'zion_video' ? 'Zion' : 'Marketing'}</span>
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 6 }}>{new Date(it.scheduled_at).toLocaleString()}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Published: distinguishes provider-confirmed publication from manually recorded publication —
+// the real, structural distinction, not a generic "published" badge.
+function PublishedTab() {
+  const [videos, setVideos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    authedFetch('/api/client?resource=zion&op=published')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error('Failed to load published videos')))
+      .then(setVideos).catch((e) => setError(e.message)).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <Loader2 style={{ width: 22, height: 22, animation: 'spin 1s linear infinite', color: GOLD }} />
+  if (error) return <p style={{ color: '#f87171', fontSize: 13 }}>{error}</p>
+  if (!videos.length) return <EmptyState text="Nothing published yet." />
+  return (
+    <div>
+      {videos.map((v) => (
+        <div key={v.id} style={CARD}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{v.platform_variant || 'Video'} {v.id.slice(0, 8)}</p>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: v.publish_confirmation_source === 'provider' ? 'rgba(74,222,128,0.15)' : 'rgba(167,139,250,0.15)', color: v.publish_confirmation_source === 'provider' ? '#4ade80' : '#a78bfa', textTransform: 'uppercase' }}>
+              {v.publish_confirmation_source === 'provider' ? 'Provider-confirmed' : v.publish_confirmation_source === 'manual' ? 'Manually recorded' : 'Confirmation unknown'}
+            </span>
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 6 }}>{v.published_at ? new Date(v.published_at).toLocaleString() : '—'}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Analytics: shows unavailable/stale data honestly — never defaults metrics to zero, which would
+// look like a real, confirmed zero-engagement result instead of "we don't actually know."
+function AnalyticsTab() {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    authedFetch('/api/client?resource=zion&op=analytics')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error('Failed to load analytics')))
+      .then(setRows).catch((e) => setError(e.message)).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <Loader2 style={{ width: 22, height: 22, animation: 'spin 1s linear infinite', color: GOLD }} />
+  if (error) return <p style={{ color: '#f87171', fontSize: 13 }}>{error}</p>
+  if (!rows.length) return <EmptyState text="No published videos to analyze yet." />
+  const statusColor = { unavailable: 'rgba(255,255,255,0.3)', stale: '#f87171', fresh: '#4ade80' }
+  return (
+    <div>
+      {rows.map((v) => (
+        <div key={v.id} style={CARD}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{v.platform_variant || 'Video'} {v.id.slice(0, 8)}</p>
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: `${statusColor[v.data_status]}18`, color: statusColor[v.data_status], textTransform: 'uppercase' }}>{v.data_status === 'unavailable' ? 'Data unavailable' : v.data_status === 'stale' ? 'Stale (24h+)' : 'Fresh'}</span>
+          </div>
+          {v.data_status === 'unavailable' ? (
+            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 6 }}>No metrics have been recorded for this video yet — honestly unavailable, not zero.</p>
+          ) : (
+            <pre style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 8, whiteSpace: 'pre-wrap' }}>{JSON.stringify(v.metrics, null, 2)}</pre>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Revenue: distinguishes estimates, verified income, expenses, and profit — profit is computed
+// server-side from verified figures only (never includes estimates), and this entire tab is
+// platform-owner-only (personal financial data), enforced server-side too.
+function RevenueTab() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({ record_type: 'estimate', amount_cents: '', source: '', notes: '' })
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    authedFetch('/api/client?resource=zion&op=revenue')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(r.status === 403 ? 'Revenue records are private to the platform owner' : 'Failed to load revenue')))
+      .then(setData).catch((e) => setError(e.message)).finally(() => setLoading(false))
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const submit = async () => {
+    if (!form.amount_cents) return
+    setSaving(true)
+    try {
+      const r = await authedFetch('/api/client?resource=zion&op=revenue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, amount_cents: Math.round(Number(form.amount_cents) * 100) }) })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Failed to record entry')
+      setForm({ record_type: 'estimate', amount_cents: '', source: '', notes: '' })
+      load()
+    } catch (e) { alert(e.message) }
+    setSaving(false)
+  }
+
+  if (loading) return <Loader2 style={{ width: 22, height: 22, animation: 'spin 1s linear infinite', color: GOLD }} />
+  if (error) return <p style={{ color: '#f87171', fontSize: 13 }}>{error}</p>
+
+  const fmt = (cents) => `$${(cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 20 }}>
+        {[['Estimates', data.summary.estimate_cents, 'rgba(255,255,255,0.4)'], ['Verified Income', data.summary.verified_income_cents, '#4ade80'], ['Expenses', data.summary.expense_cents, '#f87171'], ['Profit (verified only)', data.summary.profit_cents, GOLD]].map(([label, cents, color]) => (
+          <div key={label} style={{ ...CARD, marginBottom: 0, textAlign: 'center' }}>
+            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 6 }}>{label}</p>
+            <p style={{ color, fontSize: 20, fontWeight: 800 }}>{fmt(cents)}</p>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ ...CARD, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <label style={lbl}>Type</label>
+          <select value={form.record_type} onChange={(e) => setForm((f) => ({ ...f, record_type: e.target.value }))} style={{ ...inp, width: 150 }}>
+            <option value="estimate" style={{ background: '#111' }}>Estimate</option>
+            <option value="verified_income" style={{ background: '#111' }}>Verified Income</option>
+            <option value="expense" style={{ background: '#111' }}>Expense</option>
+          </select>
+        </div>
+        <div><label style={lbl}>Amount ($)</label><input type="number" value={form.amount_cents} onChange={(e) => setForm((f) => ({ ...f, amount_cents: e.target.value }))} style={{ ...inp, width: 110 }} /></div>
+        <div><label style={lbl}>Source</label><input value={form.source} onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))} style={{ ...inp, width: 160 }} placeholder="sponsorship, rendering cost..." /></div>
+        <button onClick={submit} disabled={saving || !form.amount_cents} style={{ padding: '10px 16px', background: form.amount_cents ? G : '#161410', border: 'none', borderRadius: 8, color: form.amount_cents ? '#0a0800' : 'rgba(255,255,255,0.25)', fontSize: 12, fontWeight: 700, cursor: form.amount_cents ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>Record</button>
+      </div>
+
+      {data.records.length === 0 ? <EmptyState text="No revenue records yet." /> : data.records.map((r) => (
+        <div key={r.id} style={CARD}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{r.source || r.record_type.replace(/_/g, ' ')}</p>
+            <p style={{ color: r.record_type === 'expense' ? '#f87171' : r.record_type === 'verified_income' ? '#4ade80' : 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: 700 }}>{r.record_type === 'expense' ? '-' : ''}{fmt(r.amount_cents)}</p>
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 4 }}>{r.record_type.replace(/_/g, ' ')} · {new Date(r.recorded_at).toLocaleDateString()}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Profile Bible: versioned character references, approved voice/assets, privacy rules. Missing
+// assets block only the render step (see ReviewTab) — this tab itself always works.
+function ProfileBibleTab() {
+  const [assets, setAssets] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({ asset_type: 'appearance_reference', storage_path: '', notes: '', privacy: 'owner_only' })
+  const [saving, setSaving] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    authedFetch('/api/client?resource=zion&op=character-assets')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error('Failed to load assets')))
+      .then(setAssets).catch((e) => setError(e.message)).finally(() => setLoading(false))
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const submit = async () => {
+    setSaving(true)
+    try {
+      const r = await authedFetch('/api/client?resource=zion&op=character-assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create', ...form }) })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Failed to save asset')
+      setForm({ asset_type: 'appearance_reference', storage_path: '', notes: '', privacy: 'owner_only' })
+      load()
+    } catch (e) { alert(e.message) }
+    setSaving(false)
+  }
+
+  const approve = async (id) => {
+    try {
+      const r = await authedFetch('/api/client?resource=zion&op=character-assets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'approve', id }) })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Failed to approve')
+      load()
+    } catch (e) { alert(e.message) }
+  }
+
+  if (loading) return <Loader2 style={{ width: 22, height: 22, animation: 'spin 1s linear infinite', color: GOLD }} />
+  if (error) return <p style={{ color: '#f87171', fontSize: 13 }}>{error}</p>
+
+  return (
+    <div>
+      <div style={{ ...CARD, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <label style={lbl}>Asset type</label>
+          <select value={form.asset_type} onChange={(e) => setForm((f) => ({ ...f, asset_type: e.target.value }))} style={{ ...inp, width: 180 }}>
+            <option value="appearance_reference" style={{ background: '#111' }}>Appearance reference</option>
+            <option value="voice_reference" style={{ background: '#111' }}>Voice reference</option>
+            <option value="profile_bible" style={{ background: '#111' }}>Profile bible (text)</option>
+          </select>
+        </div>
+        <div><label style={lbl}>Storage path / notes</label><input value={form.storage_path} onChange={(e) => setForm((f) => ({ ...f, storage_path: e.target.value }))} style={{ ...inp, width: 220 }} placeholder="private storage reference" /></div>
+        <div>
+          <label style={lbl}>Privacy</label>
+          <select value={form.privacy} onChange={(e) => setForm((f) => ({ ...f, privacy: e.target.value }))} style={{ ...inp, width: 150 }}>
+            <option value="owner_only" style={{ background: '#111' }}>Owner only</option>
+            <option value="staff_visible" style={{ background: '#111' }}>Staff visible</option>
+          </select>
+        </div>
+        <button onClick={submit} disabled={saving} style={{ padding: '10px 16px', background: G, border: 'none', borderRadius: 8, color: '#0a0800', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Add Version</button>
+      </div>
+
+      {assets.length === 0 ? <EmptyState text="No character reference assets on file yet — this blocks only the render step." /> : assets.map((a) => (
+        <div key={a.id} style={CARD}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <p style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>{a.asset_type.replace(/_/g, ' ')} v{a.version}</p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>{a.privacy === 'owner_only' ? 'Private' : 'Staff visible'}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 20, background: a.status === 'approved' ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)', color: a.status === 'approved' ? '#4ade80' : 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>{a.status}</span>
+              {a.status !== 'approved' && <button onClick={() => approve(a.id)} style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', background: `${GOLD}18`, border: 'none', borderRadius: 6, color: GOLD, cursor: 'pointer', fontFamily: 'inherit' }}>Approve</button>}
+            </div>
+          </div>
+          {a.notes && <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 6 }}>{a.notes}</p>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function EmptyState({ text }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '50px 20px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12 }}>
+      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13 }}>{text}</p>
     </div>
   )
 }

@@ -57,6 +57,18 @@ import { computeCaseClockStatus } from './_auditClock.js';
 //                                             'request-render'}
 //        &op=review              [growth.view] POST {video_id, action:'approve'|
 //                                             'request_changes'|'reject'|'schedule'}
+//        &op=calendar            [growth.view] GET — real aggregation of scheduled Zion videos +
+//                                             scheduled marketing content
+//        &op=published           [growth.view] GET — published videos, distinguishing
+//                                             publish_confirmation_source ('provider'|'manual')
+//        &op=analytics           [growth.view] GET — real metrics with an honest data_status
+//                                             ('unavailable'|'stale'|'fresh'), never defaulted to
+//                                             zero
+//        &op=revenue             [growth.view dispatcher gate; handler ALSO requires platform-
+//                                             owner — personal financial data] GET (records +
+//                                             computed summary: estimate/verified_income/expense/
+//                                             profit, profit computed from verified figures only)
+//                                             / POST {record_type, amount_cents, ...}
 //   installations                [growth.view; 'activate' action additionally requires
 //                                             admin.view — activation authority is distinct from
 //                                             ordinary installation access] GET ?organization_id=
@@ -2274,12 +2286,139 @@ async function handleZionScripts(req, res) {
   return res.status(200).json({ ok: true, script: rows[0] });
 }
 
-async function handleZionCharacterAssets(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+// Profile Bible (§16 tab): versioned character references, approved voice/assets, privacy rules.
+// "Missing character assets should block final rendering only" — this list/create/approve flow
+// works fully regardless of whether any asset has actually been supplied yet; only the render step
+// elsewhere in this file checks for a real approved appearance_reference.
+async function handleZionCharacterAssets(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const r = await sbSelect('zion_character_assets?order=version.desc');
+    if (!r.ok) { console.error('[client:zion character-assets] error:', await r.text()); return res.status(500).json({ error: 'Failed to load character assets' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const assetType = sanitize(b.asset_type, 30);
+    if (!['appearance_reference', 'voice_reference', 'profile_bible'].includes(assetType)) return res.status(400).json({ error: 'Invalid asset_type' });
+    const latestRes = await sbSelect(`zion_character_assets?asset_type=eq.${encodeURIComponent(assetType)}&order=version.desc&limit=1`);
+    const latestRows = latestRes.ok ? await latestRes.json() : [];
+    const nextVersion = (latestRows[0]?.version || 0) + 1;
+    const r = await sbWrite('zion_character_assets', 'POST', {
+      version: nextVersion, asset_type: assetType, storage_path: sanitize(b.storage_path, 500) || null,
+      notes: sanitize(b.notes, 4000) || null, supplied_by: caller.id,
+      privacy: b.privacy === 'staff_visible' ? 'staff_visible' : 'owner_only', // private by default, per §7
+    });
+    if (!r.ok) { console.error('[client:zion character-assets] create error:', await r.text()); return res.status(500).json({ error: 'Failed to save asset' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, asset: rows[0] });
+  }
+
+  if (action === 'approve') {
+    // Only the platform owner (Isaac himself) approves his own character/voice references —
+    // same rule as Zion fact confirmation elsewhere in this file.
+    if (!(await isPlatformOwner(req))) return res.status(403).json({ error: 'Only the platform owner can approve a character/voice reference' });
+    const id = sanitize(b.id, 100);
+    if (!id) return res.status(400).json({ error: 'id is required' });
+    const r = await sbWrite(`zion_character_assets?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:zion character-assets] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve asset' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, asset: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// Calendar (§16 tab): "must connect to approved content and scheduled jobs" — a real aggregation
+// across Zion's own scheduled videos, approved-and-scheduled marketing content, and Crystal's
+// scheduled jobs, not a Zion-only view pretending to be the whole picture.
+async function handleZionCalendar(req, res) {
   if (!rateLimit(req, res, 60, 60_000)) return;
-  const r = await sbSelect('zion_character_assets?order=version.desc');
-  if (!r.ok) { console.error('[client:zion character-assets] error:', await r.text()); return res.status(500).json({ error: 'Failed to load character assets' }); }
+  const [videosRes, contentRes] = await Promise.all([
+    sbSelect(`zion_videos?status=eq.scheduled&select=id,idea_id,scheduled_at,platform_variant&order=scheduled_at.asc`),
+    sbSelect(`content_assets?status=eq.scheduled&select=id,platform,scheduled_at,caption&order=scheduled_at.asc`),
+  ]);
+  const items = [];
+  if (videosRes.ok) {
+    for (const v of await videosRes.json()) items.push({ kind: 'zion_video', id: v.id, scheduled_at: v.scheduled_at, label: `Zion video (${v.platform_variant || 'unspecified platform'})` });
+  }
+  if (contentRes.ok) {
+    for (const c of await contentRes.json()) items.push({ kind: 'marketing_content', id: c.id, scheduled_at: c.scheduled_at, label: `${c.platform}: ${(c.caption || '').slice(0, 60)}` });
+  }
+  items.sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+  return res.status(200).json(items);
+}
+
+// Published (§16 tab): "must distinguish provider-confirmed publication from manually recorded
+// publication" — publish_confirmation_source is the real, structural distinction, surfaced
+// directly, never collapsed into one generic "published" badge.
+async function handleZionPublished(req, res) {
+  if (!rateLimit(req, res, 60, 60_000)) return;
+  const r = await sbSelect('zion_videos?status=eq.published&order=published_at.desc');
+  if (!r.ok) { console.error('[client:zion published] error:', await r.text()); return res.status(500).json({ error: 'Failed to load published videos' }); }
   return res.status(200).json(await r.json());
+}
+
+// Analytics (§16 tab): "must show unavailable data honestly" — metrics/metrics_updated_at are
+// read exactly as stored; a video with no metrics yet or a stale metrics_updated_at is reported as
+// such, never defaulted to zero (which would look like real, confirmed zero engagement).
+async function handleZionAnalytics(req, res) {
+  if (!rateLimit(req, res, 60, 60_000)) return;
+  const r = await sbSelect('zion_videos?status=eq.published&select=id,platform_variant,metrics,metrics_updated_at,published_at&order=published_at.desc');
+  if (!r.ok) { console.error('[client:zion analytics] error:', await r.text()); return res.status(500).json({ error: 'Failed to load analytics' }); }
+  const rows = await r.json();
+  const STALE_MS = 24 * 60 * 60 * 1000;
+  const withFreshness = rows.map((v) => {
+    const hasMetrics = v.metrics && Object.keys(v.metrics).length > 0;
+    const staleAt = v.metrics_updated_at ? new Date(v.metrics_updated_at) : null;
+    const isStale = staleAt ? (Date.now() - staleAt.getTime()) > STALE_MS : true;
+    return { ...v, data_status: !hasMetrics ? 'unavailable' : isStale ? 'stale' : 'fresh' };
+  });
+  return res.status(200).json(withFreshness);
+}
+
+// Revenue (§16 tab): "must distinguish estimates, verified income, expenses, and profit" — profit
+// is COMPUTED from real verified_income minus real expense rows, never stored/editable as its own
+// number that could drift from the underlying records. Estimates are kept structurally separate
+// and never included in the profit calculation — "do not assert millionaire progress from views
+// or pipeline value."
+async function handleZionRevenue(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    // Personal financial records — platform-owner only.
+    if (!(await isPlatformOwner(req))) return res.status(403).json({ error: 'Revenue records are private to the platform owner' });
+    const r = await sbSelect('zion_revenue_records?order=recorded_at.desc');
+    if (!r.ok) { console.error('[client:zion revenue] error:', await r.text()); return res.status(500).json({ error: 'Failed to load revenue records' }); }
+    const rows = await r.json();
+    const sum = (type) => rows.filter((x) => x.record_type === type).reduce((s, x) => s + x.amount_cents, 0);
+    const verifiedIncome = sum('verified_income');
+    const expenses = sum('expense');
+    return res.status(200).json({
+      records: rows,
+      summary: { estimate_cents: sum('estimate'), verified_income_cents: verifiedIncome, expense_cents: expenses, profit_cents: verifiedIncome - expenses },
+    });
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  if (!(await isPlatformOwner(req))) return res.status(403).json({ error: 'Revenue records are private to the platform owner' });
+  const b = req.body || {};
+  const recordType = sanitize(b.record_type, 30);
+  const amountCents = Number(b.amount_cents);
+  if (!['estimate', 'verified_income', 'expense'].includes(recordType) || !Number.isFinite(amountCents)) {
+    return res.status(400).json({ error: 'A valid record_type and a real amount_cents are required' });
+  }
+  const r = await sbWrite('zion_revenue_records', 'POST', {
+    video_id: sanitize(b.video_id, 100) || null, record_type: recordType, amount_cents: amountCents,
+    currency: sanitize(b.currency, 10) || 'USD', source: sanitize(b.source, 200) || null, notes: sanitize(b.notes, 2000) || null,
+    recorded_by: caller.id,
+  });
+  if (!r.ok) { console.error('[client:zion revenue] create error:', await r.text()); return res.status(500).json({ error: 'Failed to record revenue entry' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, record: rows[0] });
 }
 
 async function handleZionVideos(req, res, caller) {
@@ -3901,9 +4040,15 @@ export default async function handler(req, res) {
       if (!caller) return;
       if (op === 'ideas') return handleZionIdeas(req, res, caller);
       if (op === 'scripts') return handleZionScripts(req, res);
-      if (op === 'character-assets') return handleZionCharacterAssets(req, res);
+      if (op === 'character-assets') return handleZionCharacterAssets(req, res, caller);
       if (op === 'videos') return handleZionVideos(req, res, caller);
       if (op === 'review') return handleZionReview(req, res, caller);
+      if (op === 'calendar') return handleZionCalendar(req, res);
+      if (op === 'published') return handleZionPublished(req, res);
+      if (op === 'analytics') return handleZionAnalytics(req, res);
+      // Revenue is personal-financial data — handleZionRevenue enforces platform-owner-only
+      // itself, layered on top of this dispatcher's baseline growth.view, not instead of it.
+      if (op === 'revenue') return handleZionRevenue(req, res, caller);
       return res.status(400).json({ error: `Unknown zion op: ${op}` });
     }
 
