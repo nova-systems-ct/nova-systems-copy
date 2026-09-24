@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Users, FileText, ClipboardList, Receipt, Plus, X, Loader2, CheckCircle2, UserPlus, Camera } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Users, FileText, ClipboardList, Receipt, Plus, X, Loader2, CheckCircle2 } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 import { useOrg } from '../../lib/OrgContext'
 
@@ -36,6 +37,7 @@ function Modal({ title, onClose, children }) {
 // server-enforced state machine (this page only renders it).
 export default function Crystal() {
   const { currentOrg } = useOrg()
+  const navigate = useNavigate()
   const [tab, setTab] = useState('customers')
   const [customers, setCustomers] = useState([])
   const [quotes, setQuotes] = useState([])
@@ -193,7 +195,7 @@ export default function Crystal() {
               {jobs.length === 0 ? <EmptyRow text="No jobs yet. Accept an estimate to create one." /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {jobs.map((j) => (
-                    <div key={j.id} style={CARD}>
+                    <button key={j.id} onClick={() => navigate(`/dashboard/crystal/jobs/${j.id}`)} style={{ ...CARD, display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                         <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{customerName(j.customer_id)}</p>
                         <StatusBadge status={j.status} />
@@ -202,13 +204,11 @@ export default function Crystal() {
                         {j.scheduled_at ? new Date(j.scheduled_at).toLocaleString() : 'Not yet scheduled'}
                         {j.duration_minutes ? ` · ${j.duration_minutes} min` : ''}
                       </p>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
-              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <UserPlus style={{ width: 12, height: 12 }} /> Worker assignment, checklists, and before/after photos (<Camera style={{ width: 11, height: 11, display: 'inline' }} /> required evidence before a job can be marked complete) are managed via the API; a dedicated job-detail UI is the next increment.
-              </p>
+              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 16 }}>Click a job for worker assignment, checklists, before/after evidence, and completion.</p>
             </div>
           )}
 
