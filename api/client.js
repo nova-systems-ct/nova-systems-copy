@@ -4,6 +4,9 @@ import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 import { computeCaseClockStatus } from './_auditClock.js';
+import * as liAdapter from './_socialAdapters/linkedin.js';
+import * as ytAdapter from './_socialAdapters/youtube.js';
+import * as metaAdapter from './_socialAdapters/meta.js';
 
 // Combined client-dashboard endpoint — dispatch via ?resource= (and ?op= for
 // resources with more than one sub-route). All handlers use the Supabase SERVICE ROLE key
@@ -3592,6 +3595,24 @@ async function handleMarketingAdapters(req, res, caller) {
   const action = sanitize(b.action, 20);
   const platform = sanitize(b.platform, 20);
   if (!['tiktok', 'instagram', 'linkedin', 'youtube', 'facebook'].includes(platform)) return res.status(400).json({ error: 'Invalid platform' });
+
+  if (action === 'oauth-start') {
+    // Builds the real authorization URL for a platform. Requires the developer-app credentials
+    // Isaac creates himself (see api/_socialAdapters/registry.js) — without them this refuses
+    // honestly instead of producing a URL that can't work. The callback step that exchanges the
+    // code is not built until a real app + registered redirect URI exist.
+    const ENV = { linkedin: 'LINKEDIN_CLIENT_ID', youtube: 'GOOGLE_CLIENT_ID', instagram: 'META_APP_ID', facebook: 'META_APP_ID', tiktok: 'TIKTOK_CLIENT_KEY' }[platform];
+    const clientId = process.env[ENV];
+    const redirectUri = process.env.OAUTH_REDIRECT_BASE ? `${process.env.OAUTH_REDIRECT_BASE}/oauth/${platform}/callback` : null;
+    if (!clientId || !redirectUri) return res.status(409).json({ ok: false, status: 'authorization_required', error: `Set ${ENV} and OAUTH_REDIRECT_BASE (a developer app for ${platform} must exist first) — see api/_socialAdapters/registry.js for what that requires` });
+    const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    let url;
+    if (platform === 'linkedin') url = liAdapter.buildAuthorizationUrl({ clientId, redirectUri, state });
+    else if (platform === 'youtube') url = ytAdapter.buildAuthorizationUrl({ clientId, redirectUri, state });
+    else if (platform === 'tiktok') return res.status(409).json({ ok: false, error: 'TikTok requires PKCE — verifier storage/callback is not built yet' });
+    else url = metaAdapter.buildAuthorizationUrl({ appId: clientId, redirectUri, state, scope: platform === 'instagram' ? ['instagram_business_content_publish'] : ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list'] });
+    return res.status(200).json({ ok: true, url, state });
+  }
 
   if (action === 'connect') {
     const orgId = sanitize(b.organization_id, 100);

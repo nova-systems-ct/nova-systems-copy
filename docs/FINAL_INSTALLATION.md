@@ -110,7 +110,7 @@ call-audio bridge.
 | Instagram/Facebook | Meta developer app + Business verification + App Review | Free; weeks + 2-5 business days verification | Automated IG/FB posting — manual export works today regardless |
 | LinkedIn | Developer app only — **no approval needed for basic sharing** | Free; same-day | The most accessible of the 5 — worth prioritizing first if any automated posting is wanted soon |
 | YouTube | Verified Google Cloud project | Free at default quota (~100 uploads/day) | Automated video uploads — manual export works today regardless |
-| Email (Resend) | **Already connected** — no action needed | Already in use | Nothing — this was confirmed, not a gap |
+| Email (Resend) | **Already connected** — sequences stay DRY-RUN until the worker is started with `SEQUENCE_SEND_ENABLED=true`, `RESEND_API_KEY` and `SEQUENCE_FROM_ADDRESS` (a verified sender domain) — deliberate, so no campaign sends before you authorize it | Already in use | Nothing — this was confirmed, not a gap |
 | Isaac's `isaac@nova-systems.app` | Investigate Supabase Auth `email_address_invalid` rejection in Dashboard → Authentication, or continue using the already-working `isaac_0427@icloud.com` | — | Nothing functional — his real membership is confirmed correct either way |
 
 None of the social-platform review processes block anything else in this build — every adapter's
@@ -145,6 +145,7 @@ node scripts/unit_audit_clock_test.mjs           # 13/13
 node scripts/unit_job_queue_test.mjs             # 12/12
 node scripts/unit_job_queue_correctness_test.mjs # 15/15
 node scripts/unit_social_adapters_test.mjs       # 12/12
+node scripts/unit_email_sequence_test.mjs        # 12/12
 node worker/index.mjs --local --enqueue-demo --once
 ```
 

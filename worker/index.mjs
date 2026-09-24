@@ -97,6 +97,42 @@ const handlers = {
     return { published: true, post_id: published.id, slug: published.slug };
   },
 
+  // §17 approved email sequences. Payload: {enrollment_id}. Re-reads live state every run (so an
+  // unsubscribe/reply/pause since enqueue always wins), asks the pure engine what to do, and is
+  // idempotent per step via the engine's key. DRY-RUN unless SEQUENCE_SEND_ENABLED=true — no real
+  // campaign email goes out from development or an unconfigured worker.
+  async email_sequence_step(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    const { decideNextAction, applyOutcome } = await import('./emailSequenceEngine.mjs');
+    const headers = { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}`, 'Content-Type': 'application/json' };
+    const get = async (path) => { const r = await fetch(`${ctx.url}/rest/v1/${path}`, { headers }); return r.ok ? r.json() : []; };
+    const [enrollment] = await get(`marketing_sequence_enrollments?id=eq.${encodeURIComponent(job.payload?.enrollment_id)}`);
+    if (!enrollment) throw new Error('enrollment not found');
+    const [sequence] = await get(`marketing_sequences?id=eq.${enrollment.sequence_id}`);
+    const [subscriber] = await get(`newsletter_subscribers?id=eq.${enrollment.subscriber_id}`);
+    const decision = decideNextAction({ enrollment, sequence, subscriber });
+    if (decision.action === 'wait' || decision.action === 'none') return decision;
+    let result = decision;
+    if (decision.action === 'send') {
+      const live = process.env.SEQUENCE_SEND_ENABLED === 'true' && process.env.RESEND_API_KEY;
+      if (live) {
+        const r = await fetch('https://api.resend.com/emails', {
+          method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': decision.idempotencyKey },
+          body: JSON.stringify({ from: process.env.SEQUENCE_FROM_ADDRESS, to: subscriber.email, subject: decision.step.subject, html: decision.step.body }),
+        });
+        if (!r.ok) throw new Error(`Resend rejected the send: ${r.status} ${await r.text()}`);
+        result = { ...decision, delivered: 'provider_accepted' };
+      } else {
+        result = { ...decision, delivered: 'dry_run' };
+      }
+    }
+    const next = applyOutcome(enrollment, decision);
+    await fetch(`${ctx.url}/rest/v1/marketing_sequence_enrollments?id=eq.${enrollment.id}`, {
+      method: 'PATCH', headers, body: JSON.stringify({ status: next.status, stopped_reason: next.stopped_reason || null, current_step: next.current_step, last_step_at: next.last_step_at || null }),
+    });
+    return result;
+  },
+
   // A trivial handler kept only to give --enqueue-demo something real to run end-to-end in local
   // mode without needing any live credentials.
   async demo_echo(job) {

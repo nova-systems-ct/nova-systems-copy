@@ -133,6 +133,17 @@ try {
   log('UNIQUE (org, brand, platform) rejects a duplicate connection for the same brand+platform', true, 'correctly rejected: ' + e.message.split('\n')[0]);
 }
 
+try {
+  db.public.none("INSERT INTO marketing_sequences (id, organization_id, name) VALUES ('77777777-7777-7777-7777-777777777777', '"+orgId+"', 'Welcome');");
+  const [seq] = db.public.many("SELECT active, stop_on_reply FROM marketing_sequences WHERE id = '77777777-7777-7777-7777-777777777777';");
+  log('A new sequence defaults to INACTIVE with stop_on_reply on — nothing sends until approved', seq.active === false && seq.stop_on_reply === true, JSON.stringify(seq));
+  db.public.none("INSERT INTO marketing_sequence_enrollments (id, sequence_id, subscriber_id) VALUES ('88888888-8888-8888-8888-888888888888', '77777777-7777-7777-7777-777777777777', '66666666-6666-6666-6666-666666666666');");
+  db.public.none("INSERT INTO marketing_sequence_enrollments (id, sequence_id, subscriber_id) VALUES ('99999999-9999-9999-9999-999999999999', '77777777-7777-7777-7777-777777777777', '66666666-6666-6666-6666-666666666666');");
+  log('UNIQUE (sequence, subscriber) rejects double enrollment', false, 'insert should have thrown');
+} catch (e) {
+  log('UNIQUE (sequence, subscriber) rejects double enrollment', /duplicate|unique/i.test(e.message), e.message.split('\n')[0]);
+}
+
 const passed = results.filter(Boolean).length;
 console.log(`\n${passed}/${results.length} local schema-validation checks passed`);
 process.exit(passed === results.length ? 0 : 1);

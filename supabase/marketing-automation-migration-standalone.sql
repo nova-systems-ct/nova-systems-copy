@@ -145,3 +145,38 @@ CREATE TABLE IF NOT EXISTS marketing_social_accounts (
   UNIQUE (organization_id, brand_id, platform)
 );
 CREATE INDEX IF NOT EXISTS marketing_social_accounts_org_idx ON marketing_social_accounts (organization_id);
+
+-- =============================================================================================
+-- Approved email sequences (appended 2026-09-24). Logic lives in worker/emailSequenceEngine.mjs
+-- (unit-tested, scripts/unit_email_sequence_test.mjs). Sends are dry-run unless the worker is
+-- explicitly started with SEQUENCE_SEND_ENABLED=true — "do not send real campaigns in
+-- development." Suppression uses the existing newsletter_subscribers.subscribed column.
+-- =============================================================================================
+CREATE TABLE IF NOT EXISTS marketing_sequences (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id),
+  brand_id        UUID REFERENCES marketing_brands(id),
+  campaign_id     UUID REFERENCES marketing_campaigns(id),
+  name            TEXT NOT NULL,
+  steps           JSONB NOT NULL DEFAULT '[]', -- [{delay_hours, subject, body}]
+  stop_on_reply   BOOLEAN NOT NULL DEFAULT true,
+  active          BOOLEAN NOT NULL DEFAULT false, -- inactive until explicitly approved/activated
+  approved_by     UUID REFERENCES auth.users(id),
+  approved_at     TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS marketing_sequences_org_idx ON marketing_sequences (organization_id);
+
+CREATE TABLE IF NOT EXISTS marketing_sequence_enrollments (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sequence_id     UUID NOT NULL REFERENCES marketing_sequences(id) ON DELETE CASCADE,
+  subscriber_id   UUID NOT NULL REFERENCES newsletter_subscribers(id),
+  current_step    INTEGER NOT NULL DEFAULT 0,
+  status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'stopped')),
+  stopped_reason  TEXT,
+  replied_at      TIMESTAMPTZ,
+  enrolled_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_step_at    TIMESTAMPTZ,
+  UNIQUE (sequence_id, subscriber_id)
+);
+CREATE INDEX IF NOT EXISTS marketing_enrollments_status_idx ON marketing_sequence_enrollments (status);
