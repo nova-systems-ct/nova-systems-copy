@@ -320,3 +320,17 @@ be until these actually run and are reported honestly either way. `node scripts/
 `node scripts/unit_job_queue_correctness_test.mjs`,
 and `node worker/index.mjs --local --enqueue-demo --once` already pass/run today with zero
 dependency on the migrations above.
+
+## Update 2026-09-24 — Pilot execution order (Audit → Sales → Wave One → Installation)
+
+Authoritative detail: `docs/NOVA_PILOT_REQUIREMENTS.md`, `NOVA_PILOT_ACCEPTANCE_RESULTS.md`, `NOVA_PILOT_INSTALLATION.md`, `NOVA_PILOT_OWNER_ACTIONS.md`. Status of everything below: **code implemented + locally tested only** — no migration applied, nothing deployed, no provider connected, no owner-account verification.
+
+**Built** (commits 0289553, 1469962, 65ee193, b7319ee and the follow-up): Wave One core (signed Twilio SMS/voice/status webhooks fail-closed and replay-safe, forward-to-human voice, missed-call follow-up on the durable queue with execution-time eligibility, quiet-hours deferral, opt-out handling, forms with explicit-checkbox consent, pilots/checklist/go-live gate/testimonial permissions/results, operator view, Cal.com adapter that confirms only on `accepted`); Audit hardening (evidence/finding/estimate rules, readiness-gated content-hashed approval, org-checked delivery, SSRF-guarded public-page research); Sales/CRM (stages, reasons, activities, versioned proposals with no invented prices, dedupe + suppression-safe merge, import/export); UI pages Sales & Contacts, Pilots, Messaging & Booking, reworked Audit case page; `zz-public-schema-lockdown` migration.
+
+**Real defects found and fixed** (see acceptance doc for the list of 11): cross-org write paths in audit delivery/CRM, silent consent reset on contact edit, "YES" clearing opt-outs, forwarded missed calls undetectable, and 47 of 71 migration tables with no RLS.
+
+**Not built:** conversational AI voice agent, Cal.com reschedule/webhook, manual reply from inbox, appointment reminders, audit report renderer/email delivery, agreement templates, worker heartbeat/spend metering. **Not verified:** everything against a live database or provider; Isaac's own sign-in.
+
+**Verification commands:** `npm run verify:local` (16 suites, no DB/network); `scripts/ui_smoke_mocked.mjs` (mocked backend).
+
+**Exact next task:** owner actions A–F in `NOVA_PILOT_OWNER_ACTIONS.md`; then run e2e scripts and the Journey J installation on a test organization.

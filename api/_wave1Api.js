@@ -6,7 +6,7 @@
 import { randomBytes } from 'node:crypto';
 import { createPostgrestRepo } from './_wave1Repo.js';
 import { calcomConfigured, getSlots, createBooking, getBooking, cancelBooking } from './_calcom.js';
-import { handleSmsInbound, handleCallStatus, handleSmsStatus, handleFormIntake } from './_wave1Handlers.js';
+import { handleSmsInbound, handleCallStatus, handleSmsStatus, handleVoiceInbound, handleFormIntake } from './_wave1Handlers.js';
 
 const STANDARD_CHECKLIST = [
   ['preflight', 'settings_saved', 'Messaging settings saved for this organization'],
@@ -41,11 +41,11 @@ export async function handleWave1(req, res, op, deps) {
   const xml = (r) => { res.setHeader('Content-Type', r.type || 'application/json'); return res.status(r.status).send(typeof r.body === 'string' ? r.body : JSON.stringify(r.body)); };
 
   // ------------------------------------------------------------ public, verified webhooks
-  if (op === 'sms-inbound' || op === 'call-status' || op === 'sms-status') {
+  if (op === 'sms-inbound' || op === 'call-status' || op === 'sms-status' || op === 'voice-inbound') {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     const url = base ? `${base}/api/client?resource=wave1&op=${op}` : '';
     const params = req.body && typeof req.body === 'object' ? req.body : {};
-    const fn = op === 'sms-inbound' ? handleSmsInbound : op === 'sms-status' ? handleSmsStatus : handleCallStatus;
+    const fn = { 'sms-inbound': handleSmsInbound, 'sms-status': handleSmsStatus, 'voice-inbound': handleVoiceInbound, 'call-status': handleCallStatus }[op];
     try { return xml(await fn({ url, params, signature: req.headers['x-twilio-signature'] }, repoFor(), env)); }
     catch (err) { console.error(`[wave1:${op}] error:`, err.message); return res.status(500).json({ error: 'Webhook processing failed' }); } // non-2xx → Twilio retries; dedupe makes that safe
   }

@@ -44,7 +44,7 @@ Verification key: `unit_*` = pure logic; `handlers/api` = the real request handl
 | Testimonial permission separate, per-use, evidenced, not required | `pilot-permissions` op | Tests: new pilot has none; granting `quotation` does not grant `video`; "everything" rejected; not gated on agreement | C, T |
 | Reviewable agreement templates, **not labeled legally approved** | Only `agreement_version` + evidence fields exist | — | **Not built.** No template text has been written. Drafting legal language is not something this system should invent; an attorney-reviewed template must be supplied and stored as a reviewable version |
 | Configurable product catalog, no hardcoded prices/commissions/guarantees | `products` table + `pricing_approved` | Proposal test | C, T. Catalog has one placeholder row; no prices |
-| Owner pipeline UI | — | — | **Not built** (API only). See "Not built" below |
+| Owner pipeline UI | `src/pages/dashboard/Sales.jsx` (Growth → Sales & Contacts) | `ui_smoke_mocked` (mocked backend) | C; UI rendered against mocked API only — never against the real API |
 
 ## §7 CRM
 | Requirement | Where | Verification | Result |
@@ -59,7 +59,7 @@ Verification key: `unit_*` = pure logic; `handlers/api` = the real request handl
 ## §8 Inbound calls
 | Requirement | Result |
 |---|---|
-| Choose one runtime; per-business config; answers only from approved info; real CRM record; real scheduling source; transfer; fallback; recording retention | **Not built.** Missed-call detection (`call-status` webhook) and the follow-up are built (§9). A live conversational voice agent (Twilio media stream + STT/LLM/TTS) is **not implemented in this pass**; `docs/voice-agent-spec.md` and the `voice_*` schema (migration #11) describe it. Provider keys exist locally but nothing has been connected or called. Do not claim a working voice agent. |
+| Runtime chosen: **Twilio Voice forwarding to a human** (`voice-inbound` webhook: signed, per-number org routing, ring timeout, result callback). Unanswered forward → CRM record + one eligible follow-up | C, T (`unit_wave1_handlers_test`: forged 403, forwarded, answered ≠ missed, `DialCallStatus` no-answer = missed, no target → honest message + recorded miss, unowned number not forwarded). **Not built:** a conversational AI voice agent (answering from approved info, intake, booking by voice, transfer, voicemail, recording retention). `docs/voice-agent-spec.md` and the `voice_*` schema (migration #11) describe it; provider keys exist locally but nothing has been connected or called. **Do not claim a working voice agent.** |
 
 ## §9 Two-way SMS and missed calls
 | Requirement | Where | Verification | Result |
@@ -69,27 +69,27 @@ Verification key: `unit_*` = pure logic; `handlers/api` = the real request handl
 | Consent source+timestamp; no text just because a number exists; STOP wins; quiet hours/timezone; frequency; staff takeover | `evaluateSendEligibility` | Logic tests | C, T |
 | Dry-run ≠ sent; provider-accepted ≠ delivered; ambiguous outcome reconciled, never auto-retried | `classifySendOutcome`, message states | Tests | C, T |
 | Live send | Off unless `WAVE1_SEND_ENABLED=true` | — | Deliberately disabled |
-| Quiet-hours deferral | A missed call inside quiet hours is **blocked and recorded, not re-scheduled** for the morning (`retryAt` is computed but the worker does not reschedule) | — | **Known gap** |
+| Quiet-hours deferral | A missed call inside quiet hours is scheduled for the first moment quiet hours end (DST-correct), re-checked when it runs, deferred at most 3 times, then recorded as blocked | Logic + handler tests | C, T |
 | Provider registration (A2P 10DLC or equivalent) | Tracked in `provider_registration`; preflight fails until `approved` | — | Owner action; verify Twilio's current requirements yourself |
-| CRM inbox UI, delivery-status callbacks, template management UI | — | — | **Not built** (settings/conversations/takeover exist as API only; no status-callback handler for message delivery yet) |
+| Delivery-status callbacks (ordered, de-duplicated, forged/wrong-org rejected; carrier opt-out 21610 suppresses); inbox + settings + takeover UI | `handleSmsStatus`; `PilotConsole.jsx` | Handler tests; mocked UI | C, T. **Not built:** sending a manual reply from the inbox; template library UI (one missed-call template field only) |
 
 ## §10 Forms, calendar, follow-ups
 | Requirement | Result |
 |---|---|
 | Public form intake with token, honeypot, explicit-checkbox consent, double-submit protection, CORS for client sites | C, T (`form-intake`) |
-| Real calendar integration (Cal.com): connect/availability/booking/reschedule/conflicts | **Not built.** The schema models `requested` vs `confirmed` and refuses to count unconfirmed bookings in results; no Cal.com client exists. `VITE_CALCOM_URL` is a public booking link only |
+| Real calendar integration (Cal.com): availability, booking, cancel, sync, conflicts, duplicate prevention; never "confirmed" unless the source says `accepted` | C, T against a Cal.com stand-in (`api/_calcom.js`, `appointments`/`availability` ops). Endpoint paths/versions were checked against Cal.com's published reference and the host answers; **a real API key has never been used**. **Not built:** reschedule, a webhook receiver (state is refreshed by *Sync*; a raw request body is not available in the consolidated Vercel function), per-client Cal.com accounts (needs secret storage that does not exist). Requires `CALCOM_API_KEY` |
 | Durable follow-up workflows | Job queue exists (migration #8, unit-tested); only the missed-call job is wired |
 
 ## §11 Durable execution and operator view
 | Requirement | Result |
 |---|---|
 | Leases, retries, backoff, dead-letter, idempotency | C, T — `unit_job_queue_*` 27 checks; Postgres `claim_next_job()` **not executed on real Postgres** |
-| Operator view | Partial API (`operator` op): problem messages, failed/dead jobs, upcoming appointments, pause state. **Explicitly not available:** integration health, usage/spend, failed handoffs, worker liveness (the response says so). No UI |
+| Operator view | Partial API (`operator` op): problem messages, failed/dead jobs, upcoming appointments, pause state. **Explicitly not available:** integration health, usage/spend, failed handoffs, worker liveness (the response says so). UI: Messaging & Booking → Operator view (mocked-UI verified only), which lists what is not available rather than implying all-clear |
 
 ## §12 Installation Center
 | Requirement | Result |
 |---|---|
-| Repeatable workflow, preflight, supervised acceptance, go-live approval, pause switches | Preflight + 19-item checklist + server-enforced go-live gate + org/channel pause: C, T (API). Existing `Installations` UI/API (migration #6) is separate. **No installer UI for the Wave One checklist.** Journey J (new installation without code) is not proven |
+| Repeatable workflow, preflight, supervised acceptance, go-live approval, pause switches | Preflight + 19-item checklist + server-enforced go-live gate + org/channel pause: C, T (API). Existing `Installations` UI/API (migration #6) is separate. Checklist/preflight UI: Pilots → Install & acceptance (mocked-UI verified only). Journey J (new installation without code) is not proven |
 
 ## §13 Database and deployment
 | Requirement | Result |
@@ -99,7 +99,7 @@ Verification key: `unit_*` = pure logic; `handlers/api` = the real request handl
 | Vercel 12/12 cap | Still 12 top-level functions; everything folded into `api/client.js` |
 
 ## §15 Pilot results
-API `pilot-results`: baseline vs pilot period, real vs test excluded, requested vs confirmed appointments, missing period ≠ zero, and an explicit `not_measured` list (verified revenue, qualified leads, first-response time). Tested (C, T). **No dashboard UI, no exportable summary, no testimonial interview prompts yet.**
+API `pilot-results`: baseline vs pilot period, real vs test excluded, requested vs confirmed appointments, missing period ≠ zero, and an explicit `not_measured` list (verified revenue, qualified leads, first-response time). Tested (C, T). Dashboard tab + `.txt` export + interview prompts exist in `Pilots.jsx` (mocked-UI verified only). No PDF export.
 
 ## Not built in this pass (do not represent as done)
-Voice runtime · Cal.com integration · Wave One / pilots / sales / operator **UI** · audit report generation UI for the new fields (existing `AuditCaseDetail.jsx` predates them) · delivery-status webhooks · agreement templates (legal) · pilot results dashboard/export · testimonial interview workflow · quiet-hours rescheduling · general CRM change history.
+Conversational AI voice agent · Cal.com reschedule/webhook/per-client accounts · manual reply from the inbox · appointment reminders · audit report document renderer and real report email delivery · sales-handoff automation from audit to proposal · agreement templates (legal) · worker heartbeat / integration-health / usage-spend metering · general CRM change history · storage-bucket isolation tests · any live or provider verification.

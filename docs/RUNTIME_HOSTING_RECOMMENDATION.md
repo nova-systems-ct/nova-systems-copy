@@ -202,3 +202,7 @@ Sources (fetched 2026-09-24):
 - [Fly.io Pricing 2026 (Budgetforge analysis)](https://www.budgetforge.dev/tools/fly-io-pricing-2026-2)
 - [Railway vs Fly.io 2026 (Northflank analysis)](https://northflank.com/blog/railway-vs-flyio)
 - [Vapi AI Pricing 2026 (Cekura analysis)](https://www.cekura.ai/blogs/vapi-ai-pricing)
+
+## Correction 2026-09-24 — provider credentials
+
+An earlier statement in this document/tracking that telephony providers are unconfigured is inaccurate: `.env.local` contains values for Twilio, Deepgram, ElevenLabs, Resend, Stripe and a Cal.com booking URL. What is true: none of them has been **verified valid or connected** by this work (no call to any of these providers was made), and no number, messaging registration or webhook exists. The implemented telephony path is Twilio **forward-to-human** with missed-call follow-up; the Twilio Media Streams → Deepgram → Claude → ElevenLabs conversational path described above is **not built**.

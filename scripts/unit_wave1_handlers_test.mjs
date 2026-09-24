@@ -3,7 +3,7 @@
 // database table was touched. This proves the orchestration rules; it does NOT prove journeys
 // C/D/E in production — those need the migration, a deployed webhook URL and a real number.
 import { twilioSignature } from '../api/_wave1.js';
-import { handleSmsInbound, handleCallStatus, handleSmsStatus, handleFormIntake, runMissedCallFollowup } from '../api/_wave1Handlers.js';
+import { handleSmsInbound, handleCallStatus, handleSmsStatus, handleVoiceInbound, handleFormIntake, runMissedCallFollowup } from '../api/_wave1Handlers.js';
 
 const results = [];
 const log = (name, pass, detail) => { console.log(`${pass ? 'PASS' : 'FAIL'} — ${name}${detail ? ' — ' + detail : ''}`); results.push(pass); };
@@ -206,6 +206,29 @@ const settingsFor = (org, num, extra = {}) => ({ organization_id: org, sms_numbe
   log('An opted-out contact replying "Yes" is NOT re-subscribed and gets no consent', c.suppressed === true && c.sms_consent === false);
   await handleSmsInbound(signed('sms-inbound', { From: '+12035550100', To: '+12035550111', Body: 'START', MessageSid: 'SMstart' }), repo, ENV);
   log('START (carrier-standard) does re-subscribe, with source recorded', c.suppressed === false && c.sms_consent_source === 'sms_start_keyword');
+}
+
+// ---- inbound voice: forward to a human; only an UNANSWERED forward becomes a missed call ----
+{
+  const ENVV = { ...ENV, WAVE1_PUBLIC_BASE: 'https://nova-systems.app' };
+  const repo = makeRepo(); repo.s.settings.push(settingsFor(orgA, '+12035550111', { escalation_contacts: [{ name: 'Owner', phone: '(203) 555-0155' }] }));
+  const c = await repo.upsertContactByPhone(orgA, '+12035550100', { name: 'Pat' });
+  await repo.updateContact(orgA, c.id, { sms_consent: true, sms_consent_source: 'web_form_checkbox', sms_consent_at: '2026-09-01T00:00:00Z' });
+  const inbound = { From: '+12035550100', To: '+12035550111', CallSid: 'CAv1' };
+  const bad = await handleVoiceInbound({ url: `${BASE}&op=voice-inbound`, params: inbound, signature: 'forged' }, repo, ENVV);
+  log('VOICE: a forged voice webhook is rejected', bad.status === 403);
+  const t = await handleVoiceInbound(signed('voice-inbound', inbound), repo, ENVV);
+  log('VOICE: the call is forwarded to the escalation contact with a ring timeout and a result callback', t.status === 200 && t.body.includes('<Number>+12035550155</Number>') && t.body.includes('timeout="20"') && t.body.includes('action="https://nova-systems.app/api/client?resource=wave1&amp;op=call-status"'));
+  log('VOICE: forwarding alone creates no missed-call job', repo.s.jobs.length === 0);
+  await handleCallStatus(signed('call-status', { ...inbound, CallStatus: 'completed', DialCallStatus: 'completed' }), repo, ENVV);
+  log('VOICE: a forwarded leg that was ANSWERED is not a missed call', repo.s.jobs.length === 0);
+  await handleCallStatus(signed('call-status', { ...inbound, CallSid: 'CAv2', CallStatus: 'completed', DialCallStatus: 'no-answer' }), repo, ENVV);
+  log('VOICE: parent "completed" + DialCallStatus no-answer IS a missed call (one follow-up job)', repo.s.jobs.length === 1 && repo.s.jobs[0].idempotency_key === 'missed_call:CAv2');
+  const noTarget = makeRepo(); noTarget.s.settings.push(settingsFor(orgA, '+12035550111'));
+  const n = await handleVoiceInbound(signed('voice-inbound', { ...inbound, CallSid: 'CAv3' }), noTarget, ENVV);
+  log('VOICE: with no one to ring it says so honestly, hangs up, and still records the missed call', n.body.includes('<Hangup/>') && n.body.includes('no one is available') && noTarget.s.contacts.length === 1);
+  const stray = await handleVoiceInbound(signed('voice-inbound', { ...inbound, To: '+19998887777' }), repo, ENVV);
+  log('VOICE: a number no organization owns is not forwarded anywhere', stray.body.includes('not in service') && !stray.body.includes('<Dial'));
 }
 
 const passed = results.filter(Boolean).length;

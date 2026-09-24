@@ -47,6 +47,10 @@ script. Zero `DROP`/`TRUNCATE`/`DELETE` statements anywhere in this manifest.
 | 11 | `supabase/voice-agent-migration-standalone.sql` | #3 (`crm_contacts`) | No (new tables) | `scripts/validate_voice_agent_schema.mjs` — 9/9 |
 | 12 | `supabase/zion-studio-remaining-tabs-migration-standalone.sql` | #4 | Adds columns to live `zion_videos`/`zion_character_assets` (both still empty of real rows as of this writing) | `scripts/validate_zion_remaining_tabs_schema.mjs` — 6/6 |
 | 13 | `supabase/crystal-evidence-requirements-migration-standalone.sql` | #9 | Adds columns to `crystal_service_catalog`/`crystal_jobs` (both empty as of this writing) | `scripts/validate_crystal_evidence_requirements_schema.mjs` — 3/3 |
+| 14 | **`supabase/wave1-pilot-migration-standalone.sql`** (added 2026-09-24) | #3 (`crm_contacts`, `organizations`), #8 (`jobs`) | **Yes — adds columns to `crm_contacts`** (phone/consent/suppression, all nullable or defaulted) | `scripts/validate_wave1_pilot_schema.mjs` — 16/16 (pg-mem only) |
+| 15 | **`supabase/zz-public-schema-lockdown-standalone.sql`** — RUN LAST (added 2026-09-24) | all of the above | Touches only the listed tables it creates policy state for; enables RLS + revokes `anon` on 71 migration-created tables (47 had no RLS at all) | `scripts/check_migration_lockdown.mjs` (static coverage check). Not run against a live database |
+
+> **2026-09-24 correction:** #3 (`crm-order-audit`) was edited after this manifest was first written (finding/report/delivery columns, proposals, activities, deal stages). It has never been applied, so run the current file. See `docs/NOVA_PILOT_OWNER_ACTIONS.md` for the full pilot activation order.
 
 Run each file's full contents in the Supabase SQL Editor, in the numbered order above (later files
 reference tables/columns earlier files create). After each file, note in this table (or in
@@ -103,7 +107,7 @@ call-audio bridge.
 | Provider | What's needed | Cost | Blocks |
 |---|---|---|---|
 | Fly.io | Account + payment method | ~$2-8/mo | The worker above; scheduled publishing never actually fires without it |
-| Twilio | Account, phone number purchase | ~$1.15-2.15/mo + per-minute usage | Live voice calls (self-hosted path) |
+| Twilio | Number + messaging registration + webhook URLs (Twilio values already exist in `.env.local`; validity/connection **unverified**) | ~$1.15-2.15/mo + per-minute usage; registration fees per Twilio's current schedule | Wave One missed-call/SMS (forward-to-human path is built; AI voice path is not) |
 | Deepgram | API account | Usage-based (~$0.0077/min streaming) | Voice speech-to-text (self-hosted path) |
 | ElevenLabs | API account | Usage-based (~$0.05/1k chars) | Voice text-to-speech (self-hosted path) |
 | TikTok | Developer account + app review (privacy policy, demo video) | Free; ~1-2 weeks review | Automated TikTok posting — manual export works today regardless |

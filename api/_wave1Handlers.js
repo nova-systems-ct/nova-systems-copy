@@ -89,7 +89,9 @@ export async function handleCallStatus({ url, params, signature }, repo, env) {
   const from = normalizePhone(params.From);
   const to = normalizePhone(params.To);
   const callSid = params.CallSid;
-  const callStatus = params.CallStatus;
+  // When the call was forwarded with <Dial action=...>, DialCallStatus says whether the FORWARDED leg was
+  // answered; the parent CallStatus alone would read "completed" even for a call nobody picked up.
+  const callStatus = params.DialCallStatus || params.CallStatus;
   if (!from || !to || !callSid || !callStatus) return twiml(200);
 
   const org = await repo.orgByNumber(to);
@@ -100,7 +102,14 @@ export async function handleCallStatus({ url, params, signature }, repo, env) {
   const isNew = await repo.recordSourceEvent('twilio_call_status', `${callSid}:${callStatus}`, orgId, { kind: 'call_status' });
   if (!isNew) return twiml(200);
   if (!isMissedCallStatus(callStatus)) return twiml(200);
+  await processMissedCall({ repo, org, from, callSid });
+  return twiml(200);
+}
 
+// One missed call → a CRM record, and at most ONE follow-up (keyed by CallSid) if — and only if — the
+// contact is eligible right now. Everything is re-checked when the job runs.
+async function processMissedCall({ repo, org, from, callSid }) {
+  const orgId = org.organization_id;
   const contact = await repo.upsertContactByPhone(orgId, from, { name: 'Unknown (missed call)', source: 'missed_call' });
   const conv = await repo.upsertConversation(orgId, contact.id, 'sms');
   const settings = org.settings || {};
@@ -116,17 +125,42 @@ export async function handleCallStatus({ url, params, signature }, repo, env) {
     // Not refused, just too late/early: the same single follow-up is scheduled for when quiet hours end,
     // and re-evaluated then (a STOP/reply/booking in between still wins).
     await repo.enqueueJob({ job_type: 'wave1_missed_call_followup', organization_id: orgId, scheduled_at: decision.retryAt, payload: { contact_id: contact.id, conversation_id: conv.id, call_sid: callSid, deferrals: 1 }, idempotency_key: missedCallKey(callSid) });
-    return twiml(200);
+    return;
   }
   if (!decision.allowed) {
     // Recorded for the operator view so "why didn't it text them?" is answerable. Nothing is sent.
     await repo.insertMessage(orgId, { conversation_id: conv.id, direction: 'outbound', body: null, automated: true, purpose: 'missed_call', status: 'blocked', blocked_reason: decision.reason, idempotency_key: missedCallKey(callSid) });
-    return twiml(200);
+    return;
   }
   // Exactly one follow-up per call: the job's idempotency key is the CallSid. The worker re-checks
   // eligibility at execution time (a STOP or reply between now and then must win).
   await repo.enqueueJob({ job_type: 'wave1_missed_call_followup', organization_id: orgId, payload: { contact_id: contact.id, conversation_id: conv.id, call_sid: callSid }, idempotency_key: missedCallKey(callSid) });
-  return twiml(200);
+}
+
+// ---------------------------------------------------------------- inbound voice (forward to a human)
+// Point the business number's Voice webhook here. The call is forwarded to the organization's first
+// escalation contact with a ring timeout; Twilio then calls .../op=call-status with DialCallStatus, and an
+// unanswered forward becomes a missed call. NO conversational AI answers the phone — that is not built.
+const xmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const xml = (inner) => ({ status: 200, type: 'text/xml', body: `<?xml version="1.0" encoding="UTF-8"?><Response>${inner}</Response>` });
+export async function handleVoiceInbound({ url, params, signature }, repo, env) {
+  const sig = checkSignature({ url, params, signature }, env);
+  if (!sig.ok) return { status: sig.status, type: 'application/json', body: { error: sig.error } };
+  const from = normalizePhone(params.From); const to = normalizePhone(params.To); const callSid = params.CallSid;
+  if (!from || !to || !callSid) return twiml(200);
+  const org = await repo.orgByNumber(to);
+  if (!org) return xml('<Say>This number is not in service.</Say><Hangup/>');
+  const contacts = org.settings?.escalation_contacts || [];
+  const target = contacts.map((c) => normalizePhone(c.phone)).find(Boolean);
+  const base = (env.WAVE1_PUBLIC_BASE || '').replace(/\/$/, '');
+  if (!target || !base) {
+    // Nobody to ring (or no public base to receive the result): treat as missed, say so honestly, hang up.
+    if (await repo.recordSourceEvent('twilio_call_status', `${callSid}:no-forward-target`, org.organization_id, { kind: 'no_forward_target' })) await processMissedCall({ repo, org, from, callSid });
+    return xml('<Say>Sorry, no one is available to take your call right now.</Say><Hangup/>');
+  }
+  const action = `${base}/api/client?resource=wave1&op=call-status`;
+  const ring = Math.max(10, Math.min(60, Number(org.settings?.ring_timeout_seconds) || 20));
+  return xml(`<Dial timeout="${ring}" action="${xmlEsc(action)}" method="POST"><Number>${xmlEsc(target)}</Number></Dial>`);
 }
 
 // ---------------------------------------------------------------- form intake (public)
