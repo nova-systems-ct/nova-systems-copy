@@ -4,6 +4,8 @@ import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 import { handleWave1 } from './_wave1Api.js';
+import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
+import { normalizePhone } from './_wave1.js';
 import { computeCaseClockStatus } from './_auditClock.js';
 import { validateFinding, validateReportForApproval, contentHash, checkStatusTransition } from './_auditRules.js';
 import { fetchPublicPage, extractPublicSignals, signalsToEvidence } from './_auditResearch.js';
@@ -1361,11 +1363,19 @@ async function handleCrmBusinesses(req, res) {
       notes: sanitize(b.notes, 2000) || null,
       updated_at: new Date().toISOString(),
     };
-    if (!record.name) return res.status(400).json({ error: 'name is required' });
-    const path = action === 'update' && id ? `businesses?id=eq.${encodeURIComponent(id)}` : 'businesses';
-    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    if ((action === 'create' || b.name !== undefined) && !record.name) return res.status(400).json({ error: 'name is required' });
+    // Updates are scoped to the caller's org in the query itself and never rewrite organization_id —
+    // otherwise permission on org A could edit, or even re-home, org B's row by supplying its id.
+    if (action === 'update' && !id) return res.status(400).json({ error: 'id is required to update' });
+    if (action === 'update') {
+      delete record.organization_id;
+      for (const k of Object.keys(record)) if (k !== 'updated_at' && b[k] === undefined) delete record[k]; // partial update
+    }
+    const path = action === 'update' ? `businesses?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}` : 'businesses';
+    const r = await sbWrite(path, action === 'update' ? 'PATCH' : 'POST', record);
     if (!r.ok) { console.error('[client:crm businesses] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save business' }); }
     const rows = await r.json();
+    if (!rows.length) return res.status(404).json({ error: 'Business not found' });
     return res.status(200).json({ ok: true, business: rows[0] });
   }
 
@@ -1379,8 +1389,12 @@ async function handleCrmContacts(req, res) {
     const orgId = sanitize(req.query?.organization_id, 100);
     if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
     const businessId = sanitize(req.query?.business_id, 100);
-    let path = `crm_contacts?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`;
+    const limit = Math.min(200, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+    const offset = Math.max(0, parseInt(req.query?.offset, 10) || 0);
+    const q = sanitize(req.query?.q, 100).replace(/[*,()]/g, ' ').trim();
+    let path = `crm_contacts?organization_id=eq.${encodeURIComponent(orgId)}&merged_into_id=is.null&order=created_at.desc&limit=${limit}&offset=${offset}`;
     if (businessId) path += `&business_id=eq.${encodeURIComponent(businessId)}`;
+    if (q) path += `&or=(name.ilike.*${encodeURIComponent(q)}*,email.ilike.*${encodeURIComponent(q)}*,phone.ilike.*${encodeURIComponent(q)}*)`;
     const r = await sbSelect(path);
     if (!r.ok) { console.error('[client:crm contacts] error:', await r.text()); return res.status(500).json({ error: 'Failed to load contacts' }); }
     return res.status(200).json(await r.json());
@@ -1408,11 +1422,27 @@ async function handleCrmContacts(req, res) {
       source: sanitize(b.source, 100) || null,
       updated_at: new Date().toISOString(),
     };
-    if (!record.name) return res.status(400).json({ error: 'name is required' });
-    const path = action === 'update' && id ? `crm_contacts?id=eq.${encodeURIComponent(id)}` : 'crm_contacts';
-    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    if ((action === 'create' || b.name !== undefined) && !record.name) return res.status(400).json({ error: 'name is required' });
+    if (action === 'update' && !id) return res.status(400).json({ error: 'id is required to update' });
+    if (record.business_id) {
+      const br = await sbSelect(`businesses?id=eq.${encodeURIComponent(record.business_id)}&organization_id=eq.${encodeURIComponent(orgId)}&select=id&limit=1`);
+      if (!(br.ok && (await br.json()).length)) return res.status(400).json({ error: 'business_id does not belong to this organization' });
+    }
+    // Consent flags set here are staff assertions, not recorded consent: SMS consent for automation
+    // needs a source and timestamp (sms_consent_at), which only the person's own opt-in path sets.
+    if (action === 'update') {
+      delete record.organization_id; // never re-home a row
+      // Partial update: a field the caller did not send is left alone. Without this, editing a name
+      // would silently reset do_not_contact/consent flags to false and blank the email/phone.
+      for (const k of Object.keys(record)) if (k !== 'updated_at' && b[k] === undefined) delete record[k];
+    }
+    const e164 = normalizePhone(record.phone);
+    const scope = action === 'update' ? `?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}` : '';
+    let r = await sbWrite(`crm_contacts${scope}`, action === 'update' ? 'PATCH' : 'POST', e164 ? { ...record, phone_e164: e164 } : record);
+    if (!r.ok && e164) r = await sbWrite(`crm_contacts${scope}`, action === 'update' ? 'PATCH' : 'POST', record); // phone_e164 needs the wave1 migration
     if (!r.ok) { console.error('[client:crm contacts] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save contact' }); }
     const rows = await r.json();
+    if (!rows.length) return res.status(404).json({ error: 'Contact not found' });
     return res.status(200).json({ ok: true, contact: rows[0] });
   }
 
@@ -1420,7 +1450,6 @@ async function handleCrmContacts(req, res) {
 }
 
 // ------------------------------------------------------------------------------------ crm: deals
-const DEAL_STAGES = ['new', 'assigned', 'attempted', 'connected', 'qualified', 'discovery', 'proposal', 'accepted', 'payment_condition_satisfied', 'onboarding', 'lost', 'disqualified', 'nurture', 'paused'];
 
 async function handleCrmDeals(req, res, caller) {
   if (req.method === 'GET') {
@@ -1456,6 +1485,11 @@ async function handleCrmDeals(req, res, caller) {
       currency: sanitize(b.currency, 10) || 'USD',
       source: sanitize(b.source, 100) || null,
     };
+    for (const [table, refId, label] of [['businesses', record.business_id, 'business_id'], ['crm_contacts', record.contact_id, 'contact_id'], ['leads', record.lead_id, 'lead_id']]) {
+      if (!refId) continue;
+      const vr = await sbSelect(`${table}?id=eq.${encodeURIComponent(refId)}&organization_id=eq.${encodeURIComponent(orgId)}&select=id&limit=1`);
+      if (!(vr.ok && (await vr.json()).length)) return res.status(400).json({ error: `${label} does not belong to this organization` });
+    }
     const r = await sbWrite('crm_deals', 'POST', record);
     if (!r.ok) { console.error('[client:crm deals] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create deal' }); }
     const rows = await r.json();
@@ -1473,15 +1507,20 @@ async function handleCrmDeals(req, res, caller) {
     if (!existingRows.length) return res.status(404).json({ error: 'Deal not found' });
     const existing = existingRows[0];
 
+    const accRes = await sbSelect(`crm_proposals?deal_id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&status=eq.accepted&select=id&limit=1`);
+    const blocked = checkDealStageChange(existing, stage, { lost_reason: sanitize(b.lost_reason, 500), win_reason: sanitize(b.win_reason, 500) }, { hasAcceptedProposal: accRes.ok && (await accRes.json()).length > 0 });
+    if (blocked) return res.status(409).json({ error: blocked });
+
     const history = Array.isArray(existing.stage_history) ? existing.stage_history : [];
     history.push({ stage, at: new Date().toISOString(), by: caller.email });
-    const isClosed = ['lost', 'disqualified'].includes(stage);
+    const isClosed = TERMINAL_STAGES.has(stage);
     const patch = {
       stage, stage_history: history, updated_at: new Date().toISOString(),
-      lost_reason: stage === 'lost' ? sanitize(b.lost_reason, 500) || existing.lost_reason : existing.lost_reason,
+      lost_reason: ['lost', 'closed_no_conversion'].includes(stage) ? sanitize(b.lost_reason, 500) || existing.lost_reason : existing.lost_reason,
+      win_reason: ['won_paid', 'won_extended'].includes(stage) ? sanitize(b.win_reason, 500) || existing.win_reason : existing.win_reason,
       closed_at: isClosed ? new Date().toISOString() : existing.closed_at,
     };
-    const r = await sbWrite(`crm_deals?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
+    const r = await sbWrite(`crm_deals?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', patch);
     if (!r.ok) { console.error('[client:crm deals] update-stage error:', await r.text()); return res.status(500).json({ error: 'Failed to update deal stage' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, deal: rows[0] });
@@ -4163,6 +4202,7 @@ export default async function handler(req, res) {
       if (op === 'businesses') return handleCrmBusinesses(req, res);
       if (op === 'contacts') return handleCrmContacts(req, res);
       if (op === 'deals') return handleCrmDeals(req, res, caller);
+      if (['pipeline', 'activities', 'deal-plan', 'proposals', 'contacts-export', 'contacts-duplicates', 'contacts-merge', 'contacts-import'].includes(op)) return handleCrmSales(req, res, op, caller, { sbSelect, sbWrite, requireOrgAccess, sanitize, sanitizeEmail, rateLimit });
       return res.status(400).json({ error: `Unknown crm op: ${op}` });
     }
 

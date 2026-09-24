@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS crm_contacts (
   email_consent  BOOLEAN NOT NULL DEFAULT false,
   do_not_contact BOOLEAN NOT NULL DEFAULT false,
   source         TEXT,
+  -- Set when a duplicate is merged into another contact after review. The row is kept (history,
+  -- audit trail); it is excluded from normal listing and its unique identifiers are released.
+  merged_into_id UUID REFERENCES crm_contacts(id),
+  merged_at      TIMESTAMPTZ,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -80,8 +84,15 @@ CREATE TABLE IF NOT EXISTS crm_deals (
   stage           TEXT NOT NULL DEFAULT 'new' CHECK (stage IN (
                     'new','assigned','attempted','connected','qualified','discovery','proposal',
                     'accepted','payment_condition_satisfied','onboarding',
-                    'lost','disqualified','nurture','paused'
+                    'lost','disqualified','nurture','paused',
+                    -- Pilot sales path: prospect → contacted → discovery → audit → recommendation → proposal → pilot
+                    'prospect','contacted','audit_ordered','audit_delivered','recommendation','pilot_agreement',
+                    'installation','active_pilot','results_review','won_paid','won_extended','closed_no_conversion'
                   )),
+  next_action     TEXT,
+  next_action_at  TIMESTAMPTZ,
+  discovery       JSONB NOT NULL DEFAULT '{}',   -- discovery questionnaire answers (free-form; questions live in the UI)
+  win_reason      TEXT,
   stage_history   JSONB NOT NULL DEFAULT '[]',
   owner_user_id   UUID REFERENCES auth.users(id),
   value_cents     INTEGER,
@@ -94,6 +105,41 @@ CREATE TABLE IF NOT EXISTS crm_deals (
 );
 CREATE INDEX IF NOT EXISTS crm_deals_organization_idx ON crm_deals (organization_id);
 CREATE INDEX IF NOT EXISTS crm_deals_stage_idx ON crm_deals (stage);
+
+-- Notes, tasks and reminders attached to a deal and/or contact.
+CREATE TABLE IF NOT EXISTS crm_activities (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id),
+  deal_id         UUID REFERENCES crm_deals(id) ON DELETE CASCADE,
+  contact_id      UUID REFERENCES crm_contacts(id),
+  kind            TEXT NOT NULL CHECK (kind IN ('note','task','reminder')),
+  body            TEXT NOT NULL,
+  due_at          TIMESTAMPTZ,
+  done_at         TIMESTAMPTZ,
+  created_by      UUID REFERENCES auth.users(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS crm_activities_org_due_idx ON crm_activities (organization_id, due_at) WHERE done_at IS NULL;
+CREATE INDEX IF NOT EXISTS crm_activities_deal_idx ON crm_activities (deal_id);
+
+-- Versioned proposals / pilot scope. Prices are NEVER defaulted: price_cents stays NULL unless the
+-- referenced product is pricing_approved (enforced in the API). Acceptance needs recorded evidence.
+CREATE TABLE IF NOT EXISTS crm_proposals (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id     UUID NOT NULL REFERENCES organizations(id),
+  deal_id             UUID NOT NULL REFERENCES crm_deals(id) ON DELETE CASCADE,
+  version             INTEGER NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','sent','accepted','declined','superseded')),
+  scope               JSONB NOT NULL DEFAULT '{}',    -- {items:[{product_id, recommendation_id?, notes}], success_criteria:[...], ...}
+  price_cents         INTEGER,
+  currency            TEXT NOT NULL DEFAULT 'USD',
+  acceptance_evidence TEXT,
+  accepted_at         TIMESTAMPTZ,
+  created_by          UUID REFERENCES auth.users(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (deal_id, version)
+);
+CREATE INDEX IF NOT EXISTS crm_proposals_org_idx ON crm_proposals (organization_id);
 
 -- Link existing leads (Stage 5) to a resolved business without altering existing behavior —
 -- nullable, purely additive.
