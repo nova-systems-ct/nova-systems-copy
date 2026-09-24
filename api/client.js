@@ -44,6 +44,19 @@ import { computeCaseClockStatus } from './_auditClock.js';
 //                                                        inserts a new immutable version
 //         &op=deliveries         [intelligence.view]      POST {action:'record'}
 //         &op=outcomes           [intelligence.view]      POST {action:'create'}
+//   zion  &op=journal            [any active staff, ownership-scoped to author_user_id — never
+//                                             another author's rows] GET / POST (create)
+//        &op=facts               [any active staff, ownership-scoped] GET ?journal_entry_id= /
+//                                             POST {status:'confirmed'|'rejected'} — confirming a
+//                                             fact itself requires the platform owner specifically
+//        &op=ideas               [growth.view] GET ?status= / POST {action:'create'|
+//                                             'update-status'}
+//        &op=scripts             [growth.view] GET ?idea_id= / POST {idea_id, body, hook}
+//        &op=character-assets    [growth.view] GET — read-only
+//        &op=videos              [growth.view] GET ?status= / POST {action:'create-draft'|
+//                                             'request-render'}
+//        &op=review              [growth.view] POST {video_id, action:'approve'|
+//                                             'request_changes'|'reject'|'schedule'}
 //   auth                         retired — always 410 (see note above handler())
 
 const BLOG_CATEGORIES = ['AI and Technology', 'Connecticut Business', 'Case Studies', 'News', 'Tips and Strategy'];
@@ -1706,6 +1719,287 @@ async function handleAuditOutcomes(req, res) {
   return res.status(200).json({ ok: true, outcome: rows[0] });
 }
 
+// =============================================================================================
+// Zion Studio (2026-09-23, master prompt §16). Schema: supabase/zion-studio-migration-standalone.sql
+// — NOT yet applied to production.
+//
+// Journal/facts are private-by-default: scoped to the real author (or the platform owner), never
+// broadly staff-readable, checked the same way requireOrgAccess() checks org membership above —
+// by calling a real Postgres function (is_platform_owner()) with the caller's own token, not a
+// service-role assumption. Ideas/scripts/storyboards/videos/review are Nova-internal production
+// collaboration, gated at growth.view like the rest of the content tooling in this hub.
+// =============================================================================================
+
+async function isPlatformOwner(req) {
+  const { url, key } = sbEnv();
+  const token = callerToken(req);
+  try {
+    const r = await fetch(`${url}/rest/v1/rpc/is_platform_owner`, {
+      method: 'POST', headers: { apikey: key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}',
+    });
+    return r.ok && (await r.json()) === true;
+  } catch {
+    return false;
+  }
+}
+
+async function handleZionJournal(req, res, caller) {
+  const owner = await isPlatformOwner(req);
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    // Never let a non-owner list someone else's journal by omitting author_user_id — only the
+    // real author (or the platform owner) ever sees these rows, matching the RLS policy exactly.
+    const authorId = owner && sanitize(req.query?.author_user_id, 100) ? sanitize(req.query.author_user_id, 100) : caller.id;
+    const r = await sbSelect(`zion_journal_entries?author_user_id=eq.${encodeURIComponent(authorId)}&order=entry_date.desc`);
+    if (!r.ok) { console.error('[client:zion journal] error:', await r.text()); return res.status(500).json({ error: 'Failed to load journal' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const record = {
+    author_user_id: caller.id, // always the real caller — never a client-supplied author
+    entry_date: sanitize(b.entry_date, 20) || new Date().toISOString().slice(0, 10),
+    text_content: sanitize(b.text_content, 10000) || null,
+    time_spent_minutes: Number.isFinite(Number(b.time_spent_minutes)) ? Number(b.time_spent_minutes) : null,
+    wins: sanitize(b.wins, 3000) || null,
+    setbacks: sanitize(b.setbacks, 3000) || null,
+    lessons: sanitize(b.lessons, 3000) || null,
+    next_plan: sanitize(b.next_plan, 3000) || null,
+    privacy_level: b.privacy_level === 'allowed_disclosure' ? 'allowed_disclosure' : 'private',
+  };
+  const r = await sbWrite('zion_journal_entries', 'POST', record);
+  if (!r.ok) { console.error('[client:zion journal] create error:', await r.text()); return res.status(500).json({ error: 'Failed to save journal entry' }); }
+  const rows = await r.json();
+  const entryId = rows[0]?.id;
+
+  // Optional facts submitted alongside the entry — always created 'unconfirmed', never
+  // pre-confirmed by the submission itself, per "not established facts until Isaac confirms."
+  const factStatements = Array.isArray(b.facts) ? b.facts.map((f) => sanitize(f, 1000)).filter(Boolean) : [];
+  for (const statement of factStatements) {
+    await sbWrite('zion_facts', 'POST', { journal_entry_id: entryId, statement });
+  }
+  return res.status(200).json({ ok: true, entry: rows[0] });
+}
+
+async function handleZionFacts(req, res, caller) {
+  const owner = await isPlatformOwner(req);
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const journalEntryId = sanitize(req.query?.journal_entry_id, 100);
+    if (!journalEntryId) return res.status(400).json({ error: 'journal_entry_id is required' });
+    const entryRes = await sbSelect(`zion_journal_entries?id=eq.${encodeURIComponent(journalEntryId)}&limit=1`);
+    const entryRows = entryRes.ok ? await entryRes.json() : [];
+    if (!entryRows.length || (!owner && entryRows[0].author_user_id !== caller.id)) return res.status(404).json({ error: 'Journal entry not found' });
+    const r = await sbSelect(`zion_facts?journal_entry_id=eq.${encodeURIComponent(journalEntryId)}&order=created_at.asc`);
+    if (!r.ok) { console.error('[client:zion facts] error:', await r.text()); return res.status(500).json({ error: 'Failed to load facts' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  // Only Isaac (the platform owner) confirms/rejects his own facts — no staff member, however
+  // permissioned, can confirm a fact on his behalf.
+  if (!owner) return res.status(403).json({ error: 'Only the platform owner can confirm or reject a Zion fact' });
+  const b = req.body || {};
+  const id = sanitize(b.id, 100);
+  const status = sanitize(b.status, 20);
+  if (!id || !['confirmed', 'rejected'].includes(status)) return res.status(400).json({ error: 'id and a valid status (confirmed|rejected) are required' });
+  const r = await sbWrite(`zion_facts?id=eq.${encodeURIComponent(id)}`, 'PATCH', {
+    status, disclosure_allowed: b.disclosure_allowed === true, confirmed_by: caller.id, confirmed_at: new Date().toISOString(),
+  });
+  if (!r.ok) { console.error('[client:zion facts] update error:', await r.text()); return res.status(500).json({ error: 'Failed to update fact' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, fact: rows[0] });
+}
+
+const ZION_IDEA_STATUSES = ['idea', 'scripting', 'storyboarding', 'ready_to_render', 'rendering', 'editing', 'qa', 'ready_for_review', 'approved', 'changes_requested', 'rejected', 'scheduled', 'published', 'archived'];
+
+async function handleZionIdeas(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const status = sanitize(req.query?.status, 30);
+    let path = 'zion_video_ideas?order=updated_at.desc';
+    if (status) path += `&status=eq.${encodeURIComponent(status)}`;
+    const r = await sbSelect(path);
+    if (!r.ok) { console.error('[client:zion ideas] error:', await r.text()); return res.status(500).json({ error: 'Failed to load ideas' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    // Only fact IDs that are actually CONFIRMED may back a new idea — "one real event can
+    // support a recap/lesson/etc., not fictional new events."
+    const factIds = Array.isArray(b.source_fact_ids) ? b.source_fact_ids.map((f) => sanitize(f, 100)).filter(Boolean) : [];
+    if (factIds.length) {
+      const factsRes = await sbSelect(`zion_facts?id=in.(${factIds.map(encodeURIComponent).join(',')})&select=id,status`);
+      const facts = factsRes.ok ? await factsRes.json() : [];
+      const allConfirmed = factIds.every((id) => facts.some((f) => f.id === id && f.status === 'confirmed'));
+      if (!allConfirmed) return res.status(400).json({ error: 'Every source fact must already be confirmed before an idea can cite it' });
+    }
+    const record = {
+      source_fact_ids: factIds,
+      angle: sanitize(b.angle, 500),
+      story_type: ['recap', 'lesson', 'process_explanation', 'reflection'].includes(b.story_type) ? b.story_type : null,
+      created_by: caller.id,
+    };
+    if (!record.angle) return res.status(400).json({ error: 'angle is required' });
+    const r = await sbWrite('zion_video_ideas', 'POST', record);
+    if (!r.ok) { console.error('[client:zion ideas] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create idea' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, idea: rows[0] });
+  }
+
+  if (action === 'update-status') {
+    const id = sanitize(b.id, 100);
+    const status = sanitize(b.status, 30);
+    if (!id || !ZION_IDEA_STATUSES.includes(status)) return res.status(400).json({ error: 'id and a valid status are required' });
+    const r = await sbWrite(`zion_video_ideas?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status, updated_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:zion ideas] update-status error:', await r.text()); return res.status(500).json({ error: 'Failed to update idea' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, idea: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+async function handleZionScripts(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const ideaId = sanitize(req.query?.idea_id, 100);
+    if (!ideaId) return res.status(400).json({ error: 'idea_id is required' });
+    const r = await sbSelect(`zion_scripts?idea_id=eq.${encodeURIComponent(ideaId)}&order=version.desc`);
+    if (!r.ok) { console.error('[client:zion scripts] error:', await r.text()); return res.status(500).json({ error: 'Failed to load scripts' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const ideaId = sanitize(b.idea_id, 100);
+  const body = sanitize(b.body, 10000);
+  if (!ideaId || !body) return res.status(400).json({ error: 'idea_id and body are required' });
+
+  const existingRes = await sbSelect(`zion_scripts?idea_id=eq.${encodeURIComponent(ideaId)}&order=version.desc&limit=1`);
+  const existingRows = existingRes.ok ? await existingRes.json() : [];
+  const nextVersion = (existingRows[0]?.version || 0) + 1;
+  const r = await sbWrite('zion_scripts', 'POST', { idea_id: ideaId, version: nextVersion, hook: sanitize(b.hook, 500) || null, body });
+  if (!r.ok) { console.error('[client:zion scripts] create error:', await r.text()); return res.status(500).json({ error: 'Failed to save script' }); }
+  await sbWrite(`zion_video_ideas?id=eq.${encodeURIComponent(ideaId)}`, 'PATCH', { status: 'scripting', updated_at: new Date().toISOString() });
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, script: rows[0] });
+}
+
+async function handleZionCharacterAssets(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 60, 60_000)) return;
+  const r = await sbSelect('zion_character_assets?order=version.desc');
+  if (!r.ok) { console.error('[client:zion character-assets] error:', await r.text()); return res.status(500).json({ error: 'Failed to load character assets' }); }
+  return res.status(200).json(await r.json());
+}
+
+async function handleZionVideos(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const status = sanitize(req.query?.status, 30);
+    let path = 'zion_videos?order=created_at.desc';
+    if (status) path += `&status=eq.${encodeURIComponent(status)}`;
+    const r = await sbSelect(path);
+    if (!r.ok) { console.error('[client:zion videos] error:', await r.text()); return res.status(500).json({ error: 'Failed to load videos' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create-draft') {
+    const ideaId = sanitize(b.idea_id, 100);
+    if (!ideaId) return res.status(400).json({ error: 'idea_id is required' });
+    const record = {
+      idea_id: ideaId,
+      script_id: sanitize(b.script_id, 100) || null,
+      storyboard_id: sanitize(b.storyboard_id, 100) || null,
+      status: 'draft',
+    };
+    const r = await sbWrite('zion_videos', 'POST', record);
+    if (!r.ok) { console.error('[client:zion videos] create-draft error:', await r.text()); return res.status(500).json({ error: 'Failed to create video draft' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, video: rows[0] });
+  }
+
+  if (action === 'request-render') {
+    // "Missing character references block rendering, not the entire Studio" — enforced exactly
+    // here: every other action above works with zero character_assets rows; this one specific
+    // action refuses outright without at least one real appearance_reference on file.
+    const assetsRes = await sbSelect(`zion_character_assets?asset_type=eq.appearance_reference&limit=1`);
+    const assets = assetsRes.ok ? await assetsRes.json() : [];
+    if (!assets.length) {
+      return res.status(409).json({ error: 'No character reference asset is on file yet. Rendering is blocked until Isaac supplies the existing Zion character references — this does not block the rest of the Studio.' });
+    }
+    const id = sanitize(b.id, 100);
+    if (!id) return res.status(400).json({ error: 'id is required' });
+    // No render provider is connected in this environment — this honestly reports that instead
+    // of pretending to have started a render.
+    return res.status(501).json({ error: 'No video-rendering provider is connected yet. This action is implemented and ready — it needs a real provider adapter/credentials (see docs/PRODUCT_BUILD_STATE.md) before it can actually render anything.' });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+async function handleZionReview(req, res, caller) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const videoId = sanitize(b.video_id, 100);
+  const action = sanitize(b.action, 30);
+  if (!videoId || !['approve', 'request_changes', 'reject', 'schedule'].includes(action)) {
+    return res.status(400).json({ error: 'video_id and a valid action (approve|request_changes|reject|schedule) are required' });
+  }
+
+  const videoRes = await sbSelect(`zion_videos?id=eq.${encodeURIComponent(videoId)}&limit=1`);
+  const videoRows = videoRes.ok ? await videoRes.json() : [];
+  if (!videoRows.length) return res.status(404).json({ error: 'Video not found' });
+  const video = videoRows[0];
+
+  // "Material revisions invalidate approval" — an already-approved video can still be sent back
+  // to changes_requested/rejected (that IS the revision), but a second 'approve' on something
+  // already approved is refused, same immutability discipline as Audit reports.
+  if (action === 'approve' && video.status === 'approved') {
+    return res.status(400).json({ error: 'This video is already approved. Material changes require a new version, not a second approval.' });
+  }
+
+  await sbWrite('zion_review_events', 'POST', { video_id: videoId, action, notes: sanitize(b.notes, 2000) || null, actor_user_id: caller.id });
+
+  const patch = { };
+  if (action === 'approve') {
+    patch.status = 'approved';
+    patch.approval_version = (video.approval_version || 0) + 1;
+    patch.approved_by = caller.id;
+    patch.approved_at = new Date().toISOString();
+  } else if (action === 'request_changes') {
+    patch.status = 'changes_requested';
+  } else if (action === 'reject') {
+    patch.status = 'rejected';
+  } else if (action === 'schedule') {
+    if (video.status !== 'approved') return res.status(400).json({ error: 'Only an approved video can be scheduled' });
+    const scheduledAt = sanitize(b.scheduled_at, 40);
+    if (!scheduledAt) return res.status(400).json({ error: 'scheduled_at is required' });
+    patch.status = 'scheduled';
+    patch.scheduled_at = scheduledAt;
+  }
+  const r = await sbWrite(`zion_videos?id=eq.${encodeURIComponent(videoId)}`, 'PATCH', patch);
+  if (!r.ok) { console.error('[client:zion review] error:', await r.text()); return res.status(500).json({ error: 'Failed to record review decision' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, video: rows[0] });
+}
+
 // Nova Connect client portal login — checks against client_accounts.
 // handleAuth ("Nova Connect" client login) removed 2026-09-20 — confirmed dead (no live frontend
 // call, see src/pages/ClientLogin.jsx) and a real liability while it existed: unauthenticated,
@@ -1822,6 +2116,30 @@ export default async function handler(req, res) {
       if (op === 'deliveries') return handleAuditDeliveries(req, res);
       if (op === 'outcomes') return handleAuditOutcomes(req, res);
       return res.status(400).json({ error: `Unknown audit op: ${op}` });
+    }
+
+    case 'zion': {
+      // journal/facts are deliberately gated at "any real active staff member" — safe ONLY
+      // because handleZionJournal/handleZionFacts themselves filter by the real caller's own
+      // author_user_id (or require platform-owner status for facts confirmation), the same
+      // ownership-scoping pattern already proven for the hiring workflow's my-application action.
+      // Everything else here is real production tooling with no such per-row ownership check, so
+      // it needs an explicit permission gate — a bare nova_sales_candidate role (academy.view
+      // only) must not be able to reach Nova's content pipeline just by knowing the action name.
+      if (op === 'journal' || op === 'facts') {
+        const caller = await requireStaff(req, res);
+        if (!caller) return;
+        if (op === 'journal') return handleZionJournal(req, res, caller);
+        return handleZionFacts(req, res, caller);
+      }
+      const caller = await requireStaff(req, res, 'growth.view');
+      if (!caller) return;
+      if (op === 'ideas') return handleZionIdeas(req, res, caller);
+      if (op === 'scripts') return handleZionScripts(req, res);
+      if (op === 'character-assets') return handleZionCharacterAssets(req, res);
+      if (op === 'videos') return handleZionVideos(req, res, caller);
+      if (op === 'review') return handleZionReview(req, res, caller);
+      return res.status(400).json({ error: `Unknown zion op: ${op}` });
     }
 
     case 'auth':

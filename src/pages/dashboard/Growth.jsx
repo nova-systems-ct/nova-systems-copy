@@ -1,4 +1,4 @@
-import { Target, HandCoins, Zap, Newspaper, LayoutGrid, Mail, GraduationCap, Building2 } from 'lucide-react'
+import { Target, HandCoins, Zap, Newspaper, LayoutGrid, Mail, GraduationCap, Building2, Clapperboard } from 'lucide-react'
 import AreaHub from '../../components/dashboard/AreaHub'
 import { useOrg } from '../../lib/OrgContext'
 
@@ -54,6 +54,12 @@ export default function Growth() {
       description: 'Send and manage email newsletter campaigns.',
       icon: Mail,
       path: '/dashboard/newsletter',
+    },
+    {
+      label: 'Zion Studio',
+      description: "Isaac's journal-to-video pipeline. Journal entries stay private to their author.",
+      icon: Clapperboard,
+      path: '/dashboard/zion',
     },
   ]
 
