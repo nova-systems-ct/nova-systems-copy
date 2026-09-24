@@ -34,7 +34,7 @@ const NAV = [
   { to: '/dashboard/growth',       label: 'Growth',        icon: TrendingUp,      match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/leads', '/dashboard/zion'], permission: 'growth.view' },
   { to: '/dashboard/execution',    label: 'Execution',     icon: PlayCircle,      match: ['/dashboard/execution', '/dashboard/tasks'], permission: 'execution.view' },
   { to: '/dashboard/companies',    label: 'Companies',     icon: Building2,       match: ['/dashboard/companies'], permission: 'companies.view' },
-  { to: '/dashboard/admin',        label: 'Admin',         icon: ShieldCheck,     match: ['/dashboard/admin', '/dashboard/jobs', '/dashboard/invoices', '/dashboard/contracts', '/dashboard/nova-vault', '/dashboard/documents'], permission: 'admin.view' },
+  { to: '/dashboard/admin',        label: 'Admin',         icon: ShieldCheck,     match: ['/dashboard/admin', '/dashboard/jobs', '/dashboard/invoices', '/dashboard/contracts', '/dashboard/nova-vault', '/dashboard/documents', '/dashboard/approvals'], permission: 'admin.view' },
 ]
 
 function OrgSwitcher() {

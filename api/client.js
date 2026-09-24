@@ -57,6 +57,12 @@ import { computeCaseClockStatus } from './_auditClock.js';
 //                                             'request-render'}
 //        &op=review              [growth.view] POST {video_id, action:'approve'|
 //                                             'request_changes'|'reject'|'schedule'}
+//   approvals                    [admin.view]      GET aggregates pending audit reports + zion
+//                                             videos + generic approval_requests into one inbox /
+//                                             POST {action:'create'|'approve'|'reject'|'revoke', id}
+//                                             — approve/reject recheck content_version (409 on
+//                                             mismatch) and expires_at (410 if expired); revoke
+//                                             only valid from 'approved'
 //   auth                         retired — always 410 (see note above handler())
 
 const BLOG_CATEGORIES = ['AI and Technology', 'Connecticut Business', 'Case Studies', 'News', 'Tips and Strategy'];
@@ -2000,6 +2006,124 @@ async function handleZionReview(req, res, caller) {
   return res.status(200).json({ ok: true, video: rows[0] });
 }
 
+// =============================================================================================
+// Approval Inbox (2026-09-23, master prompt §19). Schema:
+// supabase/approval-inbox-migration-standalone.sql — NOT yet applied to production.
+//
+// Deliberately does NOT retrofit audit_reports/zion_videos' own already-tested approval logic
+// into this table — that would be a real refactor risk to freshly-shipped, working code for no
+// functional gain. Instead this aggregates pending items from all three real sources into one
+// list, and separately provides the generic approval_requests table for new consequential-action
+// types (installations, spending, pricing exceptions) that don't have their own flow yet.
+// =============================================================================================
+
+async function handleApprovalsInbox(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+
+  const [reportsRes, videosRes, genericRes] = await Promise.all([
+    sbSelect(`audit_reports?status=eq.draft&select=id,case_id,version,created_at&order=created_at.desc`),
+    sbSelect(`zion_videos?status=in.(draft,ready_for_review)&select=id,idea_id,status,created_at&order=created_at.desc`),
+    sbSelect(`approval_requests?status=eq.pending&order=created_at.desc`),
+  ]);
+
+  const items = [];
+  if (reportsRes.ok) {
+    for (const r of await reportsRes.json()) {
+      items.push({ item_type: 'audit_report', item_id: r.id, action_summary: `Approve Audit report v${r.version} (case ${String(r.case_id).slice(0, 8)})`, created_at: r.created_at, approve_action: { resource: 'audit', op: 'reports', body: { action: 'approve', id: r.id, case_id: r.case_id } } });
+    }
+  }
+  if (videosRes.ok) {
+    for (const v of await videosRes.json()) {
+      items.push({ item_type: 'zion_video', item_id: v.id, action_summary: `Review Zion video ${String(v.id).slice(0, 8)} (${v.status.replace(/_/g, ' ')})`, created_at: v.created_at, approve_action: { resource: 'zion', op: 'review', body: { video_id: v.id, action: 'approve' } } });
+    }
+  }
+  if (genericRes.ok) {
+    for (const g of await genericRes.json()) {
+      items.push({ item_type: g.item_type, item_id: g.id, action_summary: g.action_summary, created_at: g.created_at, cost_cents: g.cost_cents, destination: g.destination, expires_at: g.expires_at, approve_action: { resource: 'approvals', op: null, body: { action: 'approve', id: g.id } } });
+    }
+  }
+  items.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  return res.status(200).json(items);
+}
+
+async function handleApprovalsGeneric(req, res, caller) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const record = {
+      organization_id: sanitize(b.organization_id, 100) || null,
+      item_type: sanitize(b.item_type, 50),
+      item_ref: sanitize(b.item_ref, 200) || null,
+      action_summary: sanitize(b.action_summary, 1000),
+      content_version: sanitize(b.content_version, 200) || null,
+      destination: sanitize(b.destination, 300) || null,
+      requester_user_id: caller.id,
+      cost_cents: Number.isFinite(Number(b.cost_cents)) ? Number(b.cost_cents) : null,
+      currency: sanitize(b.currency, 10) || 'USD',
+      evidence: b.evidence && typeof b.evidence === 'object' ? b.evidence : {},
+      policy_ref: sanitize(b.policy_ref, 200) || null,
+      expires_at: sanitize(b.expires_at, 40) || null,
+    };
+    if (!record.item_type || !record.action_summary) return res.status(400).json({ error: 'item_type and action_summary are required' });
+    const r = await sbWrite('approval_requests', 'POST', record);
+    if (!r.ok) { console.error('[client:approvals] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create approval request' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, request: rows[0] });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  const existingRes = await sbSelect(`approval_requests?id=eq.${encodeURIComponent(id)}&limit=1`);
+  const existingRows = existingRes.ok ? await existingRes.json() : [];
+  if (!existingRows.length) return res.status(404).json({ error: 'Approval request not found' });
+  const existing = existingRows[0];
+
+  if (action === 'approve' || action === 'reject') {
+    if (existing.status !== 'pending') {
+      return res.status(400).json({ error: `This request is already ${existing.status} — a new request is required for any further change.` });
+    }
+    // "Recheck authority and unchanged content immediately before execution": if the request was
+    // created with a content_version, the caller must supply the SAME one now — a mismatch means
+    // the underlying content changed since the request was raised, and approval is refused.
+    if (existing.content_version && sanitize(b.content_version, 200) !== existing.content_version) {
+      return res.status(409).json({ error: 'Content has changed since this approval was requested. A new request is required.' });
+    }
+    if (existing.expires_at && new Date(existing.expires_at) < new Date()) {
+      await sbWrite(`approval_requests?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'expired' });
+      return res.status(410).json({ error: 'This approval request has expired.' });
+    }
+
+    if (action === 'approve') {
+      const r = await sbWrite(`approval_requests?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approver_user_id: caller.id, approved_at: new Date().toISOString() });
+      if (!r.ok) { console.error('[client:approvals] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve' }); }
+      const rows = await r.json();
+      return res.status(200).json({ ok: true, request: rows[0] });
+    }
+    const r = await sbWrite(`approval_requests?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'rejected', approver_user_id: caller.id, approved_at: new Date().toISOString(), outcome: sanitize(b.reason, 1000) || null });
+    if (!r.ok) { console.error('[client:approvals] reject error:', await r.text()); return res.status(500).json({ error: 'Failed to reject' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, request: rows[0] });
+  }
+
+  if (action === 'revoke') {
+    // Revoking only makes sense for something that was actually granted — revoking a pending or
+    // already-rejected/expired request is not a real action, it's a no-op dressed up as one.
+    if (existing.status !== 'approved') {
+      return res.status(400).json({ error: 'Only an approved request can be revoked.' });
+    }
+    const r = await sbWrite(`approval_requests?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'revoked', revoked_at: new Date().toISOString(), revoked_reason: sanitize(b.reason, 1000) || null });
+    if (!r.ok) { console.error('[client:approvals] revoke error:', await r.text()); return res.status(500).json({ error: 'Failed to revoke' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, request: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
 // Nova Connect client portal login — checks against client_accounts.
 // handleAuth ("Nova Connect" client login) removed 2026-09-20 — confirmed dead (no live frontend
 // call, see src/pages/ClientLogin.jsx) and a real liability while it existed: unauthenticated,
@@ -2140,6 +2264,16 @@ export default async function handler(req, res) {
       if (op === 'videos') return handleZionVideos(req, res, caller);
       if (op === 'review') return handleZionReview(req, res, caller);
       return res.status(400).json({ error: `Unknown zion op: ${op}` });
+    }
+
+    case 'approvals': {
+      // admin.view: approval actions are consequential (spending, installations, pricing
+      // exceptions, content publication) — gated the same as invoices/vault, not left at bare
+      // "any active staff" like the read-only aggregation might otherwise tempt.
+      const caller = await requireStaff(req, res, 'admin.view');
+      if (!caller) return;
+      if (req.method === 'GET') return handleApprovalsInbox(req, res);
+      return handleApprovalsGeneric(req, res, caller);
     }
 
     case 'auth':

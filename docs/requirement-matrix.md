@@ -34,7 +34,8 @@ silently dropped.
 | R15 | §16 | Zion Studio (journal → character video pipeline) | R03, migration | **Built 2026-09-23**: `zion_journal_entries`/`zion_facts`/`zion_character_assets`/`zion_video_ideas`/`zion_scripts`/`zion_storyboards`/`zion_videos`/`zion_review_events` in `supabase/zion-studio-migration-standalone.sql`; `api/client.js`'s `zion` resource; `src/pages/dashboard/ZionStudio.jsx` (Journal/Ideas & Scripts/Review tabs). A real pre-ship authorization gap (ideas/scripts/videos/review only checked "any staff," not growth.view) was found and fixed before this shipped — covered by `scripts/e2e_zion_studio_test.mjs`. Render step correctly refuses (409, honest message) with no character asset on file; no render provider connected, and the code says so rather than faking a result | T11 | **locally verified** (code) | Migration not applied. No character reference assets supplied yet (blocks the render step only, per instruction — not the rest of the Studio, which is fully built and tested). Calendar/Published/Analytics/Revenue/Profile Bible tabs from §16 not built |
 | R16 | §17 | Marketing/content/SEO engine | R03 | Zero implementation beyond the existing public Insights blog (content-only, no workflow/approval/scheduling) | T12 | **not started** | — |
 | R17 | §14 | Crystal / Company 002 operational workspace | R03 | Zero implementation. Naming still provisional per historical context | T10 | **not started** | Blocked behind R10-R13 per this prompt's own dependency order (§23 step 8 comes after CRM/Audit/Wave One) |
-| R18 | §19 | Integration Center, Approval Inbox | R03 | Zero implementation as a unified system. Individual ad-hoc provider calls exist (Stripe, Resend, Twilio SMS, Anthropic) but no registry/status-tracking/approval-versioning layer | T14 | **not started** | Next dependency-ready module — buildable now without live provider credentials (a registry/status system, not a live connection) |
+| R18a | §19 | Integration Center | R03 | **Correction to this matrix's own earlier entry**: this is NOT zero implementation — checked before assuming otherwise, per the master prompt's explicit "do not rebuild... preserve and extend" instruction. `api/integrations.js` + `src/pages/dashboard/Integrations.jsx` are a real, complete registry for all 8 providers this codebase touches (Supabase, Stripe, Resend, Anthropic, Twilio, Google, ElevenLabs, Deepgram) — honest status vocabulary matching §19 exactly (`not_connected`/`disconnected`/`connected`/`tested`/`degraded`/`authorization_required`), on-demand live testing (never automatic), env-var presence checking with zero secret exposure, already routed and in the Admin hub nav | — | **live verified** | Presence/live-test only, no persistent history table — "last successful sync"/"webhook health"/"usage" from §19's full field list aren't tracked across time, only computed fresh on each check. No per-organization OAuth-style connections yet (all 8 current providers are Nova's own global credentials, not per-client integrations) |
+| R18b | §19 | Approval Inbox | R03, migration | **Built 2026-09-23**: `approval_requests` table (`supabase/approval-inbox-migration-standalone.sql`, pg-mem validated 3/3), `api/client.js`'s `approvals` resource (GET aggregates pending audit reports + Zion videos + generic requests into one real inbox; POST create/approve/reject/revoke) gated at `admin.view`, `src/pages/dashboard/ApprovalInbox.jsx` (real list/action UI, wired into the Admin hub + nav). Deliberately does not retrofit `audit_reports`/`zion_videos`' own already-tested approval logic — those keep their existing flows; the inbox's approve/reject buttons for those two item types call straight through to the SAME endpoints already covered by `e2e_crm_order_audit_test.mjs`/`e2e_zion_studio_test.mjs`. Content-version mismatch is refused (409), expiry auto-marks the row `expired` on a late approve attempt (410), revoke is only valid from an actually-`approved` state (a real logic bug — revoke guarded by the same "must be pending" check as approve/reject, making it permanently unreachable — was caught and fixed before this shipped). `scripts/e2e_approval_inbox_test.mjs` written (aggregation, version mismatch, expiry, revoke-from-approved, admin.view gating), fails fast on missing schema | T14 | **locally verified** (code), **waiting on owner** (schema) | Migration not applied. Vercel function count still 12/12 — folded entirely into `api/client.js`, no new top-level file |
 | R19 | §20 | Durable workers/queues, cost tracking, incident monitoring | R03 | Zero implementation — current architecture is 100% Vercel serverless functions (request/response only), no worker/queue infrastructure exists | T15 | **not started** | Needs an explicit hosting decision (Vercel Cron? external worker host?) before any code — this is infrastructure, not application logic |
 | R20 | §9 | Vercel function capacity | — | Re-verified 2026-09-23: exactly 12 of 12 top-level `api/*.js` files. Confirmed still the actual constraint (not assumed) — this is the real current plan limit, not an unverified carryover number | — | **live verified** | Any new top-level endpoint requires consolidating into an existing file or confirming a plan upgrade with Isaac |
 
@@ -46,15 +47,18 @@ track real work. Each row above represents one coherent module; the "Current evi
 points at the actual code/test/live-check backing the status claim, so any row can be re-verified
 independently rather than taken on faith.
 
-## Summary counts (updated 2026-09-23, commit `9af43eb`)
+## Summary counts (updated 2026-09-23, commit pending — post-Approval-Inbox)
 
-- **Live verified**: R01 (system-level login), R03, R04 (shell), R06 (catalog reconciliation), R20 — 5
-- **Locally verified, waiting on owner for schema/infra**: R05, R07, R08, R10, R15 — 5
+- **Live verified**: R01 (system-level login), R03, R04 (shell), R06 (catalog reconciliation), R18a (Integration Center — found already real, corrected from an earlier wrong "not started" entry in this same matrix), R20 — 6
+- **Locally verified, waiting on owner for schema/infra**: R05, R07, R08, R10, R15, R18b — 6
 - **In development (partial, real, not yet complete)**: R11 (catalog done, runtime not), R13 (pipeline only), R14 (data model only) — 3
 - **Waiting on owner (no code blocker)**: R02, R09 — 2
-- **Not started**: R12, R16, R17, R18, R19 — 5
+- **Not started**: R12, R16, R17, R19 — 4
 
-Five of twenty tracked modules have not been started at all — down from ten at the start of this
-session, all through real, tested, verified work, not by redefining "not started." This matrix
-will be updated, not replaced, as each module moves — see `docs/PRODUCT_BUILD_STATE.md` for the
-live checkpoint and exact next task.
+Twenty-one rows now cover the original twenty modules (R18 split into R18a/R18b once it turned
+out to be two different things at two different states). This matrix will be updated, not
+replaced, as each module moves — see `docs/PRODUCT_BUILD_STATE.md` for the live checkpoint and
+exact next task. **Lesson applied from this correction**: verify a module's real state by reading
+its actual code before writing "not started" in this table, the same discipline already used for
+the Academy/hiring/CRM domains — this one slipped through on a first pass and was caught before it
+caused any wasted rebuild effort.

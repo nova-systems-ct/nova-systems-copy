@@ -74,6 +74,7 @@ const CRM = lazy(() => import('./pages/dashboard/CRM'));
 const AuditCases = lazy(() => import('./pages/dashboard/AuditCases'));
 const AuditCaseDetail = lazy(() => import('./pages/dashboard/AuditCaseDetail'));
 const ZionStudio = lazy(() => import('./pages/dashboard/ZionStudio'));
+const ApprovalInbox = lazy(() => import('./pages/dashboard/ApprovalInbox'));
 const RequirePermission = lazy(() => import('./components/dashboard/RequirePermission'));
 
 function RouteFallback() {
@@ -153,6 +154,7 @@ function App() {
               <Route path="audit" element={<RequirePermission permission="intelligence.view"><AuditCases /></RequirePermission>} />
               <Route path="audit/:id" element={<RequirePermission permission="intelligence.view"><AuditCaseDetail /></RequirePermission>} />
               <Route path="zion" element={<RequirePermission permission="growth.view"><ZionStudio /></RequirePermission>} />
+              <Route path="approvals" element={<RequirePermission permission="admin.view"><ApprovalInbox /></RequirePermission>} />
             </Route>
 
             <Route path="/verify-certificate" element={<VerifyCertificate />} />

@@ -1,8 +1,8 @@
 # Nova Product Build — State Checkpoint
 
-Last updated: 2026-09-23, commit `9af43eb`. Written per the master execution prompt's §23
-requirement to maintain a real, resumable checkpoint rather than claim unattended progress across
-a session boundary this environment cannot actually cross.
+Last updated: 2026-09-23, commit pending (post-Approval-Inbox). Written per the master execution
+prompt's §23 requirement to maintain a real, resumable checkpoint rather than claim unattended
+progress across a session boundary this environment cannot actually cross.
 
 ## Where this build actually is
 
@@ -14,13 +14,14 @@ status (source of truth; this document is the narrative checkpoint, not a duplic
 As of this update: identity/tenancy, the dashboard shell, Sales Academy, hiring pipeline, shared
 CRM foundations (businesses/contacts/deals), the product catalog, the order lifecycle, the full
 Nova Audit domain (cases/evidence/findings/recommendations/reports/deliveries/outcomes, with a
-real, independently unit-tested deadline clock), and Zion Studio (journal/facts/ideas/scripts/
-production/review) are all real, tested code. Five migration files are written, safety-reviewed,
-and NOT yet applied to production (this environment has no DDL access — never has, this whole
-project). Three storage buckets are specified and NOT yet created (blocked by this session's own
-permission system, not bypassed). Voice/phone infrastructure, the Installation Center UI, Crystal,
-marketing automation, the Integration Center/Approval Inbox, and durable worker infrastructure
-have not been started.
+real, independently unit-tested deadline clock), Zion Studio (journal/facts/ideas/scripts/
+production/review), the Integration Center (found already complete on inspection — see below), and
+the Approval Inbox (aggregation + generic consequential-action approval/reject/revoke) are all
+real, tested code. Six migration files are written, safety-reviewed, and NOT yet applied to
+production (this environment has no DDL access — never has, this whole project). Three storage
+buckets are specified and NOT yet created (blocked by this session's own permission system, not
+bypassed). Voice/phone infrastructure, the Installation Center UI, Crystal, marketing automation,
+and durable worker infrastructure have not been started.
 
 ## How schema-dependent work is being tested (no Docker/local Postgres in this environment)
 
@@ -42,11 +43,11 @@ used throughout this session:
   real business-hours weekend-skip case and the "a pause extends the deadline by exactly its own
   duration" invariant the master prompt explicitly requires.
 - **Live authorization/integration proof**: real e2e scripts (`scripts/e2e_crm_order_audit_test.mjs`,
-  `scripts/e2e_zion_studio_test.mjs`, plus the pre-existing `e2e_academy_auth_test.mjs`/
-  `e2e_hiring_workflow_test.mjs`) run against the actual Supabase project using real throwaway
-  orgs/users, cleaned up after. All four currently fail fast with a clear "table not found" error
-  — an honest, correct result, since none of their target migrations have been applied yet. This
-  is not being reported as a pass.
+  `scripts/e2e_zion_studio_test.mjs`, `scripts/e2e_approval_inbox_test.mjs`, plus the pre-existing
+  `e2e_academy_auth_test.mjs`/`e2e_hiring_workflow_test.mjs`) run against the actual Supabase
+  project using real throwaway orgs/users, cleaned up after. All five domain-specific scripts
+  currently fail fast with a clear "table not found" error — an honest, correct result, since none
+  of their target migrations have been applied yet. This is not being reported as a pass.
 
 Every pre-existing permanent regression suite (org isolation 8/8, API client auth 22/22, login
 path 12/12) has been re-run after every change this session and still passes — no regressions.
@@ -90,7 +91,22 @@ path 12/12) has been re-run after every change this session and still passes —
    would have let a low-privilege role reach Nova's real content tooling — fixed to require
    `growth.view` for everything except the ownership-scoped journal/facts, and covered by a test
    written specifically to prove the fix, not just that the code runs.
-7. **Requirement matrix and this checkpoint updated** to reflect all of the above against actual
+7. **Integration Center verified already complete** (§19): before writing a "not started" entry,
+   `api/integrations.js`/`src/pages/dashboard/Integrations.jsx` were read directly and found to
+   already be a real, working registry for all 8 providers this codebase touches, honest status
+   vocabulary, on-demand testing, already routed — corrected the requirement matrix instead of
+   duplicating working code.
+8. **Approval Inbox built** (§19): `approval_requests` table (pg-mem validated 3/3), `api/client.js`'s
+   `approvals` resource (GET aggregates pending Audit reports + Zion videos + generic requests;
+   POST create/approve/reject/revoke, gated `admin.view`), `src/pages/dashboard/ApprovalInbox.jsx`
+   wired into the Admin hub. Content-version mismatch refused (409), expiry auto-marks a row
+   `expired` on a late approve attempt (410). **A real logic bug caught and fixed before shipping**:
+   the first draft guarded `revoke` behind the same "status must still be pending" check used for
+   approve/reject, which made revoke permanently unreachable (revoking only ever makes sense on an
+   already-*approved* row) — split the guard so approve/reject require `pending` and revoke
+   requires `approved`. `scripts/e2e_approval_inbox_test.mjs` written and confirmed to fail fast
+   correctly (migration not applied).
+9. **Requirement matrix and this checkpoint updated** to reflect all of the above against actual
    evidence — not narrated separately from the code that backs each claim.
 
 ## What was deliberately NOT attempted this session
@@ -100,33 +116,34 @@ any code is worth writing — Vercel's serverless functions cannot host live cal
 telephony provider is configured. The Installation Center's actual UI/workflow (sandbox tests,
 activation authority, pause/offboard, the two-independent-test-org isolation proof) is not built —
 only its underlying data model (product catalog + order lifecycle) is. Crystal, marketing
-automation, the unified Integration Center/Approval Inbox, and durable worker/queue infrastructure
-are all still zero-implementation. Starting any of these shallowly would produce exactly the
-"scaffold with no real domain logic" the master prompt prohibits — each needs its own properly-
-scoped pass.
+automation, and durable worker/queue infrastructure are all still zero-implementation. Starting any
+of these shallowly would produce exactly the "scaffold with no real domain logic" the master prompt
+prohibits — each needs its own properly-scoped pass.
 
 ## Exact next task
 
-Per §23's dependency order and the requirement matrix's own "not started" list, the next
-dependency-ready module that does NOT require live provider credentials or a hosting decision is
-the **Integration Center registry** (§19) — a real table of provider/organization/connection-state/
-last-test/error records, with statuses exactly as specified (`not implemented` / `not connected` /
-`authorization required` / `connected` / `operation-tested` / `degraded` / `disconnected`), and the
-**Approval Inbox** (§19) unifying the review/approval pattern already built three times
-independently this session (Audit report approval, Zion video approval, and implicitly order
-acceptance) into one real, reusable service. Both are buildable and fully locally-testable right
-now, exactly like everything else in this checkpoint.
+Per §23's dependency order and the requirement matrix's own "not started" list (R12 voice, R16
+marketing/SEO engine, R17 Crystal, R19 durable workers), every remaining not-started module needs
+either live provider credentials, a hosting/runtime decision, or is explicitly gated behind other
+modules per the master prompt's own dependency order (Crystal behind R10-R13). The next
+dependency-ready, credential-free, locally-testable increment is the **Installation Center's actual
+UI/workflow** (§13) — its underlying data model (product catalog + order lifecycle, R14) is already
+built and tested; what remains is the sandbox-test flow, activation authority, pause/offboard
+controls, and the two-independent-test-org isolation proof (T13), all of which can be built and
+pg-mem/e2e-tested the same way as everything else in this checkpoint without needing owner
+decisions first.
 
 ## Owner-action items currently blocking further automated progress
 
-1. **Run five SQL migration files** in the Supabase SQL Editor (all reviewed for safety — every
+1. **Run six SQL migration files** in the Supabase SQL Editor (all reviewed for safety — every
    statement is additive, `IF NOT EXISTS`/`ON CONFLICT`, zero destructive statements):
    - `supabase/academy-migration-standalone.sql`
    - `supabase/hiring-workflow-migration-standalone.sql`
    - `supabase/crm-order-audit-migration-standalone.sql`
    - `supabase/zion-studio-migration-standalone.sql`
+   - `supabase/approval-inbox-migration-standalone.sql`
    - (the equivalent sections are also appended to the cumulative `supabase/schema-update.sql`
-     for the historical record, but the four standalone files above are the ones meant to be run)
+     for the historical record, but the five standalone files above are the ones meant to be run)
 2. **Create three Storage buckets** (this session's own permission system blocked direct creation
    — flagged as a shared-resource modification, not bypassed):
    - `portfolios` — **private**, ~5MB file size limit (resumes/application uploads)
@@ -147,7 +164,8 @@ now, exactly like everything else in this checkpoint.
    functions, which cannot host live call audio or long-running background jobs.
 
 After the SQL files run: `node scripts/e2e_academy_auth_test.mjs`,
-`node scripts/e2e_hiring_workflow_test.mjs`, `node scripts/e2e_crm_order_audit_test.mjs`, and
-`node scripts/e2e_zion_studio_test.mjs` each give real, immediate, live pass/fail evidence for
-their respective domains — none of this has been claimed as passing against production, and won't
-be until these actually run and are reported honestly either way.
+`node scripts/e2e_hiring_workflow_test.mjs`, `node scripts/e2e_crm_order_audit_test.mjs`,
+`node scripts/e2e_zion_studio_test.mjs`, and `node scripts/e2e_approval_inbox_test.mjs` each give
+real, immediate, live pass/fail evidence for their respective domains — none of this has been
+claimed as passing against production, and won't be until these actually run and are reported
+honestly either way.
