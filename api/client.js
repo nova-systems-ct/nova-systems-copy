@@ -5,6 +5,8 @@ import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 import { handleWave1 } from './_wave1Api.js';
 import { computeCaseClockStatus } from './_auditClock.js';
+import { validateFinding, validateReportForApproval, contentHash, checkStatusTransition } from './_auditRules.js';
+import { fetchPublicPage, extractPublicSignals, signalsToEvidence } from './_auditResearch.js';
 import * as liAdapter from './_socialAdapters/linkedin.js';
 import * as ytAdapter from './_socialAdapters/youtube.js';
 import * as metaAdapter from './_socialAdapters/meta.js';
@@ -1809,6 +1811,12 @@ async function handleAuditCases(req, res, caller) {
       target_hours: targetHours,
       owner_user_id: sanitize(b.owner_user_id, 100) || caller.id,
     };
+    // A case may only reference a business/order that belongs to the SAME organization.
+    for (const [table, id] of [['businesses', record.business_id], ['orders', record.order_id]]) {
+      if (!id) continue;
+      const vr = await sbSelect(`${table}?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&select=id&limit=1`);
+      if (!(vr.ok && (await vr.json()).length)) return res.status(400).json({ error: `${table === 'orders' ? 'order_id' : 'business_id'} does not belong to this organization` });
+    }
     const r = await sbWrite('audit_cases', 'POST', record);
     if (!r.ok) { console.error('[client:audit cases] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create case' }); }
     const rows = await r.json();
@@ -1836,6 +1844,16 @@ async function handleAuditCases(req, res, caller) {
     const status = sanitize(b.status, 30);
     const VALID = ['intake', 'inputs_pending', 'ready', 'researching', 'evidence_gathered', 'findings_drafted', 'report_draft', 'qa_review', 'approved', 'delivered', 'customer_decision', 'implementation', 'outcome_tracking', 'closed'];
     if (!VALID.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    // Refuse transitions that would bypass the clock start, report approval, or a recorded delivery.
+    const repRes = await sbSelect(`audit_reports?case_id=eq.${encodeURIComponent(id)}&select=id,version,status&order=version.desc`);
+    const reps = repRes.ok ? await repRes.json() : [];
+    let hasDelivery = false;
+    if (reps.length) {
+      const dr = await sbSelect(`audit_deliveries?report_id=in.(${reps.map((x) => encodeURIComponent(x.id)).join(',')})&or=(provider_accepted_at.not.is.null,delivered_at.not.is.null)&select=id&limit=1`);
+      hasDelivery = dr.ok && (await dr.json()).length > 0;
+    }
+    const blocked = checkStatusTransition(status, { case: existing, hasReport: reps.length > 0, latestReportApproved: reps[0]?.status === 'approved', hasDelivery });
+    if (blocked) return res.status(409).json({ error: blocked });
     const r = await sbWrite(`audit_cases?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status, updated_at: new Date().toISOString() });
     if (!r.ok) { console.error('[client:audit cases] update-status error:', await r.text()); return res.status(500).json({ error: 'Failed to update case' }); }
     const rows = await r.json();
@@ -1917,7 +1935,31 @@ async function handleAuditEvidence(req, res, caller) {
   return res.status(200).json({ ok: true, evidence: rows[0] });
 }
 
-async function handleAuditFindings(req, res) {
+// Fetches ONE public page and records what is observable as evidence (source + retrieval time +
+// confidence on every record). The fetched HTML is untrusted data: it is parsed for a fixed set of
+// signals and never executed or followed as instructions. It cannot show missed calls or revenue.
+async function handleAuditResearch(req, res, caller) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 10, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+  const caseId = sanitize(b.case_id, 100);
+  if (!caseId || !(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+  const url = sanitize(b.url, 500);
+  if (!url) return res.status(400).json({ error: 'url is required' });
+  let page;
+  try { page = await fetchPublicPage(url); }
+  catch (err) { return res.status(400).json({ error: `Could not research that URL: ${err.message}` }); }
+  if (page.status >= 400) return res.status(422).json({ error: `The page returned HTTP ${page.status}; nothing was recorded` });
+  if (!page.html) return res.status(422).json({ error: page.note || 'No HTML content to analyse' });
+  const records = signalsToEvidence(extractPublicSignals(page.html, page.finalUrl), page.retrievedAt).map((e) => ({ ...e, case_id: caseId, author: `automated public-page review (run by ${caller.email})` }));
+  const r = await sbWrite('audit_evidence', 'POST', records);
+  if (!r.ok) { console.error('[client:audit research] evidence write error:', await r.text()); return res.status(500).json({ error: 'Failed to save evidence' }); }
+  return res.status(200).json({ ok: true, page: { url: page.finalUrl, retrieved_at: page.retrievedAt, truncated: page.truncated === true }, evidence: await r.json() });
+}
+
+async function handleAuditFindings(req, res, caller) {
   if (req.method === 'GET') {
     if (!rateLimit(req, res, 60, 60_000)) return;
     const orgId = sanitize(req.query?.organization_id, 100);
@@ -1938,24 +1980,58 @@ async function handleAuditFindings(req, res) {
   const caseId = sanitize(b.case_id, 100);
   if (!caseId || !(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
 
-  const statementType = sanitize(b.statement_type, 20);
-  if (!['observed_fact', 'stated_claim', 'inference', 'estimate'].includes(statementType)) {
-    return res.status(400).json({ error: 'statement_type must be one of observed_fact, stated_claim, inference, estimate' });
+  // Review: a human marks a finding reviewed/rejected. Reviewed re-validates against the CURRENT
+  // linked evidence, so a finding cannot be signed off while unsupported.
+  if (sanitize(b.action, 20) === 'review') {
+    const fid = sanitize(b.id, 100);
+    const status = sanitize(b.review_status, 20);
+    if (!['draft', 'reviewed', 'rejected'].includes(status)) return res.status(400).json({ error: 'review_status must be draft, reviewed or rejected' });
+    const fr = await sbSelect(`audit_findings?id=eq.${encodeURIComponent(fid)}&case_id=eq.${encodeURIComponent(caseId)}&limit=1`);
+    const finding = (fr.ok ? await fr.json() : [])[0];
+    if (!finding) return res.status(404).json({ error: 'Finding not found in this case' });
+    if (status === 'reviewed') {
+      const links = await sbSelect(`audit_finding_evidence?finding_id=eq.${encodeURIComponent(fid)}&select=evidence_id`);
+      const errs = validateFinding(finding, (links.ok ? await links.json() : []).length);
+      if (errs.length) return res.status(400).json({ error: 'Finding cannot be marked reviewed', problems: errs });
+    }
+    const r = await sbWrite(`audit_findings?id=eq.${encodeURIComponent(fid)}&case_id=eq.${encodeURIComponent(caseId)}`, 'PATCH', { review_status: status, reviewed_by: status === 'draft' ? null : caller.id, reviewed_at: status === 'draft' ? null : new Date().toISOString(), updated_at: new Date().toISOString() });
+    if (!r.ok) return res.status(500).json({ error: 'Failed to update review status' });
+    return res.status(200).json({ ok: true, finding: (await r.json())[0] });
   }
+
+  const statementType = sanitize(b.statement_type, 20);
+  const numOrNull = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
   const record = {
     case_id: caseId,
     title: sanitize(b.title, 300),
     statement_type: statementType,
     detail: sanitize(b.detail, 3000),
     priority: ['high', 'medium', 'low'].includes(b.priority) ? b.priority : null,
+    confidence: ['high', 'medium', 'low'].includes(b.confidence) ? b.confidence : null,
+    recommended_action: sanitize(b.recommended_action, 1000) || null,
+    estimate_low: numOrNull(b.estimate_low),
+    estimate_high: numOrNull(b.estimate_high),
+    estimate_unit: sanitize(b.estimate_unit, 40) || null,
+    estimate_assumptions: sanitize(b.estimate_assumptions, 2000) || null,
+    review_status: 'draft',
   };
-  if (!record.title || !record.detail) return res.status(400).json({ error: 'title and detail are required' });
+
+  // Every linked evidence id must belong to THIS case — otherwise a finding could cite (and so expose)
+  // another organization's evidence by guessing its id.
+  const requestedEvidence = Array.isArray(b.evidence_ids) ? [...new Set(b.evidence_ids.map((e) => sanitize(e, 100)).filter(Boolean))] : [];
+  let evidenceIds = [];
+  if (requestedEvidence.length) {
+    const er = await sbSelect(`audit_evidence?case_id=eq.${encodeURIComponent(caseId)}&id=in.(${requestedEvidence.map(encodeURIComponent).join(',')})&select=id`);
+    evidenceIds = (er.ok ? await er.json() : []).map((e) => e.id);
+    if (evidenceIds.length !== requestedEvidence.length) return res.status(400).json({ error: 'One or more evidence ids do not belong to this case' });
+  }
+  const problems = validateFinding(record, evidenceIds.length);
+  if (problems.length) return res.status(400).json({ error: 'Finding failed validation', problems });
+
   const r = await sbWrite('audit_findings', 'POST', record);
   if (!r.ok) { console.error('[client:audit findings] create error:', await r.text()); return res.status(500).json({ error: 'Failed to save finding' }); }
   const rows = await r.json();
   const findingId = rows[0]?.id;
-
-  const evidenceIds = Array.isArray(b.evidence_ids) ? b.evidence_ids.map((e) => sanitize(e, 100)).filter(Boolean) : [];
   for (const evidenceId of evidenceIds) {
     await sbWrite('audit_finding_evidence', 'POST', { finding_id: findingId, evidence_id: evidenceId });
   }
@@ -1997,6 +2073,10 @@ async function handleAuditRecommendations(req, res) {
     priority_rank: Number.isFinite(Number(b.priority_rank)) ? Number(b.priority_rank) : null,
   };
   if (!record.mechanism) return res.status(400).json({ error: 'mechanism is required' });
+  if (record.finding_id) {
+    const fr = await sbSelect(`audit_findings?id=eq.${encodeURIComponent(record.finding_id)}&case_id=eq.${encodeURIComponent(caseId)}&select=id&limit=1`);
+    if (!(fr.ok && (await fr.json()).length)) return res.status(400).json({ error: 'finding_id does not belong to this case' });
+  }
   const r = await sbWrite('audit_recommendations', 'POST', record);
   if (!r.ok) { console.error('[client:audit recommendations] create error:', await r.text()); return res.status(500).json({ error: 'Failed to save recommendation' }); }
   const rows = await r.json();
@@ -2035,7 +2115,7 @@ async function handleAuditReports(req, res, caller) {
     const existingRows = existingRes.ok ? await existingRes.json() : [];
     const nextVersion = (existingRows[0]?.version || 0) + 1;
     const content = b.content && typeof b.content === 'object' ? b.content : {};
-    const r = await sbWrite('audit_reports', 'POST', { case_id: caseId, version: nextVersion, status: 'draft', content });
+    const r = await sbWrite('audit_reports', 'POST', { case_id: caseId, version: nextVersion, status: 'draft', content, content_sha256: contentHash(content) });
     if (!r.ok) { console.error('[client:audit reports] create-draft error:', await r.text()); return res.status(500).json({ error: 'Failed to create report draft' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, report: rows[0] });
@@ -2057,16 +2137,23 @@ async function handleAuditReports(req, res, caller) {
     if (latestRows.length && latestRows[0].version > reportRows[0].version) {
       return res.status(409).json({ error: `A newer draft (v${latestRows[0].version}) exists — approve the current version instead` });
     }
-    const r = await sbWrite(`audit_reports?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
+    // Approval readiness: required sections, no prohibited claims, and every finding reviewed with
+    // the evidence/confidence/estimate discipline the audit standard requires.
+    const fr = await sbSelect(`audit_findings?case_id=eq.${encodeURIComponent(caseId)}&select=*,audit_finding_evidence(evidence_id)`);
+    const findings = (fr.ok ? await fr.json() : []).map((f) => ({ ...f, evidence_count: (f.audit_finding_evidence || []).length }));
+    const readiness = validateReportForApproval(reportRows[0].content, findings.filter((f) => f.review_status !== 'rejected'));
+    if (!readiness.ready) return res.status(422).json({ error: 'Report is not ready for approval', problems: readiness.problems });
+    const r = await sbWrite(`audit_reports?id=eq.${encodeURIComponent(id)}&status=eq.draft`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString(), approved_content_sha256: contentHash(reportRows[0].content) });
     if (!r.ok) { console.error('[client:audit reports] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve report' }); }
     const rows = await r.json();
+    if (!rows.length) return res.status(409).json({ error: 'This version was approved or changed by someone else while you were approving it' });
     return res.status(200).json({ ok: true, report: rows[0] });
   }
 
   return res.status(400).json({ error: `Unknown action: ${action}` });
 }
 
-async function handleAuditDeliveries(req, res) {
+async function handleAuditDeliveries(req, res, caller) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 20, 60_000)) return;
   const b = req.body || {};
@@ -2075,13 +2162,29 @@ async function handleAuditDeliveries(req, res) {
   const reportId = sanitize(b.report_id, 100);
   if (!reportId) return res.status(400).json({ error: 'report_id is required' });
 
+  // The report must belong to a case in the caller's organization — permission on org A must never let
+  // someone record a delivery against org B's report by supplying its id.
+  const rr = await sbSelect(`audit_reports?id=eq.${encodeURIComponent(reportId)}&select=*,audit_cases!inner(organization_id)&audit_cases.organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+  const report = (rr.ok ? await rr.json() : [])[0];
+  if (!report) return res.status(404).json({ error: 'Report not found' });
+  if (report.status !== 'approved') return res.status(409).json({ error: 'Only an approved report can be delivered' });
+  const latest = await sbSelect(`audit_reports?case_id=eq.${encodeURIComponent(report.case_id)}&select=version&order=version.desc&limit=1`);
+  const latestVersion = (latest.ok ? await latest.json() : [])[0]?.version;
+  if (latestVersion && latestVersion > report.version) return res.status(409).json({ error: `Superseded: v${latestVersion} exists. Approve and deliver the current version` });
+  // Bound approval: the content being delivered must still be exactly what was approved.
+  if (!report.approved_content_sha256 || contentHash(report.content) !== report.approved_content_sha256) return res.status(409).json({ error: 'Report content no longer matches what was approved — create and approve a new version' });
+  if (b.delivered && !sanitize(b.confirmation, 500)) return res.status(400).json({ error: 'Claiming "delivered" requires a confirmation (provider event id or customer reply). Use provider_accepted for an accepted-but-unconfirmed send' });
+
   const record = {
     report_id: reportId,
     delivery_method: sanitize(b.delivery_method, 100) || 'email',
-    provider_accepted_at: b.provider_accepted ? new Date().toISOString() : null,
+    provider_accepted_at: b.provider_accepted || b.delivered ? new Date().toISOString() : null,
     delivered_at: b.delivered ? new Date().toISOString() : null,
     failed_at: b.failed ? new Date().toISOString() : null,
     failure_reason: sanitize(b.failure_reason, 500) || null,
+    delivered_by: caller.id,
+    confirmation: sanitize(b.confirmation, 500) || null,
+    report_content_sha256: report.approved_content_sha256,
   };
   const r = await sbWrite('audit_deliveries', 'POST', record);
   if (!r.ok) { console.error('[client:audit deliveries] create error:', await r.text()); return res.status(500).json({ error: 'Failed to record delivery' }); }
@@ -4080,10 +4183,11 @@ export default async function handler(req, res) {
       if (!caller) return;
       if (op === 'cases') return handleAuditCases(req, res, caller);
       if (op === 'evidence') return handleAuditEvidence(req, res, caller);
-      if (op === 'findings') return handleAuditFindings(req, res);
+      if (op === 'findings') return handleAuditFindings(req, res, caller);
+      if (op === 'research') return handleAuditResearch(req, res, caller);
       if (op === 'recommendations') return handleAuditRecommendations(req, res);
       if (op === 'reports') return handleAuditReports(req, res, caller);
-      if (op === 'deliveries') return handleAuditDeliveries(req, res);
+      if (op === 'deliveries') return handleAuditDeliveries(req, res, caller);
       if (op === 'outcomes') return handleAuditOutcomes(req, res);
       return res.status(400).json({ error: `Unknown audit op: ${op}` });
     }

@@ -228,9 +228,19 @@ CREATE TABLE IF NOT EXISTS audit_findings (
   title          TEXT NOT NULL,
   -- Separates observation/inference/estimate/recommendation as the master prompt requires —
   -- "stated_claim" covers what the customer told us, distinct from what was directly observed.
-  statement_type TEXT NOT NULL CHECK (statement_type IN ('observed_fact','stated_claim','inference','estimate')),
+  statement_type TEXT NOT NULL CHECK (statement_type IN ('observed_fact','stated_claim','inference','estimate','unknown')),
   detail         TEXT NOT NULL,
   priority       TEXT CHECK (priority IN ('high','medium','low')),
+  confidence         TEXT CHECK (confidence IN ('high','medium','low')),
+  recommended_action TEXT,
+  review_status      TEXT NOT NULL DEFAULT 'draft' CHECK (review_status IN ('draft','reviewed','rejected')),
+  reviewed_by        UUID REFERENCES auth.users(id),
+  reviewed_at        TIMESTAMPTZ,
+  -- Only meaningful for statement_type='estimate': a RANGE with stated assumptions, never a point value.
+  estimate_low          NUMERIC,
+  estimate_high         NUMERIC,
+  estimate_unit         TEXT,
+  estimate_assumptions  TEXT,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -271,6 +281,8 @@ CREATE TABLE IF NOT EXISTS audit_reports (
   version      INTEGER NOT NULL,
   status       TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved')),
   content      JSONB NOT NULL DEFAULT '{}',
+  content_sha256          TEXT,   -- hash of content at draft time
+  approved_content_sha256 TEXT,   -- hash re-computed at approval; delivery re-checks it is unchanged
   approved_by  UUID REFERENCES auth.users(id),
   approved_at  TIMESTAMPTZ,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -285,7 +297,10 @@ CREATE TABLE IF NOT EXISTS audit_deliveries (
   provider_accepted_at  TIMESTAMPTZ,
   delivered_at          TIMESTAMPTZ,
   failed_at             TIMESTAMPTZ,
-  failure_reason        TEXT
+  failure_reason        TEXT,
+  delivered_by          UUID REFERENCES auth.users(id),
+  confirmation          TEXT,   -- how delivery was confirmed (provider event id, customer reply); required to claim 'delivered'
+  report_content_sha256 TEXT    -- exact content version that was delivered
 );
 CREATE INDEX IF NOT EXISTS audit_deliveries_report_idx ON audit_deliveries (report_id);
 

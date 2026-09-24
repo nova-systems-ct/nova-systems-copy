@@ -105,7 +105,8 @@ try {
   db.public.none(`
     INSERT INTO audit_cases (id, organization_id, target_hours) VALUES ('88888888-8888-8888-8888-888888888888', '11111111-1111-1111-1111-111111111111', 72);
     INSERT INTO audit_evidence (id, case_id, source, observation, author, source_quality, confidence) VALUES ('99999999-9999-9999-9999-999999999999', '88888888-8888-8888-8888-888888888888', 'website', 'contact form returns 404', 'automated scan', 'high', 'high');
-    INSERT INTO audit_findings (id, case_id, title, statement_type, detail, priority) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '88888888-8888-8888-8888-888888888888', 'Broken contact form', 'observed_fact', 'The contact form returns a 404 error.', 'high');
+    -- confidence/review_status are supplied explicitly: pg-mem wrongly rejects NULL against a CHECK(... IN ...) column (real Postgres passes NULL); see docs/PRODUCT_BUILD_STATE.md pg-mem notes.
+    INSERT INTO audit_findings (id, case_id, title, statement_type, detail, priority, confidence, review_status) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '88888888-8888-8888-8888-888888888888', 'Broken contact form', 'observed_fact', 'The contact form returns a 404 error.', 'high', 'medium', 'draft');
     INSERT INTO audit_finding_evidence (finding_id, evidence_id) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '99999999-9999-9999-9999-999999999999');
   `);
   log('A full evidence -> finding -> finding_evidence link chain inserts successfully', true);
