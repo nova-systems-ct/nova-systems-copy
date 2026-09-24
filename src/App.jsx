@@ -79,6 +79,7 @@ const Installations = lazy(() => import('./pages/dashboard/Installations'));
 const InstallationDetail = lazy(() => import('./pages/dashboard/InstallationDetail'));
 const Crystal = lazy(() => import('./pages/dashboard/Crystal'));
 const CrystalJobDetail = lazy(() => import('./pages/dashboard/CrystalJobDetail'));
+const Marketing = lazy(() => import('./pages/dashboard/Marketing'));
 const RequirePermission = lazy(() => import('./components/dashboard/RequirePermission'));
 
 function RouteFallback() {
@@ -163,6 +164,7 @@ function App() {
               <Route path="installations/:id" element={<RequirePermission permission="admin.view"><InstallationDetail /></RequirePermission>} />
               <Route path="crystal" element={<RequirePermission permission="execution.view"><Crystal /></RequirePermission>} />
               <Route path="crystal/jobs/:id" element={<RequirePermission permission="execution.view"><CrystalJobDetail /></RequirePermission>} />
+              <Route path="marketing" element={<RequirePermission permission="growth.view"><Marketing /></RequirePermission>} />
             </Route>
 
             <Route path="/verify-certificate" element={<VerifyCertificate />} />

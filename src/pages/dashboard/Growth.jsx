@@ -1,4 +1,4 @@
-import { Target, HandCoins, Zap, Newspaper, LayoutGrid, Mail, GraduationCap, Building2, Clapperboard } from 'lucide-react'
+import { Target, HandCoins, Zap, Newspaper, LayoutGrid, Mail, GraduationCap, Building2, Clapperboard, Megaphone } from 'lucide-react'
 import AreaHub from '../../components/dashboard/AreaHub'
 import { useOrg } from '../../lib/OrgContext'
 
@@ -60,6 +60,12 @@ export default function Growth() {
       description: "Isaac's journal-to-video pipeline. Journal entries stay private to their author.",
       icon: Clapperboard,
       path: '/dashboard/zion',
+    },
+    {
+      label: 'Marketing',
+      description: 'Content pipeline, brand configuration, and platform connection status.',
+      icon: Megaphone,
+      path: '/dashboard/marketing',
     },
   ]
 
