@@ -58,6 +58,22 @@ export function failJob(jobs, jobId, error, { now = new Date(), baseDelaySeconds
   return job;
 }
 
+// A cancelled job is terminal, exactly like completed/dead_letter — claimNextJob's status filter
+// ('pending' or lease-expired 'leased') never matches 'cancelled', so a cancelled job can never be
+// reclaimed after the fact even if it was mid-flight when cancelled. Only non-terminal jobs
+// (pending/leased) can be cancelled; cancelling an already-completed/dead_letter/cancelled job is
+// refused rather than silently accepted, since "cancel" on a job that already ran or already
+// terminated a different way is not a real state transition.
+export function cancelJob(jobs, jobId, reason, { now = new Date() } = {}) {
+  const job = jobs.find((j) => j.id === jobId);
+  if (!job) return null;
+  if (!['pending', 'leased'].includes(job.status)) return { error: `Cannot cancel a job in status ${job.status}` };
+  job.status = 'cancelled';
+  job.last_error = reason ? `Cancelled: ${reason}` : 'Cancelled';
+  job.completed_at = now.toISOString();
+  return job;
+}
+
 export function enqueueJob(jobs, { id, job_type, organization_id = null, payload = {}, scheduled_at, max_attempts = 5, idempotency_key = null }) {
   if (idempotency_key && jobs.some((j) => j.idempotency_key === idempotency_key)) {
     return { job: jobs.find((j) => j.idempotency_key === idempotency_key), deduped: true };

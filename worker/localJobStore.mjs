@@ -8,7 +8,7 @@
 
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { claimNextJob, completeJob, failJob, enqueueJob } from './jobQueueEngine.mjs';
+import { claimNextJob, completeJob, failJob, enqueueJob, cancelJob } from './jobQueueEngine.mjs';
 
 export function createLocalJobStore(filePath = '.data/jobs.local.json') {
   const dir = filePath.split(/[\\/]/).slice(0, -1).join('/');
@@ -46,6 +46,12 @@ export function createLocalJobStore(filePath = '.data/jobs.local.json') {
       const job = failJob(jobs, jobId, error, { now: new Date() });
       save(jobs);
       return job;
+    },
+    async cancel(jobId, reason) {
+      const jobs = load();
+      const result = cancelJob(jobs, jobId, reason);
+      save(jobs);
+      return result;
     },
     async listAll() {
       return load();

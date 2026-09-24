@@ -15,6 +15,16 @@
 //   node worker/index.mjs --local       # force the local file store even if Supabase env vars exist
 //   node worker/index.mjs --enqueue-demo  # enqueue one demo marketing_publish job, for a real
 //                                          end-to-end local smoke test
+//   node worker/index.mjs --cancel=<job-id> [--reason="..."]  # cancel a pending/leased job —
+//                                          terminal, never reclaimed after (see
+//                                          scripts/unit_job_queue_correctness_test.mjs)
+//
+// DELIVERY GUARANTEE: this queue is at-least-once, not exactly-once — a job whose worker crashes
+// after a real side effect but before calling complete() WILL be handed to another worker again.
+// Every handler registered below MUST be idempotent (check current state, treat "already done" as
+// a no-op) rather than assume single delivery. See marketing_publish for the pattern, and
+// scripts/unit_job_queue_correctness_test.mjs for the proof this pattern actually prevents a
+// duplicate side effect on redelivery.
 
 import fs from 'node:fs';
 import { createLocalJobStore } from './localJobStore.mjs';
@@ -24,6 +34,8 @@ const args = process.argv.slice(2);
 const once = args.includes('--once');
 const forceLocal = args.includes('--local');
 const enqueueDemo = args.includes('--enqueue-demo');
+const cancelId = args.find((a) => a.startsWith('--cancel='))?.split('=')[1];
+const cancelReason = args.find((a) => a.startsWith('--reason='))?.split('=').slice(1).join('=');
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS) || 5000;
 const WORKER_ID = process.env.WORKER_ID || `worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -120,6 +132,13 @@ async function main() {
   if (enqueueDemo) {
     const { job, deduped } = await store.enqueue({ job_type: 'demo_echo', payload: { hello: 'nova', at: new Date().toISOString() } });
     console.log(deduped ? '[worker] demo job already existed (deduped)' : `[worker] enqueued demo job ${job.id}`);
+  }
+
+  if (cancelId) {
+    const result = await store.cancel(cancelId, cancelReason);
+    if (result?.error) console.error(`[worker] cancel failed: ${result.error}`);
+    else console.log(`[worker] cancelled job ${cancelId}`);
+    return;
   }
 
   if (once) {

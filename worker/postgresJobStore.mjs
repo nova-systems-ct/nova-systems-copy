@@ -63,5 +63,19 @@ export function createPostgresJobStore({ url, serviceKey }) {
       const rows = await r.json();
       return rows[0];
     },
+
+    async cancel(jobId, reason) {
+      // Only a non-terminal job can be cancelled — the filter mirrors jobQueueEngine.cancelJob's
+      // own rule exactly, enforced here via the WHERE clause rather than a separate read-then-write
+      // race (PostgREST's PATCH ...&status=in.(...) only touches rows that still match).
+      const r = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}&status=in.(pending,leased)`, {
+        method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' },
+        body: JSON.stringify({ status: 'cancelled', last_error: reason ? `Cancelled: ${reason}` : 'Cancelled', completed_at: new Date().toISOString() }),
+      });
+      if (!r.ok) throw new Error(`Failed to cancel job: ${r.status} ${await r.text()}`);
+      const rows = await r.json();
+      if (!rows.length) return { error: 'Job not found, or not in a cancellable state (pending/leased)' };
+      return rows[0];
+    },
   };
 }
