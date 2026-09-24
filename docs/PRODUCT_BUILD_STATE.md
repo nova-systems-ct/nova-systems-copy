@@ -259,7 +259,7 @@ provider-specific code is worth writing.
 
 ## Owner-action items currently blocking further automated progress
 
-1. **Run ten SQL migration files** in the Supabase SQL Editor, in this order (all reviewed for
+1. **Run eleven SQL migration files** in the Supabase SQL Editor, in this order (all reviewed for
    safety; every statement is either `IF NOT EXISTS`-additive or a narrow, idempotent UPDATE/
    backfill on a column this same file just added — never touching pre-existing data — explained
    in each file's own header comment):
@@ -278,6 +278,8 @@ provider-specific code is worth writing.
      `marketing_brands`/`content_ideas`/`content_assets` tables — real, seeded `marketing_brands`
      rows already exist and are preserved untouched; see the file's own header for how that
      reconciliation was discovered)
+   - `supabase/voice-agent-migration-standalone.sql` (depends on `crm_contacts` from the
+     crm-order-audit migration)
    - (older sections are also appended to the cumulative `supabase/schema-update.sql` for the
      historical record, but every standalone file above is what's actually meant to be run — that
      cumulative file has NOT been kept in sync with the CRM/Zion/Approvals/Installation/Marketing/
@@ -311,9 +313,10 @@ After the SQL files run: `node scripts/e2e_academy_auth_test.mjs`,
 `node scripts/e2e_hiring_workflow_test.mjs`, `node scripts/e2e_crm_order_audit_test.mjs`,
 `node scripts/e2e_zion_studio_test.mjs`, `node scripts/e2e_approval_inbox_test.mjs`,
 `node scripts/e2e_installation_center_test.mjs`, `node scripts/e2e_marketing_content_workflow_test.mjs`,
-`node scripts/e2e_crystal_test.mjs`, and `node scripts/e2e_marketing_automation_test.mjs` each give
-real, immediate, live pass/fail evidence for their respective domains — none of this has been
-claimed as passing against production, and won't be until these actually run and are reported
-honestly either way. `node scripts/unit_job_queue_test.mjs`
+`node scripts/e2e_crystal_test.mjs`, `node scripts/e2e_marketing_automation_test.mjs`, and
+`node scripts/e2e_voice_agent_test.mjs` each give real, immediate, live pass/fail evidence for
+their respective domains — none of this has been claimed as passing against production, and won't
+be until these actually run and are reported honestly either way. `node scripts/unit_job_queue_test.mjs`,
+`node scripts/unit_job_queue_correctness_test.mjs`,
 and `node worker/index.mjs --local --enqueue-demo --once` already pass/run today with zero
 dependency on the migrations above.

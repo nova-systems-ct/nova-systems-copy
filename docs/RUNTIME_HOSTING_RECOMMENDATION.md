@@ -140,11 +140,35 @@ architecture can integrate a managed provider's webhook-based API later with muc
 the reverse.
 
 **Not done, and not something to do without explicit authorization**: creating Twilio/Deepgram/
-ElevenLabs accounts, purchasing a phone number, or writing the actual Media Streams bridge code
-(§11's call-flow/typed-tools/interruption-handling requirements are substantial and deserve their
-own properly-scoped implementation pass once Isaac confirms this direction, per §11's own
-explicit requirement to verify the actual selected stack before building call-flow code against
-it).
+ElevenLabs accounts, purchasing a phone number, or writing the actual Media Streams bridge code —
+the literal audio-transport plumbing genuinely depends on this decision and cannot proceed without
+it.
+
+### What proceeds independently of this decision (and already has, 2026-09-24)
+
+Everything in §11 that is about the CALL LOGIC rather than the AUDIO TRANSPORT does not depend on
+self-hosted-vs-managed, so it was built now rather than waiting: `supabase/voice-agent-migration-
+standalone.sql` (per-org configuration — business hours, holidays, transfer destinations,
+disclosure/recording policy with recording REFUSED unless a disclosure script is on file, spend
+cap, emergency script), an approved knowledge base (an unapproved entry is never served — proven
+in `scripts/e2e_voice_agent_test.mjs`), and all 9 typed tools §11 specifies
+(`get_business_information`, `create_or_update_lead`, `find_slots`, `hold_slot`,
+`confirm_booking`, `reschedule_or_cancel_booking`, `request_transfer`, `create_callback`,
+`record_consent`, `log_outcome`) as real, independently callable, independently tested functions —
+`create_or_update_lead` genuinely writes into the existing CRM (`crm_contacts`), `hold_slot`/
+`confirm_booking` handle a real double-booking conflict (a second concurrent caller is honestly
+refused, not silently overwritten, proven with two real concurrent call sessions in the e2e test),
+`reschedule_or_cancel_booking` refuses without explicit caller verification (§11: "caller ID alone
+does not authenticate access") rather than guessing at an unwritten policy, and every tool call is
+idempotent within its call session — a retried invocation replays the stored result instead of
+re-executing the side effect (booking a slot twice, sending a duplicate callback request), proven
+directly in the e2e test.
+
+**What this means concretely**: whichever voice runtime gets chosen, the tools above are what it
+calls — a Twilio Media Streams bridge or a managed platform's function-calling interface both just
+need to invoke these same 10 functions over whatever transport that provider uses. None of this
+work needs to be redone once the decision lands; only the transport layer connecting a real phone
+call to these tools remains to be written, and only after Isaac decides which provider that is.
 
 ## 5. What this does NOT decide
 

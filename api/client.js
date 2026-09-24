@@ -111,6 +111,25 @@ import { computeCaseClockStatus } from './_auditClock.js';
 //            &op=adapters         [growth.view] GET — read-only; a platform only ever shows
 //                                             connected/operation_tested once real, tested
 //                                             integration code sets it, never via this API
+//   voice &op=config               [growth.view GET; admin.view POST — spend caps/recording
+//                                             policy are consequential] GET / POST — one row per
+//                                             org, recording_enabled requires a disclosure_script
+//                                             in the same request
+//        &op=knowledge             [growth.view; 'approve' additionally requires admin.view] GET
+//                                             / POST {action:'create'|'approve'|'retire', ...}
+//        &op=sessions              [growth.view] GET ?id= (detail incl. tool_events) / POST
+//                                             (creates a call session — the provider-independent
+//                                             record a real transport adapter would create at
+//                                             call start)
+//        &op=tools                 [growth.view] POST {tool, session_id, idempotency_key?,
+//                                             input} — the 9 typed tools from §11
+//                                             (get_business_information/create_or_update_lead/
+//                                             find_slots/hold_slot/confirm_booking/
+//                                             reschedule_or_cancel_booking/request_transfer/
+//                                             create_callback/record_consent/log_outcome), each
+//                                             idempotent within a session (a retried call with the
+//                                             same idempotency_key replays the stored result
+//                                             instead of re-running the side effect)
 //   approvals                    [admin.view]      GET aggregates pending audit reports + zion
 //                                             videos + generic approval_requests into one inbox /
 //                                             POST {action:'create'|'approve'|'reject'|'revoke', id}
@@ -3384,6 +3403,287 @@ async function handleMarketingAdapters(req, res) {
   return res.status(200).json(await r.json());
 }
 
+// =============================================================================================
+// Provider-independent voice/call agent foundation (2026-09-24, master prompt §11). Schema:
+// supabase/voice-agent-migration-standalone.sql — NOT yet applied to production.
+//
+// No telephony/voice provider is wired up here — see docs/RUNTIME_HOSTING_RECOMMENDATION.md §4
+// for that still-pending decision. What IS real: the 9 typed tools §11 specifies, each schema-
+// validated, tenant-scoped, and idempotent (a retried tool call within the SAME session returns
+// the stored result from the first real execution instead of re-running the side effect — the
+// exact "check current state, redelivery is a no-op" contract documented for the job queue).
+// Whichever voice runtime eventually gets chosen calls these same functions; nothing here needs
+// to be rewritten once that decision lands, only wired to a real transport.
+// =============================================================================================
+
+const VOICE_TOOL_NAMES = ['get_business_information', 'create_or_update_lead', 'find_slots', 'hold_slot', 'confirm_booking', 'reschedule_or_cancel_booking', 'request_transfer', 'create_callback', 'record_consent', 'log_outcome'];
+const HOLD_MINUTES = 10;
+
+async function handleVoiceConfig(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const r = await sbSelect(`voice_configurations?organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+    const rows = r.ok ? await r.json() : [];
+    return res.status(200).json(rows[0] || null);
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  // Consequential (spend caps, recording/disclosure policy, transfer destinations) — same
+  // elevated gate as invoices/vault/installation activation, not left at bare growth.view.
+  if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
+  const record = {
+    organization_id: orgId,
+    business_hours: b.business_hours && typeof b.business_hours === 'object' ? b.business_hours : {},
+    holidays: Array.isArray(b.holidays) ? b.holidays : [],
+    timezone: sanitize(b.timezone, 100) || null,
+    transfer_destinations: Array.isArray(b.transfer_destinations) ? b.transfer_destinations : [],
+    after_hours_action: ['voicemail', 'callback', 'transfer'].includes(b.after_hours_action) ? b.after_hours_action : 'voicemail',
+    wait_limit_seconds: Number.isFinite(Number(b.wait_limit_seconds)) ? Number(b.wait_limit_seconds) : null,
+    disclosure_script: sanitize(b.disclosure_script, 2000) || null,
+    recording_enabled: b.recording_enabled === true,
+    transcript_retention_days: Number.isFinite(Number(b.transcript_retention_days)) ? Number(b.transcript_retention_days) : null,
+    language: sanitize(b.language, 10) || 'en',
+    concurrency_limit: Number.isFinite(Number(b.concurrency_limit)) ? Number(b.concurrency_limit) : null,
+    spend_cap_cents: Number.isFinite(Number(b.spend_cap_cents)) ? Number(b.spend_cap_cents) : null,
+    emergency_script: sanitize(b.emergency_script, 2000) || null,
+    outbound_enabled: b.outbound_enabled === true, // "separately configured and activation-gated; do not turn on by default" — caller must explicitly opt in every save, never inherited
+    status: ['not_configured', 'configured', 'active', 'paused'].includes(b.status) ? b.status : 'configured',
+    updated_at: new Date().toISOString(),
+  };
+  // Recording requires a real disclosure script on file — never enabled silently.
+  if (record.recording_enabled && !record.disclosure_script) {
+    return res.status(400).json({ error: 'recording_enabled requires a disclosure_script to be set in the same request' });
+  }
+  const existingRes = await sbSelect(`voice_configurations?organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+  const existingRows = existingRes.ok ? await existingRes.json() : [];
+  const path = existingRows.length ? `voice_configurations?organization_id=eq.${encodeURIComponent(orgId)}` : 'voice_configurations';
+  const r = await sbWrite(path, existingRows.length ? 'PATCH' : 'POST', record);
+  if (!r.ok) { console.error('[client:voice config] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save voice configuration' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, config: rows[0] });
+}
+
+async function handleVoiceKnowledge(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const r = await sbSelect(`voice_knowledge_base?organization_id=eq.${encodeURIComponent(orgId)}&order=topic.asc`);
+    if (!r.ok) { console.error('[client:voice knowledge] error:', await r.text()); return res.status(500).json({ error: 'Failed to load knowledge base' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const question = sanitize(b.question, 1000);
+    const answer = sanitize(b.answer, 4000);
+    if (!question || !answer) return res.status(400).json({ error: 'question and answer are required' });
+    const r = await sbWrite('voice_knowledge_base', 'POST', { organization_id: orgId, topic: sanitize(b.topic, 100) || 'general', question, answer, status: 'draft' });
+    if (!r.ok) { console.error('[client:voice knowledge] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create entry' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, entry: rows[0] });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  if (action === 'approve') {
+    if (!(await requireStaff(req, res, 'admin.view'))) return;
+    const r = await sbWrite(`voice_knowledge_base?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:voice knowledge] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve entry' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, entry: rows[0] });
+  }
+
+  if (action === 'retire') {
+    const r = await sbWrite(`voice_knowledge_base?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'retired' });
+    if (!r.ok) { console.error('[client:voice knowledge] retire error:', await r.text()); return res.status(500).json({ error: 'Failed to retire entry' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, entry: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+async function handleVoiceSessions(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const id = sanitize(req.query?.id, 100);
+    if (id) {
+      const sessRes = await sbSelect(`voice_call_sessions?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+      const sessRows = sessRes.ok ? await sessRes.json() : [];
+      if (!sessRows.length) return res.status(404).json({ error: 'Call session not found' });
+      const eventsRes = await sbSelect(`voice_call_tool_events?session_id=eq.${encodeURIComponent(id)}&order=created_at.asc`);
+      return res.status(200).json({ ...sessRows[0], tool_events: eventsRes.ok ? await eventsRes.json() : [] });
+    }
+    const r = await sbSelect(`voice_call_sessions?organization_id=eq.${encodeURIComponent(orgId)}&order=started_at.desc`);
+    if (!r.ok) { console.error('[client:voice sessions] error:', await r.text()); return res.status(500).json({ error: 'Failed to load call sessions' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  // A real call-transport adapter creates the session at call start; this is the provider-
+  // independent piece — the session row exists and is scoped correctly regardless of what
+  // eventually rings it.
+  const r = await sbWrite('voice_call_sessions', 'POST', {
+    organization_id: orgId,
+    direction: b.direction === 'outbound' ? 'outbound' : 'inbound',
+    caller_ref: sanitize(b.caller_ref, 100) || null,
+  });
+  if (!r.ok) { console.error('[client:voice sessions] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create call session' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, session: rows[0] });
+}
+
+// The 9 typed tools from §11, each: schema-validated, tenant-scoped (via the session's real
+// organization_id, never a client-supplied one), idempotent within a session, and honest on
+// failure (never invents a booking, price, or answer). Logged to voice_call_tool_events
+// regardless of outcome — the audit trail is unconditional, not just for successes.
+async function handleVoiceTools(req, res, caller) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 60, 60_000)) return;
+  const b = req.body || {};
+  const tool = sanitize(b.tool, 50);
+  const sessionId = sanitize(b.session_id, 100);
+  const idempotencyKey = sanitize(b.idempotency_key, 200) || null;
+  if (!VOICE_TOOL_NAMES.includes(tool)) return res.status(400).json({ error: `Unknown tool: ${tool}` });
+  if (!sessionId) return res.status(400).json({ error: 'session_id is required' });
+
+  const sessRes = await sbSelect(`voice_call_sessions?id=eq.${encodeURIComponent(sessionId)}&limit=1`);
+  const sessRows = sessRes.ok ? await sessRes.json() : [];
+  if (!sessRows.length) return res.status(404).json({ error: 'Call session not found' });
+  const session = sessRows[0];
+  if (!(await requireOrgAccess(req, res, session.organization_id, 'growth.view'))) return;
+
+  // Idempotency: a retried tool call within the same session (e.g. a transport-layer retry after
+  // an ambiguous timeout) returns the FIRST real execution's stored result rather than re-running
+  // the side effect — the exact redelivery-safety contract documented for the durable job queue.
+  if (idempotencyKey) {
+    const priorRes = await sbSelect(`voice_call_tool_events?session_id=eq.${encodeURIComponent(sessionId)}&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}&limit=1`);
+    const priorRows = priorRes.ok ? await priorRes.json() : [];
+    if (priorRows.length) return res.status(200).json({ ok: priorRows[0].succeeded, output: priorRows[0].output, replayed: true });
+  }
+
+  const input = b.input && typeof b.input === 'object' ? b.input : {};
+  let output = null, succeeded = false, error = null, httpStatus = 200;
+
+  try {
+    if (tool === 'get_business_information') {
+      const topic = sanitize(input.topic, 100);
+      let path = `voice_knowledge_base?organization_id=eq.${encodeURIComponent(session.organization_id)}&status=eq.approved`;
+      if (topic) path += `&topic=eq.${encodeURIComponent(topic)}`;
+      const r = await sbSelect(path);
+      const rows = r.ok ? await r.json() : [];
+      output = rows.length ? { found: true, answers: rows.map((row) => ({ question: row.question, answer: row.answer })) } : { found: false, reason: 'No approved knowledge base entry matches this topic — do not answer from unverified assumption' };
+      succeeded = true;
+
+    } else if (tool === 'create_or_update_lead') {
+      const name = sanitize(input.name, 200);
+      if (!name) { error = 'name is required'; httpStatus = 400; }
+      else {
+        const record = { organization_id: session.organization_id, name, email: input.email ? sanitizeEmail(input.email) : null, phone: sanitize(input.phone, 30) || null, source: 'voice_agent' };
+        const r = await sbWrite('crm_contacts', 'POST', record);
+        if (r.ok) { const rows = await r.json(); output = { contact_id: rows[0]?.id }; succeeded = true; }
+        else { error = 'Failed to create lead'; httpStatus = 500; }
+      }
+
+    } else if (tool === 'find_slots') {
+      const serviceName = sanitize(input.service_name, 200);
+      let path = `voice_calendar_slots?organization_id=eq.${encodeURIComponent(session.organization_id)}&status=eq.open&order=start_at.asc&limit=10`;
+      if (serviceName) path += `&service_name=eq.${encodeURIComponent(serviceName)}`;
+      const r = await sbSelect(path);
+      const rows = r.ok ? await r.json() : [];
+      output = { slots: rows.map((row) => ({ id: row.id, service_name: row.service_name, start_at: row.start_at, end_at: row.end_at })) };
+      succeeded = true;
+
+    } else if (tool === 'hold_slot') {
+      const slotId = sanitize(input.slot_id, 100);
+      // Real conflict handling: only an 'open' slot can be held — a slot already held/booked by
+      // a concurrent caller is refused honestly, never silently overwritten.
+      const r = await sbWrite(`voice_calendar_slots?id=eq.${encodeURIComponent(slotId)}&status=eq.open`, 'PATCH', { status: 'held', held_by_session: sessionId, held_until: new Date(Date.now() + HOLD_MINUTES * 60_000).toISOString() });
+      const rows = r.ok ? await r.json() : [];
+      if (rows.length) { output = { held: true, slot_id: slotId, held_until: rows[0].held_until }; succeeded = true; }
+      else { error = 'This slot is no longer available'; httpStatus = 409; }
+
+    } else if (tool === 'confirm_booking') {
+      const slotId = sanitize(input.slot_id, 100);
+      const contactId = sanitize(input.contact_id, 100);
+      // Verification: only the session that actually holds this slot can confirm it — prevents a
+      // second caller confirming a slot they never held.
+      const r = await sbWrite(`voice_calendar_slots?id=eq.${encodeURIComponent(slotId)}&status=eq.held&held_by_session=eq.${encodeURIComponent(sessionId)}`, 'PATCH', { status: 'booked', booking_contact_id: contactId || null });
+      const rows = r.ok ? await r.json() : [];
+      if (rows.length) { output = { booked: true, slot_id: slotId }; succeeded = true; }
+      else { error = 'This slot is not currently held by this call — cannot confirm'; httpStatus = 409; }
+
+    } else if (tool === 'reschedule_or_cancel_booking') {
+      // "Reschedule/cancel with appropriate verification" — caller ID alone is never proof of
+      // identity (§11's own explicit rule); this requires an EXPLICIT verified_via value from
+      // whatever real verification step happened earlier in the call, never trusts the bare
+      // session/caller_ref. No verification flow is defined yet (an honest, flagged gap, not
+      // silently skipped) — this refuses the action rather than guessing at a policy.
+      if (!sanitize(input.verified_via, 1)) {
+        error = 'Caller identity verification is required before rescheduling or cancelling a booking, and no verification policy is configured yet';
+        httpStatus = 403;
+      } else {
+        const slotId = sanitize(input.slot_id, 100);
+        const newStatus = input.action === 'cancel' ? 'open' : 'open'; // reschedule frees the old slot; the caller then calls hold_slot/confirm_booking on a new one
+        const r = await sbWrite(`voice_calendar_slots?id=eq.${encodeURIComponent(slotId)}&status=eq.booked`, 'PATCH', { status: newStatus, booking_contact_id: null, held_by_session: null, held_until: null });
+        const rows = r.ok ? await r.json() : [];
+        if (rows.length) { output = { released: true, slot_id: slotId }; succeeded = true; }
+        else { error = 'No active booking found on this slot'; httpStatus = 404; }
+      }
+
+    } else if (tool === 'request_transfer') {
+      const configRes = await sbSelect(`voice_configurations?organization_id=eq.${encodeURIComponent(session.organization_id)}&limit=1`);
+      const configRows = configRes.ok ? await configRes.json() : [];
+      const destinations = configRows[0]?.transfer_destinations || [];
+      if (!destinations.length) { output = { transferred: false, reason: 'No transfer destination is configured for this organization' }; succeeded = true; }
+      else { output = { transferred: true, destination: destinations[0] }; succeeded = true; await sbWrite(`voice_call_sessions?id=eq.${encodeURIComponent(sessionId)}`, 'PATCH', { transferred_to: destinations[0].label || destinations[0].number_ref || null }); }
+
+    } else if (tool === 'create_callback') {
+      // No dedicated callback/task queue exists yet — honestly recorded as a structured, real,
+      // queryable tool-event output rather than invented as "sent to staff" when nothing was.
+      output = { callback_requested: true, reason: sanitize(input.reason, 500) || null, preferred_time: sanitize(input.preferred_time, 100) || null, note: 'Recorded on the call session — not yet wired to a staff notification/task queue' };
+      succeeded = true;
+
+    } else if (tool === 'record_consent') {
+      const granted = input.granted === true;
+      await sbWrite(`voice_call_sessions?id=eq.${encodeURIComponent(sessionId)}`, 'PATCH', { consent_recorded: granted });
+      output = { consent_recorded: granted };
+      succeeded = true;
+
+    } else if (tool === 'log_outcome') {
+      const outcome = sanitize(input.outcome, 100);
+      if (!outcome) { error = 'outcome is required'; httpStatus = 400; }
+      else {
+        await sbWrite(`voice_call_sessions?id=eq.${encodeURIComponent(sessionId)}`, 'PATCH', { outcome, ended_at: new Date().toISOString() });
+        output = { logged: true, outcome };
+        succeeded = true;
+      }
+    }
+  } catch (err) {
+    console.error(`[client:voice tools] ${tool} error:`, err.message);
+    error = 'Tool execution failed'; httpStatus = 500;
+  }
+
+  await sbWrite('voice_call_tool_events', 'POST', { session_id: sessionId, tool_name: tool, input, output, succeeded, error, idempotency_key: idempotencyKey });
+  return res.status(httpStatus).json({ ok: succeeded, output, error: error || undefined });
+}
+
 // Nova Connect client portal login — checks against client_accounts.
 // handleAuth ("Nova Connect" client login) removed 2026-09-20 — confirmed dead (no live frontend
 // call, see src/pages/ClientLogin.jsx) and a real liability while it existed: unauthenticated,
@@ -3574,6 +3874,16 @@ export default async function handler(req, res) {
       if (op === 'platform-posts') return handleMarketingPlatformPosts(req, res, caller);
       if (op === 'adapters') return handleMarketingAdapters(req, res);
       return res.status(400).json({ error: `Unknown marketing op: ${op}` });
+    }
+
+    case 'voice': {
+      const caller = await requireStaff(req, res);
+      if (!caller) return;
+      if (op === 'config') return handleVoiceConfig(req, res);
+      if (op === 'knowledge') return handleVoiceKnowledge(req, res, caller);
+      if (op === 'sessions') return handleVoiceSessions(req, res);
+      if (op === 'tools') return handleVoiceTools(req, res, caller);
+      return res.status(400).json({ error: `Unknown voice op: ${op}` });
     }
 
     case 'auth':
