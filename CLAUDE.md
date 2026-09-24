@@ -11,6 +11,11 @@ chronological work log, exact next task, and the owner-action checklist.
 
 **Runtime/hosting decisions**: [`docs/RUNTIME_HOSTING_RECOMMENDATION.md`](docs/RUNTIME_HOSTING_RECOMMENDATION.md).
 
+**Consolidated installation package**: [`docs/FINAL_INSTALLATION.md`](docs/FINAL_INSTALLATION.md) —
+migration manifest with dependencies, storage bucket policies, hosting/worker deployment, provider
+authorization checklist, test commands, and rollback steps. This is what to hand Isaac for one
+coordinated activation session, not `docs/PRODUCT_BUILD_STATE.md` (which is the narrative log).
+
 ## Standing rules (see the master prompt for full detail)
 
 - Do not modify the public marketing website (homepage, nav, legal pages, public SEO). Product
