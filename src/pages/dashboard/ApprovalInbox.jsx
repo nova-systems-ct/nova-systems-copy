@@ -47,13 +47,20 @@ export default function ApprovalInbox() {
   useEffect(() => { load() }, [load])
 
   const act = async (item, action) => {
+    // Rejecting a blog post requires real reviewer feedback (api/client.js's request-changes/
+    // reject alias) — asked here rather than silently sending an empty reason and failing.
+    let reason
+    if (action === 'reject') {
+      reason = window.prompt('Reason (required for content, optional otherwise):') || ''
+      if (item.item_type === 'content' && !reason.trim()) return
+    }
     setActing(item.item_id + action)
     try {
       const { resource, op, body } = item.approve_action
       const query = op ? `resource=${resource}&op=${op}` : `resource=${resource}`
       const r = await authedFetch(`/api/client?${query}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, action }),
+        body: JSON.stringify({ ...body, action, ...(reason ? { reason, notes: reason } : {}) }),
       })
       const data = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(data.error || `Failed to ${action}`)

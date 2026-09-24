@@ -748,7 +748,7 @@ async function handleBlogPosts(req, res) {
   }
 }
 
-async function handleBlogAdmin(req, res) {
+async function handleBlogAdmin(req, res, caller) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 30, 60_000)) return;
 
@@ -779,17 +779,22 @@ async function handleBlogAdmin(req, res) {
     const thumbnail_color          = sanitize(b.thumbnail_color, 20) || '#C49A3C';
     const seo_title                  = sanitize(b.seo_title, 200);
     const seo_description             = sanitize(b.seo_description, 300);
-    const published                    = b.published === true || b.published === 'true';
 
     if (!title) return res.status(400).json({ error: 'Title is required' });
     if (category && !BLOG_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category' });
 
     const slug = sanitize(b.slug, 100) || slugify(title);
 
+    // `published`/`status` are deliberately NOT accepted here — going live is now only reachable
+    // through submit-for-review -> approve -> publish-now below, so a plain content edit can never
+    // itself flip a post live (the real gap this migration closes: any growth.view staff member
+    // could previously set published:true directly with zero second set of eyes on public
+    // content). Omitting the columns entirely means PostgREST leaves them untouched on an update,
+    // and they take their table DEFAULTs ('draft' / false) on a brand-new post.
     const record = {
       title, slug, category: category || BLOG_CATEGORIES[0], excerpt, content,
       thumbnail_color, seo_title: seo_title || title, seo_description: seo_description || excerpt,
-      published, updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       site: 'nova', // every post created from the Nova Systems dashboard is tagged 'nova'
     };
 
@@ -811,6 +816,80 @@ async function handleBlogAdmin(req, res) {
     } catch (err) {
       console.error('[client:blog admin] Error:', err.message);
       return res.status(500).json({ error: 'Failed to save post' });
+    }
+  }
+
+  // ------------------------------------------------------------- content review/scheduling
+  // (2026-09-24, master prompt §17) — draft -> in_review -> approved -> scheduled/published.
+  // 'approve'/'request-changes' require admin.view specifically, re-checked here on top of the
+  // dispatcher's blanket growth.view, the same "distinct, higher-trust gate for one consequential
+  // action" pattern used for Installation Center activation.
+  // The Approval Inbox's generic UI sends a bare 'reject' for every item type it aggregates —
+  // here that means exactly the same thing as 'request-changes' (in_review -> draft, notes
+  // required), so it's accepted as an alias rather than making the Inbox UI special-case content.
+  const id = sanitize(b.id, 100);
+  const normalizedAction = action === 'reject' ? 'request-changes' : action;
+  if (['submit-for-review', 'approve', 'request-changes', 'schedule', 'publish-now'].includes(normalizedAction)) {
+    if (!id) return res.status(400).json({ error: 'id is required' });
+    const existingRes = await sbSelect(`blog_posts?id=eq.${encodeURIComponent(id)}&site=eq.nova&limit=1`);
+    const existingRows = existingRes.ok ? await existingRes.json() : [];
+    if (!existingRows.length) return res.status(404).json({ error: 'Post not found' });
+    const existing = existingRows[0];
+
+    if (normalizedAction === 'submit-for-review') {
+      if (existing.status !== 'draft') return res.status(400).json({ error: `Cannot submit for review from status ${existing.status}` });
+      if (!existing.title || !existing.content) return res.status(400).json({ error: 'Title and content are required before submitting for review' });
+      const r = await sbWrite(`blog_posts?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'in_review', submitted_by: caller.id, submitted_at: new Date().toISOString() });
+      if (!r.ok) { console.error('[client:blog admin] submit-for-review error:', await r.text()); return res.status(500).json({ error: 'Failed to submit for review' }); }
+      const rows = await r.json();
+      return res.status(200).json({ ok: true, post: rows[0] });
+    }
+
+    if (normalizedAction === 'approve') {
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      if (existing.status !== 'in_review') return res.status(400).json({ error: `Cannot approve from status ${existing.status}` });
+      const r = await sbWrite(`blog_posts?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString(), review_notes: null });
+      if (!r.ok) { console.error('[client:blog admin] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve post' }); }
+      const rows = await r.json();
+      return res.status(200).json({ ok: true, post: rows[0] });
+    }
+
+    if (normalizedAction === 'request-changes') {
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      if (existing.status !== 'in_review') return res.status(400).json({ error: `Cannot request changes from status ${existing.status}` });
+      // Accepts either field name: 'notes' from Blog.jsx's own dedicated UI, 'reason' from the
+      // Approval Inbox's generic reject prompt (same field the Installation Center's pause/
+      // offboard actions use) — both mean the same thing here, real reviewer feedback required.
+      const notes = sanitize(b.notes, 2000) || sanitize(b.reason, 2000);
+      if (!notes) return res.status(400).json({ error: 'notes are required when requesting changes' });
+      const r = await sbWrite(`blog_posts?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'draft', review_notes: notes });
+      if (!r.ok) { console.error('[client:blog admin] request-changes error:', await r.text()); return res.status(500).json({ error: 'Failed to request changes' }); }
+      const rows = await r.json();
+      return res.status(200).json({ ok: true, post: rows[0] });
+    }
+
+    if (normalizedAction === 'schedule') {
+      if (existing.status !== 'approved') return res.status(400).json({ error: `Cannot schedule from status ${existing.status} — must be approved first` });
+      const scheduledAt = sanitize(b.scheduled_at, 40);
+      if (!scheduledAt || Number.isNaN(Date.parse(scheduledAt)) || new Date(scheduledAt) <= new Date()) {
+        return res.status(400).json({ error: 'scheduled_at must be a valid future date/time' });
+      }
+      const r = await sbWrite(`blog_posts?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'scheduled', scheduled_at: scheduledAt });
+      if (!r.ok) { console.error('[client:blog admin] schedule error:', await r.text()); return res.status(500).json({ error: 'Failed to schedule post' }); }
+      const rows = await r.json();
+      return res.status(200).json({ ok: true, post: rows[0] });
+    }
+
+    if (normalizedAction === 'publish-now') {
+      // Scheduling only records intent (see the migration's own note) — there is no durable
+      // worker/cron in this codebase yet to act on scheduled_at automatically, so going live is
+      // always this explicit, real action, whether triggered early from 'approved' or once the
+      // scheduled time has actually arrived from 'scheduled'. Never faked as automatic.
+      if (!['approved', 'scheduled'].includes(existing.status)) return res.status(400).json({ error: `Cannot publish from status ${existing.status}` });
+      const r = await sbWrite(`blog_posts?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'published', published: true, updated_at: new Date().toISOString() });
+      if (!r.ok) { console.error('[client:blog admin] publish-now error:', await r.text()); return res.status(500).json({ error: 'Failed to publish post' }); }
+      const rows = await r.json();
+      return res.status(200).json({ ok: true, post: rows[0] });
     }
   }
 
@@ -2198,32 +2277,43 @@ async function handleZionReview(req, res, caller) {
 // Approval Inbox (2026-09-23, master prompt §19). Schema:
 // supabase/approval-inbox-migration-standalone.sql — NOT yet applied to production.
 //
-// Deliberately does NOT retrofit audit_reports/zion_videos' own already-tested approval logic
-// into this table — that would be a real refactor risk to freshly-shipped, working code for no
-// functional gain. Instead this aggregates pending items from all three real sources into one
-// list, and separately provides the generic approval_requests table for new consequential-action
-// types (installations, spending, pricing exceptions) that don't have their own flow yet.
+// Deliberately does NOT retrofit audit_reports/zion_videos'/blog_posts' own already-tested
+// approval logic into this table — that would be a real refactor risk to freshly-shipped, working
+// code for no functional gain. Instead this aggregates pending items from all real sources into
+// one list, and separately provides the generic approval_requests table for new consequential-
+// action types (installations, spending, pricing exceptions) that don't have their own flow yet.
 // =============================================================================================
 
 async function handleApprovalsInbox(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 30, 60_000)) return;
 
-  const [reportsRes, videosRes, genericRes] = await Promise.all([
-    sbSelect(`audit_reports?status=eq.draft&select=id,case_id,version,created_at&order=created_at.desc`),
+  const [reportsRes, videosRes, postsRes, genericRes] = await Promise.all([
+    // Embeds the parent case's organization_id via the case_id FK — audit_reports has no
+    // organization_id column of its own, and handleAuditReports requires one on every POST
+    // (object-level org authorization). Without this embed, the approve_action built below would
+    // be missing a required field and every "Approve" click on an audit report from this inbox
+    // would fail — a real bug in last night's first cut, caught and fixed before it was ever hit.
+    sbSelect(`audit_reports?status=eq.draft&select=id,case_id,version,created_at,audit_cases(organization_id)&order=created_at.desc`),
     sbSelect(`zion_videos?status=in.(draft,ready_for_review)&select=id,idea_id,status,created_at&order=created_at.desc`),
+    sbSelect(`blog_posts?status=eq.in_review&site=eq.nova&select=id,title,submitted_at&order=submitted_at.desc`),
     sbSelect(`approval_requests?status=eq.pending&order=created_at.desc`),
   ]);
 
   const items = [];
   if (reportsRes.ok) {
     for (const r of await reportsRes.json()) {
-      items.push({ item_type: 'audit_report', item_id: r.id, action_summary: `Approve Audit report v${r.version} (case ${String(r.case_id).slice(0, 8)})`, created_at: r.created_at, approve_action: { resource: 'audit', op: 'reports', body: { action: 'approve', id: r.id, case_id: r.case_id } } });
+      items.push({ item_type: 'audit_report', item_id: r.id, action_summary: `Approve Audit report v${r.version} (case ${String(r.case_id).slice(0, 8)})`, created_at: r.created_at, approve_action: { resource: 'audit', op: 'reports', body: { action: 'approve', id: r.id, case_id: r.case_id, organization_id: r.audit_cases?.organization_id } } });
     }
   }
   if (videosRes.ok) {
     for (const v of await videosRes.json()) {
       items.push({ item_type: 'zion_video', item_id: v.id, action_summary: `Review Zion video ${String(v.id).slice(0, 8)} (${v.status.replace(/_/g, ' ')})`, created_at: v.created_at, approve_action: { resource: 'zion', op: 'review', body: { video_id: v.id, action: 'approve' } } });
+    }
+  }
+  if (postsRes.ok) {
+    for (const p of await postsRes.json()) {
+      items.push({ item_type: 'content', item_id: p.id, action_summary: `Approve blog post "${p.title}"`, created_at: p.submitted_at, approve_action: { resource: 'blog', op: 'admin', body: { action: 'approve', id: p.id } } });
     }
   }
   if (genericRes.ok) {
@@ -2378,8 +2468,9 @@ export default async function handler(req, res) {
         return handleBlogPosts(req, res);
       }
       if (op === 'admin') {
-        if (!(await requireStaff(req, res, 'growth.view'))) return;
-        return handleBlogAdmin(req, res);
+        const blogCaller = await requireStaff(req, res, 'growth.view');
+        if (!blogCaller) return;
+        return handleBlogAdmin(req, res, blogCaller);
       }
       return res.status(400).json({ error: `Unknown blog op: ${op}` });
 

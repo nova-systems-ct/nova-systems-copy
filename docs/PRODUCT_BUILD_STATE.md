@@ -16,13 +16,15 @@ CRM foundations (businesses/contacts/deals), the product catalog, the order life
 Nova Audit domain (cases/evidence/findings/recommendations/reports/deliveries/outcomes, with a
 real, independently unit-tested deadline clock), Zion Studio (journal/facts/ideas/scripts/
 production/review), the Integration Center (found already complete on inspection — see below), the
-Approval Inbox (aggregation + generic consequential-action approval/reject/revoke), and the
+Approval Inbox (aggregation + generic consequential-action approval/reject/revoke), the
 Installation Center's provisioning workflow (sandbox testing, activation authority, pause/
-offboard) are all real, tested code. Seven migration files are written, safety-reviewed, and NOT
-yet applied to production (this environment has no DDL access — never has, this whole project).
-Three storage buckets are specified and NOT yet created (blocked by this session's own permission
-system, not bypassed). Voice/phone infrastructure, Crystal, marketing automation, and durable
-worker infrastructure have not been started.
+offboard), and a real review/scheduling workflow for blog content (draft → review → approval →
+publish, closing a live "any staff can publish with zero review" gap) are all real, tested code.
+Eight migration files are written, safety-reviewed, and NOT yet applied to production (this
+environment has no DDL access — never has, this whole project). Three storage buckets are
+specified and NOT yet created (blocked by this session's own permission system, not bypassed).
+Voice/phone infrastructure, Crystal, broader multi-channel marketing automation (social/email
+campaigns beyond blog review), and durable worker infrastructure have not been started.
 
 ## How schema-dependent work is being tested (no Docker/local Postgres in this environment)
 
@@ -44,16 +46,18 @@ used throughout this session:
   real business-hours weekend-skip case and the "a pause extends the deadline by exactly its own
   duration" invariant the master prompt explicitly requires.
 - **Live authorization/integration proof**: real e2e scripts (`scripts/e2e_crm_order_audit_test.mjs`,
-  `scripts/e2e_zion_studio_test.mjs`, `scripts/e2e_approval_inbox_test.mjs`, plus the pre-existing
-  `e2e_academy_auth_test.mjs`/`e2e_hiring_workflow_test.mjs`) run against the actual Supabase
-  project using real throwaway orgs/users, cleaned up after. All five domain-specific scripts
-  currently fail fast with a clear "table not found" error — an honest, correct result, since none
-  of their target migrations have been applied yet. This is not being reported as a pass.
+  `scripts/e2e_zion_studio_test.mjs`, `scripts/e2e_approval_inbox_test.mjs`,
+  `scripts/e2e_installation_center_test.mjs`, `scripts/e2e_marketing_content_workflow_test.mjs`,
+  plus the pre-existing `e2e_academy_auth_test.mjs`/`e2e_hiring_workflow_test.mjs`) run against the
+  actual Supabase project using real throwaway orgs/users, cleaned up after. All seven
+  domain-specific scripts currently fail fast with a clear "table not found"/"column does not
+  exist" error — an honest, correct result, since none of their target migrations have been
+  applied yet. This is not being reported as a pass.
 
 Every pre-existing permanent regression suite (org isolation 8/8, API client auth 22/22, login
 path 12/12) has been re-run after every change this session and still passes — no regressions.
 
-## This session's real work (2026-09-23, chronological)
+## This build's real work (2026-09-23 → 2026-09-24, chronological)
 
 1. **Login path re-verified from scratch**, not re-asserted — production URL/CSP/anon-key
    re-checked; `scripts/e2e_login_path_test.mjs` (new, 12/12 live) plus a real Playwright run
@@ -109,35 +113,64 @@ path 12/12) has been re-run after every change this session and still passes —
    correctly (migration not applied).
 9. **Requirement matrix and this checkpoint updated** to reflect all of the above against actual
    evidence — not narrated separately from the code that backs each claim.
+10. **Installation Center built** (§13, 2026-09-24): `installations`/`installation_tests`/
+    `installation_events` (pg-mem validated 6/6), `api/client.js`'s `installations` resource —
+    sandbox_setup → sandbox_testing (real recorded test runs) → sandbox_passed (re-derived from
+    the LATEST recorded test being an actual pass every time, never a separately trusted flag) →
+    active, gated by `admin.view` specifically ("activation authority," distinct from the
+    `growth.view` every other installation action uses) → pause/resume (reason required) /
+    offboard (terminal, reason required). One installation per order enforced by a real UNIQUE
+    constraint. `src/pages/dashboard/Installations.jsx` + `InstallationDetail.jsx`.
+    `scripts/e2e_installation_center_test.mjs` includes the exact T13 acceptance test (two
+    independent orgs, proving neither can read, write, or see the other's installation).
+11. **Marketing content review/scheduling workflow built** (§17, 2026-09-24) on the existing, live
+    `blog_posts` table: `status`/`scheduled_at`/`submitted_by`/`approved_by`/`review_notes` columns
+    added (the one migration this session that includes a real UPDATE — an idempotent backfill of
+    the new `status` column from existing rows' `published` value, proven correct and idempotent
+    in `scripts/validate_marketing_content_workflow_schema.mjs`, 5/5). **Closed a real, live
+    authorization gap**: any `growth.view` staff member could previously flip `published` straight
+    to `true` with zero review — `save` no longer accepts `published`/`status` from the client at
+    all; going live now requires `submit-for-review` → `approve` (`admin.view` specifically) →
+    `publish-now`/`schedule`. In-review posts aggregate into the Approval Inbox as
+    `item_type: 'content'`. **Also fixed a real bug in the Approval Inbox itself, caught while
+    extending it**: the `audit_report` aggregation never included `organization_id` in its
+    `approve_action`, which `handleAuditReports` requires on every POST — every "Approve" click on
+    an audit report from the inbox would have failed with a 400; fixed via a PostgREST embed
+    (`audit_cases(organization_id)`) through the existing `case_id` foreign key, a pattern already
+    proven elsewhere in this codebase (`academy.js`, `_auth.js`). `Blog.jsx` rebuilt around the new
+    status states. `scripts/e2e_marketing_content_workflow_test.mjs` written, fails fast correctly.
 
-## What was deliberately NOT attempted this session
+## What has deliberately NOT been attempted
 
-Voice/phone infrastructure (§11) needs a real hosted persistent-connection runtime decision before
-any code is worth writing — Vercel's serverless functions cannot host live call audio, and no
-telephony provider is configured. The Installation Center's actual UI/workflow (sandbox tests,
-activation authority, pause/offboard, the two-independent-test-org isolation proof) is not built —
-only its underlying data model (product catalog + order lifecycle) is. Crystal, marketing
-automation, and durable worker/queue infrastructure are all still zero-implementation. Starting any
-of these shallowly would produce exactly the "scaffold with no real domain logic" the master prompt
+Voice/phone infrastructure (§11) and durable workers/queues (§20, needed for `scheduled_at` to
+ever auto-fire) both need a real hosted persistent-connection/runtime decision before any code is
+worth writing — Vercel's serverless functions cannot host live call audio or long-running
+background jobs. Crystal (§14) is explicitly sequenced behind R10-R13 in the master prompt's own
+dependency order, which are now substantially done — it is the natural next candidate once R16's
+remaining scope (or R12/R19) is addressed. Multi-channel marketing automation beyond blog content
+review (social scheduling, email campaign sequencing) is still zero-implementation. Starting any of
+these shallowly would produce exactly the "scaffold with no real domain logic" the master prompt
 prohibits — each needs its own properly-scoped pass.
 
 ## Exact next task
 
-Per §23's dependency order and the requirement matrix's own "not started" list (R12 voice, R16
-marketing/SEO engine, R17 Crystal, R19 durable workers), every remaining not-started module needs
-either live provider credentials, a hosting/runtime decision, or is explicitly gated behind other
-modules per the master prompt's own dependency order (Crystal behind R10-R13). The next
-dependency-ready, credential-free, locally-testable increment is the **Installation Center's actual
-UI/workflow** (§13) — its underlying data model (product catalog + order lifecycle, R14) is already
-built and tested; what remains is the sandbox-test flow, activation authority, pause/offboard
-controls, and the two-independent-test-org isolation proof (T13), all of which can be built and
-pg-mem/e2e-tested the same way as everything else in this checkpoint without needing owner
-decisions first.
+R16 (marketing/content) is now partial rather than not-started — the review/scheduling workflow is
+real, but broader multi-channel automation (social, email campaigns) is still open scope. Per §23's
+dependency order, the remaining not-started/partial modules (R12 voice, R17 Crystal, R19 durable
+workers, R16's remaining scope) each either need a hosting/runtime decision, live provider
+credentials, or are sequenced behind other modules. The next credential-free, locally-testable
+increment worth picking up is either (a) rounding out R16 with a real content calendar view across
+scheduled/published posts, or (b) starting R17 Crystal now that R10-R13 are substantially built —
+neither requires an owner decision first, so the choice is a judgment call to make explicit at the
+start of the next work block rather than defaulting silently.
 
 ## Owner-action items currently blocking further automated progress
 
-1. **Run seven SQL migration files** in the Supabase SQL Editor (all reviewed for safety — every
-   statement is additive, `IF NOT EXISTS`/`ON CONFLICT`, zero destructive statements):
+1. **Run eight SQL migration files** in the Supabase SQL Editor (all reviewed for safety; seven are
+   purely additive — `IF NOT EXISTS`/`ON CONFLICT`, zero destructive statements — and one,
+   `marketing-content-workflow`, contains a single, narrow, idempotent UPDATE that only backfills
+   its own brand-new column on the existing `blog_posts` table, explained in the file's own header
+   comment):
    - `supabase/academy-migration-standalone.sql`
    - `supabase/hiring-workflow-migration-standalone.sql`
    - `supabase/crm-order-audit-migration-standalone.sql`
@@ -145,8 +178,12 @@ decisions first.
    - `supabase/approval-inbox-migration-standalone.sql`
    - `supabase/installation-center-migration-standalone.sql` (depends on `orders` from the
      crm-order-audit migration — run that one first)
-   - (the equivalent sections are also appended to the cumulative `supabase/schema-update.sql`
-     for the historical record, but the six standalone files above are the ones meant to be run)
+   - `supabase/marketing-content-workflow-migration-standalone.sql` (alters the existing, live
+     `blog_posts` table — safe, additive columns plus the one backfill UPDATE described above)
+   - (older sections are also appended to the cumulative `supabase/schema-update.sql` for the
+     historical record, but every standalone file above is what's actually meant to be run — that
+     cumulative file has NOT been kept in sync with the CRM/Zion/Approvals/Installation/Marketing
+     migrations, a stale claim in an earlier version of this doc corrected here)
 2. **Create three Storage buckets** (this session's own permission system blocked direct creation
    — flagged as a shared-resource modification, not bypassed):
    - `portfolios` — **private**, ~5MB file size limit (resumes/application uploads)
@@ -168,18 +205,8 @@ decisions first.
 
 After the SQL files run: `node scripts/e2e_academy_auth_test.mjs`,
 `node scripts/e2e_hiring_workflow_test.mjs`, `node scripts/e2e_crm_order_audit_test.mjs`,
-`node scripts/e2e_zion_studio_test.mjs`, `node scripts/e2e_approval_inbox_test.mjs`, and
-`node scripts/e2e_installation_center_test.mjs` each give real, immediate, live pass/fail evidence
-for their respective domains — none of this has been claimed as passing against production, and
-won't be until these actually run and are reported honestly either way.
-
-## Session paused 2026-09-23 per Isaac's explicit instruction ("stop till tomorrow")
-
-Not a forced boundary from an execution limit — a direct instruction to pause. Everything above
-this line is committed and in a clean, resumable state (see commit log). Nothing is mid-edit or
-half-saved. When work resumes, the next dependency-ready module per §23's order and the "not
-started" list above is still whichever of R12 (voice, needs a hosting decision)/R16 (marketing/SEO
-engine, credential-free and buildable)/R17 (Crystal, gated behind R10-R13, which are now
-substantially done)/R19 (durable workers, needs a hosting decision) makes sense to pick up next —
-R16 is the most likely candidate since it needs no owner decision first, but that's a
-recommendation to revisit, not a decision made on Isaac's behalf.
+`node scripts/e2e_zion_studio_test.mjs`, `node scripts/e2e_approval_inbox_test.mjs`,
+`node scripts/e2e_installation_center_test.mjs`, and
+`node scripts/e2e_marketing_content_workflow_test.mjs` each give real, immediate, live pass/fail
+evidence for their respective domains — none of this has been claimed as passing against
+production, and won't be until these actually run and are reported honestly either way.

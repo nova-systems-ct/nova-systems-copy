@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, X, Loader2, FileText, Eye, EyeOff, Trash2, Edit3, AlertCircle } from 'lucide-react'
+import { Plus, X, Loader2, FileText, Send, CheckCircle2, XCircle, CalendarClock, Rocket, Trash2, Edit3, AlertCircle } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
@@ -21,7 +21,15 @@ function slugify(title) {
   return title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 80)
 }
 
-const emptyForm = { id: '', title: '', slug: '', category: CATEGORIES[0], excerpt: '', content: '', thumbnail_color: '#C49A3C', seo_title: '', seo_description: '', published: false, slugTouched: false }
+const STATUS_CFG = {
+  draft:      { label: 'Draft',       bg: 'rgba(255,255,255,0.06)',  color: 'rgba(255,255,255,0.4)' },
+  in_review:  { label: 'In Review',   bg: `${GOLD}18`,                color: GOLD },
+  approved:   { label: 'Approved',    bg: 'rgba(74,222,128,0.12)',   color: '#4ade80' },
+  scheduled:  { label: 'Scheduled',   bg: 'rgba(167,139,250,0.12)',  color: '#a78bfa' },
+  published:  { label: 'Published',   bg: 'rgba(74,222,128,0.12)',   color: '#4ade80' },
+}
+
+const emptyForm = { id: '', title: '', slug: '', category: CATEGORIES[0], excerpt: '', content: '', thumbnail_color: '#C49A3C', seo_title: '', seo_description: '', slugTouched: false }
 
 export default function Blog() {
   const [posts, setPosts] = useState([])
@@ -47,14 +55,14 @@ export default function Blog() {
   const openNew = () => { setForm(emptyForm); setEditing(true) }
   const openEdit = (post) => { setForm({ ...emptyForm, ...post, slugTouched: true }); setEditing(true) }
 
-  const save = async (publish) => {
+  const save = async () => {
     if (!form.title.trim()) return
     setSaving(true)
     try {
       const r = await authedFetch('/api/client?resource=blog&op=admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', ...form, published: publish }),
+        body: JSON.stringify({ action: 'save', ...form }),
       })
       const d = await r.json()
       if (!r.ok || d.error) throw new Error(d.error || 'Save failed')
@@ -66,13 +74,32 @@ export default function Blog() {
     setSaving(false)
   }
 
-  const togglePublish = async (post) => {
-    await authedFetch('/api/client?resource=blog&op=admin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'save', ...post, published: !post.published }),
-    })
-    load()
+  // draft -> in_review -> (admin) approved -> scheduled/published. Going live is never a single
+  // toggle any growth.view staff member can flip — see api/client.js's handleBlogAdmin for why.
+  const doWorkflow = async (post, action, extra = {}) => {
+    try {
+      const r = await authedFetch('/api/client?resource=blog&op=admin', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, id: post.id, ...extra }),
+      })
+      const d = await r.json()
+      if (!r.ok || d.error) throw new Error(d.error || 'Action failed')
+      load()
+    } catch (e) {
+      alert(e.message)
+    }
+  }
+
+  const requestChanges = async (post) => {
+    const notes = window.prompt('What needs to change before this can be approved?')
+    if (!notes) return
+    await doWorkflow(post, 'request-changes', { notes })
+  }
+
+  const schedule = async (post) => {
+    const when = window.prompt('Schedule for (e.g. 2026-10-01T09:00):')
+    if (!when) return
+    await doWorkflow(post, 'schedule', { scheduled_at: new Date(when).toISOString() })
   }
 
   const remove = async (post) => {
@@ -161,16 +188,19 @@ export default function Blog() {
               </div>
             </div>
 
+            {form.review_notes && (
+              <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8 }}>
+                <p style={{ color: '#f87171', fontSize: 11, fontWeight: 700, marginBottom: 4 }}>Changes requested</p>
+                <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{form.review_notes}</p>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-              <button onClick={() => save(false)} disabled={saving || !form.title.trim()}
-                style={{ flex: 1, padding: 13, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 9, color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 700, cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+              <button onClick={save} disabled={saving || !form.title.trim()}
+                style={{ flex: 1, padding: 13, background: G, border: 'none', borderRadius: 9, color: '#0a0800', fontSize: 12, fontWeight: 700, cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit' }}>
                 {saving ? <Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite', margin: '0 auto' }} /> : 'Save Draft'}
               </button>
-              <button onClick={() => save(true)} disabled={saving || !form.title.trim()}
-                style={{ flex: 1, padding: 13, background: G, border: 'none', borderRadius: 9, color: '#0a0800', fontSize: 12, fontWeight: 700, cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit' }}>
-                Publish
-              </button>
             </div>
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 4 }}>Save the draft first, then submit it for review from the list below — publishing is no longer a single toggle.</p>
           </div>
         </div>
       ) : loading ? (
@@ -183,18 +213,47 @@ export default function Blog() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {posts.map(post => (
-            <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12 }}>
+            <div key={post.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, flexWrap: 'wrap' }}>
               <div style={{ width: 40, height: 40, borderRadius: 8, background: post.thumbnail_color || GOLD, flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 160 }}>
                 <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{post.title}</p>
-                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 3 }}>{post.category} · {post.created_at ? new Date(post.created_at).toLocaleDateString() : ''}</p>
+                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 3 }}>
+                  {post.category} · {post.created_at ? new Date(post.created_at).toLocaleDateString() : ''}
+                  {post.status === 'scheduled' && post.scheduled_at ? ` · scheduled for ${new Date(post.scheduled_at).toLocaleString()}` : ''}
+                </p>
               </div>
-              <span style={{ fontSize: 9, fontWeight: 700, padding: '4px 10px', borderRadius: 20, letterSpacing: '0.1em', textTransform: 'uppercase', background: post.published ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.06)', color: post.published ? '#4ade80' : 'rgba(255,255,255,0.4)' }}>
-                {post.published ? 'Published' : 'Draft'}
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '4px 10px', borderRadius: 20, letterSpacing: '0.1em', textTransform: 'uppercase', background: (STATUS_CFG[post.status] || STATUS_CFG.draft).bg, color: (STATUS_CFG[post.status] || STATUS_CFG.draft).color }}>
+                {(STATUS_CFG[post.status] || STATUS_CFG.draft).label}
               </span>
-              <button onClick={() => togglePublish(post)} title={post.published ? 'Unpublish' : 'Publish'} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
-                {post.published ? <EyeOff style={{ width: 14, height: 14 }} /> : <Eye style={{ width: 14, height: 14 }} />}
-              </button>
+
+              {post.status === 'draft' && (
+                <button onClick={() => doWorkflow(post, 'submit-for-review')} title="Submit for review" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: `${GOLD}18`, border: '1px solid rgba(201,168,76,0.3)', borderRadius: 7, color: GOLD, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <Send style={{ width: 12, height: 12 }} /> Submit
+                </button>
+              )}
+              {post.status === 'in_review' && (
+                <>
+                  <button onClick={() => doWorkflow(post, 'approve')} title="Approve (requires admin.view)" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: 7, color: '#4ade80', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <CheckCircle2 style={{ width: 12, height: 12 }} /> Approve
+                  </button>
+                  <button onClick={() => requestChanges(post)} title="Request changes" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 7, color: '#f87171', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <XCircle style={{ width: 12, height: 12 }} /> Changes
+                  </button>
+                </>
+              )}
+              {(post.status === 'approved' || post.status === 'scheduled') && (
+                <>
+                  {post.status === 'approved' && (
+                    <button onClick={() => schedule(post)} title="Schedule" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: 7, color: '#a78bfa', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      <CalendarClock style={{ width: 12, height: 12 }} /> Schedule
+                    </button>
+                  )}
+                  <button onClick={() => doWorkflow(post, 'publish-now')} title="Publish now" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: G, border: 'none', borderRadius: 7, color: '#0a0800', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <Rocket style={{ width: 12, height: 12 }} /> Publish Now
+                  </button>
+                </>
+              )}
+
               <button onClick={() => openEdit(post)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
                 <Edit3 style={{ width: 13, height: 13 }} />
               </button>
