@@ -18,7 +18,11 @@ function log(name, pass, detail) {
 }
 
 const sqlFile = fs.readFileSync('supabase/marketing-automation-migration-standalone.sql', 'utf8');
-const ddlSection = sqlFile.split('ALTER TABLE marketing_campaigns ENABLE ROW LEVEL SECURITY;')[0];
+// Strips RLS statements (ENABLE ROW LEVEL SECURITY / CREATE POLICY / DROP POLICY) rather than
+// truncating the file at the first one, since marketing_social_accounts (appended after the
+// original RLS block) still needs to be validated — pg-mem's RLS/policy support is the specific
+// gap being worked around here, not a reason to skip validating everything that comes after it.
+const ddlSection = sqlFile.split('\n').filter((line) => !/^(ALTER TABLE .* ENABLE ROW LEVEL SECURITY|CREATE POLICY|DROP POLICY)/.test(line.trim())).join('\n');
 
 const db = newDb({ autoCreateForeignKeyIndices: true });
 db.public.registerFunction({ name: 'gen_random_uuid', returns: 'uuid', implementation: () => '00000000-0000-0000-0000-' + Math.random().toString(16).slice(2).padEnd(12, '0') });
@@ -113,6 +117,20 @@ try {
   log('newsletter_subscribers created IF NOT EXISTS and a new row defaults subscribed=true', row.subscribed === true, JSON.stringify(row));
 } catch (e) {
   log('newsletter_subscribers created IF NOT EXISTS and a new row defaults subscribed=true', false, e.message);
+}
+
+try {
+  db.public.none(`INSERT INTO marketing_social_accounts (organization_id, brand_id, platform, account_label) VALUES ('${orgId}', '${brandId}', 'linkedin', '@nova');`);
+  log('marketing_social_accounts table (appended same day) accepts a real connection row', true);
+} catch (e) {
+  log('marketing_social_accounts table (appended same day) accepts a real connection row', false, e.message);
+}
+
+try {
+  db.public.none(`INSERT INTO marketing_social_accounts (organization_id, brand_id, platform, account_label) VALUES ('${orgId}', '${brandId}', 'linkedin', '@nova-duplicate');`);
+  log('UNIQUE (org, brand, platform) rejects a duplicate connection for the same brand+platform', false, 'insert should have thrown but did not');
+} catch (e) {
+  log('UNIQUE (org, brand, platform) rejects a duplicate connection for the same brand+platform', true, 'correctly rejected: ' + e.message.split('\n')[0]);
 }
 
 const passed = results.filter(Boolean).length;

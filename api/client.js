@@ -108,9 +108,13 @@ import { computeCaseClockStatus } from './_auditClock.js';
 //                                             created for an already-approved content item;
 //                                             publish_mode is derived from the real adapter state,
 //                                             never client-asserted
-//            &op=adapters         [growth.view] GET — read-only; a platform only ever shows
-//                                             connected/operation_tested once real, tested
-//                                             integration code sets it, never via this API
+//            &op=adapters         [growth.view GET; admin.view POST] GET / POST
+//                                             {action:'connect'|'test-connection', platform, ...}
+//                                             — a platform only ever shows connected/
+//                                             operation_tested/authorization_required/degraded
+//                                             once a real HTTP call against that platform's real
+//                                             API (api/_socialAdapters/*) sets it, never a
+//                                             hand-edit through this API
 //   voice &op=config               [growth.view GET; admin.view POST — spend caps/recording
 //                                             policy are consequential] GET / POST — one row per
 //                                             org, recording_enabled requires a disclosure_script
@@ -3392,15 +3396,87 @@ async function handleMarketingPlatformPosts(req, res, caller) {
   return res.status(400).json({ error: `Unknown action: ${action}` });
 }
 
-async function handleMarketingAdapters(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  if (!rateLimit(req, res, 60, 60_000)) return;
-  // Read-only by design — a state like 'connected'/'operation_tested' is only ever set by real,
-  // tested integration code (not written yet for any of these 5 platforms), never by a hand-edit
-  // through this API. See the migration's own seed data and header comment.
-  const r = await sbSelect('marketing_publishing_adapters?order=platform.asc');
-  if (!r.ok) { console.error('[client:marketing adapters] error:', await r.text()); return res.status(500).json({ error: 'Failed to load adapter status' }); }
-  return res.status(200).json(await r.json());
+// Real adapter implementations now exist (api/_socialAdapters/*) — this is where a stored
+// connection is actually tested against each platform's real API, and where
+// marketing_publishing_adapters.state transitions to something other than 'not_implemented' for
+// the first time, and ONLY as a result of a real HTTP call's real outcome, never a hand-set flag.
+// Token storage here is intentionally minimal for this stage: `connect` stores whatever token
+// value the caller supplies directly, since no real OAuth developer app exists yet for any of
+// these 5 platforms (that's Isaac's own account-creation step, per the registry). Production
+// hardening (proper secret-manager storage instead of a plain column) is a real follow-up, not
+// claimed as done here.
+async function handleMarketingAdapters(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const r = await sbSelect('marketing_publishing_adapters?order=platform.asc');
+    if (!r.ok) { console.error('[client:marketing adapters] error:', await r.text()); return res.status(500).json({ error: 'Failed to load adapter status' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 10, 60_000)) return;
+  // Connecting/testing a real external account is consequential — same admin.view gate as
+  // invoices/vault/voice config, not left at bare growth.view.
+  if (!(await requireStaff(req, res, 'admin.view'))) return;
+  const b = req.body || {};
+  const action = sanitize(b.action, 20);
+  const platform = sanitize(b.platform, 20);
+  if (!['tiktok', 'instagram', 'linkedin', 'youtube', 'facebook'].includes(platform)) return res.status(400).json({ error: 'Invalid platform' });
+
+  if (action === 'connect') {
+    const orgId = sanitize(b.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
+    const accessToken = sanitize(b.access_token, 2000);
+    if (!accessToken) return res.status(400).json({ error: 'access_token is required' });
+    const record = {
+      organization_id: orgId, brand_id: sanitize(b.brand_id, 100) || null, platform,
+      account_label: sanitize(b.account_label, 200) || null,
+      access_token_ref: accessToken, refresh_token_ref: sanitize(b.refresh_token, 2000) || null,
+      connected_by: caller.id, connected_at: new Date().toISOString(),
+    };
+    const r = await sbWrite('marketing_social_accounts', 'POST', record);
+    if (!r.ok) { console.error('[client:marketing adapters] connect error:', await r.text()); return res.status(500).json({ error: 'Failed to save connection — one may already exist for this brand/platform' }); }
+    await sbWrite(`marketing_publishing_adapters?platform=eq.${encodeURIComponent(platform)}`, 'PATCH', { state: 'not_connected', notes: 'Credentials saved — not yet tested', updated_at: new Date().toISOString() });
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, account: rows[0] });
+  }
+
+  if (action === 'test-connection') {
+    const accountId = sanitize(b.account_id, 100);
+    if (!accountId) return res.status(400).json({ error: 'account_id is required' });
+    const acctRes = await sbSelect(`marketing_social_accounts?id=eq.${encodeURIComponent(accountId)}&limit=1`);
+    const acctRows = acctRes.ok ? await acctRes.json() : [];
+    if (!acctRows.length) return res.status(404).json({ error: 'Connection not found' });
+    const account = acctRows[0];
+
+    // A real, minimal "who am I" call per platform — proves the token actually works rather than
+    // just existing. Any platform-specific write test (an actual post) is NOT attempted here;
+    // that only ever happens through a real publish action the caller explicitly requests.
+    let testResult;
+    try {
+      if (platform === 'linkedin') {
+        const r = await fetch('https://api.linkedin.com/v2/me', { headers: { Authorization: `Bearer ${account.access_token_ref}` } });
+        testResult = r.ok ? { ok: true } : { ok: false, status: r.status === 401 ? 'authorization_required' : 'degraded', detail: `${r.status} ${await r.text()}` };
+      } else if (platform === 'youtube') {
+        const r = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: `Bearer ${account.access_token_ref}` } });
+        testResult = r.ok ? { ok: true } : { ok: false, status: r.status === 401 ? 'authorization_required' : 'degraded', detail: `${r.status} ${await r.text()}` };
+      } else if (platform === 'instagram' || platform === 'facebook') {
+        const r = await fetch(`https://graph.facebook.com/v25.0/me?access_token=${encodeURIComponent(account.access_token_ref)}`);
+        testResult = r.ok ? { ok: true } : { ok: false, status: r.status === 401 || r.status === 403 ? 'authorization_required' : 'degraded', detail: `${r.status} ${await r.text()}` };
+      } else if (platform === 'tiktok') {
+        const r = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id', { headers: { Authorization: `Bearer ${account.access_token_ref}` } });
+        testResult = r.ok ? { ok: true } : { ok: false, status: r.status === 401 ? 'authorization_required' : 'degraded', detail: `${r.status} ${await r.text()}` };
+      }
+    } catch (err) {
+      testResult = { ok: false, status: 'degraded', detail: err.message };
+    }
+
+    const newState = testResult.ok ? 'connected' : testResult.status;
+    await sbWrite(`marketing_publishing_adapters?platform=eq.${encodeURIComponent(platform)}`, 'PATCH', { state: newState, last_tested_at: new Date().toISOString(), notes: testResult.ok ? 'Connection verified' : testResult.detail, updated_at: new Date().toISOString() });
+    await sbWrite(`marketing_social_accounts?id=eq.${encodeURIComponent(accountId)}`, 'PATCH', { last_tested_at: new Date().toISOString(), last_test_result: testResult.ok ? 'ok' : testResult.detail });
+    return res.status(200).json({ ok: testResult.ok, state: newState, detail: testResult.detail });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
 }
 
 // =============================================================================================
@@ -3872,7 +3948,7 @@ export default async function handler(req, res) {
       if (op === 'campaigns') return handleMarketingCampaigns(req, res);
       if (op === 'content') return handleMarketingContent(req, res, caller);
       if (op === 'platform-posts') return handleMarketingPlatformPosts(req, res, caller);
-      if (op === 'adapters') return handleMarketingAdapters(req, res);
+      if (op === 'adapters') return handleMarketingAdapters(req, res, caller);
       return res.status(400).json({ error: `Unknown marketing op: ${op}` });
     }
 

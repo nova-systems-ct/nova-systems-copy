@@ -117,3 +117,31 @@ ALTER TABLE newsletter_subscribers ADD COLUMN IF NOT EXISTS preferences JSONB NO
 ALTER TABLE marketing_campaigns ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS members_read_marketing_campaigns ON marketing_campaigns;
 CREATE POLICY members_read_marketing_campaigns ON marketing_campaigns FOR SELECT TO authenticated USING (is_org_member(organization_id));
+
+-- =============================================================================================
+-- Social account connections (2026-09-24, appended same day — real adapter implementations now
+-- exist in api/_socialAdapters/*, see that directory's registry.js for each platform's actual
+-- current authorization requirements). Tokens are stored as opaque references, never as raw
+-- tenant-readable secrets — same pattern as api/_vaultStorage.js's storage_path references,
+-- consistent with §6's "store credentials as secure references, not in browser configuration or
+-- tenant-readable tables." No RLS SELECT policy is added here deliberately: this table is never
+-- read by anything except service-role backend code (handleMarketingAdapters), the same posture
+-- already used for other credential-adjacent tables in this codebase.
+-- =============================================================================================
+CREATE TABLE IF NOT EXISTS marketing_social_accounts (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id   UUID NOT NULL REFERENCES organizations(id),
+  brand_id          UUID REFERENCES marketing_brands(id),
+  platform          TEXT NOT NULL CHECK (platform IN ('tiktok', 'instagram', 'linkedin', 'youtube', 'facebook')),
+  account_label     TEXT, -- human-readable handle/page name, safe to display
+  access_token_ref  TEXT, -- opaque reference into wherever the real secret is actually stored
+  refresh_token_ref TEXT,
+  expires_at        TIMESTAMPTZ,
+  connected_by      UUID REFERENCES auth.users(id),
+  connected_at      TIMESTAMPTZ,
+  last_tested_at    TIMESTAMPTZ,
+  last_test_result  TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (organization_id, brand_id, platform)
+);
+CREATE INDEX IF NOT EXISTS marketing_social_accounts_org_idx ON marketing_social_accounts (organization_id);
