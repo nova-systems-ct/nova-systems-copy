@@ -3,7 +3,7 @@
 // database table was touched. This proves the orchestration rules; it does NOT prove journeys
 // C/D/E in production — those need the migration, a deployed webhook URL and a real number.
 import { twilioSignature } from '../api/_wave1.js';
-import { handleSmsInbound, handleCallStatus, handleFormIntake, runMissedCallFollowup } from '../api/_wave1Handlers.js';
+import { handleSmsInbound, handleCallStatus, handleSmsStatus, handleFormIntake, runMissedCallFollowup } from '../api/_wave1Handlers.js';
 
 const results = [];
 const log = (name, pass, detail) => { console.log(`${pass ? 'PASS' : 'FAIL'} — ${name}${detail ? ' — ' + detail : ''}`); results.push(pass); };
@@ -25,6 +25,7 @@ function makeRepo() {
     async updateConversation(org, cid, p) { Object.assign(s.convs.find((x) => x.id === cid && x.organization_id === org), p); },
     async getSettings(org) { return s.settings.find((x) => x.organization_id === org) || null; },
     async insertMessage(org, m) { if (m.idempotency_key && s.msgs.some((x) => x.organization_id === org && x.idempotency_key === m.idempotency_key)) return null; if (m.provider_sid && s.msgs.some((x) => x.provider === m.provider && x.provider_sid === m.provider_sid)) return null; const r = { id: id(), organization_id: org, created_at: new Date().toISOString(), ...m }; s.msgs.push(r); return r; },
+    async findMessageBySid(org, sid) { return s.msgs.find((x) => x.organization_id === org && x.provider === 'twilio' && x.provider_sid === sid) || null; },
     async messageExists(org, key) { return this.s.msgs.some((x) => x.organization_id === org && x.idempotency_key === key); },
     async updateMessage(org, mid, p) { Object.assign(s.msgs.find((x) => x.id === mid && x.organization_id === org), p); },
     async countRecentAutomated(org, cid) { const conv = s.convs.filter((c) => c.organization_id === org && c.contact_id === cid).map((c) => c.id); const sent = s.msgs.filter((m) => conv.includes(m.conversation_id) && m.automated && ['provider_accepted', 'delivered', 'queued', 'ambiguous'].includes(m.status)); return { count: sent.length, lastAt: sent.at(-1)?.created_at || null }; },
@@ -154,6 +155,57 @@ const settingsFor = (org, num, extra = {}) => ({ organization_id: org, sms_numbe
   log('FORM: a wrong token is a 404 and writes nothing', (await handleFormIntake({ token: 'nope', body }, repo)).status === 404);
   log('FORM: honeypot spam is rejected', (await handleFormIntake({ token: 'tok-orgA', body: { ...body, submission_id: 's3', website_url_confirm: 'http://spam' } }, repo)).status === 422);
   log('FORM: Org B\'s token cannot write into Org A', (await handleFormIntake({ token: 'tok-orgB', body: { ...body, submission_id: 's4', fields: { name: 'Q', phone: '2035550177' } } }, repo)).status === 200 && repo.s.contacts.find((c) => c.phone_e164 === '+12035550177').organization_id === orgB);
+}
+
+// ---- quiet hours: deferred to the morning, not dropped, and re-checked when it runs ----
+{
+  const repo = makeRepo();
+  const hourNow = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Pacific/Kiritimati', hour: 'numeric', hour12: false }).format(new Date())) % 24;
+  repo.s.settings.push(settingsFor(orgA, '+12035550111', { quiet_hours: { start: hourNow, end: (hourNow + 2) % 24 } }));
+  const c = await repo.upsertContactByPhone(orgA, '+12035550100', { name: 'Pat' });
+  await repo.updateContact(orgA, c.id, { sms_consent: true, sms_consent_source: 'web_form_checkbox', sms_consent_at: '2026-09-01T00:00:00Z' });
+  await handleCallStatus(signed('call-status', { From: '+12035550100', To: '+12035550111', CallSid: 'CAq', CallStatus: 'no-answer' }), repo, ENV);
+  const j = repo.s.jobs[0];
+  log('QUIET HOURS: a missed call at night is SCHEDULED for when quiet hours end, not dropped and not sent now', repo.s.jobs.length === 1 && new Date(j.scheduled_at) > new Date() && repo.s.msgs.length === 0);
+  let sends = 0; const sender = async () => { sends += 1; return { httpStatus: 201, sid: 'SMq' }; };
+  const out = await runMissedCallFollowup({ ...j, job_type: 'wave1_missed_call_followup' }, repo, sender, ENV);
+  log('QUIET HOURS: if the job runs while still quiet it defers again (bounded) and sends nothing', out.deferred_until && sends === 0 && repo.s.jobs.length === 2 && repo.s.jobs[1].payload.deferrals === 2);
+  let last = { ...repo.s.jobs.at(-1), job_type: 'wave1_missed_call_followup', payload: { ...repo.s.jobs.at(-1).payload, deferrals: 3 } };
+  const capped = await runMissedCallFollowup(last, repo, sender, ENV);
+  log('QUIET HOURS: deferral is capped — after 3 it is recorded as blocked instead of looping forever', !capped.deferred_until && capped.blocked === 'quiet_hours' && sends === 0);
+}
+
+// ---- delivery status callbacks: ordering, duplicates, isolation, carrier opt-out ----
+{
+  const repo = makeRepo(); repo.s.settings.push(settingsFor(orgA, '+12035550111'), settingsFor(orgB, '+12035550222'));
+  const c = await repo.upsertContactByPhone(orgA, '+12035550100', { name: 'Pat' });
+  const conv = await repo.upsertConversation(orgA, c.id, 'sms');
+  const m = await repo.insertMessage(orgA, { conversation_id: conv.id, direction: 'outbound', automated: true, status: 'provider_accepted', provider: 'twilio', provider_sid: 'SMout1' });
+  const st = (status, extra = {}, to = '+12035550100', from = '+12035550111') => handleSmsStatus(signed('sms-status', { MessageSid: 'SMout1', MessageStatus: status, From: from, To: to, ...extra }), repo, ENV);
+  await st('delivered');
+  log('STATUS: a delivered callback moves provider_accepted to delivered', m.status === 'delivered');
+  await st('sent');
+  log('STATUS: a late/out-of-order "sent" cannot downgrade delivered', m.status === 'delivered');
+  await st('delivered');
+  log('STATUS: a duplicate callback is a no-op', m.status === 'delivered' && repo.s.events.size === 2);
+  const forged = await handleSmsStatus({ url: `${BASE}&op=sms-status`, params: { MessageSid: 'SMout1', MessageStatus: 'failed', From: '+12035550111', To: '+12035550100' }, signature: 'nope' }, repo, ENV);
+  log('STATUS: a forged status callback is rejected and changes nothing', forged.status === 403 && m.status === 'delivered');
+  const wrongOrg = await handleSmsStatus(signed('sms-status', { MessageSid: 'SMout1', MessageStatus: 'failed', From: '+12035550222', To: '+12035550100' }), repo, ENV);
+  log("STATUS ISOLATION: Org B's number cannot update Org A's message", wrongOrg.status === 200 && m.status === 'delivered');
+  const m2 = await repo.insertMessage(orgA, { conversation_id: conv.id, direction: 'outbound', automated: true, status: 'ambiguous', provider: 'twilio', provider_sid: 'SMout2' });
+  await handleSmsStatus(signed('sms-status', { MessageSid: 'SMout2', MessageStatus: 'undelivered', ErrorCode: '21610', From: '+12035550111', To: '+12035550100' }), repo, ENV);
+  log('STATUS: a reconciled ambiguous send takes the provider outcome', m2.status === 'undelivered');
+  log('STATUS: carrier opt-out (21610) suppresses the contact so no later automation can text them', c.suppressed === true && c.suppression_source === 'twilio_21610' && c.sms_consent === false);
+}
+// ---- "YES" is not an opt-in ----
+{
+  const repo = makeRepo(); repo.s.settings.push(settingsFor(orgA, '+12035550111'));
+  const c = await repo.upsertContactByPhone(orgA, '+12035550100', { name: 'Pat' });
+  await repo.updateContact(orgA, c.id, { suppressed: true, sms_consent: false });
+  await handleSmsInbound(signed('sms-inbound', { From: '+12035550100', To: '+12035550111', Body: 'Yes', MessageSid: 'SMyes' }), repo, ENV);
+  log('An opted-out contact replying "Yes" is NOT re-subscribed and gets no consent', c.suppressed === true && c.sms_consent === false);
+  await handleSmsInbound(signed('sms-inbound', { From: '+12035550100', To: '+12035550111', Body: 'START', MessageSid: 'SMstart' }), repo, ENV);
+  log('START (carrier-standard) does re-subscribe, with source recorded', c.suppressed === false && c.sms_consent_source === 'sms_start_keyword');
 }
 
 const passed = results.filter(Boolean).length;

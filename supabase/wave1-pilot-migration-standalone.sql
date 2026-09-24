@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS wave1_org_settings (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE wave1_org_settings ADD COLUMN IF NOT EXISTS calcom_event_type_id INTEGER;  -- Cal.com event type that supplies this organization's availability
 ALTER TABLE wave1_org_settings ADD COLUMN IF NOT EXISTS form_token TEXT;  -- public identifier for the intake form; rotate to revoke
 -- One number belongs to exactly one organization (webhook routing depends on this), and a form token
 -- resolves to exactly one organization. Partial so unset values never conflict.

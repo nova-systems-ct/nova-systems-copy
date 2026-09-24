@@ -2,7 +2,7 @@
 // contacted, nothing is sent. The Twilio signature test uses the algorithm's documented shape with
 // a fixed fake token — it proves our verifier is self-consistent and rejects tampering, NOT that a
 // real Twilio request has been accepted (that needs a deployed webhook URL + a real call/SMS).
-import { twilioSignature, verifyTwilioSignature, normalizePhone, classifyInboundKeyword, evaluateSendEligibility, isMissedCallStatus, classifySendOutcome, validateFormSubmission, localHour } from '../api/_wave1.js';
+import { twilioSignature, verifyTwilioSignature, normalizePhone, classifyInboundKeyword, evaluateSendEligibility, isMissedCallStatus, classifySendOutcome, validateFormSubmission, localHour, nextSendWindow } from '../api/_wave1.js';
 
 const results = [];
 const log = (name, pass, detail) => { console.log(`${pass ? 'PASS' : 'FAIL'} — ${name}${detail ? ' — ' + detail : ''}`); results.push(pass); };
@@ -42,6 +42,12 @@ log('A contact reply stops automated follow-up', evaluateSendEligibility({ ...ba
 log('A confirmed booking stops missed-call/inquiry follow-up', evaluateSendEligibility({ ...base, conversation: { appointment_confirmed: true } }).reason === 'already_booked');
 const night = new Date('2026-09-25T02:30:00Z'); // 22:30 EDT
 log('Quiet hours block (timezone-correct)', evaluateSendEligibility({ ...base, now: night }).reason === 'quiet_hours');
+{
+  const r = evaluateSendEligibility({ ...base, now: night });
+  const next = r.retryAt && new Date(r.retryAt);
+  log('Quiet hours give a real retry time: the first moment local time is back outside quiet hours', !!next && next > night && localHour(next, 'America/New_York') === 8 && next - night <= 10 * 3600_000);
+  log('No send window within 26h (quiet all day) yields no retry time rather than a guess', nextSendWindow(night, 'America/New_York', { start: 0, end: 24 }) === null);
+}
 log('A direct reply is allowed during quiet hours', evaluateSendEligibility({ ...base, now: night, purpose: 'reply' }).allowed === true);
 log('Unknown timezone BLOCKS rather than guessing', evaluateSendEligibility({ ...base, org: { ...base.org, timezone: undefined } }).reason === 'timezone_not_configured');
 log('DST: same UTC hour maps to a different local hour in winter (EST) vs summer (EDT)', localHour(new Date('2026-07-01T16:00:00Z'), 'America/New_York') === 12 && localHour(new Date('2026-12-01T16:00:00Z'), 'America/New_York') === 11);

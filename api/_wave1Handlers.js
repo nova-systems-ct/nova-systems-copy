@@ -52,6 +52,35 @@ export async function handleSmsInbound({ url, params, signature }, repo, env) {
   return twiml(200);
 }
 
+// ---------------------------------------------------------------- outbound delivery status
+// Twilio status callbacks arrive duplicated and out of order. Rank statuses so a late "sent" can never
+// overwrite "delivered"; terminal failures are never downgraded either.
+const RANK = { provider_accepted: 1, delivered: 2, undelivered: 3, failed: 3 };
+const MAP = { queued: 'provider_accepted', accepted: 'provider_accepted', sending: 'provider_accepted', sent: 'provider_accepted', delivered: 'delivered', undelivered: 'undelivered', failed: 'failed' };
+export async function handleSmsStatus({ url, params, signature }, repo, env) {
+  const sig = checkSignature({ url, params, signature }, env);
+  if (!sig.ok) return { status: sig.status, type: 'application/json', body: { error: sig.error } };
+  const sid = params.MessageSid || params.SmsSid; const raw = String(params.MessageStatus || params.SmsStatus || '').toLowerCase();
+  const from = normalizePhone(params.From); const to = normalizePhone(params.To);
+  const status = MAP[raw];
+  if (!sid || !status || !from) return twiml(200);
+  const org = await repo.orgByNumber(from); // outbound: From is OUR number
+  if (!org) return twiml(200);
+  const orgId = org.organization_id;
+  if (!(await repo.recordSourceEvent('twilio_sms_status', `${sid}:${raw}`, orgId, { kind: 'delivery_status' }))) return twiml(200);
+  const msg = await repo.findMessageBySid(orgId, sid);
+  if (!msg) return twiml(200); // not one of ours (or not recorded yet) — acknowledge, do not guess
+  if ((RANK[status] || 0) > (RANK[msg.status] || 0) || (msg.status === 'ambiguous' && RANK[status])) {
+    await repo.updateMessage(orgId, msg.id, { status, error_code: params.ErrorCode ? String(params.ErrorCode).slice(0, 20) : msg.error_code || null });
+  }
+  // 21610 = recipient has opted out with the carrier/Twilio. Treat as an opt-out here too.
+  if (String(params.ErrorCode) === '21610' && to) {
+    const c = await repo.upsertContactByPhone(orgId, to, { name: 'Unknown (SMS)', source: 'twilio_status' });
+    await repo.updateContact(orgId, c.id, { suppressed: true, suppressed_at: new Date().toISOString(), suppression_source: 'twilio_21610', sms_consent: false });
+  }
+  return twiml(200);
+}
+
 // ---------------------------------------------------------------- call status (missed call)
 export async function handleCallStatus({ url, params, signature }, repo, env) {
   const sig = checkSignature({ url, params, signature }, env);
@@ -83,6 +112,12 @@ export async function handleCallStatus({ url, params, signature }, repo, env) {
     org: { timezone: settings.timezone, quiet_hours: settings.quiet_hours, paused: settings.paused, channels_paused: settings.channels_paused, max_automated_per_day: settings.max_automated_per_day, min_gap_minutes: settings.min_gap_minutes },
   });
 
+  if (!decision.allowed && decision.reason === 'quiet_hours' && decision.retryAt) {
+    // Not refused, just too late/early: the same single follow-up is scheduled for when quiet hours end,
+    // and re-evaluated then (a STOP/reply/booking in between still wins).
+    await repo.enqueueJob({ job_type: 'wave1_missed_call_followup', organization_id: orgId, scheduled_at: decision.retryAt, payload: { contact_id: contact.id, conversation_id: conv.id, call_sid: callSid, deferrals: 1 }, idempotency_key: missedCallKey(callSid) });
+    return twiml(200);
+  }
   if (!decision.allowed) {
     // Recorded for the operator view so "why didn't it text them?" is answerable. Nothing is sent.
     await repo.insertMessage(orgId, { conversation_id: conv.id, direction: 'outbound', body: null, automated: true, purpose: 'missed_call', status: 'blocked', blocked_reason: decision.reason, idempotency_key: missedCallKey(callSid) });
@@ -142,6 +177,11 @@ export async function runMissedCallFollowup(job, repo, sender, env) {
     org: { timezone: settings.timezone, quiet_hours: settings.quiet_hours, paused: settings.paused, channels_paused: settings.channels_paused, max_automated_per_day: settings.max_automated_per_day, min_gap_minutes: settings.min_gap_minutes },
   });
   const key = missedCallKey(call_sid);
+  if (!decision.allowed && decision.reason === 'quiet_hours' && decision.retryAt && (job.payload?.deferrals || 0) < 3) {
+    const n = (job.payload?.deferrals || 0) + 1;
+    await repo.enqueueJob({ job_type: 'wave1_missed_call_followup', organization_id: orgId, scheduled_at: decision.retryAt, payload: { ...job.payload, deferrals: n }, idempotency_key: `${key}:defer${n}` });
+    return { sent: false, deferred_until: decision.retryAt };
+  }
   if (!decision.allowed) {
     await repo.insertMessage(orgId, { conversation_id, direction: 'outbound', automated: true, purpose: 'missed_call', status: 'blocked', blocked_reason: decision.reason, idempotency_key: `${key}:exec` });
     return { sent: false, blocked: decision.reason };
@@ -188,7 +228,7 @@ export function createTwilioSender(env, fetchImpl = fetch) {
       const r = await fetchImpl(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`, {
         method: 'POST', signal: ctrl.signal,
         headers: { Authorization: 'Basic ' + Buffer.from(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ To: to, From: from, Body: body }),
+        body: new URLSearchParams({ To: to, From: from, Body: body, ...(env.WAVE1_PUBLIC_BASE ? { StatusCallback: `${env.WAVE1_PUBLIC_BASE.replace(/\/$/, '')}/api/client?resource=wave1&op=sms-status` } : {}) }),
       });
       const j = await r.json().catch(() => ({}));
       return { httpStatus: r.status, sid: j.sid };

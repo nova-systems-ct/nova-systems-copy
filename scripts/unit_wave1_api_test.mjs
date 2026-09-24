@@ -6,7 +6,7 @@ import { handleWave1 } from '../api/_wave1Api.js';
 let pass = 0, fail = 0;
 const check = (name, cond, extra = '') => { if (cond) { pass++; console.log(`PASS — ${name}`); } else { fail++; console.log(`FAIL — ${name} ${extra}`); } };
 
-const T = { pilots: [], pilot_permissions: [], pilot_checklist_items: [], wave1_conversations: [], wave1_messages: [], wave1_appointments: [], wave1_org_settings: [], jobs: [] };
+const T = { crm_contacts: [], pilots: [], pilot_permissions: [], pilot_checklist_items: [], wave1_conversations: [], wave1_messages: [], wave1_appointments: [], wave1_org_settings: [], jobs: [] };
 let seq = 0;
 const matchRow = (row, filters) => filters.every(([col, cond]) => {
   const m = /^(eq|gte|in)\.(.*)$/.exec(cond); if (!m) return true;
@@ -16,8 +16,23 @@ const matchRow = (row, filters) => filters.every(([col, cond]) => {
   if (op === 'in') return v.replace(/[()]/g, '').split(',').includes(String(row[col]));
   return true;
 });
+// Cal.com stand-in: records calls; behaviour switchable per test. Never touches the network.
+const cal = { calls: [], slots: [], bookingStatus: 'accepted', mode: 'ok', bookings: {} };
 globalThis.fetch = async (url, init = {}) => {
-  const u = new URL(url); const table = u.pathname.split('/rest/v1/')[1];
+  const u = new URL(url);
+  if (u.hostname === 'api.cal.com') {
+    cal.calls.push({ method: init.method, path: u.pathname, version: init.headers['cal-api-version'], auth: init.headers.Authorization, body: init.body ? JSON.parse(init.body) : null });
+    const J = (b, s = 200) => ({ ok: s < 400, status: s, json: async () => b });
+    if (cal.mode === 'timeout' && init.method === 'POST') { const err = new Error('aborted'); err.name = 'AbortError'; throw err; }
+    if (cal.mode === 'server_error' && init.method === 'POST') return J({}, 503);
+    if (cal.mode === 'reject' && init.method === 'POST') return J({ error: { message: 'slot unavailable' } }, 400);
+    if (u.pathname === '/v2/slots') return J({ status: 'success', data: { [u.searchParams.get('start')]: cal.slots.map((s) => ({ start: s })) } });
+    if (u.pathname === '/v2/bookings' && init.method === 'POST') { const b = JSON.parse(init.body); const bk = { uid: `bk_${b.start}`, status: cal.bookingStatus, start: b.start, end: new Date(new Date(b.start).getTime() + 1800000).toISOString() }; cal.bookings[bk.uid] = bk; return J({ status: 'success', data: bk }, 201); }
+    const m = /^\/v2\/bookings\/([^/]+)(\/cancel)?$/.exec(u.pathname);
+    if (m && init.method === 'GET') return J({ status: 'success', data: cal.bookings[decodeURIComponent(m[1])] });
+    if (m && m[2]) { cal.bookings[decodeURIComponent(m[1])].status = 'cancelled'; return J({ status: 'success', data: {} }); }
+    return J({}, 404);
+  } const table = u.pathname.split('/rest/v1/')[1];
   const filters = [...u.searchParams.entries()].filter(([k]) => !['select', 'order', 'limit', 'on_conflict'].includes(k));
   const rows = T[table]; const method = init.method || 'GET';
   const ok = (b, s = 200) => ({ ok: true, status: s, json: async () => b, text: async () => JSON.stringify(b) });
@@ -164,6 +179,70 @@ check('inbound SMS with no public base / auth token / signature is refused', wre
 wres = mkRes();
 await handleWave1({ method: 'GET', body: {}, query: {}, headers: {} }, wres, 'sms-inbound', deps);
 check('webhooks reject non-POST', wres.code === 405);
+
+// --- Cal.com scheduling + appointments
+T.wave1_appointments.length = 0; // earlier results tests seeded rows; start clean
+process.env.CALCOM_API_KEY = 'cal_test_key';
+const FUT = (h) => new Date(Date.now() + 3 * 86400_000 + h * 3600_000);
+const hr = (d) => { const x = new Date(d); x.setUTCMinutes(0, 0, 0); return x; };
+const slotA = hr(FUT(0)).toISOString(), slotB = hr(FUT(2)).toISOString();
+T.crm_contacts.push({ id: 'ct1', organization_id: ORG, name: 'Pat Lee', email: 'pat@x.test', phone_e164: '+12035550100' }, { id: 'ct2', organization_id: 'org-B', name: 'Zed', email: 'z@x.test' }, { id: 'ct3', organization_id: ORG, name: 'No Email' });
+T.wave1_conversations.push({ id: 'cvA', organization_id: ORG, contact_id: 'ct1', channel: 'sms', appointment_confirmed: false });
+T.wave1_org_settings.push({ organization_id: ORG, timezone: 'America/New_York', calcom_event_type_id: 777 });
+cal.slots = [slotA, slotB];
+r = await call('availability', { method: 'GET', body: { organization_id: ORG }, query: { start: slotA.slice(0, 10), end: slotA.slice(0, 10) } });
+check('availability comes from the scheduling source, with the pinned API version and bearer key', r.code === 200 && r.body.slots.includes(slotA) && cal.calls.at(-1).version === '2024-09-04' && cal.calls.at(-1).auth === 'Bearer cal_test_key');
+delete process.env.CALCOM_API_KEY;
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct1', start_at: slotA } });
+check('booking with Cal.com not connected is refused, not faked', r.code === 409 && /not connected/.test(r.body.error) && T.wave1_appointments.length === 0);
+process.env.CALCOM_API_KEY = 'cal_test_key';
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct2', start_at: slotA } });
+check("cannot book for another organization's contact", r.code === 404);
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct3', start_at: slotA } });
+check('a contact with no email cannot be booked through Cal.com', r.code === 409 && T.wave1_appointments.length === 0);
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct1', start_at: new Date(Date.now() - 3600_000).toISOString() } });
+check('a time in the past is refused', r.code === 400);
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct1', start_at: hr(FUT(5)).toISOString() } });
+check('a time outside the scheduling source availability is refused', r.code === 409 && /availability/.test(r.body.error) && T.wave1_appointments.length === 0);
+cal.bookingStatus = 'pending';
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct1', start_at: slotA } });
+const pend = T.wave1_appointments.find((a) => a.start_at === slotA);
+check('a PENDING Cal.com booking is stored as requested, NOT confirmed, and does not stop follow-up', r.code === 200 && r.body.confirmed === false && pend.status === 'requested' && pend.confirmed_at === null && T.wave1_conversations.find((c) => c.id === 'cvA').appointment_confirmed === false);
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct1', start_at: slotA } });
+check('the same slot cannot be booked twice (duplicate prevention)', r.code === 409);
+cal.bookings[pend.provider_booking_id].status = 'accepted';
+r = await call('appointments', { body: { organization_id: ORG, action: 'sync', id: pend.id } });
+check('sync: confirmed only once Cal.com itself reports accepted; then follow-up automation stops', r.code === 200 && pend.status === 'confirmed' && !!pend.confirmed_at && T.wave1_conversations.find((c) => c.id === 'cvA').appointment_confirmed === true);
+cal.bookingStatus = 'accepted';
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct1', start_at: slotB } });
+check('an accepted booking is confirmed immediately with the provider booking id and end time', r.code === 200 && r.body.confirmed === true && T.wave1_appointments.find((a) => a.start_at === slotB).provider_booking_id === `bk_${slotB}`);
+const slotC = hr(FUT(30)).toISOString(); cal.slots.push(slotC); cal.mode = 'timeout';
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct1', start_at: slotC } });
+cal.mode = 'ok';
+const amb = T.wave1_appointments.find((a) => a.start_at === slotC);
+check('AMBIGUOUS write (timeout): nothing is confirmed, the row says to check Cal.com, and it is not retried automatically', r.code === 202 && amb.status === 'requested' && /AMBIGUOUS/.test(amb.notes) && cal.calls.filter((c) => c.method === 'POST' && c.body?.start === slotC).length === 1);
+const slotD = hr(FUT(50)).toISOString(); cal.slots.push(slotD); cal.mode = 'reject';
+r = await call('appointments', { body: { organization_id: ORG, action: 'book', contact_id: 'ct1', start_at: slotD } });
+cal.mode = 'ok';
+check('a refused booking is recorded as cancelled and reported, never left looking booked', r.code === 422 && T.wave1_appointments.find((a) => a.start_at === slotD).status === 'cancelled');
+cal.mode = 'server_error'; const before = T.wave1_appointments.find((a) => a.start_at === slotB).status;
+r = await call('appointments', { body: { organization_id: ORG, action: 'cancel', id: T.wave1_appointments.find((a) => a.start_at === slotB).id } });
+cal.mode = 'ok';
+check('if Cal.com cannot cancel, the appointment is NOT marked cancelled locally', r.code !== 200 && T.wave1_appointments.find((a) => a.start_at === slotB).status === before);
+r = await call('appointments', { body: { organization_id: ORG, action: 'cancel', id: T.wave1_appointments.find((a) => a.start_at === slotB).id } });
+check('a cancellation Cal.com accepted is recorded', r.code === 200 && T.wave1_appointments.find((a) => a.start_at === slotB).status === 'cancelled');
+r = await call('appointments', { body: { organization_id: ORG, action: 'request-manual', contact_id: 'ct1', start_at: slotB, notes: 'called in' } });
+const man = r.body.appointment;
+check('a staff-entered request is REQUESTED only', r.code === 200 && man.status === 'requested' && !man.confirmed_at);
+r = await call('appointments', { body: { organization_id: ORG, action: 'confirm', id: man.id } });
+check('staff confirmation needs a note on how the customer confirmed', r.code === 400);
+r = await call('appointments', { body: { organization_id: ORG, action: 'confirm', id: man.id, confirmation_note: 'Customer confirmed by phone 10/2 2pm' } });
+check('staff confirmation is recorded with who/when/how', r.code === 200 && man.status === 'confirmed' && /staff@|staff1/.test(man.notes) && !!man.confirmed_at);
+r = await call('appointments', { body: { organization_id: ORG, action: 'confirm', id: T.wave1_appointments.find((a) => a.start_at === slotA).id, confirmation_note: 'x' } });
+check('a Cal.com booking cannot be confirmed by hand — only by the scheduling source', r.code === 409);
+r = await call('appointments', { body: { organization_id: 'org-B', action: 'cancel', id: man.id } });
+check("org B cannot cancel org A's appointment", r.code === 404);
+check('Cal.com is never contacted by requests that never reach it (validation happens first)', cal.calls.filter((c) => c.method === 'POST' && c.path === '/v2/bookings').length === 4);
 
 console.log(`\n${pass}/${pass + fail} API logic checks passed (in-memory PostgREST stand-in — not a real database, not deployed)`);
 process.exit(fail ? 1 : 0);

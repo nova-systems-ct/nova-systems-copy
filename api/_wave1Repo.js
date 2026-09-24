@@ -54,6 +54,7 @@ export function createPostgrestRepo({ url, key }) {
       throw new Error(`message write failed ${r.status}`);
     },
     async messageExists(org, key) { const rows = await get(`wave1_messages?organization_id=eq.${q(org)}&idempotency_key=eq.${q(key)}&select=id&limit=1`); return rows.length > 0; },
+    async findMessageBySid(org, sid) { const [m] = await get(`wave1_messages?organization_id=eq.${q(org)}&provider=eq.twilio&provider_sid=eq.${q(sid)}&limit=1`); return m || null; },
     async updateMessage(org, id, patch) { const r = await send(`wave1_messages?id=eq.${q(id)}&organization_id=eq.${q(org)}`, 'PATCH', patch); if (!r.ok) throw new Error(`message update failed ${r.status}`); },
 
     async countRecentAutomated(org, contactId, sinceIso) {

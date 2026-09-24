@@ -20,6 +20,24 @@ export default function Growth() {
       path: '/dashboard/crm',
     },
     {
+      label: 'Sales & Contacts',
+      description: 'Pilot sales pipeline, follow-ups, versioned proposals, contact search, dedupe, import and export.',
+      icon: HandCoins,
+      path: '/dashboard/sales',
+    },
+    {
+      label: 'Pilots',
+      description: 'Pilot agreement, installation checklist, go-live gate, testimonial permissions and results.',
+      icon: Zap,
+      path: '/dashboard/pilots',
+    },
+    {
+      label: 'Messaging & Booking',
+      description: 'Missed-call follow-up, texts, forms, appointments, pause switches and the operator view.',
+      icon: Mail,
+      path: '/dashboard/pilot-console',
+    },
+    {
       label: 'Leads',
       description: 'Real leads from /welcome and /intake, with pipeline status.',
       icon: Target,

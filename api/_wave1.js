@@ -29,7 +29,9 @@ export function normalizePhone(raw) {
 
 // ---- Carrier-standard keywords. STOP-class must ALWAYS win, regardless of workflow state.
 const OPT_OUT = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT']);
-const OPT_IN = new Set(['START', 'UNSTOP', 'YES']);
+// Only carrier-standard re-subscribe keywords. "YES" is deliberately NOT one: a contact answering "yes" to a
+// question must not silently clear an opt-out or grant SMS consent.
+const OPT_IN = new Set(['START', 'UNSTOP']);
 const HELP = new Set(['HELP', 'INFO']);
 export function classifyInboundKeyword(body) {
   const word = String(body || '').trim().toUpperCase().replace(/[^A-Z]/g, '');
@@ -43,6 +45,16 @@ export function classifyInboundKeyword(body) {
 export function localHour(now, timeZone) {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', hour12: false }).formatToParts(now);
   return Number(parts.find((p) => p.type === 'hour').value) % 24;
+}
+
+export const isQuietHour = (h, qh) => (qh.start > qh.end ? (h >= qh.start || h < qh.end) : (h >= qh.start && h < qh.end));
+// Earliest moment (10-minute resolution, DST-correct via Intl) at which quiet hours have ended; null if none within 26h.
+export function nextSendWindow(now, timeZone, quietHours = { start: 21, end: 8 }) {
+  for (let m = 10; m <= 26 * 60; m += 10) {
+    const t = new Date(now.getTime() + m * 60_000);
+    if (!isQuietHour(localHour(t, timeZone), quietHours)) return t.toISOString();
+  }
+  return null;
 }
 
 // ---- The gate every AUTOMATED send must pass, evaluated at EXECUTION time (never trusted from
@@ -65,8 +77,8 @@ export function evaluateSendEligibility({ now = new Date(), purpose, channel = '
   if (!tz) return { allowed: false, reason: 'timezone_not_configured' }; // unknown zone blocks, never guesses
   const qh = org?.quiet_hours || { start: 21, end: 8 };
   const h = localHour(now, tz);
-  const inQuiet = qh.start > qh.end ? (h >= qh.start || h < qh.end) : (h >= qh.start && h < qh.end);
-  if (inQuiet && purpose !== 'reply') return { allowed: false, reason: 'quiet_hours', retryAt: 'next_window' };
+  const inQuiet = isQuietHour(h, qh);
+  if (inQuiet && purpose !== 'reply') return { allowed: false, reason: 'quiet_hours', retryAt: nextSendWindow(now, tz, qh) };
 
   const limit = org?.max_automated_per_day ?? 3;
   if (recentAutomatedCount >= limit) return { allowed: false, reason: 'frequency_limit' };
