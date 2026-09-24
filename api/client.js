@@ -1,7 +1,7 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
-import { uploadToVault } from './_vaultStorage.js';
+import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 
 // Combined client-dashboard endpoint — dispatch via ?resource= (and ?op= for
@@ -13,7 +13,7 @@ import { requireStaff } from './_auth.js';
 //   invoices                    [admin.view]        GET list / POST { action: create|update|delete }
 //   referrals                   [growth.view]        GET list / POST { action: create|update|delete }
 //   intake-requests              [intelligence.view]  GET list / POST { action: 'update-status', id, status }
-//   vault      &op=list|upload|delete               [admin.view]
+//   vault      &op=list|upload|delete|resign         [admin.view]
 //   portfolio  &op=items                             PUBLIC (mutate: POST { action: update|delete })
 //              &op=upload|mutate                     [growth.view]
 //   site-content                 GET ?key=           PUBLIC
@@ -302,6 +302,39 @@ async function handleVaultUpload(req, res) {
   } catch (err) {
     console.error('[client:vault upload] Error:', err.message);
     return res.status(500).json({ error: err.message || 'Upload failed' });
+  }
+}
+
+// Repair task (2026-09-23): vault_documents.file_url is now a signed URL with a 30-day expiry
+// (see api/_vaultStorage.js) instead of the permanent-but-broken public URL it used to be — a
+// vault item older than 30 days needs a fresh signed link generated on demand, which is what this
+// does. Not yet wired into NovaVault.jsx's UI (flagged in docs/PRODUCT_BUILD_STATE.md as a
+// deliberate, bounded scope cut, not a silent gap) — the server-side capability exists so that
+// follow-up is a small frontend change, not another backend one.
+async function handleVaultResign(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
+
+  const id = sanitize(req.body?.id, 100);
+  const storagePath = sanitize(req.body?.storage_path, 400);
+  if (!id || !storagePath) return res.status(400).json({ error: 'id and storage_path are required' });
+
+  try {
+    const file_url = await signVaultUrl(SUPABASE_URL, SUPABASE_KEY, storagePath);
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/vault_documents?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ file_url }),
+    });
+    if (!r.ok) console.error('[client:vault resign] DB update error (non-fatal, URL still returned):', r.status, await r.text());
+    return res.status(200).json({ ok: true, file_url });
+  } catch (err) {
+    console.error('[client:vault resign] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to generate a fresh signed link' });
   }
 }
 
@@ -1024,6 +1057,7 @@ export default async function handler(req, res) {
       if (op === 'list')   return handleVaultList(req, res);
       if (op === 'upload') return handleVaultUpload(req, res);
       if (op === 'delete') return handleVaultDelete(req, res);
+      if (op === 'resign') return handleVaultResign(req, res);
       return res.status(400).json({ error: `Unknown vault op: ${op}` });
 
     case 'portfolio':
