@@ -15,13 +15,14 @@ As of this update: identity/tenancy, the dashboard shell, Sales Academy, hiring 
 CRM foundations (businesses/contacts/deals), the product catalog, the order lifecycle, the full
 Nova Audit domain (cases/evidence/findings/recommendations/reports/deliveries/outcomes, with a
 real, independently unit-tested deadline clock), Zion Studio (journal/facts/ideas/scripts/
-production/review), the Integration Center (found already complete on inspection — see below), and
-the Approval Inbox (aggregation + generic consequential-action approval/reject/revoke) are all
-real, tested code. Six migration files are written, safety-reviewed, and NOT yet applied to
-production (this environment has no DDL access — never has, this whole project). Three storage
-buckets are specified and NOT yet created (blocked by this session's own permission system, not
-bypassed). Voice/phone infrastructure, the Installation Center UI, Crystal, marketing automation,
-and durable worker infrastructure have not been started.
+production/review), the Integration Center (found already complete on inspection — see below), the
+Approval Inbox (aggregation + generic consequential-action approval/reject/revoke), and the
+Installation Center's provisioning workflow (sandbox testing, activation authority, pause/
+offboard) are all real, tested code. Seven migration files are written, safety-reviewed, and NOT
+yet applied to production (this environment has no DDL access — never has, this whole project).
+Three storage buckets are specified and NOT yet created (blocked by this session's own permission
+system, not bypassed). Voice/phone infrastructure, Crystal, marketing automation, and durable
+worker infrastructure have not been started.
 
 ## How schema-dependent work is being tested (no Docker/local Postgres in this environment)
 
@@ -135,15 +136,17 @@ decisions first.
 
 ## Owner-action items currently blocking further automated progress
 
-1. **Run six SQL migration files** in the Supabase SQL Editor (all reviewed for safety — every
+1. **Run seven SQL migration files** in the Supabase SQL Editor (all reviewed for safety — every
    statement is additive, `IF NOT EXISTS`/`ON CONFLICT`, zero destructive statements):
    - `supabase/academy-migration-standalone.sql`
    - `supabase/hiring-workflow-migration-standalone.sql`
    - `supabase/crm-order-audit-migration-standalone.sql`
    - `supabase/zion-studio-migration-standalone.sql`
    - `supabase/approval-inbox-migration-standalone.sql`
+   - `supabase/installation-center-migration-standalone.sql` (depends on `orders` from the
+     crm-order-audit migration — run that one first)
    - (the equivalent sections are also appended to the cumulative `supabase/schema-update.sql`
-     for the historical record, but the five standalone files above are the ones meant to be run)
+     for the historical record, but the six standalone files above are the ones meant to be run)
 2. **Create three Storage buckets** (this session's own permission system blocked direct creation
    — flagged as a shared-resource modification, not bypassed):
    - `portfolios` — **private**, ~5MB file size limit (resumes/application uploads)
@@ -165,7 +168,18 @@ decisions first.
 
 After the SQL files run: `node scripts/e2e_academy_auth_test.mjs`,
 `node scripts/e2e_hiring_workflow_test.mjs`, `node scripts/e2e_crm_order_audit_test.mjs`,
-`node scripts/e2e_zion_studio_test.mjs`, and `node scripts/e2e_approval_inbox_test.mjs` each give
-real, immediate, live pass/fail evidence for their respective domains — none of this has been
-claimed as passing against production, and won't be until these actually run and are reported
-honestly either way.
+`node scripts/e2e_zion_studio_test.mjs`, `node scripts/e2e_approval_inbox_test.mjs`, and
+`node scripts/e2e_installation_center_test.mjs` each give real, immediate, live pass/fail evidence
+for their respective domains — none of this has been claimed as passing against production, and
+won't be until these actually run and are reported honestly either way.
+
+## Session paused 2026-09-23 per Isaac's explicit instruction ("stop till tomorrow")
+
+Not a forced boundary from an execution limit — a direct instruction to pause. Everything above
+this line is committed and in a clean, resumable state (see commit log). Nothing is mid-edit or
+half-saved. When work resumes, the next dependency-ready module per §23's order and the "not
+started" list above is still whichever of R12 (voice, needs a hosting decision)/R16 (marketing/SEO
+engine, credential-free and buildable)/R17 (Crystal, gated behind R10-R13, which are now
+substantially done)/R19 (durable workers, needs a hosting decision) makes sense to pick up next —
+R16 is the most likely candidate since it needs no owner decision first, but that's a
+recommendation to revisit, not a decision made on Isaac's behalf.

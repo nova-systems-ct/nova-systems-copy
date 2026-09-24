@@ -1,4 +1,4 @@
-import { Users, Receipt, FileSignature, Lock, FileText, Plug, UserPlus, ShieldAlert } from 'lucide-react'
+import { Users, Receipt, FileSignature, Lock, FileText, Plug, UserPlus, ShieldAlert, Server } from 'lucide-react'
 import AreaHub from '../../components/dashboard/AreaHub'
 
 // Team, billing, documents, and security. Real RBAC is live (Stage 4) — every route below and
@@ -58,6 +58,12 @@ export default function Admin() {
           description: 'Pending audit reports, Zion videos, and consequential actions awaiting sign-off.',
           icon: ShieldAlert,
           path: '/dashboard/approvals',
+        },
+        {
+          label: 'Installation Center',
+          description: 'Sandbox testing, activation authority, and pause/offboard controls for delivered orders.',
+          icon: Server,
+          path: '/dashboard/installations',
         },
       ]}
     />

@@ -57,6 +57,16 @@ import { computeCaseClockStatus } from './_auditClock.js';
 //                                             'request-render'}
 //        &op=review              [growth.view] POST {video_id, action:'approve'|
 //                                             'request_changes'|'reject'|'schedule'}
+//   installations                [growth.view; 'activate' action additionally requires
+//                                             admin.view — activation authority is distinct from
+//                                             ordinary installation access] GET ?organization_id=
+//                                             (list) or &id= (detail incl. tests/events) / POST
+//                                             {action:'create'|'record-test'|
+//                                             'mark-sandbox-passed'|'activate'|'pause'|'resume'|
+//                                             'offboard', ...} — sandbox_passed requires the LATEST
+//                                             recorded test to be a real pass, re-derived from
+//                                             installation_tests every time, never a separately
+//                                             trusted flag
 //   approvals                    [admin.view]      GET aggregates pending audit reports + zion
 //                                             videos + generic approval_requests into one inbox /
 //                                             POST {action:'create'|'approve'|'reject'|'revoke', id}
@@ -1373,6 +1383,184 @@ async function handleOrders(req, res, caller) {
   return res.status(400).json({ error: `Unknown action: ${action}` });
 }
 
+// =============================================================================================
+// Installation Center (2026-09-23, master prompt §13). Schema:
+// supabase/installation-center-migration-standalone.sql — NOT yet applied to production.
+//
+// One installation per order. sandbox_setup -> sandbox_testing (real recorded test runs, not a
+// checkbox) -> sandbox_passed (requires the LATEST recorded test to be a real pass — re-derived
+// from installation_tests, never tracked as a separate boolean that could drift from the actual
+// evidence) -> active, which requires 'admin.view' specifically, not the 'growth.view' every
+// other installation action uses — "activation authority" is a distinct, higher-trust gate from
+// ordinary CRM/order access, enforced server-side exactly like invoices/vault/approvals, not left
+// to a hidden button in the UI. pause/resume toggle active<->paused with a required reason;
+// offboard is terminal from any non-offboarded state, also with a required reason.
+// =============================================================================================
+const INSTALLATION_ACTIVATE_PERMISSION = 'admin.view';
+
+async function loadInstallation(id, orgId) {
+  const r = await sbSelect(`installations?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+  const rows = r.ok ? await r.json() : [];
+  return rows[0] || null;
+}
+
+async function logInstallationEvent(installationId, eventType, actorUserId, detail) {
+  await sbWrite('installation_events', 'POST', { installation_id: installationId, event_type: eventType, actor_user_id: actorUserId, detail: detail || {} });
+}
+
+async function handleInstallations(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+    const id = sanitize(req.query?.id, 100);
+    if (id) {
+      const installation = await loadInstallation(id, orgId);
+      if (!installation) return res.status(404).json({ error: 'Installation not found' });
+      const [testsRes, eventsRes] = await Promise.all([
+        sbSelect(`installation_tests?installation_id=eq.${encodeURIComponent(id)}&order=created_at.desc`),
+        sbSelect(`installation_events?installation_id=eq.${encodeURIComponent(id)}&order=created_at.desc`),
+      ]);
+      return res.status(200).json({
+        ...installation,
+        tests: testsRes.ok ? await testsRes.json() : [],
+        events: eventsRes.ok ? await eventsRes.json() : [],
+      });
+    }
+    const r = await sbSelect(`installations?organization_id=eq.${encodeURIComponent(orgId)}&order=updated_at.desc`);
+    if (!r.ok) { console.error('[client:installations] error:', await r.text()); return res.status(500).json({ error: 'Failed to load installations' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+  const action = sanitize(b.action, 30);
+
+  if (action === 'create') {
+    const orderId = sanitize(b.order_id, 100);
+    if (!orderId) return res.status(400).json({ error: 'order_id is required' });
+    const orderRes = await sbSelect(`orders?id=eq.${encodeURIComponent(orderId)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+    const orderRows = orderRes.ok ? await orderRes.json() : [];
+    if (!orderRows.length) return res.status(404).json({ error: 'Order not found in this organization' });
+    const order = orderRows[0];
+
+    const record = {
+      organization_id: orgId,
+      order_id: orderId,
+      business_id: order.business_id || null,
+      product_id: order.product_id || null,
+    };
+    const r = await sbWrite('installations', 'POST', record);
+    if (!r.ok) {
+      const errText = await r.text();
+      console.error('[client:installations] create error:', errText);
+      // The order_id UNIQUE constraint is the real, intended guard against a second installation
+      // silently duplicating work already in flight for the same order — surface that plainly.
+      if (r.status === 409 || /duplicate key/i.test(errText)) return res.status(409).json({ error: 'An installation already exists for this order' });
+      return res.status(500).json({ error: 'Failed to create installation' });
+    }
+    const rows = await r.json();
+    const installation = rows[0];
+    await logInstallationEvent(installation.id, 'created', caller.id, { order_id: orderId });
+    return res.status(200).json({ ok: true, installation });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  const installation = await loadInstallation(id, orgId);
+  if (!installation) return res.status(404).json({ error: 'Installation not found' });
+
+  if (action === 'record-test') {
+    if (!['sandbox_setup', 'sandbox_testing'].includes(installation.status)) {
+      return res.status(400).json({ error: `Cannot record a test while the installation is ${installation.status}` });
+    }
+    const testName = sanitize(b.test_name, 200);
+    const result = ['pass', 'fail', 'blocked'].includes(b.result) ? b.result : null;
+    if (!testName || !result) return res.status(400).json({ error: 'test_name and a valid result (pass|fail|blocked) are required' });
+    const environment = b.environment === 'production' ? 'production' : 'sandbox';
+
+    const testR = await sbWrite('installation_tests', 'POST', { installation_id: id, test_name: testName, environment, result, run_by: caller.id, notes: sanitize(b.notes, 2000) || null, evidence: b.evidence && typeof b.evidence === 'object' ? b.evidence : {} });
+    if (!testR.ok) { console.error('[client:installations] record-test error:', await testR.text()); return res.status(500).json({ error: 'Failed to record test' }); }
+    const testRows = await testR.json();
+
+    if (installation.status === 'sandbox_setup') {
+      await sbWrite(`installations?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'sandbox_testing', updated_at: new Date().toISOString() });
+    }
+    await logInstallationEvent(id, 'test_recorded', caller.id, { test_name: testName, result });
+    return res.status(200).json({ ok: true, test: testRows[0] });
+  }
+
+  if (action === 'mark-sandbox-passed') {
+    if (installation.status !== 'sandbox_testing') {
+      return res.status(400).json({ error: `Cannot mark sandbox passed from status ${installation.status}` });
+    }
+    const testsRes = await sbSelect(`installation_tests?installation_id=eq.${encodeURIComponent(id)}&order=created_at.desc&limit=1`);
+    const testsRows = testsRes.ok ? await testsRes.json() : [];
+    // Re-derived from the real evidence, not a separately trusted flag: the most recent recorded
+    // test must itself be a pass. A stale pass shadowed by a later fail does not count.
+    if (!testsRows.length || testsRows[0].result !== 'pass') {
+      return res.status(400).json({ error: 'The most recent recorded test must be a pass before sandbox can be marked passed' });
+    }
+    const r = await sbWrite(`installations?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'sandbox_passed', updated_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:installations] mark-sandbox-passed error:', await r.text()); return res.status(500).json({ error: 'Failed to update installation' }); }
+    await logInstallationEvent(id, 'sandbox_passed', caller.id, {});
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, installation: rows[0] });
+  }
+
+  if (action === 'activate') {
+    // Activation authority: a distinct, higher-trust gate from the growth.view already checked
+    // above for every other installation action — enforced here server-side, not a hidden button.
+    if (!(await requireOrgAccess(req, res, orgId, INSTALLATION_ACTIVATE_PERMISSION))) return;
+    if (installation.status !== 'sandbox_passed') {
+      return res.status(400).json({ error: `Cannot activate from status ${installation.status} — sandbox must pass first` });
+    }
+    const now = new Date().toISOString();
+    const r = await sbWrite(`installations?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'active', activated_by: caller.id, activated_at: now, updated_at: now });
+    if (!r.ok) { console.error('[client:installations] activate error:', await r.text()); return res.status(500).json({ error: 'Failed to activate installation' }); }
+    await logInstallationEvent(id, 'activated', caller.id, {});
+    if (installation.order_id) await sbWrite(`orders?id=eq.${encodeURIComponent(installation.order_id)}`, 'PATCH', { status: 'installed', updated_at: now });
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, installation: rows[0] });
+  }
+
+  if (action === 'pause') {
+    if (installation.status !== 'active') return res.status(400).json({ error: `Cannot pause from status ${installation.status}` });
+    const reason = sanitize(b.reason, 1000);
+    if (!reason) return res.status(400).json({ error: 'reason is required to pause an installation' });
+    const r = await sbWrite(`installations?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'paused', paused_at: new Date().toISOString(), pause_reason: reason, updated_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:installations] pause error:', await r.text()); return res.status(500).json({ error: 'Failed to pause installation' }); }
+    await logInstallationEvent(id, 'paused', caller.id, { reason });
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, installation: rows[0] });
+  }
+
+  if (action === 'resume') {
+    if (installation.status !== 'paused') return res.status(400).json({ error: `Cannot resume from status ${installation.status}` });
+    const r = await sbWrite(`installations?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'active', paused_at: null, pause_reason: null, updated_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:installations] resume error:', await r.text()); return res.status(500).json({ error: 'Failed to resume installation' }); }
+    await logInstallationEvent(id, 'resumed', caller.id, {});
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, installation: rows[0] });
+  }
+
+  if (action === 'offboard') {
+    if (installation.status === 'offboarded') return res.status(400).json({ error: 'Installation is already offboarded' });
+    const reason = sanitize(b.reason, 1000);
+    if (!reason) return res.status(400).json({ error: 'reason is required to offboard an installation' });
+    const r = await sbWrite(`installations?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'offboarded', offboarded_at: new Date().toISOString(), offboard_reason: reason, updated_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:installations] offboard error:', await r.text()); return res.status(500).json({ error: 'Failed to offboard installation' }); }
+    await logInstallationEvent(id, 'offboarded', caller.id, { reason });
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, installation: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
 // ===================================================================== Nova Audit workflow
 async function loadAuditCase(id, orgId) {
   const r = await sbSelect(`audit_cases?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
@@ -2264,6 +2452,12 @@ export default async function handler(req, res) {
       if (op === 'videos') return handleZionVideos(req, res, caller);
       if (op === 'review') return handleZionReview(req, res, caller);
       return res.status(400).json({ error: `Unknown zion op: ${op}` });
+    }
+
+    case 'installations': {
+      const caller = await requireStaff(req, res, 'growth.view');
+      if (!caller) return;
+      return handleInstallations(req, res, caller);
     }
 
     case 'approvals': {
