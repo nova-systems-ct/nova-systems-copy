@@ -133,6 +133,16 @@ const handlers = {
     return result;
   },
 
+  // Wave One missed-call follow-up. Payload: {contact_id, conversation_id, call_sid}. Eligibility is
+  // re-evaluated against LIVE state here; live SMS only when WAVE1_SEND_ENABLED=true (else a recorded dry run).
+  async wave1_missed_call_followup(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    const { runMissedCallFollowup, createTwilioSender } = await import('../api/_wave1Handlers.js');
+    const { createPostgrestRepo } = await import('../api/_wave1Repo.js');
+    const repo = createPostgrestRepo({ url: ctx.url, key: ctx.serviceKey });
+    return runMissedCallFollowup(job, repo, createTwilioSender(process.env), process.env);
+  },
+
   // A trivial handler kept only to give --enqueue-demo something real to run end-to-end in local
   // mode without needing any live credentials.
   async demo_echo(job) {

@@ -3,6 +3,7 @@ import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
+import { handleWave1 } from './_wave1Api.js';
 import { computeCaseClockStatus } from './_auditClock.js';
 import * as liAdapter from './_socialAdapters/linkedin.js';
 import * as ytAdapter from './_socialAdapters/youtube.js';
@@ -3968,12 +3969,24 @@ async function handleVoiceTools(req, res, caller) {
 // account-existence with no session ever issued — disabled outright rather than secured, since
 // there is nothing left depending on it.
 export default async function handler(req, res) {
-  if (setCors(req, res)) return;
-
   const resource = typeof req.query?.resource === 'string' ? req.query.resource : '';
   const op       = typeof req.query?.op === 'string' ? req.query.op : '';
 
+  // The embeddable intake form is posted from CLIENT websites (arbitrary origins), so it cannot use
+  // the first-party origin allowlist. It carries no credentials or cookies; the org is resolved from
+  // an unguessable, rotatable token, so a wildcard origin exposes nothing an attacker with the token
+  // could not already do by calling the endpoint directly.
+  if (resource === 'wave1' && op === 'form-intake') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.status(204).end();
+  } else if (setCors(req, res)) return;
+
   switch (resource) {
+    case 'wave1':
+      return handleWave1(req, res, op, { requireStaff, requireOrgAccess, sanitize, rateLimit });
+
     case 'invoices':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleInvoices(req, res);
