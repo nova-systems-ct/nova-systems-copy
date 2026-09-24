@@ -256,32 +256,60 @@ async function main() {
       log('Recommendation created and linked to its finding', res.statusCode === 200, `status=${res.statusCode}`);
     }
 
-    // ---- 7. Report immutability: approve once, then reject a second approve/edit attempt ----
-    let reportId = null;
+    // ---- 7. Report approval authorization + version-currency evidence (2026-09-24, explicit
+    // evidence requested: authorized approval succeeds for the CORRECT version; unauthorized
+    // approval fails; STALE-version approval fails) ----
+    let v1Id = null, v2Id = null;
     {
       const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionA.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'create-draft', content: { summary: 'v1 draft' } } });
       const res = mockRes();
       await handler(req, res);
-      reportId = res._json?.report?.id;
+      v1Id = res._json?.report?.id;
       log('Report draft v1 created', res.statusCode === 200 && res._json?.report?.version === 1, JSON.stringify(res._json?.report));
     }
     {
-      const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionA.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'approve', id: reportId } });
+      // UNAUTHORIZED: a real staff member from a completely different organization cannot approve
+      // Org A's report at all — object-level org authorization, same requireOrgAccess check every
+      // other audit handler uses, not a version-specific rule.
+      const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionB.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'approve', id: v1Id } });
       const res = mockRes();
       await handler(req, res);
-      log('Report v1 approved', res.statusCode === 200 && res._json?.report?.status === 'approved', JSON.stringify(res._json?.report));
+      log('UNAUTHORIZED: a staff member from a different organization cannot approve this report', res.statusCode === 403, `status=${res.statusCode}`);
     }
     {
-      const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionA.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'approve', id: reportId } });
+      const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionA.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'create-draft', content: { summary: 'v2 draft, supersedes v1' } } });
+      const res = mockRes();
+      await handler(req, res);
+      v2Id = res._json?.report?.id;
+      log('A second draft (v2) is created while v1 is still unapproved — v1 is now stale', res.statusCode === 200 && res._json?.report?.version === 2, JSON.stringify(res._json?.report));
+    }
+    {
+      // STALE VERSION: v1 still exists, unapproved, but a newer v2 has superseded it — approving
+      // the stale v1 must be refused even by a fully authorized caller on the correct organization.
+      const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionA.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'approve', id: v1Id } });
+      const res = mockRes();
+      await handler(req, res);
+      log('STALE VERSION: approving v1 after v2 was created is refused, even for an authorized caller', res.statusCode === 409, `status=${res.statusCode} body=${JSON.stringify(res._json)}`);
+    }
+    {
+      // AUTHORIZED + CORRECT VERSION: the same authorized caller approving the actual current
+      // version (v2) succeeds.
+      const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionA.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'approve', id: v2Id } });
+      const res = mockRes();
+      await handler(req, res);
+      log('AUTHORIZED + CORRECT VERSION: approving the current version (v2) succeeds', res.statusCode === 200 && res._json?.report?.status === 'approved', JSON.stringify(res._json?.report));
+    }
+    {
+      const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionA.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'approve', id: v2Id } });
       const res = mockRes();
       await handler(req, res);
       log('Re-approving an already-approved report version is refused — immutability enforced', res.statusCode === 400, `status=${res.statusCode} body=${JSON.stringify(res._json)}`);
     }
     {
-      const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionA.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'create-draft', content: { summary: 'v2 draft, edited' } } });
+      const req = mockReq({ method: 'POST', query: { resource: 'audit', op: 'reports' }, headers: { authorization: `Bearer ${sessionA.access_token}` }, body: { organization_id: orgAId, case_id: caseId, action: 'create-draft', content: { summary: 'v3 draft, edited after approval' } } });
       const res = mockRes();
       await handler(req, res);
-      log('An edit after approval creates a NEW version (v2), never mutates the approved v1', res.statusCode === 200 && res._json?.report?.version === 2, JSON.stringify(res._json?.report));
+      log('An edit after approval creates a NEW version (v3), never mutates the approved v2', res.statusCode === 200 && res._json?.report?.version === 3, JSON.stringify(res._json?.report));
     }
 
   } finally {

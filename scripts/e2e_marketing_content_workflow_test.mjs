@@ -207,6 +207,19 @@ async function main() {
       log('Scheduling for a past date is refused', res.statusCode === 400, `status=${res.statusCode}`);
     }
 
+    // ---- 8b. A real future schedule enqueues a real durable job (worker/index.mjs's
+    // marketing_publish handler is what actually fires it later) — not just an unread field ----
+    {
+      const future = new Date(Date.now() + 3600_000).toISOString();
+      const req = mockReq({ method: 'POST', query: { resource: 'blog', op: 'admin' }, headers: { authorization: `Bearer ${salesSession.access_token}` }, body: { action: 'schedule', id: postId, scheduled_at: future } });
+      const res = mockRes();
+      await handler(req, res);
+      log('Scheduling for a real future date succeeds', res.statusCode === 200 && res._json?.post?.status === 'scheduled', `status=${res.statusCode}`);
+      const jobCheck = await adminFetch(`/rest/v1/jobs?job_type=eq.marketing_publish&payload->>post_id=eq.${postId}&select=id,scheduled_at,status`);
+      const jobRows = jobCheck.ok ? await jobCheck.json() : [];
+      log('A real jobs row is enqueued for the worker to pick up at the scheduled time', jobRows.length === 1 && jobRows[0].status === 'pending', JSON.stringify(jobRows));
+    }
+
     // ---- 9. publish-now actually goes live ----
     {
       const req = mockReq({ method: 'POST', query: { resource: 'blog', op: 'admin' }, headers: { authorization: `Bearer ${salesSession.access_token}` }, body: { action: 'publish-now', id: postId } });

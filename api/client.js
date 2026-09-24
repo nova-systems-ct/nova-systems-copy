@@ -877,6 +877,15 @@ async function handleBlogAdmin(req, res, caller) {
       const r = await sbWrite(`blog_posts?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'scheduled', scheduled_at: scheduledAt });
       if (!r.ok) { console.error('[client:blog admin] schedule error:', await r.text()); return res.status(500).json({ error: 'Failed to schedule post' }); }
       const rows = await r.json();
+      // This is what makes scheduling real instead of a field nobody ever reads: enqueues a durable
+      // job (supabase/durable-jobs-migration-standalone.sql) that worker/index.mjs's marketing_publish
+      // handler picks up once scheduled_at arrives. idempotency_key means re-scheduling to a new time
+      // is a distinct job, but clicking "schedule" twice with the same time is a safe no-op enqueue,
+      // not a duplicate publish. Enqueue failure doesn't fail the request — the post IS scheduled in
+      // the data model either way, and a missing job just means it needs a manual Publish Now, an
+      // honest degraded state, not a silent double-write.
+      const jobRes = await sbWrite('jobs', 'POST', { job_type: 'marketing_publish', payload: { post_id: id }, scheduled_at: scheduledAt, idempotency_key: `marketing_publish:${id}:${scheduledAt}` });
+      if (!jobRes.ok) console.error('[client:blog admin] failed to enqueue publish job (post is still scheduled in the data model):', await jobRes.text());
       return res.status(200).json({ ok: true, post: rows[0] });
     }
 
@@ -1935,6 +1944,15 @@ async function handleAuditReports(req, res, caller) {
     const reportRows = reportRes.ok ? await reportRes.json() : [];
     if (!reportRows.length) return res.status(404).json({ error: 'Report version not found' });
     if (reportRows[0].status === 'approved') return res.status(400).json({ error: 'This version is already approved and immutable — create a new draft instead' });
+    // Stale-version guard (2026-09-24, caught while producing approval-authorization evidence for
+    // Isaac): nothing previously stopped approving an OLD draft after a newer one was already
+    // created — "recheck authority and unchanged content immediately before execution" means the
+    // version being approved must still be the current one, not just not-yet-approved.
+    const latestRes = await sbSelect(`audit_reports?case_id=eq.${encodeURIComponent(caseId)}&select=version&order=version.desc&limit=1`);
+    const latestRows = latestRes.ok ? await latestRes.json() : [];
+    if (latestRows.length && latestRows[0].version > reportRows[0].version) {
+      return res.status(409).json({ error: `A newer draft (v${latestRows[0].version}) exists — approve the current version instead` });
+    }
     const r = await sbWrite(`audit_reports?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
     if (!r.ok) { console.error('[client:audit reports] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve report' }); }
     const rows = await r.json();
