@@ -67,6 +67,32 @@ import { computeCaseClockStatus } from './_auditClock.js';
 //                                             recorded test to be a real pass, re-derived from
 //                                             installation_tests every time, never a separately
 //                                             trusted flag
+//   crystal &op=customers         [execution.view] GET ?q= search/list / POST {action:'create'|
+//                                             'update', ...}
+//          &op=properties         [execution.view] GET ?customer_id= / POST {action:...}
+//          &op=catalog            [execution.view] GET / POST {action:'create'|'update', ...}
+//          &op=quotes             [execution.view] GET ?id= / POST {action:'create'|
+//                                             'update-scope'|'decline', ...}
+//          &op=estimates          [execution.view] GET ?quote_request_id= / POST {action:
+//                                             'create-draft'|'send'|'accept'|'reject', ...} —
+//                                             versioned like audit_reports; accept refuses a stale
+//                                             (superseded) version
+//          &op=jobs               [execution.view; GET ?scope=mine is bare-staff, ownership-
+//                                             scoped to the caller's own crystal_job_assignments
+//                                             rows, trimmed fields — "workers see only assigned
+//                                             jobs and necessary customer information"] GET ?id=
+//                                             (detail incl. assignments/checklist/media/
+//                                             completion) / POST {action:'create'|'assign-worker'|
+//                                             'unassign-worker'|'update-status'|
+//                                             'add-checklist-item'|'checklist-item'|'add-media'|
+//                                             'complete'|'approve-completion', ...} — 'complete'
+//                                             requires the caller be an assigned worker AND at
+//                                             least one 'after' photo already on file (no AI-
+//                                             declared completion without evidence)
+//          &op=invoices           [admin.view] GET / POST {action:'create'|'send'|'mark-paid', ...}
+//          &op=feedback           [execution.view] GET ?job_id= / POST {job_id, customer_id,
+//                                             rating, comments}
+//          &op=recurring          [execution.view] GET / POST {action:'create'|'pause'|'resume', ...}
 //   approvals                    [admin.view]      GET aggregates pending audit reports + zion
 //                                             videos + generic approval_requests into one inbox /
 //                                             POST {action:'create'|'approve'|'reject'|'revoke', id}
@@ -2420,6 +2446,623 @@ async function handleApprovalsGeneric(req, res, caller) {
   return res.status(400).json({ error: `Unknown action: ${action}` });
 }
 
+// =============================================================================================
+// Crystal / Company 002 operational workspace (2026-09-24, master prompt §14, restored scope).
+// Schema: supabase/crystal-migration-standalone.sql — NOT yet applied to production.
+//
+// "Crystal / Company 002" is the provisional internal name; nothing here assumes a final brand,
+// price, worker-classification, or insurance/legal position — those are business inputs this code
+// leaves configurable, never invented. Every handler uses the same real, per-organization
+// requireOrgAccess pattern as CRM/Audit/Installations. Two access tiers: `execution.view` for
+// administrative actions (creating quotes/estimates/invoices, assigning workers), and a bare-staff,
+// ownership-scoped "my jobs" view for workers — "workers see only assigned jobs and necessary
+// customer information," enforced by filtering on crystal_job_assignments.worker_user_id and
+// returning a reduced field set (no customer email/phone), not by hiding a button in the UI.
+// =============================================================================================
+
+// ---------------------------------------------------------------------------- crystal: customers
+async function handleCrystalCustomers(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+    const q = sanitize(req.query?.q, 200);
+    let path = `crystal_customers?organization_id=eq.${encodeURIComponent(orgId)}&order=name.asc`;
+    if (q) path += `&or=(name.ilike.*${encodeURIComponent(q)}*,email.ilike.*${encodeURIComponent(q)}*,phone.ilike.*${encodeURIComponent(q)}*)`;
+    const r = await sbSelect(path);
+    if (!r.ok) { console.error('[client:crystal customers] error:', await r.text()); return res.status(500).json({ error: 'Failed to load customers' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+  const action = sanitize(b.action, 20);
+  if (action === 'create' || action === 'update') {
+    const id = sanitize(b.id, 100);
+    const record = {
+      organization_id: orgId,
+      name: sanitize(b.name, 200),
+      email: b.email ? sanitizeEmail(b.email) : null,
+      phone: sanitize(b.phone, 30) || null,
+      notes: sanitize(b.notes, 2000) || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (!record.name) return res.status(400).json({ error: 'name is required' });
+    const path = action === 'update' && id ? `crystal_customers?id=eq.${encodeURIComponent(id)}` : 'crystal_customers';
+    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    if (!r.ok) { console.error('[client:crystal customers] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save customer' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, customer: rows[0] });
+  }
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// --------------------------------------------------------------------------- crystal: properties
+async function handleCrystalProperties(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+    const customerId = sanitize(req.query?.customer_id, 100);
+    let path = `crystal_properties?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`;
+    if (customerId) path += `&customer_id=eq.${encodeURIComponent(customerId)}`;
+    const r = await sbSelect(path);
+    if (!r.ok) { console.error('[client:crystal properties] error:', await r.text()); return res.status(500).json({ error: 'Failed to load properties' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+  const action = sanitize(b.action, 20);
+  if (action === 'create' || action === 'update') {
+    const id = sanitize(b.id, 100);
+    const record = {
+      organization_id: orgId,
+      customer_id: sanitize(b.customer_id, 100),
+      address_line: sanitize(b.address_line, 300),
+      city: sanitize(b.city, 100) || null,
+      state: sanitize(b.state, 50) || null,
+      postal_code: sanitize(b.postal_code, 20) || null,
+      property_type: sanitize(b.property_type, 50) || null,
+      access_notes: sanitize(b.access_notes, 2000) || null,
+    };
+    if (!record.customer_id || !record.address_line) return res.status(400).json({ error: 'customer_id and address_line are required' });
+    const path = action === 'update' && id ? `crystal_properties?id=eq.${encodeURIComponent(id)}` : 'crystal_properties';
+    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    if (!r.ok) { console.error('[client:crystal properties] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save property' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, property: rows[0] });
+  }
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// -------------------------------------------------------------------- crystal: service catalog
+async function handleCrystalCatalog(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+    const r = await sbSelect(`crystal_service_catalog?organization_id=eq.${encodeURIComponent(orgId)}&order=name.asc`);
+    if (!r.ok) { console.error('[client:crystal catalog] error:', await r.text()); return res.status(500).json({ error: 'Failed to load catalog' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+  const action = sanitize(b.action, 20);
+  if (action === 'create' || action === 'update') {
+    const id = sanitize(b.id, 100);
+    const record = {
+      organization_id: orgId,
+      name: sanitize(b.name, 200),
+      description: sanitize(b.description, 2000) || null,
+      pricing_unit: ['flat', 'hourly', 'per_sqft', 'per_unit'].includes(b.pricing_unit) ? b.pricing_unit : 'flat',
+      // Unknown pricing must never be invented — leave null rather than guess.
+      base_price_cents: Number.isFinite(Number(b.base_price_cents)) ? Number(b.base_price_cents) : null,
+      currency: sanitize(b.currency, 10) || 'USD',
+      service_areas: Array.isArray(b.service_areas) ? b.service_areas.map((a) => sanitize(String(a), 50)) : [],
+      active: b.active !== false,
+    };
+    if (!record.name) return res.status(400).json({ error: 'name is required' });
+    if (id) {
+      const r = await sbWrite(`crystal_service_catalog?id=eq.${encodeURIComponent(id)}`, 'PATCH', { ...record, version: sanitize(b.version, 10) ? Number(b.version) + 1 : undefined });
+      if (!r.ok) { console.error('[client:crystal catalog] update error:', await r.text()); return res.status(500).json({ error: 'Failed to update service' }); }
+      const rows = await r.json();
+      return res.status(200).json({ ok: true, service: rows[0] });
+    }
+    const r = await sbWrite('crystal_service_catalog', 'POST', record);
+    if (!r.ok) { console.error('[client:crystal catalog] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create service' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, service: rows[0] });
+  }
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// ---------------------------------------------------------------------------- crystal: quotes
+async function handleCrystalQuotes(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+    const id = sanitize(req.query?.id, 100);
+    if (id) {
+      const r = await sbSelect(`crystal_quote_requests?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+      const rows = r.ok ? await r.json() : [];
+      if (!rows.length) return res.status(404).json({ error: 'Quote request not found' });
+      return res.status(200).json(rows[0]);
+    }
+    const r = await sbSelect(`crystal_quote_requests?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`);
+    if (!r.ok) { console.error('[client:crystal quotes] error:', await r.text()); return res.status(500).json({ error: 'Failed to load quote requests' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+  const action = sanitize(b.action, 30);
+
+  if (action === 'create') {
+    const record = {
+      organization_id: orgId,
+      customer_id: sanitize(b.customer_id, 100),
+      property_id: sanitize(b.property_id, 100) || null,
+      service_catalog_id: sanitize(b.service_catalog_id, 100) || null,
+      scope_details: sanitize(b.scope_details, 4000) || null,
+      photo_paths: Array.isArray(b.photo_paths) ? b.photo_paths.map((p) => sanitize(String(p), 500)) : [],
+      status: 'new',
+    };
+    if (!record.customer_id) return res.status(400).json({ error: 'customer_id is required' });
+    const r = await sbWrite('crystal_quote_requests', 'POST', record);
+    if (!r.ok) { console.error('[client:crystal quotes] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create quote request' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, quote: rows[0] });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  if (action === 'update-scope') {
+    const patch = { scope_details: sanitize(b.scope_details, 4000), status: 'scoped', updated_at: new Date().toISOString() };
+    if (Array.isArray(b.photo_paths)) patch.photo_paths = b.photo_paths.map((p) => sanitize(String(p), 500));
+    const r = await sbWrite(`crystal_quote_requests?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
+    if (!r.ok) { console.error('[client:crystal quotes] update-scope error:', await r.text()); return res.status(500).json({ error: 'Failed to update scope' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, quote: rows[0] });
+  }
+
+  if (action === 'decline') {
+    const r = await sbWrite(`crystal_quote_requests?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'declined', updated_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:crystal quotes] decline error:', await r.text()); return res.status(500).json({ error: 'Failed to decline quote' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, quote: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// -------------------------------------------------------------------------- crystal: estimates
+// Versioned exactly like audit_reports — create-draft always increments, an approved/accepted
+// version is never mutated in place. "Required approval" + "customer acceptance" are two distinct,
+// separately recorded steps (send, then accept), not one click.
+async function handleCrystalEstimates(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+    const quoteId = sanitize(req.query?.quote_request_id, 100);
+    if (!quoteId) return res.status(400).json({ error: 'quote_request_id is required' });
+    const r = await sbSelect(`crystal_estimates?quote_request_id=eq.${encodeURIComponent(quoteId)}&order=version.desc`);
+    if (!r.ok) { console.error('[client:crystal estimates] error:', await r.text()); return res.status(500).json({ error: 'Failed to load estimates' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+  const action = sanitize(b.action, 20);
+  const quoteId = sanitize(b.quote_request_id, 100);
+  if (!quoteId) return res.status(400).json({ error: 'quote_request_id is required' });
+
+  if (action === 'create-draft') {
+    const lineItems = Array.isArray(b.line_items) ? b.line_items : [];
+    // total_cents stays null if ANY line item is missing a real unit_price_cents — never sum a
+    // partially-invented total.
+    const allPriced = lineItems.length > 0 && lineItems.every((li) => Number.isFinite(Number(li.unit_price_cents)));
+    const total = allPriced ? lineItems.reduce((sum, li) => sum + Number(li.unit_price_cents) * (Number(li.quantity) || 1), 0) : null;
+    const existingRes = await sbSelect(`crystal_estimates?quote_request_id=eq.${encodeURIComponent(quoteId)}&order=version.desc&limit=1`);
+    const existingRows = existingRes.ok ? await existingRes.json() : [];
+    const nextVersion = (existingRows[0]?.version || 0) + 1;
+    const r = await sbWrite('crystal_estimates', 'POST', { quote_request_id: quoteId, version: nextVersion, line_items: lineItems, total_cents: total, pricing_notes: sanitize(b.pricing_notes, 2000) || null, status: 'draft' });
+    if (!r.ok) { console.error('[client:crystal estimates] create-draft error:', await r.text()); return res.status(500).json({ error: 'Failed to create estimate draft' }); }
+    await sbWrite(`crystal_quote_requests?id=eq.${encodeURIComponent(quoteId)}`, 'PATCH', { status: 'estimated', updated_at: new Date().toISOString() });
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, estimate: rows[0] });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  const estRes = await sbSelect(`crystal_estimates?id=eq.${encodeURIComponent(id)}&limit=1`);
+  const estRows = estRes.ok ? await estRes.json() : [];
+  if (!estRows.length) return res.status(404).json({ error: 'Estimate not found' });
+  const estimate = estRows[0];
+
+  if (action === 'send') {
+    if (estimate.status !== 'draft') return res.status(400).json({ error: `Cannot send from status ${estimate.status}` });
+    const r = await sbWrite(`crystal_estimates?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'sent', sent_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:crystal estimates] send error:', await r.text()); return res.status(500).json({ error: 'Failed to send estimate' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, estimate: rows[0] });
+  }
+
+  if (action === 'accept') {
+    // No customer-facing acceptance portal exists yet — this is staff recording a real customer
+    // decision (phone/email/in-person confirmation), same honest pattern as order acceptance
+    // elsewhere in this codebase, not a claim that the customer clicked something themselves.
+    if (estimate.status !== 'sent') return res.status(400).json({ error: `Cannot accept from status ${estimate.status} — must be sent first` });
+    const latestRes = await sbSelect(`crystal_estimates?quote_request_id=eq.${encodeURIComponent(quoteId)}&select=version&order=version.desc&limit=1`);
+    const latestRows = latestRes.ok ? await latestRes.json() : [];
+    if (latestRows.length && latestRows[0].version > estimate.version) {
+      return res.status(409).json({ error: `A newer estimate (v${latestRows[0].version}) exists — accept the current version instead` });
+    }
+    const r = await sbWrite(`crystal_estimates?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'accepted', accepted_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:crystal estimates] accept error:', await r.text()); return res.status(500).json({ error: 'Failed to accept estimate' }); }
+    await sbWrite(`crystal_quote_requests?id=eq.${encodeURIComponent(quoteId)}`, 'PATCH', { status: 'accepted', updated_at: new Date().toISOString() });
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, estimate: rows[0] });
+  }
+
+  if (action === 'reject') {
+    const r = await sbWrite(`crystal_estimates?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'rejected', rejected_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:crystal estimates] reject error:', await r.text()); return res.status(500).json({ error: 'Failed to reject estimate' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, estimate: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// -------------------------------------------------------------------------------- crystal: jobs
+async function handleCrystalJobs(req, res, caller) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const scope = req.query?.scope;
+
+    if (scope === 'mine') {
+      // "Workers see only assigned jobs and necessary customer information" — ownership-scoped,
+      // any real active staff member, NOT gated behind execution.view. Trimmed field set: property
+      // address (needed to do the job), no customer email/phone.
+      const assignRes = await sbSelect(`crystal_job_assignments?worker_user_id=eq.${encodeURIComponent(caller.id)}&select=job_id`);
+      const assignRows = assignRes.ok ? await assignRes.json() : [];
+      const jobIds = assignRows.map((a) => a.job_id);
+      if (!jobIds.length) return res.status(200).json([]);
+      const r = await sbSelect(`crystal_jobs?id=in.(${jobIds.map(encodeURIComponent).join(',')})&select=id,status,scheduled_at,duration_minutes,travel_notes,property_id,crystal_properties(address_line,city,state,access_notes)&order=scheduled_at.asc`);
+      if (!r.ok) { console.error('[client:crystal jobs mine] error:', await r.text()); return res.status(500).json({ error: 'Failed to load assigned jobs' }); }
+      return res.status(200).json(await r.json());
+    }
+
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+    const id = sanitize(req.query?.id, 100);
+    if (id) {
+      const jobRes = await sbSelect(`crystal_jobs?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+      const jobRows = jobRes.ok ? await jobRes.json() : [];
+      if (!jobRows.length) return res.status(404).json({ error: 'Job not found' });
+      const [assignmentsRes, checklistRes, mediaRes, completionRes] = await Promise.all([
+        sbSelect(`crystal_job_assignments?job_id=eq.${encodeURIComponent(id)}`),
+        sbSelect(`crystal_job_checklist_items?job_id=eq.${encodeURIComponent(id)}&order=created_at.asc`),
+        sbSelect(`crystal_job_media?job_id=eq.${encodeURIComponent(id)}&order=uploaded_at.desc`),
+        sbSelect(`crystal_completion_reviews?job_id=eq.${encodeURIComponent(id)}&limit=1`),
+      ]);
+      return res.status(200).json({
+        ...jobRows[0],
+        assignments: assignmentsRes.ok ? await assignmentsRes.json() : [],
+        checklist: checklistRes.ok ? await checklistRes.json() : [],
+        media: mediaRes.ok ? await mediaRes.json() : [],
+        completion: completionRes.ok ? (await completionRes.json())[0] || null : null,
+      });
+    }
+    const r = await sbSelect(`crystal_jobs?organization_id=eq.${encodeURIComponent(orgId)}&order=scheduled_at.asc`);
+    if (!r.ok) { console.error('[client:crystal jobs] error:', await r.text()); return res.status(500).json({ error: 'Failed to load jobs' }); }
+    return res.status(200).json(await r.json());
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const action = sanitize(b.action, 30);
+
+  // 'complete' is reachable by an assigned worker without execution.view (they need to be able to
+  // finish their own job); every other action requires full execution.view administrative access.
+  const workerOnlyActions = ['complete', 'checklist-item'];
+  let orgId = sanitize(b.organization_id, 100);
+  if (!workerOnlyActions.includes(action)) {
+    if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+  }
+
+  if (action === 'create') {
+    const estimateId = sanitize(b.estimate_id, 100);
+    if (!estimateId) return res.status(400).json({ error: 'estimate_id is required' });
+    const estRes = await sbSelect(`crystal_estimates?id=eq.${encodeURIComponent(estimateId)}&limit=1`);
+    const estRows = estRes.ok ? await estRes.json() : [];
+    if (!estRows.length) return res.status(404).json({ error: 'Estimate not found' });
+    if (estRows[0].status !== 'accepted') return res.status(400).json({ error: 'A job can only be created from an accepted estimate' });
+    const quoteRes = await sbSelect(`crystal_quote_requests?id=eq.${encodeURIComponent(estRows[0].quote_request_id)}&limit=1`);
+    const quoteRows = quoteRes.ok ? await quoteRes.json() : [];
+    if (!quoteRows.length) return res.status(404).json({ error: 'Source quote request not found' });
+    const quote = quoteRows[0];
+    const record = {
+      organization_id: orgId,
+      estimate_id: estimateId,
+      customer_id: quote.customer_id,
+      property_id: quote.property_id,
+      scheduled_at: sanitize(b.scheduled_at, 40) || null,
+      duration_minutes: Number.isFinite(Number(b.duration_minutes)) ? Number(b.duration_minutes) : null,
+      travel_notes: sanitize(b.travel_notes, 2000) || null,
+    };
+    const r = await sbWrite('crystal_jobs', 'POST', record);
+    if (!r.ok) { console.error('[client:crystal jobs] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create job' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, job: rows[0] });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  if (action === 'assign-worker') {
+    const workerUserId = sanitize(b.worker_user_id, 100);
+    if (!workerUserId) return res.status(400).json({ error: 'worker_user_id is required' });
+    const r = await sbWrite('crystal_job_assignments', 'POST', { job_id: id, worker_user_id: workerUserId, role: sanitize(b.role, 50) || null });
+    if (!r.ok) {
+      const text = await r.text();
+      if (/duplicate key/i.test(text)) return res.status(409).json({ error: 'This worker is already assigned to this job' });
+      console.error('[client:crystal jobs] assign-worker error:', text);
+      return res.status(500).json({ error: 'Failed to assign worker' });
+    }
+    await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'assigned', updated_at: new Date().toISOString() });
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, assignment: rows[0] });
+  }
+
+  if (action === 'unassign-worker') {
+    const workerUserId = sanitize(b.worker_user_id, 100);
+    const r = await sbWrite(`crystal_job_assignments?job_id=eq.${encodeURIComponent(id)}&worker_user_id=eq.${encodeURIComponent(workerUserId)}`, 'DELETE');
+    if (!r.ok) { console.error('[client:crystal jobs] unassign-worker error:', await r.text()); return res.status(500).json({ error: 'Failed to unassign worker' }); }
+    return res.status(200).json({ ok: true });
+  }
+
+  if (action === 'update-status') {
+    const status = sanitize(b.status, 30);
+    if (!['scheduled', 'assigned', 'in_progress', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid status for direct update — completion/invoicing have their own actions' });
+    const r = await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status, updated_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:crystal jobs] update-status error:', await r.text()); return res.status(500).json({ error: 'Failed to update job status' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, job: rows[0] });
+  }
+
+  if (action === 'add-checklist-item') {
+    const label = sanitize(b.label, 300);
+    if (!label) return res.status(400).json({ error: 'label is required' });
+    const r = await sbWrite('crystal_job_checklist_items', 'POST', { job_id: id, label, required: b.required !== false });
+    if (!r.ok) { console.error('[client:crystal jobs] add-checklist-item error:', await r.text()); return res.status(500).json({ error: 'Failed to add checklist item' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, item: rows[0] });
+  }
+
+  if (action === 'checklist-item') {
+    // Reachable by an assigned worker without execution.view — verified below, not assumed.
+    const itemId = sanitize(b.item_id, 100);
+    if (!itemId) return res.status(400).json({ error: 'item_id is required' });
+    const isAssigned = await isWorkerAssignedToJob(caller.id, id);
+    const hasOrgAccess = orgId && await hasPermissionSilent(req, orgId, 'execution.view');
+    if (!isAssigned && !hasOrgAccess) return res.status(403).json({ error: 'Only an assigned worker or execution staff can update this checklist' });
+    const r = await sbWrite(`crystal_job_checklist_items?id=eq.${encodeURIComponent(itemId)}&job_id=eq.${encodeURIComponent(id)}`, 'PATCH', { completed: true, completed_by: caller.id, completed_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:crystal jobs] checklist-item error:', await r.text()); return res.status(500).json({ error: 'Failed to update checklist item' }); }
+    const rows = await r.json();
+    if (!rows.length) return res.status(404).json({ error: 'Checklist item not found' });
+    return res.status(200).json({ ok: true, item: rows[0] });
+  }
+
+  if (action === 'add-media') {
+    const kind = ['before', 'after'].includes(b.kind) ? b.kind : null;
+    const storagePath = sanitize(b.storage_path, 500);
+    if (!kind || !storagePath) return res.status(400).json({ error: 'kind (before|after) and storage_path are required' });
+    const r = await sbWrite('crystal_job_media', 'POST', { job_id: id, kind, storage_path: storagePath, uploaded_by: caller.id });
+    if (!r.ok) { console.error('[client:crystal jobs] add-media error:', await r.text()); return res.status(500).json({ error: 'Failed to record media' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, media: rows[0] });
+  }
+
+  if (action === 'complete') {
+    // "AI cannot declare physical work completed without authorized evidence" — enforced here, not
+    // just described: completion requires a real assigned worker AND at least one 'after' photo
+    // already on file. No evidence, no completion, regardless of who's asking.
+    const isAssigned = await isWorkerAssignedToJob(caller.id, id);
+    if (!isAssigned) return res.status(403).json({ error: 'Only a worker assigned to this job can mark it complete' });
+    const mediaRes = await sbSelect(`crystal_job_media?job_id=eq.${encodeURIComponent(id)}&kind=eq.after&limit=1`);
+    const mediaRows = mediaRes.ok ? await mediaRes.json() : [];
+    if (!mediaRows.length) return res.status(400).json({ error: 'At least one "after" photo is required as evidence before a job can be marked complete' });
+    const jobRes = await sbSelect(`crystal_jobs?id=eq.${encodeURIComponent(id)}&limit=1`);
+    const jobRows = jobRes.ok ? await jobRes.json() : [];
+    if (!jobRows.length) return res.status(404).json({ error: 'Job not found' });
+    const completionRes = await sbWrite('crystal_completion_reviews', 'POST', { job_id: id, completed_by: caller.id, completion_notes: sanitize(b.notes, 2000) || null });
+    if (!completionRes.ok) {
+      const text = await completionRes.text();
+      if (/duplicate key/i.test(text)) return res.status(400).json({ error: 'This job already has a completion record' });
+      console.error('[client:crystal jobs] complete error:', text);
+      return res.status(500).json({ error: 'Failed to record completion' });
+    }
+    await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'completed', updated_at: new Date().toISOString() });
+    const rows = await completionRes.json();
+    return res.status(200).json({ ok: true, completion: rows[0] });
+  }
+
+  if (action === 'approve-completion') {
+    // No customer-facing portal yet — staff records a real customer decision (phone/email/
+    // in-person), the same honest pattern used for estimate acceptance above.
+    const r = await sbWrite(`crystal_completion_reviews?job_id=eq.${encodeURIComponent(id)}`, 'PATCH', { customer_approved: true, customer_approved_at: new Date().toISOString(), customer_notes: sanitize(b.customer_notes, 2000) || null });
+    if (!r.ok) { console.error('[client:crystal jobs] approve-completion error:', await r.text()); return res.status(500).json({ error: 'Failed to record customer approval' }); }
+    const rows = await r.json();
+    if (!rows.length) return res.status(404).json({ error: 'No completion record on file for this job yet' });
+    await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', updated_at: new Date().toISOString() });
+    return res.status(200).json({ ok: true, completion: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+async function isWorkerAssignedToJob(userId, jobId) {
+  const r = await sbSelect(`crystal_job_assignments?job_id=eq.${encodeURIComponent(jobId)}&worker_user_id=eq.${encodeURIComponent(userId)}&limit=1`);
+  const rows = r.ok ? await r.json() : [];
+  return rows.length > 0;
+}
+// Silent variant of requireOrgAccess for a branch that already has another valid authorization
+// path (an assigned worker) — checks the permission without writing an error response on failure,
+// since the caller here decides what to do with a false result itself rather than short-circuiting.
+async function hasPermissionSilent(req, orgId, permission) {
+  const { url, key } = sbEnv();
+  const token = callerToken(req);
+  try {
+    const r = await fetch(`${url}/rest/v1/rpc/has_permission`, {
+      method: 'POST', headers: { apikey: key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_org_id: orgId, permission_key: permission }),
+    });
+    return r.ok && (await r.json()) === true;
+  } catch { return false; }
+}
+
+// ---------------------------------------------------------------------------- crystal: invoices
+async function handleCrystalInvoices(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
+    const r = await sbSelect(`crystal_invoices?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`);
+    if (!r.ok) { console.error('[client:crystal invoices] error:', await r.text()); return res.status(500).json({ error: 'Failed to load invoices' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const jobId = sanitize(b.job_id, 100);
+    const amountCents = Number(b.amount_cents);
+    if (!jobId || !Number.isFinite(amountCents)) return res.status(400).json({ error: 'job_id and a real amount_cents are required — unbilled work is never invoiced with an invented amount' });
+    const r = await sbWrite('crystal_invoices', 'POST', { organization_id: orgId, job_id: jobId, amount_cents: amountCents, currency: sanitize(b.currency, 10) || 'USD' });
+    if (!r.ok) { console.error('[client:crystal invoices] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create invoice' }); }
+    await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(jobId)}`, 'PATCH', { status: 'invoiced', updated_at: new Date().toISOString() });
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, invoice: rows[0] });
+  }
+
+  const id = sanitize(b.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+
+  if (action === 'send') {
+    const r = await sbWrite(`crystal_invoices?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'sent', sent_at: new Date().toISOString() });
+    if (!r.ok) { console.error('[client:crystal invoices] send error:', await r.text()); return res.status(500).json({ error: 'Failed to send invoice' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, invoice: rows[0] });
+  }
+
+  if (action === 'mark-paid') {
+    const r = await sbWrite(`crystal_invoices?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'paid', paid_at: new Date().toISOString(), payment_method: sanitize(b.payment_method, 100) || null });
+    if (!r.ok) { console.error('[client:crystal invoices] mark-paid error:', await r.text()); return res.status(500).json({ error: 'Failed to mark invoice paid' }); }
+    const rows = await r.json();
+    if (rows[0]?.job_id) await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(rows[0].job_id)}`, 'PATCH', { status: 'paid', updated_at: new Date().toISOString() });
+    return res.status(200).json({ ok: true, invoice: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
+// ---------------------------------------------------------------------------- crystal: feedback
+async function handleCrystalFeedback(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+    const jobId = sanitize(req.query?.job_id, 100);
+    let path = `crystal_feedback?order=created_at.desc`;
+    if (jobId) path = `crystal_feedback?job_id=eq.${encodeURIComponent(jobId)}&order=created_at.desc`;
+    const r = await sbSelect(path);
+    if (!r.ok) { console.error('[client:crystal feedback] error:', await r.text()); return res.status(500).json({ error: 'Failed to load feedback' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+  const jobId = sanitize(b.job_id, 100);
+  const customerId = sanitize(b.customer_id, 100);
+  const rating = Number(b.rating);
+  if (!jobId || !customerId || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'job_id, customer_id, and a rating from 1-5 are required' });
+  }
+  const r = await sbWrite('crystal_feedback', 'POST', { job_id: jobId, customer_id: customerId, rating, comments: sanitize(b.comments, 2000) || null });
+  if (!r.ok) { console.error('[client:crystal feedback] create error:', await r.text()); return res.status(500).json({ error: 'Failed to record feedback' }); }
+  const rows = await r.json();
+  return res.status(200).json({ ok: true, feedback: rows[0] });
+}
+
+// -------------------------------------------------------------------------- crystal: recurring
+async function handleCrystalRecurring(req, res) {
+  if (req.method === 'GET') {
+    if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+    const r = await sbSelect(`crystal_recurring_schedules?organization_id=eq.${encodeURIComponent(orgId)}&order=next_due_at.asc`);
+    if (!r.ok) { console.error('[client:crystal recurring] error:', await r.text()); return res.status(500).json({ error: 'Failed to load recurring schedules' }); }
+    return res.status(200).json(await r.json());
+  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
+  const action = sanitize(b.action, 20);
+
+  if (action === 'create') {
+    const customerId = sanitize(b.customer_id, 100);
+    const frequency = sanitize(b.frequency, 20);
+    if (!customerId || !['weekly', 'biweekly', 'monthly', 'quarterly', 'custom'].includes(frequency)) {
+      return res.status(400).json({ error: 'customer_id and a valid frequency are required' });
+    }
+    const r = await sbWrite('crystal_recurring_schedules', 'POST', {
+      organization_id: orgId, customer_id: customerId,
+      property_id: sanitize(b.property_id, 100) || null,
+      service_catalog_id: sanitize(b.service_catalog_id, 100) || null,
+      frequency, next_due_at: sanitize(b.next_due_at, 40) || null,
+    });
+    if (!r.ok) { console.error('[client:crystal recurring] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create recurring schedule' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, schedule: rows[0] });
+  }
+
+  if (action === 'pause' || action === 'resume') {
+    const id = sanitize(b.id, 100);
+    if (!id) return res.status(400).json({ error: 'id is required' });
+    const r = await sbWrite(`crystal_recurring_schedules?id=eq.${encodeURIComponent(id)}`, 'PATCH', { active: action === 'resume' });
+    if (!r.ok) { console.error('[client:crystal recurring] pause/resume error:', await r.text()); return res.status(500).json({ error: 'Failed to update recurring schedule' }); }
+    const rows = await r.json();
+    return res.status(200).json({ ok: true, schedule: rows[0] });
+  }
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}
+
 // Nova Connect client portal login — checks against client_accounts.
 // handleAuth ("Nova Connect" client login) removed 2026-09-20 — confirmed dead (no live frontend
 // call, see src/pages/ClientLogin.jsx) and a real liability while it existed: unauthenticated,
@@ -2577,6 +3220,24 @@ export default async function handler(req, res) {
       if (!caller) return;
       if (req.method === 'GET') return handleApprovalsInbox(req, res);
       return handleApprovalsGeneric(req, res, caller);
+    }
+
+    case 'crystal': {
+      // Bare staff check at the dispatcher — the real per-op gate (execution.view for admin
+      // actions, ownership-scoping for a worker's own jobs) happens inside each handler, exactly
+      // like crm/orders/audit above.
+      const caller = await requireStaff(req, res);
+      if (!caller) return;
+      if (op === 'customers') return handleCrystalCustomers(req, res);
+      if (op === 'properties') return handleCrystalProperties(req, res);
+      if (op === 'catalog') return handleCrystalCatalog(req, res);
+      if (op === 'quotes') return handleCrystalQuotes(req, res);
+      if (op === 'estimates') return handleCrystalEstimates(req, res, caller);
+      if (op === 'jobs') return handleCrystalJobs(req, res, caller);
+      if (op === 'invoices') return handleCrystalInvoices(req, res);
+      if (op === 'feedback') return handleCrystalFeedback(req, res);
+      if (op === 'recurring') return handleCrystalRecurring(req, res);
+      return res.status(400).json({ error: `Unknown crystal op: ${op}` });
     }
 
     case 'auth':

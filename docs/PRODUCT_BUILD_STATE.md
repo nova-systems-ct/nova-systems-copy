@@ -1,8 +1,31 @@
 # Nova Product Build — State Checkpoint
 
-Last updated: 2026-09-23, commit pending (post-Approval-Inbox). Written per the master execution
+Last updated: 2026-09-24, commit pending (post-Crystal). Written per the master execution
 prompt's §23 requirement to maintain a real, resumable checkpoint rather than claim unattended
 progress across a session boundary this environment cannot actually cross.
+
+**Canonical specification**: [`NOVA_PRODUCT_ONLY_MASTER_EXECUTION_PROMPT.md`](../NOVA_PRODUCT_ONLY_MASTER_EXECUTION_PROMPT.md)
+(recovered 2026-09-24 verbatim from this session's own saved transcript after a prior context
+compaction had left only a lossy summary in circulation — read the actual file, not a paraphrase).
+
+## Status framework
+
+Per Isaac's 2026-09-24 instruction, every module below is tracked against five concrete states,
+which map onto this document's existing vocabulary (`docs/requirement-matrix.md`'s status column)
+as follows:
+
+| Isaac's five states | This project's status column |
+|---|---|
+| Implemented | `in development` — code written, not yet run against any real data |
+| Locally tested | `locally verified` — pg-mem schema proof and/or a pure-logic unit test and/or an e2e test written (even if it currently fails-fast on a missing migration — see below) |
+| Tested with an actual provider | `staging verified` — not yet reached by any module; no live provider credentials are configured in this environment |
+| Installed in production | `installed` — the migration has been applied and the code deployed, but not yet exercised live |
+| Verified live | `live verified` — actually exercised against production and confirmed working |
+
+**No module has moved past "locally tested" this session** except the ones already live before
+this session started (login, org isolation, the dashboard shell, Integration Center). Every new
+domain built in the last two days is real, tested code sitting one migration-run away from
+"installed" — see the owner-action checklist for exactly what that requires.
 
 ## Where this build actually is
 
@@ -18,13 +41,18 @@ real, independently unit-tested deadline clock), Zion Studio (journal/facts/idea
 production/review), the Integration Center (found already complete on inspection — see below), the
 Approval Inbox (aggregation + generic consequential-action approval/reject/revoke), the
 Installation Center's provisioning workflow (sandbox testing, activation authority, pause/
-offboard), and a real review/scheduling workflow for blog content (draft → review → approval →
-publish, closing a live "any staff can publish with zero review" gap) are all real, tested code.
-Eight migration files are written, safety-reviewed, and NOT yet applied to production (this
-environment has no DDL access — never has, this whole project). Three storage buckets are
-specified and NOT yet created (blocked by this session's own permission system, not bypassed).
-Voice/phone infrastructure, Crystal, broader multi-channel marketing automation (social/email
-campaigns beyond blog review), and durable worker infrastructure have not been started.
+offboard), a real review/scheduling workflow for blog content (draft → review → approval →
+publish, closing a live "any staff can publish with zero review" gap), a durable job queue with a
+genuinely runnable worker process (real local persistence and tested crash-recovery proven today),
+and Crystal / Company 002's full operational workspace (customers → quote → versioned estimate →
+acceptance → booking → worker assignment → evidence-gated completion → customer approval →
+invoicing → feedback/recurring service) are all real, tested code. Nine migration files are
+written, safety-reviewed, and NOT yet applied to production (this environment has no DDL access —
+never has, this whole project). Three storage buckets are specified and NOT yet created (blocked
+by this session's own permission system, not bypassed). Live voice/phone infrastructure (a
+concrete recommendation exists — see `docs/RUNTIME_HOSTING_RECOMMENDATION.md` — but no code
+against a specific provider yet, pending Isaac's decision) and broader multi-channel marketing
+automation (social/email campaigns beyond blog review) remain not started.
 
 ## How schema-dependent work is being tested (no Docker/local Postgres in this environment)
 
@@ -140,37 +168,77 @@ path 12/12) has been re-run after every change this session and still passes —
     proven elsewhere in this codebase (`academy.js`, `_auth.js`). `Blog.jsx` rebuilt around the new
     status states. `scripts/e2e_marketing_content_workflow_test.mjs` written, fails fast correctly.
 
+10. **Canonical spec recovered** (2026-09-24): the full 24-section master prompt was missing from
+    the repository — only a lossy conversation summary survived a prior context compaction, which
+    Isaac correctly flagged as a real risk ("do not rely on conversation summaries as the sole
+    specification"). Recovered verbatim from this session's own saved transcript file (not
+    re-typed from memory, not reconstructed) and saved as
+    `NOVA_PRODUCT_ONLY_MASTER_EXECUTION_PROMPT.md`, referenced from a new `CLAUDE.md`.
+11. **Runtime/hosting recommendation delivered as a concrete engineering decision**, not an open
+    question handed back to Isaac (§20): `docs/RUNTIME_HOSTING_RECOMMENDATION.md`, backed by real
+    current pricing fetched the same day from Vercel/Twilio/Deepgram/ElevenLabs/Fly.io/Railway/
+    Vapi's own sources — recommends one small always-on worker (Fly.io, ~$2-8/mo) serving both
+    durable jobs and, if self-hosted voice is chosen, the live-call audio bridge.
+12. **Durable job queue built as real, runnable code**, not a proposal: `jobs` table +
+    `claim_next_job()` Postgres function (`supabase/durable-jobs-migration-standalone.sql`,
+    pg-mem validated 4/4), `worker/jobQueueEngine.mjs`'s pure claim/complete/fail/retry/dead-letter
+    algorithm (`scripts/unit_job_queue_test.mjs`, 12/12 — includes a real proof that a job whose
+    worker crashes mid-processing is automatically reclaimed once its lease expires, with zero
+    operator intervention), and `worker/index.mjs`, a genuinely runnable poll loop verified today
+    end-to-end locally (`node worker/index.mjs --local --enqueue-demo --once`) with real
+    persistence to disk and no external service required. Wired into a real consumer: scheduling a
+    blog post now enqueues an actual job instead of recording an unread field.
+13. **Audit-report approval evidence produced on request**, surfacing and fixing a real gap:
+    nothing previously stopped approving a stale (superseded) draft version. Fixed (409 refusal)
+    and `scripts/e2e_crm_order_audit_test.mjs` now explicitly proves, in sequence: an unauthorized
+    cross-org caller is refused (403), the same authorized caller is refused on a stale version
+    (409), and the same caller succeeds on the actual current version (200).
+14. **Crystal / Company 002's full operational workspace built** (§14, restored scope): customers,
+    properties, configurable service catalog (unpriced services never default to zero), quote
+    requests with private photo references, versioned estimates (stale-version-guarded, like
+    Audit reports), customer acceptance, booking, worker assignment, job checklists, before/after
+    media, and a real two-party completion record. **"AI cannot declare physical work completed
+    without authorized evidence" is structurally enforced**: `complete` requires the caller be a
+    real assigned worker AND at least one real "after" photo already on file. Invoicing (real
+    amounts only, never invented), feedback, and recurring-service scheduling. `src/pages/
+    dashboard/Crystal.jsx` (customers/quotes/jobs/invoices, with the estimate-builder and job-
+    detail UI honestly flagged as the next increment — the workflow is proven real via the API and
+    `scripts/e2e_crystal_test.mjs`, not yet fully reachable through a polished UI). The e2e test
+    proves the two explicit isolation requirements Isaac asked for: cross-org separation and
+    worker-level isolation (an unassigned worker sees nothing in "mine," cannot self-assign, and
+    cannot complete a job they're not on).
+
 ## What has deliberately NOT been attempted
 
-Voice/phone infrastructure (§11) and durable workers/queues (§20, needed for `scheduled_at` to
-ever auto-fire) both need a real hosted persistent-connection/runtime decision before any code is
-worth writing — Vercel's serverless functions cannot host live call audio or long-running
-background jobs. Crystal (§14) is explicitly sequenced behind R10-R13 in the master prompt's own
-dependency order, which are now substantially done — it is the natural next candidate once R16's
-remaining scope (or R12/R19) is addressed. Multi-channel marketing automation beyond blog content
-review (social scheduling, email campaign sequencing) is still zero-implementation. Starting any of
-these shallowly would produce exactly the "scaffold with no real domain logic" the master prompt
-prohibits — each needs its own properly-scoped pass.
+Live voice/phone infrastructure (§11) has a concrete recommendation
+(`docs/RUNTIME_HOSTING_RECOMMENDATION.md`) but no code against a specific provider yet — writing
+Twilio Media Streams / Deepgram / ElevenLabs integration code before Isaac confirms the self-hosted
+vs. managed-platform decision would risk building against the wrong stack. Broader multi-channel
+marketing automation beyond blog content review (social scheduling across TikTok/Instagram/
+LinkedIn/YouTube/Facebook, email campaign sequencing with stop-on-reply/unsubscribe/budget limits)
+is still zero-implementation — this is real, substantial remaining scope from §17's restored
+requirements, not yet started. Cost-per-org/provider tracking and incident escalation on top of the
+new job queue (§20's remaining scope) are not built. Starting any of these shallowly would produce
+exactly the "scaffold with no real domain logic" the master prompt prohibits — each needs its own
+properly-scoped pass.
 
 ## Exact next task
 
-R16 (marketing/content) is now partial rather than not-started — the review/scheduling workflow is
-real, but broader multi-channel automation (social, email campaigns) is still open scope. Per §23's
-dependency order, the remaining not-started/partial modules (R12 voice, R17 Crystal, R19 durable
-workers, R16's remaining scope) each either need a hosting/runtime decision, live provider
-credentials, or are sequenced behind other modules. The next credential-free, locally-testable
-increment worth picking up is either (a) rounding out R16 with a real content calendar view across
-scheduled/published posts, or (b) starting R17 Crystal now that R10-R13 are substantially built —
-neither requires an owner decision first, so the choice is a judgment call to make explicit at the
-start of the next work block rather than defaulting silently.
+With R14 (Crystal) and R19 (durable runtime foundation) both moved to locally-verified today, the
+largest remaining real scope is §17's multi-channel marketing automation (social/email beyond blog
+review) — credential-free and locally-testable for everything up to actual publishing (platform
+adapters can be built with honest "not implemented"/"authorization required" states exactly like
+the Integration Center already does, per §19's own status vocabulary). R12 (voice) has a concrete
+recommendation now but is waiting on Isaac's self-hosted-vs-managed decision before any
+provider-specific code is worth writing.
 
 ## Owner-action items currently blocking further automated progress
 
-1. **Run eight SQL migration files** in the Supabase SQL Editor (all reviewed for safety; seven are
-   purely additive — `IF NOT EXISTS`/`ON CONFLICT`, zero destructive statements — and one,
-   `marketing-content-workflow`, contains a single, narrow, idempotent UPDATE that only backfills
-   its own brand-new column on the existing `blog_posts` table, explained in the file's own header
-   comment):
+1. **Run nine SQL migration files** in the Supabase SQL Editor, in this order (all reviewed for
+   safety; eight are purely additive — `IF NOT EXISTS`/`ON CONFLICT`, zero destructive statements —
+   and one, `marketing-content-workflow`, contains a single, narrow, idempotent UPDATE that only
+   backfills its own brand-new column on the existing `blog_posts` table, explained in the file's
+   own header comment):
    - `supabase/academy-migration-standalone.sql`
    - `supabase/hiring-workflow-migration-standalone.sql`
    - `supabase/crm-order-audit-migration-standalone.sql`
@@ -180,10 +248,12 @@ start of the next work block rather than defaulting silently.
      crm-order-audit migration — run that one first)
    - `supabase/marketing-content-workflow-migration-standalone.sql` (alters the existing, live
      `blog_posts` table — safe, additive columns plus the one backfill UPDATE described above)
+   - `supabase/durable-jobs-migration-standalone.sql`
+   - `supabase/crystal-migration-standalone.sql`
    - (older sections are also appended to the cumulative `supabase/schema-update.sql` for the
      historical record, but every standalone file above is what's actually meant to be run — that
-     cumulative file has NOT been kept in sync with the CRM/Zion/Approvals/Installation/Marketing
-     migrations, a stale claim in an earlier version of this doc corrected here)
+     cumulative file has NOT been kept in sync with the CRM/Zion/Approvals/Installation/Marketing/
+     Jobs/Crystal migrations, a stale claim in an earlier version of this doc corrected here)
 2. **Create three Storage buckets** (this session's own permission system blocked direct creation
    — flagged as a shared-resource modification, not bypassed):
    - `portfolios` — **private**, ~5MB file size limit (resumes/application uploads)
@@ -199,14 +269,22 @@ start of the next work block rather than defaulting silently.
    default in `api/academy.js`'s `SCORE_THRESHOLD_PERCENT` constant. Does not block other work.
 5. **Supply Zion's existing character reference assets** before the render step can produce
    anything — every other part of the Studio is built and works without them.
-6. **A hosting/runtime decision for voice/phone and durable workers** (§11/§20) before any of
-   that code is worth writing — current architecture is 100% short-lived Vercel serverless
-   functions, which cannot host live call audio or long-running background jobs.
+6. **Create a Fly.io account and authorize ~$2-8/month** for one small always-on machine to run
+   `worker/index.mjs` (concrete recommendation with sourced pricing in
+   `docs/RUNTIME_HOSTING_RECOMMENDATION.md` — no longer an open question, a specific action).
+7. **Decide self-hosted voice (Twilio + Deepgram + ElevenLabs, recommended) vs. a managed platform
+   (Vapi/Retell/Bland)** — see the runtime doc's §4 for the real cost/tradeoff comparison. Not
+   needed to use the worker for durable jobs/scheduling, only for live call answering.
+8. **Confirm the Vercel account's actual current plan/tier** in the dashboard — this project has
+   always assumed Hobby, never independently re-verified via API (no token exists in this
+   environment).
 
 After the SQL files run: `node scripts/e2e_academy_auth_test.mjs`,
 `node scripts/e2e_hiring_workflow_test.mjs`, `node scripts/e2e_crm_order_audit_test.mjs`,
 `node scripts/e2e_zion_studio_test.mjs`, `node scripts/e2e_approval_inbox_test.mjs`,
-`node scripts/e2e_installation_center_test.mjs`, and
-`node scripts/e2e_marketing_content_workflow_test.mjs` each give real, immediate, live pass/fail
-evidence for their respective domains — none of this has been claimed as passing against
-production, and won't be until these actually run and are reported honestly either way.
+`node scripts/e2e_installation_center_test.mjs`, `node scripts/e2e_marketing_content_workflow_test.mjs`,
+and `node scripts/e2e_crystal_test.mjs` each give real, immediate, live pass/fail evidence for their
+respective domains — none of this has been claimed as passing against production, and won't be
+until these actually run and are reported honestly either way. `node scripts/unit_job_queue_test.mjs`
+and `node worker/index.mjs --local --enqueue-demo --once` already pass/run today with zero
+dependency on the migrations above.

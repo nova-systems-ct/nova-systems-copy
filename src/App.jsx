@@ -77,6 +77,7 @@ const ZionStudio = lazy(() => import('./pages/dashboard/ZionStudio'));
 const ApprovalInbox = lazy(() => import('./pages/dashboard/ApprovalInbox'));
 const Installations = lazy(() => import('./pages/dashboard/Installations'));
 const InstallationDetail = lazy(() => import('./pages/dashboard/InstallationDetail'));
+const Crystal = lazy(() => import('./pages/dashboard/Crystal'));
 const RequirePermission = lazy(() => import('./components/dashboard/RequirePermission'));
 
 function RouteFallback() {
@@ -159,6 +160,7 @@ function App() {
               <Route path="approvals" element={<RequirePermission permission="admin.view"><ApprovalInbox /></RequirePermission>} />
               <Route path="installations" element={<RequirePermission permission="admin.view"><Installations /></RequirePermission>} />
               <Route path="installations/:id" element={<RequirePermission permission="admin.view"><InstallationDetail /></RequirePermission>} />
+              <Route path="crystal" element={<RequirePermission permission="execution.view"><Crystal /></RequirePermission>} />
             </Route>
 
             <Route path="/verify-certificate" element={<VerifyCertificate />} />
