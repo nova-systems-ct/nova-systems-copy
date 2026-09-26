@@ -84,6 +84,31 @@ const Crystal = lazy(() => import('./pages/dashboard/Crystal'));
 const CrystalJobDetail = lazy(() => import('./pages/dashboard/CrystalJobDetail'));
 const Marketing = lazy(() => import('./pages/dashboard/Marketing'));
 const RequirePermission = lazy(() => import('./components/dashboard/RequirePermission'));
+// Sales Team platform: public application/invitation/proposal pages, the representative workspace, and Nova HQ → Sales Team
+const SalesApply = lazy(() => import('./pages/sales/SalesApply'));
+const JoinInvitation = lazy(() => import('./pages/sales/JoinInvitation'));
+const ClientProposal = lazy(() => import('./pages/sales/ClientProposal'));
+const RepLayout = lazy(() => import('./components/sales/RepLayout'));
+const RepHome = lazy(() => import('./pages/rep/RepHome'));
+const RepLeads = lazy(() => import('./pages/rep/RepLeads'));
+const RepLeadDetail = lazy(() => import('./pages/rep/RepLeadDetail'));
+const RepToolkit = lazy(() => import('./pages/rep/RepToolkit'));
+const RepEarnings = lazy(() => import('./pages/rep/RepEarnings'));
+const RepTraining = lazy(() => import('./pages/rep/RepTraining'));
+const RepTrainingProgram = lazy(() => import('./pages/rep/RepTrainingProgram'));
+const RepDocuments = lazy(() => import('./pages/rep/RepDocuments'));
+const DashboardIndex = lazy(() => import('./components/dashboard/DashboardIndex'));
+const SalesTeamLayout = lazy(() => import('./pages/dashboard/salesTeam/SalesTeamLayout'));
+const STOverview = lazy(() => import('./pages/dashboard/salesTeam/Overview'));
+const STHiring = lazy(() => import('./pages/dashboard/salesTeam/Hiring'));
+const STReps = lazy(() => import('./pages/dashboard/salesTeam/Reps'));
+const STLeads = lazy(() => import('./pages/dashboard/salesTeam/TeamLeads'));
+const STAcademy = lazy(() => import('./pages/dashboard/salesTeam/SalesAcademy'));
+const STAgreements = lazy(() => import('./pages/dashboard/salesTeam/Agreements'));
+const STCatalog = lazy(() => import('./pages/dashboard/salesTeam/CatalogAdmin'));
+const STVerification = lazy(() => import('./pages/dashboard/salesTeam/Verification'));
+const STCommissions = lazy(() => import('./pages/dashboard/salesTeam/Commissions'));
+const STSettings = lazy(() => import('./pages/dashboard/salesTeam/SalesSettings'));
 
 function RouteFallback() {
   return <div style={{ minHeight: '100vh', background: '#0A0A0A' }} />
@@ -131,9 +156,40 @@ function App() {
             <Route path="/waves" element={<Waves />} />
             <Route path="/waves/form" element={<WavesForm />} />
 
+            {/* Sales Team platform — public */}
+            <Route path="/apply/sales" element={<SalesApply />} />
+            <Route path="/apply/continue" element={<SalesApply />} />
+            <Route path="/apply/status" element={<SalesApply />} />
+            <Route path="/join/:token" element={<JoinInvitation />} />
+            <Route path="/proposal/:token" element={<ClientProposal />} />
+
+            {/* Representative / candidate workspace */}
+            <Route path="/rep" element={<RepLayout />}>
+              <Route index element={<RepHome />} />
+              <Route path="leads" element={<RepLeads />} />
+              <Route path="leads/:id" element={<RepLeadDetail />} />
+              <Route path="toolkit" element={<RepToolkit />} />
+              <Route path="earnings" element={<RepEarnings />} />
+              <Route path="training" element={<RepTraining />} />
+              <Route path="training/:id" element={<RepTrainingProgram />} />
+              <Route path="documents" element={<RepDocuments />} />
+            </Route>
+
             {/* CRM Dashboard — nested routes */}
             <Route path="/dashboard" element={<DashboardRoot />}>
-              <Route index element={<RequirePermission permission="overview.view"><DashboardHome /></RequirePermission>} />
+              <Route index element={<DashboardIndex home={<DashboardHome />} />} />
+              <Route path="sales-team" element={<SalesTeamLayout />}>
+                <Route path="overview" element={<STOverview />} />
+                <Route path="hiring" element={<RequirePermission permission="sales.hiring"><STHiring /></RequirePermission>} />
+                <Route path="reps" element={<RequirePermission permission="sales.manage"><STReps /></RequirePermission>} />
+                <Route path="leads" element={<RequirePermission permission="sales.manage"><STLeads /></RequirePermission>} />
+                <Route path="academy" element={<RequirePermission permission="sales.manage"><STAcademy /></RequirePermission>} />
+                <Route path="documents" element={<RequirePermission permission="sales.owner"><STAgreements /></RequirePermission>} />
+                <Route path="catalog" element={<RequirePermission permission="sales.owner"><STCatalog /></RequirePermission>} />
+                <Route path="verification" element={<RequirePermission permission="sales.owner"><STVerification /></RequirePermission>} />
+                <Route path="commissions" element={<RequirePermission permission="sales.finance"><STCommissions /></RequirePermission>} />
+                <Route path="settings" element={<RequirePermission permission="sales.owner"><STSettings /></RequirePermission>} />
+              </Route>
               <Route path="intelligence" element={<RequirePermission permission="intelligence.view"><Intelligence /></RequirePermission>} />
               <Route path="growth" element={<RequirePermission permission="growth.view"><Growth /></RequirePermission>} />
               <Route path="execution" element={<RequirePermission permission="execution.view"><Execution /></RequirePermission>} />

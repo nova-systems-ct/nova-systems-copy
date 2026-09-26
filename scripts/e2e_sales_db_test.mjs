@@ -80,13 +80,13 @@ try {
   let badStatus = null; try { await env.sql("insert into applications (name, email, position, status) values ('B','b@x.test','x','totally_made_up')"); } catch (e) { badStatus = e.code; }
   check('an invented application status is refused (23514)', badStatus === '23514', String(badStatus));
 
-  await env.sql("insert into sales_config (key, version, status, value) values ('academy_policy',1,'approved','{}')");
-  let two = null; try { await env.sql("insert into sales_config (key, version, status, value) values ('academy_policy',2,'approved','{}')"); } catch (e) { two = e.code; }
+  await env.sql("insert into sales_config (key, version, status, value) values ('test_policy',1,'approved','{}')");
+  let two = null; try { await env.sql("insert into sales_config (key, version, status, value) values ('test_policy',2,'approved','{}')"); } catch (e) { two = e.code; }
   check('only one APPROVED configuration version per key can exist', two === '23505', String(two));
   const app2 = (await env.sql("insert into applications (name, email, email_normalized, position, status) values ('C','c@y.test','c@y.test','Sales Representative','accepted') returning id")).rows[0].id;
   await env.sql("insert into application_invitations (application_id, email, token_hash, created_by, expires_at, status) values ($1,'c@y.test','h1',$2, now() + interval '7 days','sent')", [app2, U.owner.id]);
   let inv2 = null; try { await env.sql("insert into application_invitations (application_id, email, token_hash, created_by, expires_at, status) values ($1,'c@y.test','h2',$2, now() + interval '7 days','queued')", [app2, U.owner.id]); } catch (e) { inv2 = e.code; }
   check('a second live invitation for the same application is refused', inv2 === '23505', String(inv2));
 } finally { await env.stop(); }
-console.log(`\n${pass}/${pass + fail} sales-team database checks passed (real PostgreSQL + PostgREST, local, disposable — not Supabase, not production)`);
+console.log(`\n${pass} passed, ${fail} failed — sales-team database checks (real PostgreSQL + PostgREST, local, disposable — not Supabase, not production)`);
 process.exitCode = fail ? 1 : 0;

@@ -63,9 +63,22 @@ export default function JobModal({ job, onClose }) {
             <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
           </div>
 
-          <JobApplicationForm job={job} />
+          {job.id === 'sales-rep' ? <SalesApplyCta /> : <JobApplicationForm job={job} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+// The Sales Representative role uses the platform's own application (save/resume, status tracking, private review) instead of the legacy form.
+function SalesApplyCta() {
+  return (
+    <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
+      <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 14, lineHeight: 1.7, maxWidth: 520, margin: "0 auto 20px" }}>
+        Applications for this role are made in Nova's application portal. You can save and come back, and see your status at any time.
+        No income, interview or role is guaranteed at the application stage.
+      </p>
+      <a href="/apply/sales" style={{ display: "inline-block", padding: "14px 28px", borderRadius: 10, background: GOLD, color: "#0A0A0A", fontWeight: 800, fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase", textDecoration: "none" }}>Start your application</a>
     </div>
   );
 }

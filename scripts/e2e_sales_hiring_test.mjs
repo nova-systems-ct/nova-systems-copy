@@ -206,5 +206,5 @@ try {
   r = await call({ resource: 'apply', op: 'start', body: { email: 'bob@applicant.test' } });
   check('after withdrawing, the same person can start a fresh application', (await env.sql("select count(*) from applications where email_normalized='bob@applicant.test'")).rows[0].count === '2');
 } finally { await env.stop(); }
-console.log(`\n${pass}/${pass + fail} hiring journey checks passed (real handlers + real PostgreSQL/PostgREST; Auth/Storage/Resend are stand-ins; local, disposable)`);
+console.log(`\n${pass} passed, ${fail} failed — hiring journey checks (real handlers + real PostgreSQL/PostgREST; Auth/Storage/Resend are stand-ins; local, disposable)`);
 process.exitCode = fail ? 1 : 0;

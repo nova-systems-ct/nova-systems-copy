@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard, BrainCircuit, TrendingUp, PlayCircle, Building2, ShieldCheck,
-  LogOut, Menu, X, ChevronsUpDown, Check,
+  LogOut, Menu, X, ChevronsUpDown, Check, Users,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuthGuard } from '../../hooks/useAuthGuard'
@@ -15,6 +15,7 @@ const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#e0c476 55%,${GOLD} 80%
 const ROLE_LABELS = {
   nova_super_admin: 'Platform Owner', nova_admin: 'Nova Admin', nova_auditor: 'Nova Auditor',
   nova_marketing: 'Nova Marketing', nova_sales: 'Nova Sales', nova_developer: 'Nova Developer',
+  nova_sales_candidate: 'Sales Candidate', nova_sales_manager: 'Sales Manager', nova_finance: 'Nova Finance',
   client_owner: 'Owner', client_admin: 'Admin', client_marketing: 'Marketing',
   client_employee: 'Employee', client_viewer: 'Viewer',
 }
@@ -34,6 +35,7 @@ const NAV = [
   { to: '/dashboard/growth',       label: 'Growth',        icon: TrendingUp,      match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/sales', '/dashboard/pilots', '/dashboard/pilot-console', '/dashboard/leads', '/dashboard/zion', '/dashboard/marketing'], permission: 'growth.view' },
   { to: '/dashboard/execution',    label: 'Execution',     icon: PlayCircle,      match: ['/dashboard/execution', '/dashboard/tasks'], permission: 'execution.view' },
   { to: '/dashboard/companies',    label: 'Companies',     icon: Building2,       match: ['/dashboard/companies', '/dashboard/crystal'], permission: 'companies.view' },
+  { to: '/dashboard/sales-team',    label: 'Sales Team',    icon: Users,           match: ['/dashboard/sales-team'], permission: ['sales.manage', 'sales.finance', 'sales.hiring'] },
   { to: '/dashboard/admin',        label: 'Admin',         icon: ShieldCheck,     match: ['/dashboard/admin', '/dashboard/jobs', '/dashboard/invoices', '/dashboard/contracts', '/dashboard/nova-vault', '/dashboard/documents', '/dashboard/approvals', '/dashboard/installations'], permission: 'admin.view' },
 ]
 
@@ -128,7 +130,7 @@ export default function DashboardLayout() {
 
   const active = (item) =>
     item.exact ? loc.pathname === item.to : (item.match || [item.to]).some((p) => loc.pathname.startsWith(p))
-  const visibleNav = NAV.filter((item) => hasPermission(item.permission))
+  const visibleNav = NAV.filter((item) => (Array.isArray(item.permission) ? item.permission.some(hasPermission) : hasPermission(item.permission)))
   const orgName = currentOrg?.name || 'Nova Systems'
 
   function Sidebar() {

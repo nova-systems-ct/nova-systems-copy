@@ -32,7 +32,7 @@ export const handleAcademy = wrap(async (req, res, action) => {
     return res.status(200).json({ valid: c.status === 'valid', status: c.status, certificate_number: c.certificate_number, program_title: c.academy_programs?.title, program_version: c.program_version, issued_at: c.issued_at, holder_name: c.holder_display, revoked_at: c.status === 'revoked' ? c.revoked_at : undefined, provisional_policy: c.policy_provisional, issuer: 'Nova Systems LLC', disclaimer: CERTIFICATE_DISCLAIMER });
   }
 
-  const adminOps = ['admin-overview', 'practical-queue', 'review-practical', 'policy'];
+  const adminOps = ['admin-overview', 'practical-queue', 'review-practical', 'policy', 'certificates', 'programs-admin'];
   const ownerOps = ['critical-review', 'reset-attempts', 'revoke-certificate', 'save-policy', 'approve-policy', 'approve-content'];
   const caller = await requirePerm(req, res, ownerOps.includes(action) ? 'sales.owner' : adminOps.includes(action) ? 'sales.manage' : 'academy.view'); if (!caller) return;
   if (!rateLimit(req, res, 120, 60_000)) return;
@@ -49,7 +49,7 @@ export const handleAcademy = wrap(async (req, res, action) => {
   if (action === 'program-detail') {
     const id = sanitize(req.query?.id, 60); const program = id && (await dbOne(`academy_programs?id=eq.${enc(id)}&select=*`)); if (!program) return bad(res, 404, 'Program not found');
     const enrollment = await getEnrollment(id, caller.id);
-    const [lessons, quiz, exercises, done, attempts, practicals, responses, pol] = await Promise.all([dbGet(`academy_lessons?program_id=eq.${enc(id)}&order=order_index.asc`), dbGet(`academy_quiz_questions?program_id=eq.${enc(id)}&order=order_index.asc&select=id,order_index,question,choices`), dbGet(`academy_exercises?program_id=eq.${enc(id)}&order=order_index.asc&select=id,order_index,lesson_order,title,prompt`), progressOf(enrollment.id), countedAttempts(enrollment.id), dbGet(`academy_practical_submissions?enrollment_id=eq.${enc(enrollment.id)}&order=attempt_no.asc`), dbGet(`academy_exercise_responses?enrollment_id=eq.${enc(enrollment.id)}&select=exercise_id,response,submitted_at`), currentPolicy()]);
+    const [lessons, quiz, exercises, done, attempts, practicals, responses, pol, certRow] = await Promise.all([dbGet(`academy_lessons?program_id=eq.${enc(id)}&order=order_index.asc`), dbGet(`academy_quiz_questions?program_id=eq.${enc(id)}&order=order_index.asc&select=id,order_index,question,choices`), dbGet(`academy_exercises?program_id=eq.${enc(id)}&order=order_index.asc&select=id,order_index,lesson_order,title,prompt`), progressOf(enrollment.id), countedAttempts(enrollment.id), dbGet(`academy_practical_submissions?enrollment_id=eq.${enc(enrollment.id)}&order=attempt_no.asc`), dbGet(`academy_exercise_responses?enrollment_id=eq.${enc(enrollment.id)}&select=exercise_id,response,submitted_at`), currentPolicy(), dbOne(`academy_certificates?enrollment_id=eq.${enc(enrollment.id)}&select=id,certificate_number,verification_code,issued_at,status,policy_provisional,program_version`)]);
     const gate = attemptGate({ policy: pol.policy, enrollmentStatus: enrollment.status, attempts, lessonsCompleted: done.length, totalLessons: lessons.length });
     const exWithFeedback = [];
     for (const ex of exercises) {
@@ -62,7 +62,7 @@ export const handleAcademy = wrap(async (req, res, action) => {
     return res.status(200).json({
       program: { id: program.id, slug: program.slug, title: program.title, description: program.description, version: program.version, requires_practical: program.requires_practical, critical_compliance: program.critical_compliance, learning_objectives: program.learning_objectives, content_review_status: program.content_review_status, practical_prompt: program.requires_practical ? program.practical_prompt : null, practical_rubric: program.requires_practical ? program.practical_rubric : [] },
       lessons: lessons.map((l) => ({ ...l, completed: done.includes(l.order_index), locked: l.order_index > 1 && !done.includes(l.order_index - 1) && !done.includes(l.order_index) })),
-      quiz_questions: quiz, exercises: exWithFeedback, enrollment: { ...enrollment, lessons_completed: done.length }, resume_lesson: nextLesson,
+      certificate: certRow || null, quiz_questions: quiz, exercises: exWithFeedback, enrollment: { ...enrollment, lessons_completed: done.length }, resume_lesson: nextLesson,
       quiz: { attempts_used: attempts.length, attempts_left: Math.max(0, pol.policy.max_attempts - attempts.length), best_score: attempts.reduce((m, a) => Math.max(m, Number(a.score)), 0) || null, last_results: attempts.length ? { score: attempts[attempts.length - 1].score, passed: attempts[attempts.length - 1].passed, critical_failed: attempts[attempts.length - 1].critical_failed, questions: attempts[attempts.length - 1].question_results } : null, gate },
       practicals: practicals.map((p) => ({ id: p.id, attempt_no: p.attempt_no, status: p.status, feedback: p.feedback, submitted_at: p.submitted_at, reviewed_at: p.reviewed_at, response: p.response })),
       policy: { ...pol.policy, provisional: pol.provisional, status: pol.status, version: pol.version },
@@ -185,6 +185,17 @@ export const handleAcademy = wrap(async (req, res, action) => {
     const rows = await dbGet(q); const names = {};
     for (const id of [...new Set(rows.map((r) => r.staff_user_id))]) names[id] = await displayNameOf(id);
     return res.status(200).json(rows.map((r) => ({ ...r, staff: { name: names[r.staff_user_id] } })));
+  }
+  if (action === 'certificates') {
+    const scope = await visibleRepUserIds(caller);
+    let q = 'academy_certificates?order=issued_at.desc&limit=300&select=id,staff_user_id,certificate_number,issued_at,status,revoked_at,revoked_reason,policy_provisional,program_version,academy_programs(title)';
+    if (scope) q += scope.length ? `&staff_user_id=in.${inList(scope)}` : '&staff_user_id=eq.00000000-0000-0000-0000-000000000000';
+    const rows = await dbGet(q); const names = {}; for (const id of [...new Set(rows.map((r) => r.staff_user_id))]) names[id] = await displayNameOf(id);
+    return res.status(200).json(rows.map((r) => ({ ...r, holder: names[r.staff_user_id] })));
+  }
+  if (action === 'programs-admin') {
+    const rows = await dbGet('academy_programs?order=order_index.asc&select=id,slug,order_index,title,version,content_review_status,content_reviewed_at,requires_practical,critical_compliance');
+    return res.status(200).json(rows);
   }
   if (action === 'practical-queue') {
     const scope = await visibleRepUserIds(caller);

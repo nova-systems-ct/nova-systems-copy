@@ -2,7 +2,7 @@
 // Training completion NEVER activates anyone. Activation = explicit owner action that re-derives the checklist from stored facts.
 import { sanitize } from '../_sanitize.js';
 import { rateLimit } from '../_rateLimit.js';
-import { dbGet, dbOne, dbInsert, dbPatch, enc, inList, nowIso, audit, bad, wrap, requirePerm, isOwner, visibleRepUserIds, displayNameOf, notify, authUserById, userHasPerm } from './core.js';
+import { dbGet, dbOne, dbInsert, dbPatch, enc, inList, nowIso, audit, bad, wrap, requirePerm, isOwner, visibleRepUserIds, displayNameOf, notify, authUserById, userHasPerm, usersWithRoles } from './core.js';
 import { documentStatesFor } from './documents.js';
 import { hqDashboard, repExtras } from './dashboard.js';
 import { DEFAULT_ACTIVATION_POLICY, normalizeActivationPolicy, buildChecklist, REP_TRANSITIONS } from './documentRules.js';
@@ -45,6 +45,11 @@ export const handleSalesTeam = wrap(async (req, res, op) => {
     return rep;
   };
 
+  if (op === 'people') { // reviewers / managers a screen may choose from (names only)
+    const roles = req.query?.role === 'finance' ? ['nova_finance', 'nova_super_admin'] : ['nova_sales_manager', 'nova_admin', 'nova_super_admin'];
+    const list = await usersWithRoles(roles); const out = []; for (const u of list) out.push({ id: u.id, name: await displayNameOf(u.id), email: u.email });
+    return res.status(200).json(out);
+  }
   if (op === 'dashboard') return res.status(200).json(await hqDashboard(caller, scopeIds));
   if (op === 'reps') {
     let q = 'sales_reps?order=created_at.desc&select=*&limit=500'; if (req.query?.status) q += `&status=eq.${enc(sanitize(req.query.status, 20))}`;

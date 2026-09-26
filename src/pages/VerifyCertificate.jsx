@@ -58,15 +58,16 @@ export default function VerifyCertificate() {
         </form>
 
         {checked && result && (
-          result.valid ? (
+          result.valid || result.status === "revoked" ? (
             <div style={{ padding: 24, borderRadius: 14, background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.25)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
                 <ShieldCheck className="w-5 h-5" style={{ color: "#4ade80" }} />
-                <p style={{ color: "#4ade80", fontWeight: 700, fontSize: 14 }}>Valid Nova Systems Certificate</p>
+                <p style={{ color: result.status === "revoked" ? "#f87171" : "#4ade80", fontWeight: 700, fontSize: 14 }}>{result.status === "revoked" ? "This certificate has been revoked" : "Valid Nova Systems Certificate"}</p>
               </div>
               {[
                 ["Holder", result.holder_name],
-                ["Program", result.program_title],
+                ["Program", result.program_title ? `${result.program_title}${result.program_version ? ` (v${result.program_version})` : ""}` : "—"],
+                ["Status", result.status === "revoked" ? `Revoked${result.revoked_at ? " " + new Date(result.revoked_at).toLocaleDateString("en-US") : ""}` : "Valid"],
                 ["Certificate No.", result.certificate_number],
                 ["Issued", result.issued_at ? new Date(result.issued_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—"],
                 ["Issuer", result.issuer],
@@ -77,7 +78,7 @@ export default function VerifyCertificate() {
                 </div>
               ))}
               <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 16, lineHeight: 1.6 }}>
-                This is a Nova-issued internal credential, not an independent third-party accreditation.
+                {result.disclaimer || "This is a Nova-issued internal credential, not an independent third-party accreditation."}{result.provisional_policy ? " Issued while the Academy passing rule was still pending owner approval." : ""}
               </p>
             </div>
           ) : (
