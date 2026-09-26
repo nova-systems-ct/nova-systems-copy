@@ -33,3 +33,4 @@ dist-ssr
 .vite
 .vercel
 base44/.app.jsonc
+.testenv/
