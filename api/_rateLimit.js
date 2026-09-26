@@ -9,8 +9,13 @@ export function rateLimit(req, res, maxRequests = 10, windowMs = 60_000) {
     req.socket?.remoteAddress ||
     'unknown';
 
+  // One counter per (caller, endpoint, limit): a person using several screens must not be throttled by a stricter limit that
+  // belongs to a different endpoint (a shared per-IP counter made ordinary sessions hit the 8/minute invitation limit).
+  const bucket = `${ip}|${maxRequests}|${String(req.query?.resource || '').slice(0, 30)}|${String(req.query?.op || req.query?.action || '').slice(0, 40)}`;
+
   const now = Date.now();
-  const record = store.get(ip) || { count: 0, reset: now + windowMs };
+  if (store.size > 20000) for (const [k, v] of store) if (now > v.reset) store.delete(k); // keep memory bounded
+  const record = store.get(bucket) || { count: 0, reset: now + windowMs };
 
   if (now > record.reset) {
     record.count = 1;
@@ -19,7 +24,7 @@ export function rateLimit(req, res, maxRequests = 10, windowMs = 60_000) {
     record.count++;
   }
 
-  store.set(ip, record);
+  store.set(bucket, record);
 
   if (record.count > maxRequests) {
     res.setHeader('Retry-After', Math.ceil((record.reset - now) / 1000));

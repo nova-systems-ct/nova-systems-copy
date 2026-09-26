@@ -65,7 +65,7 @@ function SendModal({ t, reps, onClose, onDone }) {
   const send = async () => { const r = await api('documents', 'send', { body: { template_key: t.key, user_ids: ids, expires_days: days } }); if (r.ok) onDone(`Sent to ${r.data.results.filter((x) => x.ok).length} of ${ids.length}. Email is recorded as dry-run unless email mode is live.`); else setErr(r.data?.error) }
   return (
     <Modal title={`Send: ${t.title}`} onClose={onClose}>
-      <Field label="Who should sign?">{reps.filter((r) => r.status !== 'inactive').map((r) => <Check key={r.id} checked={ids.includes(r.user_id)} onChange={() => toggle(r.user_id)}>{r.display_name || r.email} <Badge>{label(r.status)}</Badge></Check>)}</Field>
+      <Field group label="Who should sign?">{reps.filter((r) => r.status !== 'inactive').map((r) => <Check key={r.id} checked={ids.includes(r.user_id)} onChange={() => toggle(r.user_id)}>{r.display_name || r.email} <Badge>{label(r.status)}</Badge></Check>)}</Field>
       <Field label="Expires after (days)"><Input type="number" min="1" max="60" value={days} onChange={(e) => setDays(e.target.value)} /></Field>
       {err && <Banner tone="bad">{err}</Banner>}
       <Btn kind="primary" onClick={send} disabled={!ids.length}>Send</Btn>

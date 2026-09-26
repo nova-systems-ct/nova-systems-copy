@@ -66,14 +66,15 @@ export const Banner = ({ tone = 'warn', children, onClose }) => (
 )
 
 const fieldBase = { width: '100%', background: 'rgba(255,255,255,0.04)', border: `1px solid ${LINE}`, borderRadius: 8, color: '#fff', padding: '10px 12px', fontSize: 14, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
-export function Field({ label, hint, error, children, style }) {
+export function Field({ label, hint, error, children, style, group }) {
+  const Wrap = group ? 'div' : 'label'
   return (
-    <label style={{ display: 'block', marginBottom: 14, ...style }}>
+    <Wrap {...(group ? { role: 'group', 'aria-label': label } : {})} style={{ display: 'block', marginBottom: 14, ...style }}>
       {label && <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#fff', marginBottom: 6 }}>{label}</span>}
       {children}
       {hint && !error && <span style={{ display: 'block', fontSize: 11.5, color: FAINT, marginTop: 4 }}>{hint}</span>}
       {error && <span role="alert" style={{ display: 'block', fontSize: 12, color: BAD, marginTop: 4 }}>{error}</span>}
-    </label>
+    </Wrap>
   )
 }
 export const Input = (p) => <input {...p} style={{ ...fieldBase, ...p.style }} />

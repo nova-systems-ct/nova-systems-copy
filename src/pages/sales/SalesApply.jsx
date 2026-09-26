@@ -153,7 +153,7 @@ function Form({ app, reload }) {
 
       <Card title="Availability">
         <Field label="Hours per week you could work" error={E('hours_per_week')}><Input type="number" min="1" max="80" value={p.hours_per_week} onChange={(e) => set('hours_per_week', e.target.value)} /></Field>
-        <Field label="Days you are usually available" error={E('availability_days')}>
+        <Field group label="Days you are usually available" error={E('availability_days')}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{DAYS.map(([k, l]) => <button type="button" key={k} onClick={() => toggle('availability_days', k)} aria-pressed={p.availability_days.includes(k)} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${p.availability_days.includes(k) ? GOLD : 'rgba(255,255,255,0.15)'}`, background: p.availability_days.includes(k) ? `${GOLD}22` : 'transparent', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>{l}</button>)}</div>
         </Field>
         <Field label="Preferred hours" error={E('preferred_hours')}><Input value={p.preferred_hours} onChange={(e) => set('preferred_hours', e.target.value)} placeholder="e.g. weekday evenings, Saturday mornings" /></Field>
@@ -162,7 +162,7 @@ function Form({ app, reload }) {
 
       <Card title="Experience">
         <Field label="Relevant sales or customer-service experience" hint="If you have none yet, say so honestly — training is provided." error={E('experience')}><Textarea rows={5} value={p.experience} onChange={(e) => set('experience', e.target.value)} /></Field>
-        <Field label="Ways you would be comfortable working with customers" error={E('channels')}>
+        <Field group label="Ways you would be comfortable working with customers" error={E('channels')}>
           {CHANNELS.map(([k, l]) => <Check key={k} checked={p.channels.includes(k)} onChange={() => toggle('channels', k)}>{l}</Check>)}
         </Field>
         <Field label="Why do you want this role?" error={E('motivation')}><Textarea rows={5} value={p.motivation} onChange={(e) => set('motivation', e.target.value)} /></Field>

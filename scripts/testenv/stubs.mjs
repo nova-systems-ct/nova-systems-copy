@@ -31,7 +31,7 @@ const checkPw = (pw, stored) => { const [, salt, h] = String(stored || '').split
 
 export function createStubs({ pool, jwtSecret, postgrestPort, publicBuckets = [] }) {
   const state = { outbox: [], magicLinks: new Map(), objects: new Map(), signed: new Map(), failEmails: false, emailRequests: [], invites: [] };
-  const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+  const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(body)); };
   const readBody = (req) => new Promise((r) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => r(Buffer.concat(c))); });
   const userOut = (u) => ({ id: u.id, email: u.email, user_metadata: u.raw_user_meta_data || {}, app_metadata: u.raw_app_meta_data || {}, email_confirmed_at: u.email_confirmed_at, banned_until: u.banned_until, created_at: u.created_at });
   const roleOf = (req) => { const t = (req.headers.authorization || '').replace(/^Bearer /, ''); const p = verifyJwt(t, jwtSecret); return { token: t, payload: p }; };
@@ -133,11 +133,11 @@ export function createStubs({ pool, jwtSecret, postgrestPort, publicBuckets = []
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://x');
-      if (req.method === 'OPTIONS') { res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' }); return res.end(); }
+      if (req.method === 'OPTIONS') { res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': req.headers['access-control-request-headers'] || '*', 'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS', 'Access-Control-Max-Age': '600' }); return res.end(); }
       const body = await readBody(req);
       if (url.pathname.startsWith('/rest/v1/') || url.pathname === '/rest/v1') {
         const opts = { host: '127.0.0.1', port: postgrestPort, path: url.pathname.replace(/^\/rest\/v1/, '') + url.search, method: req.method, headers: { ...req.headers, host: `127.0.0.1:${postgrestPort}` } };
-        const pr = http.request(opts, (r) => { res.writeHead(r.statusCode, { ...r.headers, 'Access-Control-Allow-Origin': '*' }); r.pipe(res); });
+        const pr = http.request(opts, (r) => { const h = { ...r.headers }; for (const k of Object.keys(h)) if (k.toLowerCase().startsWith('access-control-')) delete h[k]; res.writeHead(r.statusCode, { ...h, 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Content-Range, Content-Type' }); r.pipe(res); });
         pr.on('error', (e) => json(res, 502, { message: `postgrest unreachable: ${e.message}` })); pr.end(body); return;
       }
       if (url.pathname.startsWith('/auth/v1/')) return await auth(req, res, url, body);
