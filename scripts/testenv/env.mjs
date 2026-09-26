@@ -55,7 +55,7 @@ export async function startTestEnv({ migrations = [], publicBuckets = ['papers']
   const libpq = path.join(ROOT, '.testenv', 'node_modules', '@embedded-postgres', 'windows-x64', 'native', 'bin');
   const proc = spawn(pgExe, [conf], { env: { ...process.env, PATH: `${libpq}${path.delimiter}${process.env.PATH}` }, stdio: ['ignore', 'pipe', 'pipe'] });
   let restLog = ''; proc.stdout.on('data', (d) => (restLog += d)); proc.stderr.on('data', (d) => (restLog += d));
-  await waitFor(async () => { const r = await fetch(`http://127.0.0.1:${restPort}/`); return r.status < 500; }, 20000, 'PostgREST').catch((e) => { throw new Error(`${e.message}\n${restLog.slice(-800)}`); });
+  await waitFor(async () => { const r = await fetch(`http://127.0.0.1:${restPort}/`); return r.status < 500; }, 60000, 'PostgREST').catch((e) => { throw new Error(`${e.message}\n${restLog.slice(-800)}`); });
 
   const stubs = createStubs({ pool, jwtSecret: JWT_SECRET, postgrestPort: restPort, publicBuckets });
   await new Promise((r) => stubs.server.listen(0, '127.0.0.1', r));

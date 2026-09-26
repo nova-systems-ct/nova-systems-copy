@@ -13,6 +13,7 @@
 //   node worker/index.mjs               # poll forever (Ctrl+C to stop)
 //   node worker/index.mjs --once        # claim and process at most one job, then exit
 //   node worker/index.mjs --local       # force the local file store even if Supabase env vars exist
+//   node worker/index.mjs --enqueue-sales-maintenance  # start the self-rescheduling Sales Team maintenance loop
 //   node worker/index.mjs --enqueue-demo  # enqueue one demo marketing_publish job, for a real
 //                                          end-to-end local smoke test
 //   node worker/index.mjs --cancel=<job-id> [--reason="..."]  # cancel a pending/leased job —
@@ -34,6 +35,7 @@ const args = process.argv.slice(2);
 const once = args.includes('--once');
 const forceLocal = args.includes('--local');
 const enqueueDemo = args.includes('--enqueue-demo');
+const enqueueSalesMaintenance = args.includes('--enqueue-sales-maintenance');
 const cancelId = args.find((a) => a.startsWith('--cancel='))?.split('=')[1];
 const cancelReason = args.find((a) => a.startsWith('--reason='))?.split('=').slice(1).join('=');
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS) || 5000;
@@ -143,6 +145,20 @@ const handlers = {
     return runMissedCallFollowup(job, repo, createTwilioSender(process.env), process.env);
   },
 
+  // Sales Team platform maintenance: expires invitations/proposals/documents, promotes commissions whose hold-back ended, retries failed
+  // emails (never dry_run/blocked ones), and sends overdue-follow-up reminders. Every step is idempotent, so at-least-once delivery is
+  // safe. Re-enqueues itself for the next slot (idempotency key = slot) so one worker keeps it alive without a separate scheduler.
+  async sales_maintenance(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    process.env.SUPABASE_URL ||= ctx.url; process.env.SUPABASE_SERVICE_ROLE_KEY ||= ctx.serviceKey;
+    const { runSalesMaintenance } = await import('../api/_sales/notifications.js');
+    const result = await runSalesMaintenance();
+    const every = Number(job.payload?.every_minutes) || 15; const next = new Date(Date.now() + every * 60_000);
+    const slot = `${next.toISOString().slice(0, 13)}:${Math.floor(next.getUTCMinutes() / every)}`;
+    if (ctx.store) await ctx.store.enqueue({ job_type: 'sales_maintenance', payload: { every_minutes: every }, scheduled_at: next.toISOString(), idempotency_key: `sales_maintenance:${slot}` });
+    return result;
+  },
+
   // A trivial handler kept only to give --enqueue-demo something real to run end-to-end in local
   // mode without needing any live credentials.
   async demo_echo(job) {
@@ -173,11 +189,17 @@ async function processOneJob(store, ctx) {
 
 async function main() {
   const { store, url, serviceKey, mode } = buildStore();
-  const ctx = { url, serviceKey, mode };
+  const ctx = { url, serviceKey, mode, store };
 
   if (enqueueDemo) {
     const { job, deduped } = await store.enqueue({ job_type: 'demo_echo', payload: { hello: 'nova', at: new Date().toISOString() } });
     console.log(deduped ? '[worker] demo job already existed (deduped)' : `[worker] enqueued demo job ${job.id}`);
+  }
+
+  if (enqueueSalesMaintenance) {
+    const slot = new Date().toISOString().slice(0, 13);
+    const { job, deduped } = await store.enqueue({ job_type: 'sales_maintenance', payload: { every_minutes: 15 }, idempotency_key: `sales_maintenance:boot:${slot}` });
+    console.log(deduped ? '[worker] sales_maintenance already enqueued for this hour' : `[worker] enqueued sales_maintenance job ${job.id} (it re-enqueues itself every 15 minutes)`);
   }
 
   if (cancelId) {

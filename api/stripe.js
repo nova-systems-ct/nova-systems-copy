@@ -326,6 +326,18 @@ export default async function handler(req, res) {
     const rawBody = await readRawBody(req);
     return handleWebhook(req, res, rawBody);
   }
+  // Resend delivery callbacks (Svix-signed): updates the Sales Team email delivery ledger. Shares this raw-body function so the
+  // project stays within the 12-function limit.
+  if (req.headers['svix-signature']) {
+    const rawBody = await readRawBody(req);
+    const secret = process.env.RESEND_WEBHOOK_SECRET;
+    if (!secret) return res.status(503).json({ error: 'Webhook verification is not configured.' });
+    const { verifySvix, handleResendEvent } = await import('./_sales/notifications.js');
+    if (!verifySvix(req.headers, rawBody, secret)) return res.status(400).json({ error: 'Invalid signature' });
+    let event; try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).json({ error: 'Invalid JSON payload' }); }
+    try { await handleResendEvent(event); } catch (err) { console.error('[resend webhook] processing failed:', err.message); return res.status(500).json({ error: 'Processing failed; please retry.' }); }
+    return res.status(200).json({ received: true });
+  }
 
   if (setCors(req, res)) return;
 

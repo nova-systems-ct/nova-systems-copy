@@ -4,6 +4,7 @@ import { sanitize } from '../_sanitize.js';
 import { rateLimit } from '../_rateLimit.js';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, inList, nowIso, audit, bad, wrap, requirePerm, isOwner, visibleRepUserIds, displayNameOf, notify, authUserById, userHasPerm } from './core.js';
 import { documentStatesFor } from './documents.js';
+import { hqDashboard, repExtras } from './dashboard.js';
 import { DEFAULT_ACTIVATION_POLICY, normalizeActivationPolicy, buildChecklist, REP_TRANSITIONS } from './documentRules.js';
 
 export async function activationPolicy() {
@@ -44,6 +45,7 @@ export const handleSalesTeam = wrap(async (req, res, op) => {
     return rep;
   };
 
+  if (op === 'dashboard') return res.status(200).json(await hqDashboard(caller, scopeIds));
   if (op === 'reps') {
     let q = 'sales_reps?order=created_at.desc&select=*&limit=500'; if (req.query?.status) q += `&status=eq.${enc(sanitize(req.query.status, 20))}`;
     if (scopeIds) q += scopeIds.length ? `&user_id=in.${inList(scopeIds)}` : '&user_id=eq.00000000-0000-0000-0000-000000000000';
@@ -54,7 +56,7 @@ export const handleSalesTeam = wrap(async (req, res, op) => {
   if (op === 'rep') {
     const rep = await repOf(req.query?.id); if (!rep) return;
     const [c, notes, history, u, application] = await Promise.all([checklistFor(rep), dbGet(`sales_rep_notes?rep_id=eq.${enc(rep.id)}&order=created_at.desc&select=*`), dbGet(`sales_rep_status_history?rep_id=eq.${enc(rep.id)}&order=created_at.desc&select=*`), authUserById(rep.user_id), rep.application_id ? dbOne(`applications?id=eq.${enc(rep.application_id)}&select=id,reference_code,status,submitted_at`) : null]);
-    return res.status(200).json({ rep: { ...publicRep(rep), email: u?.email || null, operational_setup: rep.operational_setup, manager_notes: rep.manager_notes }, application, checklist: c, notes, status_history: history });
+    return res.status(200).json({ ...(await repExtras(rep, caller)), rep: { ...publicRep(rep), email: u?.email || null, operational_setup: rep.operational_setup, manager_notes: rep.manager_notes }, application, checklist: c, notes, status_history: history });
   }
   if (op === 'add-note') {
     if (!need('POST')) return;
