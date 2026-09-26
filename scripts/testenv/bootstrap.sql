@@ -90,3 +90,10 @@ create table if not exists public.wave_one_applications (id uuid primary key def
 create table if not exists public.vault_documents (id uuid primary key default gen_random_uuid(), file_name text, created_at timestamptz default now());
 create table if not exists public.blog_posts (id uuid primary key default gen_random_uuid(), title text, created_at timestamptz default now());
 create table if not exists public.portfolio (id uuid primary key default gen_random_uuid(), title text, created_at timestamptz default now());
+
+-- RLS on the identity tables, matching production's verified behaviour (permissions-matrix.md: "role-escalation writes are
+-- rejected — no UPDATE policy exists for authenticated"; users read only their own membership rows).
+alter table public.organizations enable row level security;
+alter table public.organization_members enable row level security;
+create policy own_org_read on public.organizations for select to authenticated using (exists (select 1 from public.organization_members m where m.organization_id = organizations.id and m.staff_user_id = auth.uid() and m.status = 'active'));
+create policy own_membership_read on public.organization_members for select to authenticated using (staff_user_id = auth.uid());
