@@ -6,6 +6,7 @@ import { handleLeads } from './leads.js';
 import { handleCatalog } from './catalog.js';
 import { handleProposals, handleClientProposal } from './proposals.js';
 import { handlePayments } from './payments.js';
+import { handleCommissions } from './commissions.js';
 
 const TABLE = {
   apply: handleApply,     // applicant portal + public invitation acceptance
@@ -17,6 +18,7 @@ const TABLE = {
   proposals: handleProposals,        // rep/owner proposal, submission and verification
   clientproposal: handleClientProposal, // PUBLIC: client views/signs/pays via a personal link
   salespay: handlePayments,          // owner/manager payment records
+  commissions: handleCommissions,    // ledger, plan, payout batches, payout accounts
 };
 export const SALES_RESOURCES = new Set(Object.keys(TABLE));
 export async function salesDispatch(resource, op, req, res) {

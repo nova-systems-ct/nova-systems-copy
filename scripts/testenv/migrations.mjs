@@ -13,6 +13,7 @@ export const SALES_PARTS = [
   'supabase/sales-team-03-documents-and-activation-migration-standalone.sql',
   'supabase/sales-team-04-pipeline-catalog-toolkit-migration-standalone.sql',
   'supabase/sales-team-05-proposals-closing-migration-standalone.sql',
+  'supabase/sales-team-06-commissions-payouts-migration-standalone.sql',
 ];
 export const LOCKDOWN = 'supabase/zz-public-schema-lockdown-standalone.sql';
 export const allMigrations = (parts = SALES_PARTS, { lockdown = true } = {}) => [...BASE, ...parts, ...(lockdown ? [LOCKDOWN] : [])];

@@ -17,7 +17,9 @@ export function stripeAllowed() {
 // ---- hooks so the commission ledger can react without this file depending on it
 const hooks = { paymentReceived: [], paymentReversed: [], providerEvent: [], saleSubmitted: [], saleVerified: [], saleRejected: [] };
 export const registerSalesHook = (name, fn) => { hooks[name].push(fn); };
-export const runHooks = async (name, arg) => { for (const fn of hooks[name]) await fn(arg); };
+// Each Vercel function bundles its own copy of this module, so the commission hooks are loaded on demand (api/stripe.js never imports the dispatcher).
+let hooksLoaded = null; const ensureHooks = () => (hooksLoaded ||= import('./commissions.js'));
+export const runHooks = async (name, arg) => { await ensureHooks(); for (const fn of hooks[name]) await fn(arg); };
 
 export async function createCheckoutForProposal({ proposal, deal, token }) {
   const allowed = stripeAllowed(); if (!allowed.ok) return { error: allowed.reason, status: 409 };
@@ -89,6 +91,7 @@ export async function handleStripeEvent(event) {
         if (row) { await audit({ id: null, kind: 'stripe_webhook' }, 'sales_payment', p.id, `payment_${to}`, { deal: p.deal_id, event: event.id }); await runHooks('paymentReversed', { dealId: p.deal_id, paymentId: p.id, reason: to }); await notifyOwners({ kind: 'payment_reversed', subject: `A client payment was ${to}`, body: `The payment for a sold proposal was ${to}. Related commission entries were flagged.`, link: '/dashboard/sales-team/commissions', channels: ['in_app', 'email'], idempotencyKey: `payrev:${event.id}` }); status = 'processed'; }
       }
     }
+    await ensureHooks();
     if (hooks.providerEvent.length) { for (const fn of hooks.providerEvent) { const r = await fn(event); if (r?.processed) status = 'processed'; } }
     await finish(status); return { handled: true };
   } catch (e) {
@@ -115,7 +118,7 @@ export const handlePayments = wrap(async (req, res, op) => {
   if (op === 'record-manual') {
     if (!need('POST')) return;
     const proposal = await dbOne(`crm_proposals?id=eq.${enc(sanitize(b.proposal_id, 60))}&select=*`); if (!proposal) return bad(res, 404, 'Proposal not found');
-    if (proposal.status !== 'signed') return bad(res, 409, 'A payment can only be recorded against a proposal the client has signed.');
+    if (!['signed', 'accepted'].includes(proposal.status)) return bad(res, 409, 'A payment can only be recorded against a proposal the client has signed.');
     const deal = await dbOne(`crm_deals?id=eq.${enc(proposal.deal_id)}&select=*`);
     if (deal.assigned_rep_id === caller.id) return bad(res, 403, 'You cannot record payment for a sale you are credited on.');
     const method = ['check', 'ach', 'cash', 'wire', 'other'].includes(b.method) ? b.method : null; if (!method) return bad(res, 422, 'Choose how it was paid.');

@@ -317,7 +317,7 @@ export const handleClientProposal = wrap(async (req, res, op) => {
   }
   if (op === 'pay') {
     if (req.method !== 'POST') return bad(res, 405, 'Method not allowed');
-    if (p.status !== 'signed') return bad(res, 409, 'Please sign the proposal first.');
+    if (!['signed', 'accepted'].includes(p.status)) return bad(res, 409, 'Please sign the proposal first.');
     const out = await createCheckoutForProposal({ proposal: p, deal, token });
     if (out.error) return bad(res, out.status || 409, out.error === 'The payment provider is not configured.' ? 'Online payment is not available yet. Nova will send you payment instructions.' : out.error);
     return res.status(200).json({ ok: true, checkout_url: out.url });
