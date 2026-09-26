@@ -55,7 +55,7 @@ BEGIN
       RAISE EXCEPTION 'a proposal that has been sent cannot be edited; supersede it with a new version';
     END IF;
   END IF;
-  IF OLD.status = 'signed' THEN
+  IF OLD.signed_at IS NOT NULL THEN   -- once the client has signed, the signature record is frozen whatever the status becomes (accepted, superseded…)
     IF NEW.signed_at IS DISTINCT FROM OLD.signed_at OR NEW.signer_name IS DISTINCT FROM OLD.signer_name OR NEW.signature_hash IS DISTINCT FROM OLD.signature_hash OR NEW.signature_image IS DISTINCT FROM OLD.signature_image THEN
       RAISE EXCEPTION 'a signed proposal record is immutable';
     END IF;

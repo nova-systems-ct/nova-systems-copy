@@ -2,6 +2,7 @@
 import { startTestEnv } from './testenv/env.mjs';
 import { allMigrations } from './testenv/migrations.mjs';
 import { makeCaller } from './testenv/call.mjs';
+import fs from 'node:fs';
 
 let pass = 0, fail = 0;
 const check = (n, c, x = '') => { if (c) { pass++; console.log(`PASS — ${n}`); } else { fail++; console.log(`FAIL — ${n} ${x}`); } };
@@ -85,7 +86,7 @@ try {
   check('cannot issue a certificate without being enrolled/complete', r.status === 403);
   r = await A({ action: 'issue-certificate', token: c1.token, body: { program_id: p1.id } });
   const cert = r.body.certificate;
-  check('certificate issued: unique id + verification code, provisional policy flagged, holder name kept private-side', r.status === 200 && /^NOVA-CERT-\d{4}-/.test(cert.certificate_number) && cert.policy_provisional === true && cert.holder_display === 'Jane D.' && cert.program_version === 1);
+  check('certificate issued: unique id + verification code, provisional policy flagged, holder name kept private-side', r.status === 200 && /^NOVA-CERT-\d{4}-/.test(cert.certificate_number) && cert.policy_provisional === true && cert.holder_display === 'Jane D.' && cert.program_version === 2);
   r = await A({ action: 'issue-certificate', token: c1.token, body: { program_id: p1.id } });
   check('re-issuing returns the same certificate (no duplicates)', r.body.certificate.id === cert.id && (await env.sql('select count(*) from academy_certificates')).rows[0].count === '1');
   r = await A({ action: 'verify-certificate', method: 'GET', query: { code: cert.verification_code.toLowerCase() } });
@@ -103,7 +104,6 @@ try {
   check('owner revocation works; verification now shows revoked (and stays 200 so the status is visible)', r.status === 200 && v2.body.valid === false && v2.body.status === 'revoked');
 
   // ---------------------------------------------------------------- practical program (6/7)
-  await env.sql("update academy_programs set practical_rubric=$2::jsonb where id=$1", [p6.id, JSON.stringify([{ key: 'diagnosis_first', label: 'Diagnosis first' }, { key: 'no_promises', label: 'No promises' }])]);
   await doLessons(c1.token, p6.id);
   r = await A({ action: 'submit-practical', token: c1.token, body: { program_id: p6.id, response: 'x'.repeat(300) } });
   check('practical cannot be submitted before the quiz is passed', r.status === 409);
@@ -214,6 +214,28 @@ try {
     check('exercise: self-check + model answer returned after submitting', r.status === 200 && Array.isArray(r.body.self_check));
     void exProg;
   }
+  // ================================================================== Academy v2 content (migration part 7)
+  r = await A({ action: 'programs', method: 'GET', token: c2.token });
+  check('all ten programs carry real content: 4+ lessons, 10+ questions, 2+ exercises, objectives', r.body.programs.length === 10 && r.body.programs.every((p) => p.lesson_count >= 4 && p.quiz_question_count >= 10 && p.exercise_count >= 2 && p.learning_objectives.length >= 3 && p.version === 2));
+  check('content is PENDING OWNER REVIEW until the owner approves each program (only the one approved earlier is approved)', r.body.programs.filter((p) => p.content_review_status === 'approved').length === 1 && r.body.programs.filter((p) => p.content_review_status === 'pending_owner_review').length === 9);
+  const pr = (await env.sql('select slug, requires_practical, practical_prompt, practical_rubric from academy_programs order by order_index')).rows;
+  check('exactly programs 6 and 7 define a practical prompt and a 4+ criterion rubric', pr.filter((x) => x.practical_prompt).map((x) => x.slug).join() === 'in-person-sales,discovery-and-diagnostic-selling' && pr.filter((x) => x.practical_prompt).every((x) => x.requires_practical && x.practical_rubric.length >= 4));
+  check('program 10 (final assessment) has critical questions; programs 9 too; earlier programs do not', (await env.sql("select count(*) from academy_quiz_questions q join academy_programs p on p.id=q.program_id where q.critical and p.slug='ethics-commission-final-assessment'")).rows[0].count >= 4 && (await env.sql("select count(*) from academy_quiz_questions q join academy_programs p on p.id=q.program_id where q.critical and p.order_index < 9")).rows[0].count === '0');
+  check('every question has four distinct choices, a valid answer index and an explanation', (await env.sql("select count(*) from academy_quiz_questions where jsonb_array_length(choices) <> 4 or correct_index not between 0 and 3 or coalesce(explanation,'') = ''")).rows[0].count === '0');
+  check('correct answers are spread across all four positions (not guessable by position)', (await env.sql('select count(distinct correct_index) from academy_quiz_questions')).rows[0].count === '4');
+  check('the toolkit starter set is seeded as DRAFT only — none approved', (await env.sql("select count(*) filter (where status='draft') d, count(*) filter (where status<>'draft') o from sales_toolkit_items")).rows[0].o === '0' && Number((await env.sql("select count(*) from sales_toolkit_items")).rows[0].count) >= 15);
+  const contentSql = fs.readFileSync('supabase/sales-team-07-academy-content-migration-standalone.sql', 'utf8');
+  const counts = async () => JSON.stringify((await env.sql('select (select count(*) from academy_lessons) l, (select count(*) from academy_quiz_questions) q, (select count(*) from academy_exercises) e, (select count(*) from sales_toolkit_items) t')).rows[0]);
+  const before = await counts();
+  await env.sql("update academy_lessons set title='OWNER EDITED TITLE' where program_id=$1 and order_index=1", [p1.id]);
+  const p2row = (await env.sql("select id from academy_programs where slug='prospecting-and-qualification'")).rows[0];
+  await env.sql("update academy_lessons set title='DRIFTED TITLE' where program_id=$1 and order_index=1", [p2row.id]);
+  await env.sql(contentSql);
+  check('re-running the content migration adds no duplicates', (await counts()) === before);
+  check('...never overwrites a program the owner already approved', (await env.sql('select title from academy_lessons where program_id=$1 and order_index=1', [p1.id])).rows[0].title === 'OWNER EDITED TITLE');
+  check('...but does restore a program still pending review', (await env.sql('select title from academy_lessons where program_id=$1 and order_index=1', [p2row.id])).rows[0].title !== 'DRIFTED TITLE');
+  r = await A({ action: 'program-detail', method: 'GET', token: c2.token, query: { id: p2row.id } });
+  check('program detail still exposes no answer key with the new content', r.status === 200 && r.body.quiz_questions.length >= 10 && !/"correct_index"|"explanation"/.test(JSON.stringify(r.body.quiz_questions)) && r.body.program.learning_objectives.length >= 3);
 } catch (e) { fail++; console.log('FAIL — test crashed:', e.stack || e); }
 finally { await env.stop(); }
 console.log(`\n${pass} passed, ${fail} failed`); process.exitCode = fail ? 1 : 0;
