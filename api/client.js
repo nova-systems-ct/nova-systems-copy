@@ -4,6 +4,7 @@ import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 import { handleWave1 } from './_wave1Api.js';
+import { salesDispatch, SALES_RESOURCES } from './_sales/index.js';
 import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
 import { normalizePhone } from './_wave1.js';
 import { computeCaseClockStatus } from './_auditClock.js';
@@ -4124,6 +4125,8 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') return res.status(204).end();
   } else if (setCors(req, res)) return;
+
+  if (SALES_RESOURCES.has(resource)) return salesDispatch(resource, op, req, res);
 
   switch (resource) {
     case 'wave1':

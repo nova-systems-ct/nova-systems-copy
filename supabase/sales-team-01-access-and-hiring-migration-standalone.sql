@@ -173,6 +173,7 @@ CREATE TRIGGER sales_activation_approvals_immutable BEFORE UPDATE OR DELETE ON s
 
 -- ---------------------------------------------------------------- applications: extend in place
 -- (the same table the existing Careers flow writes; no second applicant store)
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();  -- the legacy table only had submitted_at (which defaulted to row creation)
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS reference_code TEXT;
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS email_normalized TEXT;
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS timezone TEXT;
