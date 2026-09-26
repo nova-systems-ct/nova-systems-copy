@@ -356,6 +356,9 @@ async function handleSubmitApplication(req, res) {
 
   if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
   if (!position)       return res.status(400).json({ error: 'Position is required' });
+  // Sales applications moved to the authenticated flow (api/_sales/hiring.js, /apply/sales): it validates server-side, keeps
+  // history, and refuses bank/ID numbers. This legacy generic form must not create a parallel sales applicant record.
+  if (/\bsales\b/i.test(position)) return res.status(410).json({ error: 'Sales representative applications now use the new application at /apply/sales.' });
 
   let portfolio_file_path = null;
   if (portfolio_file_base64 && SUPABASE_URL && SUPABASE_SERVICE_KEY) {
@@ -365,7 +368,7 @@ async function handleSubmitApplication(req, res) {
   if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
     try {
       const record = {
-        id, name, email, phone, position, status: 'new', password_hash: password_hash || null,
+        id, name, email, phone, position, status: 'new', password_hash: null, // never store a client-computed password hash: no login path uses it (retired 2026-09-23)
         city: city || null,
         portfolio_links: portfolio_links || null,
         portfolio_file_path,
@@ -604,6 +607,12 @@ async function handleUpdateApplication(req, res) {
 
   if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'No fields to update' });
 
+  // Sales-position applications are managed only through the Sales Team hiring workspace (server-enforced stages, history, owner decision).
+  try {
+    const pr = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(id)}&select=position&limit=1`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
+    const pos = pr.ok ? (await pr.json())[0]?.position : '';
+    if (/\bsales\b/i.test(pos || '')) return res.status(409).json({ error: 'Sales applications are managed in the Sales Team hiring workspace.' });
+  } catch { /* fall through to the normal update path */ }
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH',
@@ -631,96 +640,7 @@ async function handleUpdateApplication(req, res) {
 // role='nova_sales_candidate' (granted ONLY academy.view; see
 // supabase/hiring-workflow-migration-standalone.sql), not a separate identity system.
 
-async function fetchAuthUserByEmail(SUPABASE_URL, SUPABASE_KEY, email) {
-  const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-  });
-  if (!r.ok) return null;
-  const data = await r.json();
-  const users = data.users || (Array.isArray(data) ? data : []);
-  // Supabase's admin list-users `email` filter has been observed to not strictly filter (see
-  // this project's own login-diagnosis notes) — match exactly, don't trust it as pre-filtered.
-  return users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) || null;
-}
-
-async function handleInviteApplicant(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!rateLimit(req, res, 15, 60_000)) return;
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
-
-  const application_id = sanitize(req.body?.id, 100);
-  if (!application_id) return res.status(400).json({ error: 'id is required' });
-
-  const appRes = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(application_id)}&limit=1`, {
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-  });
-  const appRows = appRes.ok ? await appRes.json() : [];
-  const application = appRows[0];
-  if (!application) return res.status(404).json({ error: 'Application not found' });
-
-  try {
-    let authUser = application.auth_user_id ? null : await fetchAuthUserByEmail(SUPABASE_URL, SUPABASE_KEY, application.email);
-    let isNewAuthUser = false;
-
-    if (!application.auth_user_id && !authUser) {
-      // GoTrue's admin invite endpoint creates the user AND sends the real "invite" email
-      // (magic link) using Nova's own configured mail settings — never a plaintext password.
-      const redirectTo = `${(req.headers.origin && req.headers.origin.startsWith('https://')) ? req.headers.origin : 'https://nova-systems.app'}/auth/callback?returnTo=${encodeURIComponent('/dashboard/academy')}`;
-      const inviteRes = await fetch(`${SUPABASE_URL}/auth/v1/invite?redirect_to=${encodeURIComponent(redirectTo)}`, {
-        method: 'POST',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: application.email }),
-      });
-      if (!inviteRes.ok) {
-        const errText = await inviteRes.text();
-        console.error('[intake:invite-applicant] Invite error:', inviteRes.status, errText);
-        return res.status(500).json({ error: 'Failed to send invitation email' });
-      }
-      authUser = await inviteRes.json();
-      isNewAuthUser = true;
-    }
-
-    const authUserId = application.auth_user_id || authUser?.id;
-    if (!authUserId) return res.status(500).json({ error: 'Could not resolve an auth account for this applicant' });
-
-    // Find (or bootstrap) the Nova Systems organization to attach the candidate membership to.
-    const orgRes = await fetch(`${SUPABASE_URL}/rest/v1/organizations?kind=eq.nova_internal&limit=1`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-    });
-    const orgRows = orgRes.ok ? await orgRes.json() : [];
-    const novaOrgId = orgRows[0]?.id;
-    if (!novaOrgId) return res.status(500).json({ error: 'Nova Systems organization not found — cannot create candidate membership' });
-
-    // Idempotent: if a membership already exists for this user on this org, leave its role
-    // alone (an admin may have already activated them — never downgrade a real rep back to
-    // candidate just by re-inviting).
-    const existingMemberRes = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?organization_id=eq.${novaOrgId}&staff_user_id=eq.${authUserId}&limit=1`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-    });
-    const existingMembers = existingMemberRes.ok ? await existingMemberRes.json() : [];
-    if (!existingMembers.length) {
-      await fetch(`${SUPABASE_URL}/rest/v1/organization_members`, {
-        method: 'POST',
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ organization_id: novaOrgId, member_type: 'staff', staff_user_id: authUserId, role: 'nova_sales_candidate', status: 'active' }),
-      });
-    }
-
-    await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(application_id)}`, {
-      method: 'PATCH',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ auth_user_id: authUserId, invited_at: new Date().toISOString() }),
-    });
-
-    return res.status(200).json({ ok: true, auth_user_id: authUserId, invited_new_account: isNewAuthUser });
-  } catch (err) {
-    console.error('[intake:invite-applicant] Error:', err.message);
-    return res.status(500).json({ error: 'Failed to invite applicant' });
-  }
-}
+// (legacy invite-applicant / activate-representative removed 2026-09-26: replaced by the owner-controlled invitation and activation flow in api/_sales)
 
 // Applicant self-service: returns only the caller's OWN application (matched by auth_user_id,
 // never a client-supplied id) plus their Academy enrollment summary and any working-agreement
@@ -790,53 +710,6 @@ async function handleResumeSignedUrl(req, res) {
   }
 }
 
-// Administrator-controlled representative activation: flips a candidate's role from
-// 'nova_sales_candidate' (academy.view only) to 'nova_sales' (overview.view + growth.view +
-// academy.view — real rep access). Deliberately does NOT auto-trigger off Academy completion or
-// a signed agreement — those are shown to the admin as context, but the decision to activate
-// stays a human one, per the master prompt's explicit "do not promise work/classification/
-// commission solely because training is passed."
-async function handleActivateRepresentative(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!rateLimit(req, res, 15, 60_000)) return;
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
-
-  const application_id = sanitize(req.body?.id, 100);
-  if (!application_id) return res.status(400).json({ error: 'id is required' });
-
-  const appRes = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(application_id)}&limit=1`, {
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-  });
-  const appRows = appRes.ok ? await appRes.json() : [];
-  const application = appRows[0];
-  if (!application?.auth_user_id) return res.status(400).json({ error: 'This applicant has not been invited yet — nothing to activate' });
-
-  try {
-    const memberRes = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?staff_user_id=eq.${application.auth_user_id}&role=eq.nova_sales_candidate`, {
-      method: 'PATCH',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-      body: JSON.stringify({ role: 'nova_sales' }),
-    });
-    if (!memberRes.ok) { console.error('[intake:activate-representative] Update error:', memberRes.status, await memberRes.text()); return res.status(500).json({ error: 'Failed to activate representative' }); }
-    const updated = await memberRes.json();
-    if (!updated.length) return res.status(400).json({ error: 'No pending candidate membership found for this applicant — they may already be activated' });
-
-    await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(application_id)}`, {
-      method: 'PATCH',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ status: 'hired' }),
-    });
-
-    return res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error('[intake:activate-representative] Error:', err.message);
-    return res.status(500).json({ error: 'Failed to activate representative' });
-  }
-}
-
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
 
@@ -863,8 +736,7 @@ export default async function handler(req, res) {
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleUpdateApplication(req, res);
     case 'invite-applicant':
-      if (!(await requireStaff(req, res, 'admin.view'))) return;
-      return handleInviteApplicant(req, res);
+      return res.status(410).json({ error: 'Retired. Invitations are created by the owner from the Sales Team hiring workspace (a decision, a single-use expiring link and a delivery record are required).' });
     case 'my-application': {
       const caller = await requireStaff(req, res);
       if (!caller) return;
@@ -874,8 +746,7 @@ export default async function handler(req, res) {
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleResumeSignedUrl(req, res);
     case 'activate-representative':
-      if (!(await requireStaff(req, res, 'admin.view'))) return;
-      return handleActivateRepresentative(req, res);
+      return res.status(410).json({ error: 'Retired. Activation is an owner-only action with a complete checklist in the Sales Team workspace; training completion or a signature alone never activates a representative.' });
     default:
       return res.status(400).json({ error: `Unknown action: ${action}` });
   }

@@ -16,7 +16,11 @@ import { requireStaff } from './_auth.js';
 //   ?op=deactivate           POST  { staff_user_id } — set status='inactive' (soft — never deletes
 //                                   the auth user or their history)
 
-const STAFF_ROLES = ['nova_super_admin', 'nova_admin', 'nova_auditor', 'nova_marketing', 'nova_sales', 'nova_developer'];
+// nova_sales (and candidates/managers/finance) are NOT assignable here: sales roles are created only by the hiring flow and
+// activation checklist (api/_sales). Elevated roles need the owner.
+const STAFF_ROLES = ['nova_super_admin', 'nova_admin', 'nova_auditor', 'nova_marketing', 'nova_developer'];
+const OWNER_ONLY_ROLES = ['nova_super_admin', 'nova_admin'];
+const SALES_ROLES = ['nova_sales', 'nova_sales_candidate', 'nova_sales_manager', 'nova_finance'];
 
 async function getNovaInternalOrgId(SUPABASE_URL, SUPABASE_KEY) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/organizations?kind=eq.nova_internal&select=id&limit=1`, {
@@ -167,7 +171,19 @@ async function handleDeactivate(req, res) {
 
 export default async function handler(req, res) {
   if (setCors(req, res)) return;
-  if (!(await requireStaff(req, res, 'members.manage'))) return;
+  const caller = await requireStaff(req, res, 'members.manage');
+  if (!caller) return;
+  // Only the owner may hand out owner/admin roles, and nobody may reassign a sales person's role from here.
+  if (req.method === 'POST' && ['invite', 'update-role'].includes(req.query?.op)) {
+    if (OWNER_ONLY_ROLES.includes(req.body?.role) && !caller.roles.includes('nova_super_admin')) return res.status(403).json({ error: 'Only the owner can grant the owner or admin role.' });
+    if (SALES_ROLES.includes(req.body?.role)) return res.status(403).json({ error: 'Sales roles are managed in the Sales Team workspace, not here.' });
+    if (req.query.op === 'update-role') {
+      const SU = process.env.SUPABASE_URL; const SK = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const cur = await fetch(`${SU}/rest/v1/organization_members?staff_user_id=eq.${encodeURIComponent(String(req.body?.staff_user_id || ''))}&select=role`, { headers: { apikey: SK, Authorization: `Bearer ${SK}` } }).then((x) => (x.ok ? x.json() : [])).catch(() => []);
+      if (cur.some((m) => SALES_ROLES.includes(m.role))) return res.status(403).json({ error: 'This person is a sales team member. Change their access from the Sales Team workspace.' });
+      if (cur.some((m) => OWNER_ONLY_ROLES.includes(m.role)) && !caller.roles.includes('nova_super_admin')) return res.status(403).json({ error: 'Only the owner can change an owner or admin role.' });
+    }
+  }
 
   const op = typeof req.query?.op === 'string' ? req.query.op : '';
   if (op === 'list') return handleList(req, res);
