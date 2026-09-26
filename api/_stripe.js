@@ -20,13 +20,15 @@ function toFormParams(obj, prefix = '') {
   return params;
 }
 
-export async function stripeRequest(secretKey, method, path, body) {
-  const url = `https://api.stripe.com/v1/${path}`;
+// STRIPE_API_BASE lets local tests point at a stand-in server; production leaves it unset.
+export async function stripeRequest(secretKey, method, path, body, { idempotencyKey } = {}) {
+  const url = `${(process.env.STRIPE_API_BASE || 'https://api.stripe.com/v1').replace(/\/$/, '')}/${path}`;
   const opts = {
     method,
     headers: {
       Authorization: `Bearer ${secretKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
     },
   };
   if (body && method !== 'GET') {

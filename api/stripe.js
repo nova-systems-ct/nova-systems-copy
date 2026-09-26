@@ -3,6 +3,7 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizeUrl } from './_sanitize.js';
 import { stripeRequest } from './_stripe.js';
+import { handleStripeEvent as handleSalesStripeEvent } from './_sales/payments.js';
 
 // Combined Stripe endpoint — actions: checkout-session, payment-intent,
 // verify-payment (?action=...), plus the raw-body webhook (auto-detected via
@@ -31,6 +32,8 @@ function verifyStripeSignature(rawBody, sigHeader, secret) {
   const timestamp = parts.t;
   const signature = parts.v1;
   if (!timestamp || !signature) return false;
+  // Replay protection: reject events signed more than 5 minutes ago (Stripe's recommended tolerance).
+  if (!Number.isFinite(Number(timestamp)) || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
   const signedPayload = `${timestamp}.${rawBody.toString('utf8')}`;
   const expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
   try {
@@ -83,6 +86,11 @@ async function handleWebhook(req, res, rawBody) {
     console.warn('[stripe webhook] Supabase not configured — acknowledging event without processing');
     return res.status(200).json({ received: true });
   }
+
+  // Sales Team platform: client payments, refunds/disputes and representative payout callbacks. Idempotent per event id;
+  // a processing error answers 500 so Stripe retries instead of silently losing a payment confirmation.
+  const sales = await handleSalesStripeEvent(event);
+  if (sales.error) return res.status(500).json({ error: 'Processing failed; please retry.' });
 
   try {
     if (event.type === 'checkout.session.completed') {
