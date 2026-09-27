@@ -75,6 +75,22 @@ async function handleInvite(req, res) {
   if (!email) return res.status(400).json({ error: 'A valid email is required.' });
   if (!role) return res.status(400).json({ error: `Role must be one of: ${STAFF_ROLES.join(', ')}` });
 
+  // Optional: this invite is for a reviewed Careers applicant (non-sales — sales hiring stays in api/_sales).
+  // Verified and linked BEFORE the real invite email goes out, so a bad application_id fails closed with no side effect.
+  const applicationId = typeof req.body?.application_id === 'string' ? req.body.application_id : '';
+  let application = null;
+  if (applicationId) {
+    const appRes = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(applicationId)}&select=id,position,email,auth_user_id&limit=1`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+    const appRows = appRes.ok ? await appRes.json() : [];
+    application = appRows[0];
+    if (!application) return res.status(404).json({ error: 'Application not found.' });
+    if (/\bsales\b/i.test(application.position || '')) return res.status(409).json({ error: 'Sales applications are invited from the Sales Team hiring workspace, not here.' });
+    if (application.auth_user_id) return res.status(409).json({ error: 'This applicant already has an account.' });
+    if (application.email && application.email.toLowerCase() !== email) return res.status(409).json({ error: 'That email does not match this application. Invite the applicant at their applied email address.' });
+  }
+
   const orgId = await getNovaInternalOrgId(SUPABASE_URL, SUPABASE_KEY);
   if (!orgId) return res.status(500).json({ error: 'Nova internal organization not found — has the Stage 4 migration been run?' });
 
@@ -114,6 +130,16 @@ async function handleInvite(req, res) {
     const errText = await memberRes.text();
     console.error('[team:invite] organization_members insert failed:', memberRes.status, errText);
     return res.status(502).json({ error: 'Invite email was sent, but adding the membership record failed. The user exists in Supabase Auth but has no role yet — add it manually or retry.' });
+  }
+
+  if (application) {
+    const linkRes = await fetch(`${SUPABASE_URL}/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}&auth_user_id=is.null`, {
+      method: 'PATCH',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ auth_user_id: invitedUser.id, invited_at: new Date().toISOString() }),
+    });
+    const linked = linkRes.ok ? await linkRes.json() : [];
+    if (!linkRes.ok || !linked.length) console.error('[team:invite] account was created but the application record could not be linked — check applications.id=', application.id);
   }
 
   return res.status(200).json({ ok: true, email, role, staff_user_id: invitedUser.id });

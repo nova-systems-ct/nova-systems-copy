@@ -1,9 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, Save, Check, Mail, GraduationCap, FileSignature, UserCheck, FileText } from 'lucide-react'
+import { ArrowLeft, ExternalLink, Save, Check, Mail, FileSignature, FileText, Info } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
+// Roles this page's "Invite to Create Account" can grant. Sales roles are excluded on purpose —
+// sales hiring/invitation lives entirely in the Sales Team workspace (api/_sales), never here.
+const INVITE_ROLES = [
+  { value: 'nova_marketing', label: 'Marketing / Content' },
+  { value: 'nova_developer', label: 'Developer / IT' },
+  { value: 'nova_auditor', label: 'Diagnostics / Audit' },
+  { value: 'nova_admin', label: 'Admin (owner approval required)' },
+]
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
 const inp = { width: '100%', padding: '10px 13px', fontSize: 13, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 7, color: '#fff', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }
 
@@ -44,18 +52,18 @@ export default function JobDetail() {
   const [updating, setUpdating] = useState(false)
   const [notFound, setNotFound] = useState(false)
 
-  // Hiring workflow: Careers -> application -> administrator review (this page) -> secure
-  // account invitation -> Academy enrollment -> practical approval -> working agreement ->
-  // administrator-controlled representative activation. See api/intake.js's invite-applicant/
-  // my-application/resume-signed-url/activate-representative actions.
+  // Hiring workflow for NON-SALES roles: Careers -> application -> administrator review (this
+  // page) -> secure account invitation (real Supabase invite email via api/team.js, the same
+  // mechanism used to bring on any Nova staff member) -> working agreement. Sales applications no
+  // longer reach this page's invite step at all (see api/_sales/hiring.js and /apply/sales) — a
+  // general invite here grants full, active access immediately; there is no separate
+  // "activation" step for non-sales staff the way there is for sales representatives.
   const [inviting, setInviting] = useState(false)
   const [inviteResult, setInviteResult] = useState('')
+  const [inviteRole, setInviteRole] = useState(INVITE_ROLES[0].value)
   const [resumeLoading, setResumeLoading] = useState(false)
-  const [academyStatus, setAcademyStatus] = useState(null) // null=unknown, []=none, [rows]
   const [creatingAgreement, setCreatingAgreement] = useState(false)
   const [agreement, setAgreement] = useState(null)
-  const [activating, setActivating] = useState(false)
-  const [activateResult, setActivateResult] = useState('')
 
   // Repair task (2026-09-21): this page used to read purely from localStorage('nova_applications')
   // — a cache Jobs.jsx populated on its own mount — so a direct link or a page refresh landing
@@ -77,17 +85,6 @@ export default function JobDetail() {
     return () => { active = false }
   }, [id])
 
-  // Once we know whether this candidate has been invited, load their Academy progress (admin
-  // overview, filtered client-side to this one person — avoids a 13th top-level API function)
-  // and any existing working agreement.
-  useEffect(() => {
-    if (!candidate?.auth_user_id) return
-    authedFetch('/api/academy?action=admin-overview')
-      .then(r => r.ok ? r.json() : [])
-      .then(rows => setAcademyStatus(Array.isArray(rows) ? rows.filter(r => r.staff_user_id === candidate.auth_user_id) : []))
-      .catch(() => setAcademyStatus([]))
-  }, [candidate?.auth_user_id])
-
   useEffect(() => {
     if (!candidate?.id) return
     authedFetch('/api/contracts?action=list')
@@ -103,13 +100,14 @@ export default function JobDetail() {
     setInviting(true)
     setInviteResult('')
     try {
-      const r = await authedFetch('/api/intake?action=invite-applicant', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+      const r = await authedFetch('/api/team?op=invite', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: candidate.email, role: inviteRole, application_id: id }),
       })
       const data = await r.json()
       if (!r.ok) { setInviteResult(data.error || 'Failed to invite.'); setInviting(false); return }
-      setCandidate(c => ({ ...c, auth_user_id: data.auth_user_id }))
-      setInviteResult(data.invited_new_account ? 'Invitation email sent.' : 'Account linked (already existed).')
+      setCandidate(c => ({ ...c, auth_user_id: data.staff_user_id, invited_at: new Date().toISOString() }))
+      setInviteResult(`Invitation email sent — they will have real Nova Systems access as soon as they accept and set a password.`)
     } catch (e) {
       setInviteResult('Failed to invite: ' + e.message)
     }
@@ -134,7 +132,7 @@ export default function JobDetail() {
     try {
       const r = await authedFetch('/api/contracts?action=create', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_name: candidate.name, client_email: candidate.email, contract_type: 'Sales Representative Agreement', application_id: id }),
+        body: JSON.stringify({ client_name: candidate.name, client_email: candidate.email, contract_type: `${candidate.position} Agreement`, application_id: id }),
       })
       const data = await r.json()
       if (r.ok && data.contract) setAgreement(data.contract)
@@ -143,21 +141,6 @@ export default function JobDetail() {
       alert('Failed to create agreement: ' + e.message)
     }
     setCreatingAgreement(false)
-  }
-
-  const handleActivate = async () => {
-    setActivating(true)
-    setActivateResult('')
-    try {
-      const r = await authedFetch('/api/intake?action=activate-representative', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
-      })
-      const data = await r.json()
-      setActivateResult(r.ok ? 'Activated as a Nova Systems representative.' : (data.error || 'Failed to activate.'))
-    } catch (e) {
-      setActivateResult('Failed to activate: ' + e.message)
-    }
-    setActivating(false)
   }
 
   // Persists status/notes/interview changes to the real `applications` row via
@@ -256,7 +239,6 @@ export default function JobDetail() {
 
   const c = candidate
   const date = c.submittedAt ? new Date(c.submittedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '—'
-  const cfg = STATUS_CFG[status]
 
   return (
     <div style={{ padding: '40px 48px 80px', maxWidth: 1000 }}>
@@ -367,7 +349,7 @@ export default function JobDetail() {
           )}
         </div>
 
-        {/* Hiring workflow: invite -> Academy -> agreement -> activation */}
+        {/* Hiring workflow: invite -> working agreement. Not for sales positions — those hire through the Sales Team workspace. */}
         <div style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, padding: 24, marginTop: 16 }}>
           <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 16 }}>Hiring Workflow</p>
 
@@ -376,43 +358,29 @@ export default function JobDetail() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Mail style={{ width: 13, height: 13, color: candidate.auth_user_id ? '#4ade80' : 'rgba(255,255,255,0.3)' }} />
               <p style={{ fontSize: 11, fontWeight: 700, color: candidate.auth_user_id ? '#4ade80' : 'rgba(255,255,255,0.5)' }}>
-                {candidate.auth_user_id ? 'Account Invited' : 'No Account Yet'}
+                {candidate.auth_user_id ? 'Account Invited — active as soon as they accept' : 'No Account Yet'}
               </p>
             </div>
             {!candidate.auth_user_id && (
-              <button onClick={handleInvite} disabled={inviting} style={{ width: '100%', padding: '9px 14px', background: G, border: 'none', borderRadius: 7, color: '#0a0800', fontSize: 11, fontWeight: 700, cursor: inviting ? 'default' : 'pointer', fontFamily: 'inherit' }}>
-                {inviting ? 'Sending Invitation…' : 'Invite to Create Account'}
-              </button>
+              <>
+                <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ ...inp, marginBottom: 8 }}>
+                  {INVITE_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+                <button onClick={handleInvite} disabled={inviting} style={{ width: '100%', padding: '9px 14px', background: G, border: 'none', borderRadius: 7, color: '#0a0800', fontSize: 11, fontWeight: 700, cursor: inviting ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+                  {inviting ? 'Sending Invitation…' : 'Invite to Create Account'}
+                </button>
+                <p style={{ display: 'flex', gap: 6, color: 'rgba(255,255,255,0.3)', fontSize: 10.5, lineHeight: 1.5, marginTop: 8 }}>
+                  <Info style={{ width: 11, height: 11, flexShrink: 0, marginTop: 2 }} />
+                  Sends a real Supabase account-invitation email. There is no separate activation step for this role — they gain the access above the moment they accept and set a password.
+                </p>
+              </>
             )}
             {inviteResult && <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>{inviteResult}</p>}
           </div>
 
-          {/* Step: Academy */}
-          {candidate.auth_user_id && (
-            <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <GraduationCap style={{ width: 13, height: 13, color: GOLD }} />
-                <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>Sales Academy</p>
-              </div>
-              {academyStatus === null ? (
-                <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11 }}>Loading…</p>
-              ) : academyStatus.length === 0 ? (
-                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>No programs started yet.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {academyStatus.map(a => (
-                    <p key={a.id} style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>
-                      {a.academy_programs?.title}: <span style={{ color: a.status === 'completed' ? '#4ade80' : GOLD }}>{a.status}</span>
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Step: working agreement */}
           {candidate.auth_user_id && (
-            <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <FileSignature style={{ width: 13, height: 13, color: agreement?.status === 'signed' ? '#4ade80' : 'rgba(255,255,255,0.3)' }} />
                 <p style={{ fontSize: 11, fontWeight: 700, color: agreement?.status === 'signed' ? '#4ade80' : 'rgba(255,255,255,0.5)' }}>
@@ -424,23 +392,6 @@ export default function JobDetail() {
                   {creatingAgreement ? 'Sending…' : 'Send Working Agreement'}
                 </button>
               )}
-            </div>
-          )}
-
-          {/* Step: activation */}
-          {candidate.auth_user_id && (
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <UserCheck style={{ width: 13, height: 13, color: 'rgba(255,255,255,0.3)' }} />
-                <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.5)' }}>Representative Activation</p>
-              </div>
-              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, lineHeight: 1.6, marginBottom: 10 }}>
-                Activation is your decision — it is not automatic from training or a signed agreement, shown above only as context.
-              </p>
-              <button onClick={handleActivate} disabled={activating} style={{ width: '100%', padding: '9px 14px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 7, color: '#4ade80', fontSize: 11, fontWeight: 700, cursor: activating ? 'default' : 'pointer', fontFamily: 'inherit' }}>
-                {activating ? 'Activating…' : 'Activate as Representative'}
-              </button>
-              {activateResult && <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>{activateResult}</p>}
             </div>
           )}
         </div>
