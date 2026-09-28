@@ -4,7 +4,7 @@
 //   npm run verify:sales-e2e
 import { spawnSync } from 'node:child_process';
 
-const suites = ['e2e_sales_db_test', 'e2e_sales_hiring_test', 'e2e_jobs_hiring_test', 'e2e_sales_academy_test', 'e2e_sales_documents_activation_test', 'e2e_sales_pipeline_catalog_test', 'e2e_sales_closing_test', 'e2e_sales_commissions_test', 'e2e_sales_notifications_dashboard_test', 'e2e_sales_journeys_test'];
+const suites = ['e2e_sales_db_test', 'e2e_sales_hiring_test', 'e2e_jobs_hiring_test', 'e2e_audit_engine_test', 'e2e_sales_academy_test', 'e2e_sales_documents_activation_test', 'e2e_sales_pipeline_catalog_test', 'e2e_sales_closing_test', 'e2e_sales_commissions_test', 'e2e_sales_notifications_dashboard_test', 'e2e_sales_journeys_test'];
 let failed = 0; let total = 0;
 for (const s of suites) {
   const t0 = Date.now(); const r = spawnSync(process.execPath, [`scripts/${s}.mjs`], { encoding: 'utf8', timeout: 900_000, maxBuffer: 64 * 1024 * 1024 });
