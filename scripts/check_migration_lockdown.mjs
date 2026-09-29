@@ -9,7 +9,12 @@ import path from 'node:path';
 
 const dir = 'supabase';
 const LOCKDOWN = 'zz-public-schema-lockdown-standalone.sql';
-const files = fs.readdirSync(dir).filter((f) => f.endsWith('-standalone.sql') && f !== LOCKDOWN);
+// 2026-09-29: this used to only scan *-standalone.sql files, which silently missed
+// schema-update.sql (the older, pre-standalone-migration schema file) — 15 real tables there
+// (client_accounts, vault_documents, nova_ai_calls, ...) had zero RLS and zero lockdown coverage
+// for an unknown period as a result. Scan every .sql file in supabase/ except the lockdown file
+// itself, so this blind spot cannot reopen the next time a table is added anywhere in this dir.
+const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql') && f !== LOCKDOWN);
 const created = new Map(); const rlsOn = new Set();
 for (const f of files) {
   const sql = fs.readFileSync(path.join(dir, f), 'utf8');
@@ -22,7 +27,11 @@ if (process.argv.includes('--print')) { console.log(all.map((t) => `    '${t}'`)
 const lock = fs.existsSync(path.join(dir, LOCKDOWN)) ? fs.readFileSync(path.join(dir, LOCKDOWN), 'utf8') : '';
 const listed = new Set([...lock.matchAll(/^\s*'([a-z_0-9]+)'/gim)].map((m) => m[1]));
 const noRls = all.filter((t) => !rlsOn.has(t));
-const uncovered = all.filter((t) => !listed.has(t));
+// A table is covered if it enables RLS in its own file (the schema-update.sql pattern: real
+// per-org policies) OR is in the blanket-deny lockdown list (the standalone-migration pattern:
+// API-only access, no policy). Requiring BOTH would wrongly flag tables that already have real,
+// intentional RLS+policies of their own (leads, contracts, applications, ...).
+const uncovered = all.filter((t) => !listed.has(t) && !rlsOn.has(t));
 console.log(`${all.length} tables created across ${files.length} migrations; ${noRls.length} enable RLS nowhere in their own file; ${listed.size} covered by the lockdown file.`);
 let bad = 0;
 for (const t of uncovered) { console.log(`FAIL — ${t} (${created.get(t)}) is not in ${LOCKDOWN}`); bad++; }

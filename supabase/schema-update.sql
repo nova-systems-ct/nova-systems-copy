@@ -355,23 +355,14 @@ INSERT INTO nova_ai_voices (voice_name, elevenlabs_voice_id, industry, language,
 ON CONFLICT (voice_name) DO NOTHING;
 
 -- ── WAVE ONE (limited-enrollment landing page + intake, /waves) ─────────────
-CREATE TABLE IF NOT EXISTS wave_one_applications (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  first_name TEXT NOT NULL,
-  last_name TEXT NOT NULL,
-  phone TEXT NOT NULL,
-  email TEXT NOT NULL,
-  company_name TEXT NOT NULL,
-  website TEXT,
-  city TEXT,
-  industry TEXT,
-  biggest_problem TEXT,
-  revenue_range TEXT,
-  priority_engines JSONB DEFAULT '[]'::jsonb,
-  notes TEXT,
-  status TEXT DEFAULT 'new',  -- new | reviewing | approved | rejected | waitlisted
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- 2026-09-29: the original CREATE TABLE that lived here (no organization_id column) was removed.
+-- Because it ran before the "2026-09-20 BUG FIX" block further down in this same file also
+-- CREATE TABLE IF NOT EXISTS wave_one_applications, the earlier, column-incomplete definition
+-- always won the race on a fresh database, silently skipping the fixed version — meaning
+-- organization_id, its index, its backfill, and its RLS policy (all further down this file) have
+-- never actually applied anywhere this file has run start-to-finish. See that section for the
+-- real table definition and an idempotent ADD COLUMN for databases where the stale version above
+-- already ran.
 
 -- Seed the Wave One spots counter shown live on /waves (read/written via nova_ai_settings).
 INSERT INTO nova_ai_settings (key, value) VALUES ('wave_one_spots_remaining', '7')
@@ -694,6 +685,31 @@ WHERE o.kind = 'nova_internal'
   );
 
 -- ============================================================================================
+-- SECURITY FIX (2026-09-29, Gap A-2): tighten the inherited staff_read_all_organizations /
+-- staff_read_all_members policy — added directly to production by nova-wave-one's 2026-08-12
+-- migration, never present anywhere in this repo — that grants ANY row with member_type='staff',
+-- regardless of role or which org it is actually on, read access to EVERY organization and EVERY
+-- membership row. Under Isaac's corrected identity model a client-side person is ALSO
+-- member_type='staff' (distinguished only by role), so a client_owner at Org B could read Org A's
+-- organizations/organization_members rows directly via PostgREST using nothing but their own
+-- token. Replaced with the same narrow, real per-membership check (is_org_member / own row) used
+-- everywhere else in this file. Additive and idempotent: DROP POLICY IF EXISTS is a no-op against
+-- a database (such as this repo's own local test environment) that never had the old policy in
+-- the first place; ENABLE ROW LEVEL SECURITY is a no-op if already on.
+-- ============================================================================================
+ALTER TABLE organizations       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS staff_read_all_organizations ON organizations;
+DROP POLICY IF EXISTS staff_read_all_members ON organization_members;
+
+DROP POLICY IF EXISTS own_org_read ON organizations;
+CREATE POLICY own_org_read ON organizations FOR SELECT TO authenticated USING (is_org_member(id));
+
+DROP POLICY IF EXISTS own_membership_read ON organization_members;
+CREATE POLICY own_membership_read ON organization_members FOR SELECT TO authenticated USING (staff_user_id = auth.uid());
+
+-- ============================================================================================
 -- STAGE 5 — NOVA RUNS NOVA (2026-09-14, NOVA-STAGE-5-RUNS-NOVA)
 -- Additive only. Safe to re-run. Does not alter or drop any existing table's data.
 --
@@ -813,6 +829,9 @@ CREATE TABLE IF NOT EXISTS wave_one_applications (
   organization_id  UUID REFERENCES organizations(id),
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Idempotent for a database where the removed, column-incomplete table definition that used to
+-- precede this section already ran, which would have made Postgres skip the CREATE TABLE above.
+ALTER TABLE wave_one_applications ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
 
 CREATE INDEX IF NOT EXISTS wave_one_applications_organization_idx ON wave_one_applications (organization_id);
 CREATE INDEX IF NOT EXISTS wave_one_applications_created_idx      ON wave_one_applications (created_at DESC);

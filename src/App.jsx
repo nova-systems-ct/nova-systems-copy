@@ -23,9 +23,7 @@ const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Careers = lazy(() => import('./pages/Careers'));
 const ApplicantLogin = lazy(() => import('./pages/ApplicantLogin'));
-const SetPassword = lazy(() => import('./pages/SetPassword'));
 const ApplicationStatus = lazy(() => import('./pages/ApplicationStatus'));
-const EmployeeDashboard = lazy(() => import('./pages/EmployeeDashboard'));
 const Insights = lazy(() => import('./pages/Insights'));
 const InsightPost = lazy(() => import('./pages/InsightPost'));
 const PublicPortfolio = lazy(() => import('./pages/Portfolio'));
@@ -83,6 +81,22 @@ const InstallationDetail = lazy(() => import('./pages/dashboard/InstallationDeta
 const Crystal = lazy(() => import('./pages/dashboard/Crystal'));
 const CrystalJobDetail = lazy(() => import('./pages/dashboard/CrystalJobDetail'));
 const Marketing = lazy(() => import('./pages/dashboard/Marketing'));
+const Command = lazy(() => import('./pages/dashboard/Command'));
+const CommandWorkforce = lazy(() => import('./pages/dashboard/command/Workforce'));
+const CommandMeetings = lazy(() => import('./pages/dashboard/command/Meetings'));
+const CommandGovernance = lazy(() => import('./pages/dashboard/command/Governance'));
+const CommandReports = lazy(() => import('./pages/dashboard/command/Reports'));
+const CommandOrganization = lazy(() => import('./pages/dashboard/command/Organization'));
+const CommandCompanies = lazy(() => import('./pages/dashboard/command/Companies'));
+const CommandCompanyDetail = lazy(() => import('./pages/dashboard/command/CompanyDetail'));
+const CommandExecutives = lazy(() => import('./pages/dashboard/command/Executives'));
+const CommandCommittees = lazy(() => import('./pages/dashboard/command/Committees'));
+const CommandCommitteeDetail = lazy(() => import('./pages/dashboard/command/CommitteeDetail'));
+const CommandWorkerDesk = lazy(() => import('./pages/dashboard/command/WorkerDesk'));
+const CommandActivity = lazy(() => import('./pages/dashboard/command/Activity'));
+const CommandIncidents = lazy(() => import('./pages/dashboard/command/Incidents'));
+const CommandIncidentDetail = lazy(() => import('./pages/dashboard/command/IncidentDetail'));
+const CommandApprovals = lazy(() => import('./pages/dashboard/command/Approvals'));
 const RequirePermission = lazy(() => import('./components/dashboard/RequirePermission'));
 // Sales Team platform: public application/invitation/proposal pages, the representative workspace, and Nova HQ → Sales Team
 const SalesApply = lazy(() => import('./pages/sales/SalesApply'));
@@ -136,9 +150,13 @@ function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/careers" element={<Careers />} />
             <Route path="/applicant-login" element={<ApplicantLogin />} />
-            <Route path="/set-password" element={<SetPassword />} />
+            {/* /set-password and /employee-dashboard were a pre-Supabase, localStorage-only
+                auth model (nova_employee_accounts / nova_applicant_session) superseded by real
+                Supabase-Auth-backed ApplicantLogin/ApplicationStatus. Redirected, not deleted
+                outright, in case a stale bookmark/link still points here. */}
+            <Route path="/set-password" element={<Navigate to="/applicant-login" replace />} />
             <Route path="/application-status" element={<ApplicationStatus />} />
-            <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
+            <Route path="/employee-dashboard" element={<Navigate to="/applicant-login" replace />} />
             <Route path="/insights" element={<Insights />} />
             <Route path="/insights/:slug" element={<InsightPost />} />
             <Route path="/portfolio" element={<PublicPortfolio />} />
@@ -195,6 +213,23 @@ function App() {
               <Route path="execution" element={<RequirePermission permission="execution.view"><Execution /></RequirePermission>} />
               <Route path="companies" element={<RequirePermission permission="companies.view"><Companies /></RequirePermission>} />
               <Route path="admin" element={<RequirePermission permission="admin.view"><Admin /></RequirePermission>} />
+              <Route path="command" element={<RequirePermission permission="command.view"><Command /></RequirePermission>} />
+              <Route path="command/workforce" element={<RequirePermission permission="command.view"><CommandWorkforce /></RequirePermission>} />
+              <Route path="command/meetings" element={<RequirePermission permission="command.view"><CommandMeetings /></RequirePermission>} />
+              <Route path="command/governance" element={<RequirePermission permission="command.view"><CommandGovernance /></RequirePermission>} />
+              <Route path="command/reports" element={<RequirePermission permission="command.view"><CommandReports /></RequirePermission>} />
+              <Route path="command/organization" element={<RequirePermission permission="command.view"><CommandOrganization /></RequirePermission>} />
+              <Route path="command/companies" element={<RequirePermission permission="command.view"><CommandCompanies /></RequirePermission>} />
+              <Route path="command/companies/:id" element={<RequirePermission permission="command.view"><CommandCompanyDetail /></RequirePermission>} />
+              <Route path="command/executives" element={<RequirePermission permission="command.view"><CommandExecutives /></RequirePermission>} />
+              <Route path="command/committees" element={<RequirePermission permission="command.view"><CommandCommittees /></RequirePermission>} />
+              <Route path="command/committees/:id" element={<RequirePermission permission="command.view"><CommandCommitteeDetail /></RequirePermission>} />
+              <Route path="command/workers/:id" element={<RequirePermission permission="command.view"><CommandWorkerDesk /></RequirePermission>} />
+              <Route path="command/activity" element={<RequirePermission permission="command.view"><CommandActivity /></RequirePermission>} />
+              <Route path="command/incidents" element={<RequirePermission permission="command.view"><CommandIncidents /></RequirePermission>} />
+              <Route path="command/incidents/:id" element={<RequirePermission permission="command.view"><CommandIncidentDetail /></RequirePermission>} />
+              <Route path="command/approvals" element={<RequirePermission permission="command.view"><CommandApprovals /></RequirePermission>} />
+              <Route path="command/ventures" element={<RequirePermission permission="command.view"><CommandCompanies /></RequirePermission>} />
               <Route path="leads" element={<RequirePermission permission="growth.view"><Leads /></RequirePermission>} />
               <Route path="tasks" element={<RequirePermission permission="execution.view"><Tasks /></RequirePermission>} />
               <Route path="jobs" element={<RequirePermission permission="admin.view"><Jobs /></RequirePermission>} />

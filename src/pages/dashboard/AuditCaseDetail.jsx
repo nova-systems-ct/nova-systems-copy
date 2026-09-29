@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, PlayCircle, PauseCircle, FileText, Lightbulb, ListChecks, FileCheck2, Send, Plus, Loader2, AlertTriangle } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 import { useOrg } from '../../lib/OrgContext'
+import { generateAuditReportPDF } from '../../utils/generatePdf'
 
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
@@ -417,9 +418,14 @@ function ReportTab({ caseId, orgId, reports, evidence, findings, recommendations
               <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>{new Date(r.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
             </div>
             {r.status === 'approved' ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, padding: '5px 12px', borderRadius: 20, background: 'rgba(34,197,94,0.12)', color: '#4ade80', textTransform: 'uppercase' }}>
-                <FileCheck2 style={{ width: 12, height: 12 }} /> Approved — content locked
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, padding: '5px 12px', borderRadius: 20, background: 'rgba(34,197,94,0.12)', color: '#4ade80', textTransform: 'uppercase' }}>
+                  <FileCheck2 style={{ width: 12, height: 12 }} /> Approved — content locked
+                </span>
+                <button onClick={() => generateAuditReportPDF({ version: r.version, approvedAt: r.approved_at, content: r.content }).save(`Nova-Audit-Report-v${r.version}-${caseId.slice(0, 8)}.pdf`)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 7, color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <FileText style={{ width: 12, height: 12 }} /> Download PDF
+                </button>
+              </div>
             ) : idx === 0 ? (
               <button onClick={() => approve(r.id)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'rgba(255,255,255,0.06)', border: `1px solid ${GOLD}40`, borderRadius: 7, color: GOLD, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                 <Send style={{ width: 12, height: 12 }} /> Approve this version
@@ -440,7 +446,7 @@ function ReportTab({ caseId, orgId, reports, evidence, findings, recommendations
                 {delivery.state === 'delivered' && <input value={delivery.confirmation} onChange={(e) => setDelivery((d) => ({ ...d, confirmation: e.target.value }))} placeholder="How confirmed — provider event id, or customer reply" style={{ ...inp, flex: 1, minWidth: 220 }} />}
                 <button onClick={() => deliver(r)} style={{ padding: '9px 16px', background: G, border: 'none', borderRadius: 8, color: '#0a0800', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Record</button>
               </div>
-              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 8 }}>This records that the report was sent. It does not send anything itself — no report document generator or email send is wired to this button.</p>
+              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, marginTop: 8 }}>This records that the report was sent. It does not send anything itself — download the PDF above and deliver it through your own email/portal, then record it here.</p>
             </div>
           )}
         </div>
@@ -448,7 +454,7 @@ function ReportTab({ caseId, orgId, reports, evidence, findings, recommendations
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 16px', background: 'rgba(201,168,76,0.06)', border: `1px solid ${GOLD}20`, borderRadius: 10 }}>
         <AlertTriangle style={{ width: 14, height: 14, color: GOLD, flexShrink: 0, marginTop: 2 }} />
         <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, lineHeight: 1.6 }}>
-          There is no branded PDF/document renderer yet: the approved sections are the report of record and must be exported or formatted by hand for now.
+          The downloaded PDF renders exactly the approved, content-hash-bound sections — it is not a separate document that could drift from the report of record. There is no automated email send yet; delivery is still a manual step you record above.
         </p>
       </div>
     </div>

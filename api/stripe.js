@@ -3,7 +3,7 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizeUrl } from './_sanitize.js';
 import { stripeRequest } from './_stripe.js';
-import { handleStripeEvent as handleSalesStripeEvent } from './_sales/payments.js';
+import { handleStripeEvent as handleSalesStripeEvent, stripeAllowed } from './_sales/payments.js';
 
 // Combined Stripe endpoint — actions: checkout-session, payment-intent,
 // verify-payment (?action=...), plus the raw-body webhook (auto-detected via
@@ -167,6 +167,8 @@ async function handleCheckoutSession(req, res, b) {
   if (!STRIPE_SECRET_KEY) {
     return res.status(500).json({ error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY to enable payments.' });
   }
+  const allowed = stripeAllowed();
+  if (!allowed.ok) return res.status(409).json({ error: allowed.reason });
 
   const amount        = Number(b.tier_price ?? b.amount);
   const client_email   = sanitizeEmail(b.client_email || '');
@@ -216,6 +218,8 @@ async function handlePaymentIntent(req, res, b) {
   if (!STRIPE_SECRET_KEY) {
     return res.status(500).json({ error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY to enable payments.' });
   }
+  const allowed = stripeAllowed();
+  if (!allowed.ok) return res.status(409).json({ error: allowed.reason });
 
   const amount        = Number(b.amount);
   const client_email   = sanitizeEmail(b.client_email || '');
@@ -253,6 +257,8 @@ async function handleSetupIntent(req, res, b) {
   if (!STRIPE_SECRET_KEY) {
     return res.status(500).json({ error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY to enable payments.' });
   }
+  const allowed = stripeAllowed();
+  if (!allowed.ok) return res.status(409).json({ error: allowed.reason });
 
   const email = sanitizeEmail(b.email || '');
   const name = sanitize(b.name, 200);

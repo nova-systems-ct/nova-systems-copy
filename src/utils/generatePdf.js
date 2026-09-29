@@ -463,6 +463,56 @@ export function generateInvoicePDF({ invoiceNumber, clientName, clientEmail, lin
   return doc
 }
 
+// Nova Audit report — renders exactly the approved audit_reports.content sections (the report of
+// record), in the same fixed order the report editor (AuditCaseDetail.jsx's REPORT_SECTIONS)
+// collects them. Purely a renderer: it never decides what counts as approved or ready — it draws
+// whatever content object it's given, which the caller must have already confirmed is the
+// server's approved, content-hash-bound version, not an in-progress draft.
+const AUDIT_REPORT_SECTIONS = [
+  ['executive_summary', 'Executive Summary'],
+  ['business_identity', 'Business Identity & Scope Confirmed'],
+  ['scope_and_method', 'Scope and Method'],
+  ['evidence_reviewed', 'Evidence Reviewed'],
+  ['findings', 'Findings'],
+  ['estimates_and_assumptions', 'Estimates and Assumptions'],
+  ['recommendations', 'Recommendations'],
+  ['limitations', 'Limitations'],
+  ['next_steps', 'Next Steps'],
+]
+
+export function generateAuditReportPDF({ businessName, version, approvedAt, content }) {
+  const doc = new jsPDF()
+  header(doc, 'Nova Audit Report')
+
+  let y = 54
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(120, 120, 120)
+  doc.text(`Prepared for: ${businessName || 'Client'}`, 14, y); y += 6
+  doc.text(`Report version ${version || ''}${approvedAt ? `  ·  Approved ${new Date(approvedAt).toLocaleDateString()}` : ''}`, 14, y); y += 10
+
+  for (const [key, label] of AUDIT_REPORT_SECTIONS) {
+    const body = (content || {})[key]
+    if (!body) continue
+    y = sectionHeading(doc, label, y)
+    y = addSection(doc, '', body, y)
+  }
+
+  y += 4
+  if (y > 260) { doc.addPage(); y = 24 }
+  doc.setDrawColor(...GOLD)
+  doc.setLineWidth(0.4)
+  doc.line(14, y, 196, y)
+  y += 8
+  doc.setFont('helvetica', 'italic')
+  doc.setFontSize(8)
+  doc.setTextColor(140, 140, 140)
+  y = addSection(doc, '', 'This audit reflects publicly available and client-supplied information reviewed as of the date above. It is not a guarantee of results, a complete inventory of every issue, or a certification of security or legal compliance.', y)
+
+  footer(doc, 'Nova Audit Report')
+  return doc
+}
+
 export function generateContractPDF({ clientName, businessName, tierName, tierPrice, includedServices, signatureDataUrl, date }) {
   const doc = new jsPDF()
   header(doc, 'Service Agreement')

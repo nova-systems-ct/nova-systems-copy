@@ -83,13 +83,15 @@ create table if not exists public.client_invoices (id uuid primary key default g
 create table if not exists public.meetings (id uuid primary key default gen_random_uuid(), name text, email text, starts_at timestamptz, created_at timestamptz default now());
 create table if not exists public.nova_tasks (id uuid primary key default gen_random_uuid(), title text, status text default 'open', description text, due_date date, assigned_to text, created_at timestamptz default now());
 create table if not exists public.referral_tracking (id uuid primary key default gen_random_uuid(), referrer text, created_at timestamptz default now());
-create table if not exists public.contact_submissions (id uuid primary key default gen_random_uuid(), name text, email text, message text, created_at timestamptz default now());
-create table if not exists public.newsletter_subscribers (id uuid primary key default gen_random_uuid(), email text, created_at timestamptz default now());
-create table if not exists public.newsletter_sends (id uuid primary key default gen_random_uuid(), subject text, created_at timestamptz default now());
-create table if not exists public.wave_one_applications (id uuid primary key default gen_random_uuid(), name text, email text, created_at timestamptz default now());
-create table if not exists public.vault_documents (id uuid primary key default gen_random_uuid(), file_name text, created_at timestamptz default now());
-create table if not exists public.blog_posts (id uuid primary key default gen_random_uuid(), title text, created_at timestamptz default now());
-create table if not exists public.portfolio (id uuid primary key default gen_random_uuid(), title text, created_at timestamptz default now());
+-- 2026-09-29: removed stub creates for contact_submissions / newsletter_subscribers /
+-- newsletter_sends / wave_one_applications / vault_documents / blog_posts / portfolio. Despite
+-- this section's header, schema-update.sql does not ALTER these — it CREATE TABLE IF NOT EXISTS
+-- them itself with their real, full column set (including organization_id on the first four).
+-- The column-incomplete stubs that used to be here ran first, so IF NOT EXISTS silently skipped
+-- schema-update.sql's real definitions on every local test run, which masked a genuine production
+-- bug in wave_one_applications's own migration (fixed separately, same day) and would have kept
+-- masking it here even after that fix. Production has no bootstrap.sql, so it never had this stub
+-- in the first place — this brings the local test environment's starting state in line with it.
 
 -- RLS on the identity tables, matching production's verified behaviour (permissions-matrix.md: "role-escalation writes are
 -- rejected — no UPDATE policy exists for authenticated"; users read only their own membership rows).

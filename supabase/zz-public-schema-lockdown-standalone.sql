@@ -15,6 +15,22 @@
 -- SAFE TO RERUN. Skips tables that do not exist yet (migration not applied). Touches ONLY the
 -- tables listed here; it does not alter any pre-existing production table.
 --
+-- 2026-09-29: added 15 tables from supabase/schema-update.sql (the older, pre-standalone-migration
+-- schema file) that check_migration_lockdown.mjs never scanned, because it only reads files
+-- matching *-standalone.sql — schema-update.sql doesn't match that glob, so these tables silently
+-- had zero RLS and zero lockdown coverage despite holding real client/PII data (client_accounts
+-- has a password_hash column, though the one code path that ever read it — the "Nova Connect"
+-- client login — was already removed 2026-09-20; nova_ai_calls/sms_logs hold call/SMS content;
+-- vault_documents/intake_requests/client_messages hold client PII). Confirmed by direct grep that
+-- every one of these 15 is read/written server-side only via SUPABASE_SERVICE_ROLE_KEY (which
+-- bypasses RLS) — no frontend code calls the Supabase client directly against any of them — so
+-- this closes the anon/authenticated direct-REST attack surface without touching any legitimate
+-- code path: blog_posts, client_accounts, client_messages, intake_requests, notifications,
+-- nova_ai_agents, nova_ai_audits, nova_ai_calls, nova_ai_knowledge_bases, nova_ai_settings,
+-- nova_ai_sms_logs, nova_ai_voices, portfolio, social_posts, vault_documents.
+-- check_migration_lockdown.mjs was also fixed the same day to scan schema-update.sql too, so this
+-- blind spot cannot silently reopen the next time a table is added there.
+--
 -- Verified by: scripts/check_migration_lockdown.mjs (static coverage check). NOT yet run against a
 -- live database — after running, confirm with the anon key that a SELECT on e.g. audit_evidence
 -- returns 401/permission denied (see docs/NOVA_PILOT_INSTALLATION.md).
@@ -48,8 +64,16 @@ DECLARE
     'audit_outcomes',
     'audit_recommendations',
     'audit_reports',
+    'blog_posts',
     'business_locations',
     'businesses',
+    'client_accounts',
+    'client_messages',
+    'committee_meeting_action_items',
+    'committee_meeting_evidence',
+    'committee_meeting_participants',
+    'committee_meeting_transcript_entries',
+    'committee_meetings',
     'crm_activities',
     'crm_contacts',
     'crm_deals',
@@ -68,21 +92,44 @@ DECLARE
     'crystal_quote_requests',
     'crystal_recurring_schedules',
     'crystal_service_catalog',
+    'decision_records',
+    'escalation_events',
+    'escalations',
+    'executive_assignments',
     'installation_events',
     'installation_tests',
     'installations',
+    'intake_requests',
     'jobs',
+    'kill_switches',
     'marketing_campaigns',
     'marketing_publishing_adapters',
     'marketing_sequence_enrollments',
     'marketing_sequences',
     'marketing_social_accounts',
+    'model_runs',
     'newsletter_subscribers',
+    'notifications',
+    'nova_ai_agents',
+    'nova_ai_audits',
+    'nova_ai_calls',
+    'nova_ai_knowledge_bases',
+    'nova_ai_settings',
+    'nova_ai_sms_logs',
+    'nova_ai_voices',
+    'operational_memory',
     'order_events',
     'orders',
+    'org_units',
+    'owner_briefs',
+    'owner_reauth_confirmations',
     'pilot_checklist_items',
     'pilot_permissions',
     'pilots',
+    'portfolio',
+    'portfolio_entities',
+    'portfolio_status_events',
+    'positions',
     'products',
     'sales_activation_approvals',
     'sales_audit_log',
@@ -109,6 +156,9 @@ DECLARE
     'sales_reps',
     'sales_scope_exceptions',
     'sales_toolkit_items',
+    'social_posts',
+    'vault_documents',
+    'venture_stage_events',
     'voice_calendar_slots',
     'voice_call_sessions',
     'voice_call_tool_events',
@@ -119,6 +169,15 @@ DECLARE
     'wave1_messages',
     'wave1_org_settings',
     'wave1_source_events',
+    'work_item_events',
+    'work_item_evidence',
+    'work_item_outputs',
+    'work_item_reviews',
+    'work_items',
+    'worker_contracts',
+    'worker_heartbeats',
+    'worker_status_events',
+    'workers',
     'zion_character_assets',
     'zion_facts',
     'zion_journal_entries',
