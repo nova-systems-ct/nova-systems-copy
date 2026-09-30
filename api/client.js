@@ -174,15 +174,18 @@ function slugify(title) {
 }
 
 // ---------------------------------------------------------------- invoices
+// Org-scoped (Gap A-4, 2026-09-29): see handleIntakeRequests above for the pattern/rationale.
 async function handleInvoices(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (req.method === 'GET') {
     if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
     if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(200).json([]);
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/client_invoices?order=created_at.desc`, {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/client_invoices?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`, {
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       });
       if (!r.ok) { console.error('[client:invoices] Supabase error:', r.status, await r.text()); return res.status(200).json([]); }
@@ -199,11 +202,14 @@ async function handleInvoices(req, res) {
 
   const b = req.body || {};
   const action = sanitize(b.action, 20);
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
 
   if (action === 'create' || action === 'update') {
     const id = sanitize(b.id, 100);
     const record = {
       client_id: sanitize(b.client_id, 100) || null,
+      organization_id: orgId,
       invoice_number: sanitize(b.invoice_number, 50),
       line_items: Array.isArray(b.line_items) ? b.line_items : [],
       subtotal: Number(b.subtotal) || 0,
@@ -219,8 +225,10 @@ async function handleInvoices(req, res) {
     if (record.status === 'Paid' && !b.paid_at_skip) record.paid_at = new Date().toISOString();
 
     try {
+      // On update, the row must already belong to the caller's authorized org — permission on org
+      // A must never let someone update org B's invoice by supplying its id.
       const url = (action === 'update' && id)
-        ? `${SUPABASE_URL}/rest/v1/client_invoices?id=eq.${encodeURIComponent(id)}`
+        ? `${SUPABASE_URL}/rest/v1/client_invoices?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`
         : `${SUPABASE_URL}/rest/v1/client_invoices`;
       const r = await fetch(url, {
         method: (action === 'update' && id) ? 'PATCH' : 'POST',
@@ -232,6 +240,7 @@ async function handleInvoices(req, res) {
       });
       if (!r.ok) { console.error('[client:invoices] Save error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to save invoice' }); }
       const rows = await r.json();
+      if (action === 'update' && !rows.length) return res.status(404).json({ error: 'Invoice not found in this organization' });
       return res.status(200).json({ ok: true, invoice: rows[0] });
     } catch (err) {
       console.error('[client:invoices] Error:', err.message);
@@ -242,11 +251,13 @@ async function handleInvoices(req, res) {
   if (action === 'delete') {
     const id = sanitize(b.id, 100);
     if (!id) return res.status(400).json({ error: 'id is required' });
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/client_invoices?id=eq.${encodeURIComponent(id)}`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/client_invoices?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, {
       method: 'DELETE',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, Prefer: 'return=representation' },
     });
     if (!r.ok) return res.status(500).json({ error: 'Delete failed' });
+    const rows = await r.json();
+    if (!rows.length) return res.status(404).json({ error: 'Invoice not found in this organization' });
     return res.status(200).json({ ok: true });
   }
 
@@ -255,15 +266,20 @@ async function handleInvoices(req, res) {
 
 // --------------------------------------------------------------- referrals
 // Strategy-meeting requests submitted from the public /welcome form.
+// Org-scoped (Gap A-4, 2026-09-29): organization_id is required and the caller's own access to
+// that specific org is re-verified server-side (requireOrgAccess), not just that they hold the
+// permission on SOME org — the dispatch-level requireStaff() check remains as a coarse gate too.
 async function handleIntakeRequests(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (req.method === 'GET') {
     if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
     if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(200).json([]);
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_requests?order=created_at.desc`, {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_requests?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`, {
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       });
       if (!r.ok) { console.error('[client:intake-requests] Supabase error:', r.status, await r.text()); return res.status(200).json([]); }
@@ -280,6 +296,8 @@ async function handleIntakeRequests(req, res) {
 
   const b = req.body || {};
   const action = sanitize(b.action, 20);
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
 
   if (action === 'update-status') {
     const id = sanitize(b.id, 100);
@@ -289,15 +307,20 @@ async function handleIntakeRequests(req, res) {
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_requests?id=eq.${encodeURIComponent(id)}`, {
+      // The request must belong to the caller's authorized org — permission on org A must never
+      // let someone update org B's intake request by supplying its id (same cross-org-id-guessing
+      // defense already used by handleAuditDeliveries).
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_requests?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, {
         method: 'PATCH',
         headers: {
           apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json', Prefer: 'return=minimal',
+          'Content-Type': 'application/json', Prefer: 'return=representation',
         },
         body: JSON.stringify({ status }),
       });
       if (!r.ok) { console.error('[client:intake-requests] Update error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to update status' }); }
+      const rows = await r.json();
+      if (!rows.length) return res.status(404).json({ error: 'Request not found in this organization' });
       return res.status(200).json({ ok: true });
     } catch (err) {
       console.error('[client:intake-requests] Error:', err.message);
@@ -308,15 +331,18 @@ async function handleIntakeRequests(req, res) {
   return res.status(400).json({ error: `Unknown action: ${action}` });
 }
 
+// Org-scoped (Gap A-4, 2026-09-29): see handleIntakeRequests above for the pattern/rationale.
 async function handleReferrals(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (req.method === 'GET') {
     if (!rateLimit(req, res, 60, 60_000)) return;
+    const orgId = sanitize(req.query?.organization_id, 100);
+    if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
     if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(200).json([]);
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/referral_tracking?order=created_at.desc`, {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/referral_tracking?organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`, {
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
       });
       if (!r.ok) { console.error('[client:referrals] Supabase error:', r.status, await r.text()); return res.status(200).json([]); }
@@ -333,6 +359,8 @@ async function handleReferrals(req, res) {
 
   const b = req.body || {};
   const action = sanitize(b.action, 20);
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
 
   if (action === 'create' || action === 'update') {
     const id = sanitize(b.id, 100);
@@ -342,6 +370,7 @@ async function handleReferrals(req, res) {
       rep_name: sanitize(b.rep_name, 150),
       rep_email: sanitize(b.rep_email, 200),
       client_id: sanitize(b.client_id, 100) || null,
+      organization_id: orgId,
       client_name: sanitize(b.client_name, 200),
       deal_value,
       commission_rate,
@@ -350,8 +379,10 @@ async function handleReferrals(req, res) {
       retention_bonus_paid: b.retention_bonus_paid === true || b.retention_bonus_paid === 'true',
     };
     try {
+      // On update, the row must already belong to the caller's authorized org — permission on org
+      // A must never let someone update org B's referral by supplying its id.
       const url = (action === 'update' && id)
-        ? `${SUPABASE_URL}/rest/v1/referral_tracking?id=eq.${encodeURIComponent(id)}`
+        ? `${SUPABASE_URL}/rest/v1/referral_tracking?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`
         : `${SUPABASE_URL}/rest/v1/referral_tracking`;
       const r = await fetch(url, {
         method: (action === 'update' && id) ? 'PATCH' : 'POST',
@@ -363,6 +394,7 @@ async function handleReferrals(req, res) {
       });
       if (!r.ok) { console.error('[client:referrals] Save error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to save referral' }); }
       const rows = await r.json();
+      if (action === 'update' && !rows.length) return res.status(404).json({ error: 'Referral not found in this organization' });
       return res.status(200).json({ ok: true, referral: rows[0] });
     } catch (err) {
       console.error('[client:referrals] Error:', err.message);
@@ -373,11 +405,13 @@ async function handleReferrals(req, res) {
   if (action === 'delete') {
     const id = sanitize(b.id, 100);
     if (!id) return res.status(400).json({ error: 'id is required' });
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/referral_tracking?id=eq.${encodeURIComponent(id)}`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/referral_tracking?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, {
       method: 'DELETE',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, Prefer: 'return=representation' },
     });
     if (!r.ok) return res.status(500).json({ error: 'Delete failed' });
+    const rows = await r.json();
+    if (!rows.length) return res.status(404).json({ error: 'Referral not found in this organization' });
     return res.status(200).json({ ok: true });
   }
 

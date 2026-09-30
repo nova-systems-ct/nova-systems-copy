@@ -42,6 +42,21 @@ export default async function handler(req, res) {
 
   if (SUPABASE_URL && SUPABASE_KEY) {
     try {
+      // Best-effort org lookup — never let this block real lead capture (same pattern as
+      // api/welcome.js). Every submission here is unambiguously Nova's own (this handler is bound
+      // entirely to the public /welcome page), so resolving to the one nova_internal org is not a
+      // guess. If the lookup fails for any reason, the insert still proceeds without
+      // organization_id rather than losing the lead.
+      let organizationId = null;
+      try {
+        const orgRes = await fetch(`${SUPABASE_URL}/rest/v1/organizations?kind=eq.nova_internal&select=id&limit=1`, {
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        });
+        if (orgRes.ok) organizationId = (await orgRes.json())[0]?.id || null;
+      } catch (err) {
+        console.error('[book-meeting] Organization lookup error (non-fatal):', err.message);
+      }
+
       const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_requests`, {
         method: 'POST',
         headers: {
@@ -58,6 +73,7 @@ export default async function handler(req, res) {
           referral_source: referral_source || null,
           meeting_date, meeting_time,
           status: 'pending',
+          organization_id: organizationId,
         }),
       });
       if (!r.ok) {

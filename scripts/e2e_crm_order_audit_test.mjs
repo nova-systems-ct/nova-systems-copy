@@ -15,6 +15,7 @@
 // Usage: node scripts/e2e_crm_order_audit_test.mjs
 
 import fs from 'node:fs';
+import { requireRealSupabaseOptIn } from './_realSupabaseGuard.mjs';
 
 const env = {};
 fs.readFileSync('.env.local', 'utf8').split('\n').forEach((line) => {
@@ -32,6 +33,7 @@ if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) {
   console.error('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / VITE_SUPABASE_ANON_KEY in .env.local');
   process.exit(1);
 }
+requireRealSupabaseOptIn(SUPABASE_URL, 'e2e_crm_order_audit_test');
 
 const adminFetch = (path, opts = {}) => fetch(`${SUPABASE_URL}${path}`, {
   ...opts,

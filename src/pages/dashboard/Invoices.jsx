@@ -66,16 +66,17 @@ export default function Invoices() {
   }, [currentOrg?.id])
 
   const load = async () => {
+    if (!currentOrg) return
     setLoading(true)
     try {
-      const r = await authedFetch('/api/client?resource=invoices')
+      const r = await authedFetch(`/api/client?resource=invoices&organization_id=${encodeURIComponent(currentOrg.id)}`)
       const data = await r.json()
       setInvoices(Array.isArray(data) ? data : [])
     } catch { setInvoices([]) }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [currentOrg?.id])
 
   const statusOptions = useMemo(() => [...new Set(invoices.map(i => i.status).filter(Boolean))].sort(), [invoices])
 
@@ -116,7 +117,7 @@ export default function Invoices() {
       // 1. Create the invoice row first so we have an id to attach to the Stripe session
       const createRes = await authedFetch('/api/client?resource=invoices', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid' }),
+        body: JSON.stringify({ action: 'create', organization_id: currentOrg.id, client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid' }),
       })
       const createData = await createRes.json()
       const invoiceId = createData.invoice?.id
@@ -158,7 +159,7 @@ export default function Invoices() {
       if (invoiceId) {
         await authedFetch('/api/client?resource=invoices', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'update', id: invoiceId, client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid', stripe_payment_link: pay_link, invoice_pdf_url }),
+          body: JSON.stringify({ action: 'update', organization_id: currentOrg.id, id: invoiceId, client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid', stripe_payment_link: pay_link, invoice_pdf_url }),
         })
       }
 

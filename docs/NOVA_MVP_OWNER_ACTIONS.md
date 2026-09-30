@@ -11,12 +11,24 @@ provider accounts, the 71-table migration order, legal/pricing decisions), see
 
 ## A. Security migration authorization (highest priority — before any real client data)
 
-**A-3 and A-2 are now prepared AND locally proven** (58 real-database checks across two new test
-files, `scripts/e2e_schema_lockdown_test.mjs` and `scripts/e2e_org_membership_read_test.mjs`, both
-100% passing against a real disposable local PostgreSQL+PostgREST). The migration lives in
-`supabase/schema-update.sql` and `supabase/zz-public-schema-lockdown-standalone.sql`. **What's
-needed from you now is authorization to apply it to staging, then production — not more
-preparation work.** A-4 is investigated but not yet fixed (see below — it needs a larger change).
+**A-3 and A-2 are now prepared AND locally proven** (63 real-database checks across three test
+files — `scripts/e2e_schema_lockdown_test.mjs`, `scripts/e2e_org_membership_read_test.mjs`,
+`scripts/e2e_mvp_security_fix_test.mjs` — all passing against a real disposable local
+PostgreSQL+PostgREST). **The deliverable for your real deployment is
+`supabase/mvp-security-fix-2026-09-29-standalone.sql`** — a narrow, separately-reviewable file
+containing only the A-2/A-3 statements, not the full cumulative `schema-update.sql` (most of which
+has almost certainly already run against your deployment; re-running the whole file blindly is
+not what you want). Read that file's own header comment first — it states its dependencies, what
+it preserves, backup/verification/rollback steps, and the one open decision (staging-project
+target — see below). **What's needed from you now is authorization to apply it — not more
+preparation work.** A-4 is now also fixed and locally proven (see below).
+
+**No staging Supabase project currently exists** — nova-systems-copy and nova-wave-one share one
+project, and no separate staging project has been created. Before I can hand you a "run this in
+staging" step, you need to either (a) create a new, free-tier Supabase project to use as staging
+(no new spend required), or (b) explicitly accept applying directly to production with a fresh
+backup first. The security-fix file's own header lays out both paths — pick one and let me know,
+or just tell me you've created a staging project's URL/keys and I'll verify against it.
 
 1. **A-3 (done, locally proven):** RLS enabled on 15 tables that were reachable with the public
    anon key — `client_accounts` (contains password hashes), `client_messages`, `vault_documents`,

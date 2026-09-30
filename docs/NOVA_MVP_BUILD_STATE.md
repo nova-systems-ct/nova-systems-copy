@@ -94,9 +94,29 @@ the whole audit" instruction — all confirmed accurate.
   orgs, each provably limited to their own org and membership row, a forged org-id query-string
   filter granting nothing, anon getting zero rows, service role unaffected.
 - Regression check after all of the above: re-ran `e2e_schema_lockdown_test.mjs` (48/48),
-  `e2e_audit_engine_test.mjs` (27/27), `e2e_sales_closing_test.mjs` (97/97),
-  `e2e_api_client_auth_test.mjs` (22/22) — all clean. 204 real-database checks total this session
-  across 5 suites, 0 regressions.
+  `e2e_audit_engine_test.mjs` (27/27), `e2e_sales_closing_test.mjs` (97/97) — all against the real
+  local disposable harness, all clean. 182 real-database checks total this session across 4
+  suites, 0 regressions.
+- **Correction, found while addressing Isaac's follow-up prompt's item 7:** the same regression
+  pass also re-ran `e2e_api_client_auth_test.mjs` (22/22) and reported it above alongside the
+  local-harness suites as if it were equivalent evidence. It is not: that script reads
+  `.env.local`, whose `SUPABASE_URL` points at the real production Supabase project
+  (`xizmgruvuazmummotzkp.supabase.co`), not a local instance. This is pre-existing, partially
+  documented behavior (`docs/SALES_TEAM_INSTALLATION.md:121` already flags these as "legacy"
+  scripts that touch the live project), not something introduced this session — but two runs of it
+  this session, both believed at the time to be local, created a throwaway org and two throwaway
+  Supabase Auth users in production. The script's own `finally`-block cleanup should have removed
+  them; this session could not independently confirm that (blocked by the harness's own safety
+  classifier from a read-only production check) and asked Isaac to verify directly. Fixed the
+  systemic gap: added `scripts/_realSupabaseGuard.mjs` and wired it into all 13 scripts in this
+  repo that read `.env.local` for `SUPABASE_URL` (`e2e_api_client_auth_test`,
+  `e2e_org_isolation_test`, `e2e_crystal_test`, `e2e_zion_remaining_tabs_test`,
+  `e2e_voice_agent_test`, `e2e_marketing_automation_test`, `e2e_marketing_content_workflow_test`,
+  `e2e_crm_order_audit_test`, `e2e_installation_center_test`, `e2e_approval_inbox_test`,
+  `e2e_zion_studio_test`, `e2e_login_path_test`, `e2e_academy_auth_test`) — all now refuse to run
+  against a non-`localhost` target without an explicit `ALLOW_REAL_SUPABASE_TESTS=yes` opt-in.
+  Confirmed the guard fires correctly (re-running `e2e_api_client_auth_test.mjs` now prints a
+  clear refusal instead of silently touching production); `node --check` clean on all 14 files.
 - **Audit report renderer (built, local/uncommitted):** `generateAuditReportPDF()` added to
   `src/utils/generatePdf.js`, reusing the exact `header()`/`sectionHeading()`/`addSection()`
   pattern already proven for contracts/invoices/certificates. Wired into `AuditCaseDetail.jsx`'s

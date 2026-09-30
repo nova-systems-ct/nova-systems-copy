@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ClipboardList, Loader2, ExternalLink, Download, Calendar } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
+import { useOrg } from '../../lib/OrgContext'
 
 const GOLD = '#C9A84C'
 const STATUS_COLORS = {
@@ -34,6 +35,7 @@ function exportMeetingsCsv(meetings) {
 }
 
 export default function IntakeForms() {
+  const { currentOrg } = useOrg()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [meetings, setMeetings] = useState([])
@@ -46,12 +48,13 @@ export default function IntakeForms() {
       .catch(() => setClients([]))
       .finally(() => setLoading(false))
 
-    authedFetch('/api/client?resource=intake-requests')
+    if (!currentOrg) return
+    authedFetch(`/api/client?resource=intake-requests&organization_id=${encodeURIComponent(currentOrg.id)}`)
       .then(r => r.json())
       .then(data => setMeetings(Array.isArray(data) ? data : []))
       .catch(() => setMeetings([]))
       .finally(() => setMeetingsLoading(false))
-  }, [])
+  }, [currentOrg?.id])
 
   const updateMeetingStatus = async (id, status) => {
     setMeetings(prev => prev.map(m => m.id === id ? { ...m, status } : m))
@@ -59,7 +62,7 @@ export default function IntakeForms() {
       await authedFetch('/api/client?resource=intake-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update-status', id, status }),
+        body: JSON.stringify({ action: 'update-status', organization_id: currentOrg.id, id, status }),
       })
     } catch {}
   }

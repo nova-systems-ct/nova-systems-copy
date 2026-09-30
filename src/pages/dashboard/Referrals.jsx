@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, X, Loader2, HandCoins, CheckCircle2 } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
+import { useOrg } from '../../lib/OrgContext'
 
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
@@ -15,6 +16,7 @@ const lbl = { display: 'block', fontSize: 9, fontWeight: 700, letterSpacing: '0.
 const emptyForm = { rep_name: '', rep_email: '', client_name: '', deal_value: '', commission_rate: 15 }
 
 export default function Referrals() {
+  const { currentOrg } = useOrg()
   const [referrals, setReferrals] = useState([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -22,16 +24,17 @@ export default function Referrals() {
   const [saving, setSaving] = useState(false)
 
   const load = async () => {
+    if (!currentOrg) return
     setLoading(true)
     try {
-      const r = await authedFetch('/api/client?resource=referrals')
+      const r = await authedFetch(`/api/client?resource=referrals&organization_id=${encodeURIComponent(currentOrg.id)}`)
       const data = await r.json()
       setReferrals(Array.isArray(data) ? data : [])
     } catch { setReferrals([]) }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [currentOrg?.id])
 
   const stats = useMemo(() => ({
     owed: referrals.filter(r => r.status !== 'Paid').reduce((s, r) => s + (Number(r.commission_amount) || 0), 0),
@@ -44,7 +47,7 @@ export default function Referrals() {
     setSaving(true)
     await authedFetch('/api/client?resource=referrals', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'create', ...form }),
+      body: JSON.stringify({ action: 'create', organization_id: currentOrg.id, ...form }),
     })
     setSaving(false)
     setCreating(false)

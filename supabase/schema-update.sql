@@ -710,6 +710,24 @@ DROP POLICY IF EXISTS own_membership_read ON organization_members;
 CREATE POLICY own_membership_read ON organization_members FOR SELECT TO authenticated USING (staff_user_id = auth.uid());
 
 -- ============================================================================================
+-- SECURITY FIX (2026-09-29, Gap A-4): organization-scope intake_requests, matching the same
+-- pattern already applied to leads/contracts/client_invoices/etc. below. Every existing row is
+-- unambiguously Nova's own data — intake_requests is written only by api/book-meeting.js, which is
+-- bound entirely to the public /welcome page (hardcoded "Nova Systems" branding, emails always to
+-- Isaac's own address, no org parameter anywhere in that request) — there is no other real
+-- organization this data could belong to today, so this is the same well-reasoned backfill already
+-- used for the tables below, not a guess. (client_invoices and referral_tracking already have
+-- organization_id + RLS from Stage 5 below — only their handlers in api/client.js needed fixing,
+-- not their schema; see api/client.js's handleInvoices/handleReferrals/handleIntakeRequests.)
+-- ============================================================================================
+ALTER TABLE intake_requests ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+CREATE INDEX IF NOT EXISTS intake_requests_organization_idx ON intake_requests (organization_id);
+UPDATE intake_requests SET organization_id = o.id FROM organizations o WHERE o.kind = 'nova_internal' AND intake_requests.organization_id IS NULL;
+ALTER TABLE intake_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS members_read_intake_requests ON intake_requests;
+CREATE POLICY members_read_intake_requests ON intake_requests FOR SELECT TO authenticated USING (is_org_member(organization_id));
+
+-- ============================================================================================
 -- STAGE 5 — NOVA RUNS NOVA (2026-09-14, NOVA-STAGE-5-RUNS-NOVA)
 -- Additive only. Safe to re-run. Does not alter or drop any existing table's data.
 --
