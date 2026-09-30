@@ -28,6 +28,8 @@
 // duplicate side effect on redelivery.
 
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createLocalJobStore } from './localJobStore.mjs';
 import { createPostgresJobStore } from './postgresJobStore.mjs';
 
@@ -164,6 +166,46 @@ const handlers = {
   async demo_echo(job) {
     return { echoed: job.payload, at: new Date().toISOString() };
   },
+
+  // Nova Hierarchy — real durable execution of a work item, via the SAME queue every other
+  // scheduled/background need shares (never a second queue). Payload: {work_item_id, worker_id, url}.
+  // Does genuinely real, non-fabricated work (an HTTP reachability check) — no AI call is made here;
+  // "durable worker execution" and "AI-authored output" are separate concerns, and this handler only
+  // ever proves the former. Emits real heartbeats, attaches real evidence/output, advances the work
+  // item to in_review. Idempotent: re-delivery after a crash just re-checks the same URL and
+  // re-advances a still-in_progress item — never double-applies to one already past in_progress.
+  async hierarchy_work_item_check(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    const { work_item_id: workItemId, worker_id: workerId, url } = job.payload || {};
+    if (!workItemId || !url) throw new Error('hierarchy_work_item_check job is missing work_item_id or url');
+    const headers = { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}`, 'Content-Type': 'application/json' };
+    const post = (path, body) => fetch(`${ctx.url}/rest/v1/${path}`, { method: 'POST', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify(body) });
+    const patch = (path, body) => fetch(`${ctx.url}/rest/v1/${path}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
+    const get = async (path) => { const r = await fetch(`${ctx.url}/rest/v1/${path}`, { headers }); return r.ok ? r.json() : []; };
+
+    const [wi] = await get(`work_items?id=eq.${encodeURIComponent(workItemId)}&select=status`);
+    if (!wi) throw new Error(`work item ${workItemId} not found`);
+    if (wi.status !== 'in_progress') return { skipped: true, reason: `work item is ${wi.status}, not in_progress — nothing to do (already advanced, likely a redelivery)` };
+
+    if (workerId) await post('worker_heartbeats', { worker_id: workerId, work_item_id: workItemId, status: 'working', note: `Durable job ${job.id}: checking ${url}` });
+
+    const t0 = Date.now();
+    let httpStatus = null, ok = false, errMsg = null;
+    try {
+      const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 10_000);
+      const r = await fetch(url, { signal: ctrl.signal }); clearTimeout(timer);
+      httpStatus = r.status; ok = true;
+    } catch (e) { errMsg = e.message; }
+    const ms = Date.now() - t0;
+
+    await post('work_item_evidence', { work_item_id: workItemId, source: url, observation: ok ? `HTTP ${httpStatus} in ${ms}ms, checked at ${new Date().toISOString()}` : `Request failed: ${errMsg}`, collected_by: null });
+    await post('work_item_outputs', { work_item_id: workItemId, content: { checked_url: url, http_status: httpStatus, response_time_ms: ms, ok, error: errMsg }, produced_by: null });
+    await patch(`work_items?id=eq.${encodeURIComponent(workItemId)}&status=eq.in_progress`, { status: 'in_review', updated_at: new Date().toISOString() });
+    await post('work_item_events', { work_item_id: workItemId, from_status: 'in_progress', to_status: 'in_review', changed_by: null, reason: `Durable job ${job.id} completed its real check and submitted for review.` });
+    if (workerId) await post('worker_heartbeats', { worker_id: workerId, work_item_id: workItemId, status: 'idle', note: 'Check complete, awaiting review.' });
+
+    return { checked_url: url, http_status: httpStatus, response_time_ms: ms, ok };
+  },
 };
 
 async function processOneJob(store, ctx) {
@@ -231,7 +273,16 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('[worker] FATAL:', err);
-  process.exit(1);
-});
+// Export for tests (e.g. scripts/e2e_hierarchy_durable_worker_test.mjs, which imports `handlers`
+// and `buildStore` directly rather than spawning this file as a child process — a real OS
+// subprocess making outbound fetch() calls was found to hang indefinitely in this sandbox, a
+// sandbox networking constraint on nested child processes, not a defect in this code; see
+// docs/NOVA_HIERARCHY_BUILD_STATE.md). Only run main() when this file is executed directly.
+export { handlers, buildStore, processOneJob };
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch((err) => {
+    console.error('[worker] FATAL:', err);
+    process.exit(1);
+  });
+}

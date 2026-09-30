@@ -328,4 +328,10 @@ try {
   check('audit trail recorded the sale lifecycle', (await env.sql("select count(*) from sales_audit_log where action in ('proposal_sent','proposal_signed','payment_received','sale_submitted_for_verification','sale_verified')")).rows[0].count >= 5);
 } catch (e) { fail++; console.log('FAIL — test crashed:', e.stack || e); }
 finally { stripeSrv.close(); await env.stop(); }
-console.log(`\n${pass} passed, ${fail} failed`); process.exitCode = fail ? 1 : 0;
+console.log(`\n${pass} passed, ${fail} failed`);
+// Force-exit: observed (2026-09-28, via the aggregate runner) to otherwise hang past its own
+// cleanup — every check completes and prints, but the process doesn't exit on its own (most likely
+// stripeSrv.close() above not waiting for open keep-alive connections to drain). Same fix already
+// applied to the hierarchy e2e suites after the identical symptom there.
+process.exitCode = fail ? 1 : 0;
+process.exit(process.exitCode);

@@ -8,6 +8,10 @@ import { handleProposals, handleClientProposal } from './proposals.js';
 import { handlePayments } from './payments.js';
 import { handleCommissions } from './commissions.js';
 import { handleNotifications } from './notifications.js';
+import { handleHierarchy } from '../_hierarchy/registry.js';
+import { handleGovernance } from '../_hierarchy/governance.js';
+import { handleWorkItems } from '../_hierarchy/workitems.js';
+import { handleMeetings } from '../_hierarchy/meetings.js';
 
 const TABLE = {
   apply: handleApply,     // applicant portal + public invitation acceptance
@@ -21,6 +25,10 @@ const TABLE = {
   salespay: handlePayments,          // owner/manager payment records
   commissions: handleCommissions,    // ledger, plan, payout batches, payout accounts
   notifications: handleNotifications, // in-app inbox, delivery report, maintenance
+  hierarchy: handleHierarchy, // Nova organizational hierarchy registry (portfolio, positions, workers, CEO Twin/authority matrix policy)
+  governance: handleGovernance, // Nova hierarchy governance (worker contracts, escalations, kill switches, decision records)
+  workitems: handleWorkItems, // Nova hierarchy work & reporting (work items, heartbeats, Venture Lab, Owner Brief, operational memory)
+  meetings: handleMeetings, // Nova hierarchy Meeting Engine (Meet Now, Committee Room, transcript, evidence board, action items, Incident Room)
 };
 export const SALES_RESOURCES = new Set(Object.keys(TABLE));
 export async function salesDispatch(resource, op, req, res) {
