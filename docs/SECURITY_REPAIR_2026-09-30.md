@@ -91,12 +91,48 @@ The tests listed in section 4 verify each item below locally.
 
 ## 4. Verification
 
-See the final report for the exact results. Commands, run from a copy that has no `.env.local`:
+The clean-checkout run used commit `6ce1d1b`, exported with `git archive` into an empty folder with no
+`.env.local`. Dependencies came from `npm ci`, and no Supabase variables were set.
 
-```
-node scripts/verify_local_all.mjs          # logic and schema validators, no database
-node scripts/verify_sales_team_e2e.mjs     # every local real-database and browser suite
-```
+| Step | Result |
+|---|---|
+| `npm ci` | passed |
+| `vite build` | passed |
+| `node scripts/verify_local_all.mjs`, 23 logic and schema suites with no database | 23 PASS |
+| `node scripts/verify_sales_team_e2e.mjs`, 24 suites on a disposable database, including 2 browser suites | 24 PASS, 0 FAIL, 0 SKIP, 0 TIMEOUT; 1,212 checks |
+
+Key suites from that run:
+
+| Suite | Checks |
+|---|---|
+| Security personas: anonymous, applicant, representative, staff, other-org staff, owner | 90/90 |
+| Production patch on a reproduced production-like broken state | 32/32 |
+| Strict clean install from the manifest | 17/17 |
+| Hiring, including the concurrency proof | 76/76 |
+| Sales browser suite, including F5 | 49/49 |
+
+The local test tooling in `.testenv/` (embedded PostgreSQL and the PostgREST binary) is set up per machine,
+as described in docs/SALES_TEAM_INSTALLATION.md. It is not part of the repository.
+
+An earlier clean-checkout run, before the final two commits, had two failures. The clean-install suite
+hit a cold PostgREST start beyond 60 seconds, so the wait is now 120 seconds. The journeys suite ended
+silently once and passed in 5 later runs. The cause was not identified. The runner now reports the exit
+code and first error line if that happens again.
+
+Commits on `repair/security-2026-09-30` (local only, not pushed):
+
+| Commit | Content |
+|---|---|
+| `08a7eac` | Shared org-access and email helpers; public forms reply only to the submitter (F-04) |
+| `2601f23` | Organization and role isolation (F-08, F-22 org binding, F-23, F-24, F-33, F-35) |
+| `712e507` | Authoritative payments and server-built invoice email (F-03, F-04, F-05) |
+| `26c8e58` | Private intake uploads, bound contract signatures, no stored sign-in links (F-16, F-26, F-36) |
+| `cf1e92e` | Worker and scripts fail closed (F-21, F-28) |
+| `cfc4d24` | Production patch, repair columns, strict clean install (F-02, F-17, F-18, F-34) |
+| `0dfffdb` | Honest exit codes, bounded runner, persona security suite (F-27) |
+| `5d2823d` | First version of this report and the credential/legacy plan |
+| `06002b6` | LF line endings for every checkout, which the clean-checkout run required |
+| `6ce1d1b` | Prompt runner reporting; longer PostgREST cold start |
 
 ## 5. Still open
 
