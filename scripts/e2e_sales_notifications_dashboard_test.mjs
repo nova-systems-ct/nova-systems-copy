@@ -111,6 +111,10 @@ try {
   check('a failed invitation email is shown as FAILED with the reason (owner can see delivery failed)', r.body.email_status === 'failed' && (await env.sql('select status, delivery_error from application_invitations where id=$1', [inv2])).rows[0].status === 'failed');
   env.stubs.failEmails = false; await N('run-maintenance', { token: owner.token, body: {} });
   check('after the provider recovers the sweep resends it and the invitation becomes SENT', (await env.sql('select status, provider_message_id from application_invitations where id=$1', [inv2])).rows[0].status === 'sent');
+  // F-36: the link was never stored, so the sweep issues a FRESH link for the same invitation and emails it.
+  const resent = env.stubs.outbox.filter((m) => JSON.stringify(m.to).includes('bob@nova.test')).pop();
+  check('the re-sent invitation email carries a fresh one-time link', /\/join\/[A-Za-z0-9_-]{20,}/.test(resent?.text || ''), resent?.text?.slice(0, 120));
+  check('no stored invitation notification contains a usable link', (await env.sql("select count(*) from sales_notifications where kind='invitation' and body ~ '/join/'")).rows[0].count === '0');
   Object.assign(process.env, { SALES_EMAIL_MODE: 'dry_run' });
 
   // ================================================================== reminders

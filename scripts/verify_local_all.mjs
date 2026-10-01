@@ -14,7 +14,8 @@ let failed = 0;
 for (const s of suites) {
   const r = spawnSync(process.execPath, [`scripts/${s}.mjs`], { encoding: 'utf8', timeout: 180_000 });
   const tail = (r.stdout || '').trim().split('\n').filter((l) => /passed|PASS — every/.test(l)).pop() || (r.stderr || '').trim().split('\n').pop();
-  console.log(`${r.status === 0 ? 'OK  ' : 'FAIL'} ${s.padEnd(38)} ${tail}`);
+  const label = r.error?.code === 'ETIMEDOUT' ? 'TIMEOUT' : r.status === 0 ? 'PASS' : 'FAIL'; // F-27: a timeout is reported as such
+  console.log(`${label.padEnd(7)} ${s.padEnd(38)} ${label === 'TIMEOUT' ? 'killed after 180s' : tail}`);
   if (r.status !== 0) failed++;
 }
 console.log(failed ? `\n${failed} suite(s) FAILED` : '\nAll local suites passed (logic/schema-syntax only — nothing here proves a deployment).');

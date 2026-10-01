@@ -13,8 +13,19 @@
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
 
-const suites = ['e2e_sales_db_test', 'e2e_sales_hiring_test', 'e2e_jobs_hiring_test', 'e2e_audit_engine_test', 'e2e_hierarchy_registry_test', 'e2e_hierarchy_governance_test', 'e2e_hierarchy_workitems_test', 'e2e_hierarchy_meetings_test', 'e2e_hierarchy_durable_worker_test', 'e2e_sales_academy_test', 'e2e_sales_documents_activation_test', 'e2e_sales_pipeline_catalog_test', 'e2e_sales_closing_test', 'e2e_sales_commissions_test', 'e2e_sales_notifications_dashboard_test', 'e2e_sales_journeys_test'];
-const SUITE_TIMEOUT_MS = 120_000; // every suite normally finishes in 12-20s; 120s is generous headroom, not 900s
+// Security repair 2026-09-30 (audit F-27): every local real-database suite, including the security, schema and
+// browser suites. The run no longer stops at the first failure; each suite is reported PASS / FAIL / SKIP / TIMEOUT
+// and the process exits non-zero unless every suite PASSed. A suite SKIPs only by exiting with code 3 after
+// printing a "SKIP —" line that says why (e.g. no Playwright browser installed). Limit with --only=a,b.
+const ALL = [
+  'e2e_clean_install_test', 'e2e_production_patch_test', 'e2e_mvp_security_fix_test', 'e2e_org_membership_read_test', 'e2e_schema_lockdown_test',
+  'e2e_security_personas_test',
+  'e2e_sales_db_test', 'e2e_sales_hiring_test', 'e2e_jobs_hiring_test', 'e2e_audit_engine_test', 'e2e_hierarchy_registry_test', 'e2e_hierarchy_governance_test', 'e2e_hierarchy_workitems_test', 'e2e_hierarchy_meetings_test', 'e2e_hierarchy_durable_worker_test', 'e2e_sales_academy_test', 'e2e_sales_documents_activation_test', 'e2e_sales_pipeline_catalog_test', 'e2e_sales_closing_test', 'e2e_sales_commissions_test', 'e2e_sales_notifications_dashboard_test', 'e2e_sales_journeys_test',
+  'e2e_sales_browser_test', 'e2e_hierarchy_browser_test',
+];
+const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
+const suites = only.length ? ALL.filter((s) => only.includes(s)) : ALL;
+const SUITE_TIMEOUT_MS = Number(process.env.NOVA_SUITE_TIMEOUT_MS) || 240_000; // database suites take 12-40s, browser suites ~2 min
 
 function killTree(pid) {
   try {
@@ -62,10 +73,12 @@ function runSuite(name) {
     child.on('close', (code) => {
       clearTimeout(timer);
       const seconds = (Date.now() - t0) / 1000;
-      const m = /(\d+) passed, (\d+) failed/.exec(out);
+      const m = /(\d+)(?:\/\d+)? passed, (\d+) failed/.exec(out); // "4/5 passed" counts 4, not 5 (F-27)
       const pass = m ? Number(m[1]) : 0;
       const failCount = m ? Number(m[2]) : null;
       if (timedOut) return resolve({ status: 'timeout', pass, failCount, tail: `killed after ${SUITE_TIMEOUT_MS / 1000}s with no result — process tree terminated`, seconds });
+      const skip = out.split('\n').find((l) => l.startsWith('SKIP —'));
+      if (code === 3 && skip) return resolve({ status: 'skip', pass, failCount, tail: skip, seconds });
       if (code === 0 && m && failCount === 0) return resolve({ status: 'ok', pass, failCount, tail: `${m[1]} passed, ${m[2]} failed`, seconds });
       const tail = m ? `${m[1]} passed, ${m[2]} failed` : (err || out || 'no output').trim().split('\n').pop();
       resolve({ status: 'fail', pass, failCount, tail, seconds, failLines: out.split('\n').filter((l) => l.startsWith('FAIL')).slice(0, 8) });
@@ -73,25 +86,20 @@ function runSuite(name) {
   });
 }
 
-let failed = 0; let timedOutCount = 0; let total = 0;
+const rows = []; let total = 0;
 for (const s of suites) {
-  console.log(`RUN  ${s} …`);
+  console.log(`RUN  ${s} ...`);
   const r = await runSuite(s);
   total += r.pass;
-  const label = r.status === 'ok' ? 'OK  ' : r.status === 'timeout' ? 'TIME' : 'FAIL';
-  console.log(`${label} ${s.padEnd(42)} ${r.tail} (${r.seconds.toFixed(0)}s)`);
+  const label = { ok: 'PASS', fail: 'FAIL', skip: 'SKIP', timeout: 'TIMEOUT' }[r.status];
+  rows.push({ s, label, tail: r.tail, seconds: r.seconds });
+  console.log(`${label.padEnd(7)} ${s.padEnd(42)} ${r.tail} (${r.seconds.toFixed(0)}s)`);
+  (r.failLines || []).forEach((l) => console.log(`        ${l}`));
   reapOrphanedTestPostgres();
-  if (r.status === 'timeout') { timedOutCount++; failed++; continue; } // a timeout is not a code assertion failure — recorded separately, but still blocks a clean overall pass
-  if (r.status === 'fail') {
-    failed++;
-    (r.failLines || []).forEach((l) => console.log(`       ${l}`));
-    console.log(`\nStopping after a real assertion failure in ${s} — fix it and rerun that suite directly before continuing the aggregate.`);
-    break; // stop on a real failure; do not keep burning time on later suites while a genuine defect is unresolved
-  }
 }
-console.log(
-  failed
-    ? `\n${failed} suite(s) did not pass cleanly${timedOutCount ? ` (${timedOutCount} of those were TIMEOUTs, not assertion failures)` : ''} (${total} checks passed before stopping).`
-    : `\nAll Sales Team + Nova Hierarchy real-database suites passed: ${total} checks (local disposable PostgreSQL + PostgREST; auth/storage/email/payments are stand-ins).`
-);
-process.exit(failed ? 1 : 0);
+const count = (l) => rows.filter((x) => x.label === l).length;
+console.log('\nSUMMARY');
+for (const x of rows) console.log(`  ${x.label.padEnd(7)} ${x.s}`);
+console.log(`\n${count('PASS')} PASS, ${count('FAIL')} FAIL, ${count('SKIP')} SKIP, ${count('TIMEOUT')} TIMEOUT — ${total} checks passed in total`);
+console.log('Local disposable PostgreSQL + PostgREST; auth, storage, email and payments are stand-ins. Not evidence about production.');
+process.exit(count('PASS') === rows.length && rows.length > 0 ? 0 : 1);

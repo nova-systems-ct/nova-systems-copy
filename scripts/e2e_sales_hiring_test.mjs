@@ -19,7 +19,9 @@ try {
   await env.reload();
 
   const goodProfile = { name: 'Jane Applicant', phone: '(203) 555-0142', city: 'Waterbury, CT', timezone: 'America/New_York', hours_per_week: 20, availability_days: ['mon', 'tue', 'thu'], preferred_hours: 'Evenings', experience: 'Two years of retail and customer service; I enjoy helping owners solve problems.', channels: ['telephone', 'email'], motivation: 'I like working with small business owners and I want structured training before I talk to anyone.', scenario_no_data: 'I would say I cannot know yet; I would ask about their calls, follow-up and website, and offer a diagnostic first without promising a number.', scenario_objection: 'I would ask how new customers currently find and contact them, and what happens to those who do not get an answer.', ack_privacy: true, ack_truthful: true, ack_no_guarantee: true, ack_conduct: true };
-  const magic = async (email) => { const row = (await env.sql("select body from sales_notifications where kind='apply_link' and email=$1 order by created_at desc limit 1", [email])).rows[0]; const link = row?.body.match(/http[^\s]+/)?.[0]; return env.stubServer.consumeMagicLink(link); };
+  // The sign-in link is taken from the auth provider stand-in (as the applicant's inbox would receive
+  // it), never from Nova's database — which must not retain usable authentication links (F-36).
+  const magic = async (email) => env.stubServer.consumeMagicLink(env.stubServer.lastLinkFor(email));
 
   // ------------------------------------------------------------------ public start
   let r = await call({ resource: 'apply', op: 'start', body: { email: 'jane@applicant.test', hp: 'i am a bot' } });
@@ -30,6 +32,7 @@ try {
   check('start creates a real auth user, ONE draft application with a reference code, and a sign-in email', r.status === 200 && (await env.sql("select count(*) from applications where email_normalized='jane@applicant.test' and status='draft'")).rows[0].count === '1' && (await env.sql("select reference_code from applications where email_normalized='jane@applicant.test'")).rows[0].reference_code.startsWith('NOVA-'));
   const dryRow = (await env.sql("select status, body from sales_notifications where kind='apply_link' and email='jane@applicant.test'")).rows[0];
   check('with email mode not live, the sign-in email is recorded as dry_run (NOT sent) and no provider was contacted', dryRow.status === 'dry_run' && env.stubs.outbox.length === 0 && env.stubs.emailRequests.length === 0);
+  check('the stored notification keeps NO usable sign-in link (F-36)', !/https?:\/\//.test(dryRow.body) && /not stored/.test(dryRow.body));
   await call({ resource: 'apply', op: 'start', body: { email: 'jane@applicant.test' } });
   check('starting twice reuses the same application (duplicate handling)', (await env.sql("select count(*) from applications where email_normalized='jane@applicant.test'")).rows[0].count === '1');
   const stf = await call({ resource: 'apply', op: 'start', body: { email: 'owner@nova.test' } });
@@ -40,9 +43,10 @@ try {
   void before;
 
   // ------------------------------------------------------------------ applicant session
-  const jane = await magic('jane@applicant.test');
+  const janeLink = env.stubServer.lastLinkFor('jane@applicant.test');
+  const jane = env.stubServer.consumeMagicLink(janeLink);
   check('the one-time link yields a real session for that applicant', !!jane?.access_token);
-  check('a one-time link cannot be reused', env.stubServer.consumeMagicLink((await env.sql("select body from sales_notifications where kind='apply_link' and email='jane@applicant.test' order by created_at desc limit 1")).rows[0].body.match(/http[^\s]+/)[0]) !== null || true);
+  check('a one-time link cannot be reused', env.stubServer.consumeMagicLink(janeLink) === null);
   r = await call({ resource: 'apply', op: 'me', method: 'GET', token: jane.access_token });
   check('applicant sees their own draft, editable, with a next step', r.status === 200 && r.body.application.status === 'draft' && r.body.application.can_edit && /Finish your application/.test(r.body.application.next_step));
   const forbidden = ['admin_notes', 'decision_reason', 'assigned_reviewer_id', 'evaluations', 'password_hash', 'email_normalized', 'auth_user_id'];
@@ -146,16 +150,23 @@ try {
   check('a weak password is refused and the invitation stays usable', r.status === 422 && (await env.sql("select status from application_invitations where application_id=$1", [janeApp.id])).rows[0].status === 'queued');
   r = await call({ resource: 'apply', op: 'accept-invitation', body: { token: 'nope', password: 'A-very-long-passphrase-1' } });
   check('an invalid token cannot create an account', r.status === 400);
-  const [a1, a2] = await Promise.all([call({ resource: 'apply', op: 'accept-invitation', body: { token, password: 'A-very-long-passphrase-1' } }), call({ resource: 'apply', op: 'accept-invitation', body: { token, password: 'Another-long-passphrase-2' } })]);
+  const P1 = 'A-very-long-passphrase-1', P2 = 'Another-long-passphrase-2';
+  const [a1, a2] = await Promise.all([call({ resource: 'apply', op: 'accept-invitation', body: { token, password: P1 } }), call({ resource: 'apply', op: 'accept-invitation', body: { token, password: P2 } })]);
+  // Either request may win the race. The account must carry the WINNER's password and only that one (F-27:
+  // the old version always assumed the first request won, so it failed whenever the second did).
+  const winnerPw = a1.status === 200 ? P1 : P2, loserPw = winnerPw === P1 ? P2 : P1;
   check('CONCURRENCY: two simultaneous uses of one link — exactly one succeeds', [a1.status, a2.status].filter((s) => s === 200).length === 1 && [a1.status, a2.status].filter((s) => s === 409).length === 1, `${a1.status}/${a2.status}`);
   const cand = (await env.sql("select m.role, m.status, u.id from organization_members m join auth.users u on u.id = m.staff_user_id where u.email='jane@applicant.test'")).rows;
   check('the applicant became a real candidate: ONE membership, role nova_sales_candidate (never a rep)', cand.length === 1 && cand[0].role === 'nova_sales_candidate' && cand[0].status === 'active');
   check('a sales_reps record exists with status candidate, linked to the application', (await env.sql("select status, application_id from sales_reps where user_id=$1", [cand[0].id])).rows[0].status === 'candidate');
   check('the candidate is enrolled in all ten Academy programs', (await env.sql('select count(*) from academy_enrollments where staff_user_id=$1', [cand[0].id])).rows[0].count === '10');
-  r = await call({ resource: 'apply', op: 'accept-invitation', body: { token, password: 'A-very-long-passphrase-1' } });
+  r = await call({ resource: 'apply', op: 'accept-invitation', body: { token, password: loserPw } });
   check('a used link is refused', r.status === 409);
-  const login = await fetch(`${env.base}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'jane@applicant.test', password: 'A-very-long-passphrase-1' }) });
-  check('the new password works for a real sign-in', login.status === 200);
+  const signIn = (password) => fetch(`${env.base}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'jane@applicant.test', password }) });
+  const loserLogin = await signIn(loserPw);
+  check("CONCURRENCY: the losing request's password does NOT work (its account change was not applied)", loserLogin.status >= 400, String(loserLogin.status));
+  const login = await signIn(winnerPw);
+  check("the winning request's password works for a real sign-in", login.status === 200, String(login.status));
   const candTok = (await login.json()).access_token;
   const perm = async (k) => (await env.rest(candTok, 'rpc/has_permission', { method: 'POST', body: { target_org_id: org, permission_key: k } })).data === true;
   check('the new candidate has training/onboarding access only', (await perm('academy.view')) && (await perm('sales.onboarding')) && !(await perm('sales.rep')) && !(await perm('growth.view')));

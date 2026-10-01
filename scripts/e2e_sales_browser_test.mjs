@@ -3,18 +3,23 @@
 //   PLAYWRIGHT_PATH=<dir containing the playwright package> node scripts/e2e_sales_browser_test.mjs
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { startHarness } from './testenv/devharness.mjs';
 
 const require = createRequire(import.meta.url);
 const pw = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 let pass = 0, fail = 0;
 const check = (n, c, x = '') => { if (c) { pass++; console.log(`PASS — ${n}`); } else { fail++; console.log(`FAIL — ${n} ${x}`); } };
-const SHOTS = 'C:/Users/NVUBCR~1/AppData/Local/Temp/claude/C--Users-NVUBCrosbyUBMS07/0ef944d3-fdd6-4062-be44-e3a88cd2eff0/scratchpad/sales-shots';
+// Portable (audit F-27): NOVA_TEST_SHOTS_DIR, else the OS temp folder — never another session's scratch folder.
+const SHOTS = path.join(process.env.NOVA_TEST_SHOTS_DIR || path.join(os.tmpdir(), 'nova-test-shots'), 'sales');
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const H = await startHarness();
 const { env, base } = H;
-const browser = await pw.chromium.launch({ headless: true });
+// F-27: a machine without a Playwright browser reports SKIP (exit 3) with the reason, never a silent pass.
+let browser;
+try { browser = await pw.chromium.launch({ headless: true }); } catch (e) { console.log(`SKIP — no launchable Playwright Chromium: ${String(e.message).split(String.fromCharCode(10))[0]}`); await H.stop(); process.exit(3); }
 const sql = (q, p) => env.sql(q, p);
 try {
   // ---------------------------------------------------------------- seed (Nova-owned TEST data)
@@ -41,8 +46,9 @@ try {
     await page.getByText('Check your email').waitFor();
     check('A2 asking for a link shows the neutral confirmation (never reveals if an account exists)', true);
     const row = (await sql("select body from sales_notifications where kind='apply_link' and email='jane@applicant.test'")).rows[0];
+    check('A3b the stored record keeps no usable sign-in link (F-36)', !/https?:\/\//.test(row.body));
     check('A3 the sign-in email was recorded as dry-run and NOT sent', (await sql("select status from sales_notifications where kind='apply_link'")).rows[0].status === 'dry_run' && env.stubs.outbox.length === 0);
-    const sess = env.stubServer.consumeMagicLink(row.body.match(/http[^\s]+/)[0]);
+    const sess = env.stubServer.consumeMagicLink(env.stubServer.lastLinkFor('jane@applicant.test'));
     const authKey = `sb-${new URL(env.base).hostname.split('.')[0]}-auth-token`;
     const stored = JSON.stringify({ access_token: sess.access_token, refresh_token: 'r', token_type: 'bearer', expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: sess.userId, email: sess.email } });
     await ctx.addInitScript(([k, v]) => localStorage.setItem(k, v), [authKey, stored]);
@@ -252,7 +258,8 @@ try {
     check('F4 the owner verifies with an explicit unpaid-terms acceptance: deal Won, customer org + order created once', (await sql('select stage, owner_verified_at from crm_deals where id=$1', [dealId])).rows[0].stage === 'won' && (await sql('select count(*) from orders where deal_id=$1', [dealId])).rows[0].count === '1');
     await o.page.goto(`${base}/dashboard/sales-team/commissions`);
     await o.page.getByText('Commissions & payouts').waitFor({ timeout: 15000 });
-    check('F5 with no approved commission plan, the ledger says none can be calculated (no invented rates)', await o.page.getByText(/No commission plan is approved/).first().isVisible());
+    // The heading renders before the ledger data loads; wait (bounded) for the message instead of sampling once (F-27).
+    check('F5 with no approved commission plan, the ledger says none can be calculated (no invented rates)', await o.page.getByText(/No commission plan is approved/).first().waitFor({ timeout: 10000 }).then(() => true, () => false));
     await o.page.goto(`${base}/dashboard/sales-team/overview`);
     await o.page.getByText('Revenue vs pipeline').waitFor({ timeout: 15000 });
     await shot(o.page, 'F-overview');

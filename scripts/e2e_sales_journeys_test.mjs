@@ -53,7 +53,7 @@ try {
   // ==================================================================================================================
   const profile = { name: 'Jane Applicant', phone: '(203) 555-0142', city: 'Waterbury, CT', timezone: 'America/New_York', hours_per_week: 20, availability_days: ['mon', 'tue', 'thu'], preferred_hours: 'Evenings', experience: 'Two years of retail and customer service; I enjoy helping owners solve problems.', channels: ['telephone', 'email'], motivation: 'I like working with small business owners and I want structured training before I talk to anyone.', scenario_no_data: 'I would say I cannot know yet; I would ask about their calls, follow-up and website, and offer a diagnostic first without promising a number.', scenario_objection: 'I would ask how new customers currently find and contact them, and what happens to those who do not get an answer.', ack_privacy: true, ack_truthful: true, ack_no_guarantee: true, ack_conduct: true };
   let r = await apply('start', { body: { email: 'jane@applicant.test' } });
-  const link = (await env.sql("select body from sales_notifications where kind='apply_link' and email='jane@applicant.test'")).rows[0].body.match(/http[^\s]+/)[0];
+  const link = env.stubServer.lastLinkFor('jane@applicant.test'); // from the provider stand-in, never Nova's DB (F-36)
   const jane = env.stubServer.consumeMagicLink(link);
   r = await apply('submit', { token: jane.access_token, body: { profile } });
   const ref = r.body.reference_code;

@@ -20,12 +20,19 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const require = createRequire(path.join(ROOT, '.testenv', 'package.json'));
 const EmbeddedPostgres = require('embedded-postgres').default;
 const pg = require('pg');
+
+// embedded-postgres installs async-exit-hook, whose 'beforeExit' handler schedules process.exit(0). That silently
+// replaced every suite's `process.exitCode = 1`, so failing suites exited 0 (audit F-27). This synchronous listener
+// runs before that deferred exit and keeps the suite's own code. Reproduced and fixed 2026-09-30.
+process.on('beforeExit', () => { process.exit(process.exitCode ?? 0); });
 export const JWT_SECRET = 'local-test-jwt-secret-please-do-not-use-anywhere-else-0123456789';
 
 const freePort = () => new Promise((res) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
 const waitFor = async (fn, ms, what) => { const t0 = Date.now(); let last; while (Date.now() - t0 < ms) { try { if (await fn()) return; } catch (e) { last = e; } await new Promise((r) => setTimeout(r, 200)); } throw new Error(`timeout waiting for ${what}: ${last?.message || ''}`); };
 
-export async function startTestEnv({ migrations = [], publicBuckets = ['papers'], quiet = true } = {}) {
+// bootstrap: 'full' (default) also pre-creates the legacy Nova tables production already had; 'platform' creates only
+// what Supabase itself provides (roles, auth, storage), so a migration list must build everything else (clean install).
+export async function startTestEnv({ migrations = [], publicBuckets = ['papers'], quiet = true, bootstrap = 'full' } = {}) {
   const pgExe = path.join(ROOT, '.testenv', 'bin', 'postgrest.exe');
   if (!fs.existsSync(pgExe)) throw new Error('PostgREST binary missing: download postgrest v16.x for your OS into .testenv/bin (see docs/SALES_TEAM_INSTALLATION.md)');
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nova-testenv-'));
@@ -36,7 +43,8 @@ export async function startTestEnv({ migrations = [], publicBuckets = ['papers']
   const q = (sql, params) => pool.query(sql, params);
 
   const errors = [];
-  await q(fs.readFileSync(path.join(ROOT, 'scripts/testenv/bootstrap.sql'), 'utf8'));
+  const boot = fs.readFileSync(path.join(ROOT, 'scripts/testenv/bootstrap.sql'), 'utf8');
+  await q(bootstrap === 'platform' ? boot.split('-- ==== END OF SUPABASE PLATFORM EMULATION')[0] : boot);
   for (const entry of migrations) {
     const f = typeof entry === 'string' ? entry : entry.file; const mode = typeof entry === 'string' ? 'whole' : entry.mode || 'whole';
     const sql = fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -82,7 +90,7 @@ export async function startTestEnv({ migrations = [], publicBuckets = ['papers']
       const r = await fetch(`${base}/rest/v1/${pathAndQuery}`, { method, headers: { apikey: anonKey, Authorization: `Bearer ${token || anonKey}`, 'Content-Type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
       const text = await r.text(); let data; try { data = JSON.parse(text); } catch { data = text; } return { status: r.status, data };
     },
-    async stop() { try { await pool.end(); } catch { /* ignore */ } try { proc.kill(); } catch { /* ignore */ } await new Promise((r) => stubs.server.close(r)); try { await server.stop(); } catch { /* ignore */ } await new Promise((r) => setTimeout(r, 1200)); try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch { /* ignore */ } },
+    async stop() { try { await pool.end(); } catch { /* ignore */ } try { proc.kill(); } catch { /* ignore */ } proc.stdout?.destroy(); proc.stderr?.destroy(); proc.unref(); /* F-27: open child pipes kept finished suites alive */ await new Promise((r) => stubs.server.close(r)); const pgChild = server.process; try { await server.stop(); } catch { /* ignore */ } pgChild?.stdout?.destroy(); pgChild?.stderr?.destroy(); pgChild?.unref?.(); /* forked postgres workers inherit these pipes on Windows */ await new Promise((r) => setTimeout(r, 1200)); try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch { /* ignore */ } },
   };
   return api;
 }

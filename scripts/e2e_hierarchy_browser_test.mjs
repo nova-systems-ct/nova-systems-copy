@@ -11,6 +11,8 @@
 // logged as SKIP, not PASS.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { startHarness } from './testenv/devharness.mjs';
 
 const require = createRequire(import.meta.url);
@@ -18,12 +20,15 @@ const pw = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 let pass = 0, fail = 0, skip = 0;
 const check = (n, c, x = '') => { if (c) { pass++; console.log(`PASS — ${n}`); } else { fail++; console.log(`FAIL — ${n} ${x}`); } };
 const skipCheck = (n, why) => { skip++; console.log(`SKIP — ${n} (${why})`); };
-const SHOTS = 'C:/Users/NVUBCR~1/AppData/Local/Temp/claude/C--Users-NVUBCrosbyUBMS07/0ef944d3-fdd6-4062-be44-e3a88cd2eff0/scratchpad/hierarchy-shots';
+// Portable (audit F-27): NOVA_TEST_SHOTS_DIR, else the OS temp folder — never another session's scratch folder.
+const SHOTS = path.join(process.env.NOVA_TEST_SHOTS_DIR || path.join(os.tmpdir(), 'nova-test-shots'), 'hierarchy');
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const H = await startHarness(); // already applies allMigrations() by default, which now includes the hierarchy parts
 const { env, base } = H;
-const browser = await pw.chromium.launch({ headless: true });
+// F-27: a machine without a Playwright browser reports SKIP (exit 3) with the reason, never a silent pass.
+let browser;
+try { browser = await pw.chromium.launch({ headless: true }); } catch (e) { console.log(`SKIP — no launchable Playwright Chromium: ${String(e.message).split(String.fromCharCode(10))[0]}`); await H.stop(); process.exit(3); }
 const sql = (q, p) => env.sql(q, p);
 
 try {
