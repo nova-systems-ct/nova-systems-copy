@@ -21,7 +21,7 @@ try {
   await env.sql("insert into leads (name, email, phone, organization_id) values ('Real Prospect','p@x.test','2035550100',$1)", [org]);
   await env.sql("insert into clients (full_name, email, organization_id) values ('Real Client','c@x.test',$1)", [org]);
   await env.sql("insert into contracts (client_name, client_email, contract_type, organization_id) values ('Real Client','c@x.test','Custom',$1)", [org]);
-  await env.sql("insert into client_invoices (client_name, amount, organization_id) values ('Real Client', 750, $1)", [org]);
+  await env.sql("insert into client_invoices (invoice_number, total, organization_id) values ('INV-REAL', 750, $1)", [org]);
   await env.sql("insert into crm_contacts (organization_id, name, email) values ($1,'CRM Person','crm@x.test')", [org]);
   await env.sql("insert into businesses (organization_id, name) values ($1,'Prospect Co')", [org]);
   await env.reload();

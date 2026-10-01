@@ -1,6 +1,8 @@
 // Dependency-ordered migration list used by the local integration tests (and mirrored in docs/SALES_TEAM_INSTALLATION.md).
 export const BASE = [
-  { file: 'supabase/schema-update.sql', mode: 'statements' },   // legacy cumulative file: run per statement
+  'supabase/00-base-identity-tables-standalone.sql',            // tables production had before this repo's history
+  { file: 'supabase/schema-update.sql', mode: 'statements' },
+  'supabase/security-repair-2026-09-30-columns-standalone.sql',   // legacy cumulative file: run per statement
   'supabase/academy-migration-standalone.sql',
   'supabase/hiring-workflow-migration-standalone.sql',
   'supabase/crm-order-audit-migration-standalone.sql',

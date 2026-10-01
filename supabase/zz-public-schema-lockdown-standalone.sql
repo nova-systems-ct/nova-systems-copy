@@ -102,6 +102,11 @@ DECLARE
     'intake_requests',
     'jobs',
     'kill_switches',
+    -- 2026-09-30: the three tables below pre-date this repo in production (created 2026-08-12) and are
+    -- read only by service-role handlers in both apps; a fresh install now creates them (F-18).
+    'content_assets',
+    'content_ideas',
+    'marketing_brands',
     'marketing_campaigns',
     'marketing_publishing_adapters',
     'marketing_sequence_enrollments',
@@ -194,6 +199,29 @@ BEGIN
       EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
       EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
       EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.%I FROM authenticated', t);
+    END IF;
+  END LOOP;
+END
+$$;
+
+-- ---- Legacy tables (security repair 2026-09-30, audit F-01/F-18) ----------------------------------------
+-- These already have RLS with per-organization policies for signed-in users, but still carried Supabase's
+-- default grants to the anonymous role. No browser code (nova-systems-copy or nova-wave-one) uses the anonymous
+-- key on them; every public form goes through a service-role API handler. Only the anon grant is removed here:
+-- signed-in access stays governed by the existing RLS policies.
+DO $$
+DECLARE
+  t text;
+  legacy text[] := ARRAY[
+    'applications', 'client_invoices', 'clients', 'contact_submissions', 'contracts', 'intake_submissions',
+    'leads', 'locations', 'meetings', 'newsletter_sends', 'newsletter_subscribers', 'nova_tasks',
+    'organization_members', 'organizations', 'permissions', 'referral_tracking', 'role_permissions',
+    'wave_one_applications'
+  ];
+BEGIN
+  FOREACH t IN ARRAY legacy LOOP
+    IF to_regclass('public.' || t) IS NOT NULL THEN
+      EXECUTE format('REVOKE ALL ON public.%I FROM anon', t);
     END IF;
   END LOOP;
 END

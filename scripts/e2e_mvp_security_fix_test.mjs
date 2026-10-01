@@ -37,7 +37,8 @@ async function main() {
     // Spot-check the outcome directly through this exact file's own effect: anon denied, service
     // role allowed, for one A-2 table and one A-3 table.
     const anonOrgs = await env.rest(null, 'organizations?select=id');
-    log('A-2: anon reads zero organizations after this file', Array.isArray(anonOrgs.data) && anonOrgs.data.length === 0, `status=${anonOrgs.status}`);
+    // Refused outright (anon grant revoked by the lockdown, 2026-09-30) or an empty result: both mean no rows.
+    log('A-2: anon reads zero organizations after this file', anonOrgs.status === 401 || anonOrgs.status === 403 || (Array.isArray(anonOrgs.data) && anonOrgs.data.length === 0), `status=${anonOrgs.status}`);
 
     const anonAccounts = await env.rest(null, 'client_accounts?select=id&limit=1');
     log('A-3: anon is denied on client_accounts after this file', anonAccounts.status >= 400, `status=${anonAccounts.status} body=${JSON.stringify(anonAccounts.data).slice(0, 120)}`);

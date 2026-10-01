@@ -22,7 +22,12 @@ const sqlFile = fs.readFileSync('supabase/marketing-automation-migration-standal
 // truncating the file at the first one, since marketing_social_accounts (appended after the
 // original RLS block) still needs to be validated — pg-mem's RLS/policy support is the specific
 // gap being worked around here, not a reason to skip validating everything that comes after it.
-const ddlSection = sqlFile.split('\n').filter((line) => !/^(ALTER TABLE .* ENABLE ROW LEVEL SECURITY|CREATE POLICY|DROP POLICY)/.test(line.trim())).join('\n');
+// The file's "Base tables for a FRESH install" block (CREATE TABLE IF NOT EXISTS, added 2026-09-30 for audit F-18)
+// is a no-op where these tables already exist, which is the production state simulated here. pg-mem cannot parse
+// a no-op IF NOT EXISTS against an existing table, so that block is removed for this simulation only.
+// scripts/e2e_clean_install_test.mjs proves the block itself on real PostgreSQL.
+const withoutFreshInstallBlock = sqlFile.replace(/-- ---- Base tables for a FRESH install[\s\S]*?(?=-- ---- Extend the REAL, existing marketing_brands)/, '');
+const ddlSection = withoutFreshInstallBlock.split('\n').filter((line) => !/^(ALTER TABLE .* ENABLE ROW LEVEL SECURITY|CREATE POLICY|DROP POLICY)/.test(line.trim())).join('\n');
 
 const db = newDb({ autoCreateForeignKeyIndices: true });
 db.public.registerFunction({ name: 'gen_random_uuid', returns: 'uuid', implementation: () => '00000000-0000-0000-0000-' + Math.random().toString(16).slice(2).padEnd(12, '0') });

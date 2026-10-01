@@ -51,7 +51,10 @@ alter table storage.objects enable row level security;
 grant usage on schema storage to anon, authenticated, service_role;
 grant select, insert, update, delete on storage.objects to anon, authenticated, service_role;
 
+-- ==== END OF SUPABASE PLATFORM EMULATION (startTestEnv({ bootstrap: 'platform' }) stops here) ====
+
 -- ---- pre-existing Nova tables (identity + tenancy) -------------------------------------------------------
+-- Also defined, identically, by supabase/00-base-identity-tables-standalone.sql (first in the manifest).
 create table if not exists public.organizations (
   id uuid primary key default gen_random_uuid(),
   name text not null, slug text unique,
@@ -75,11 +78,11 @@ create table if not exists public.organization_members (
 );
 
 -- ---- pre-existing operating tables that schema-update.sql only ALTERs -----------------------------------
-create table if not exists public.clients (id uuid primary key default gen_random_uuid(), full_name text, business_name text, phone text, email text, status text, payment_status text, created_at timestamptz default now());
 create table if not exists public.leads (id uuid primary key default gen_random_uuid(), name text, email text, phone text, company text, service_needed text, created_at timestamptz default now());
 create table if not exists public.intake_submissions (id uuid primary key default gen_random_uuid(), name text, email text, phone text, status text, created_at timestamptz default now());
-create table if not exists public.contracts (id uuid primary key default gen_random_uuid(), client_name text, client_email text, contract_type text, custom_notes text, status text default 'pending', sent_at timestamptz default now(), signed_at timestamptz, signed_name text, signature_data text, pdf_url text, created_at timestamptz default now());
-create table if not exists public.client_invoices (id uuid primary key default gen_random_uuid(), client_name text, amount numeric, status text, created_at timestamptz default now());
+-- 2026-09-30 (security repair, F-18): removed the clients / contracts / client_invoices stubs. schema-update.sql
+-- creates all three with their real columns (invoice_number, total, tier_price...); the stubs ran first and hid
+-- those columns from every test, so payment and contract code was never exercised against the real shape.
 create table if not exists public.meetings (id uuid primary key default gen_random_uuid(), name text, email text, starts_at timestamptz, created_at timestamptz default now());
 create table if not exists public.nova_tasks (id uuid primary key default gen_random_uuid(), title text, status text default 'open', description text, due_date date, assigned_to text, created_at timestamptz default now());
 create table if not exists public.referral_tracking (id uuid primary key default gen_random_uuid(), referrer text, created_at timestamptz default now());

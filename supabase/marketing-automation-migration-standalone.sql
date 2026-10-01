@@ -30,6 +30,27 @@
 -- credentials exist in this environment; nothing here claims a connection that isn't real.
 -- =============================================================================================
 
+-- ---- Base tables for a FRESH install (security repair 2026-09-30, audit F-18) ----
+-- Production already has these three tables (created outside this repo on 2026-08-12), so on
+-- production every CREATE below is a no-op. On an empty database they did not exist and this file
+-- failed. The shapes are the live shapes recorded in scripts/validate_marketing_automation_schema.mjs.
+CREATE TABLE IF NOT EXISTS marketing_brands (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid REFERENCES organizations(id), key text, name text, kind text,
+  voice_notes text, content_pillars jsonb, never_say text, always_say text,
+  created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS content_ideas (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid REFERENCES organizations(id), brand_id uuid REFERENCES marketing_brands(id),
+  journey_entry_id uuid, pillar text, title text, notes text, status text, created_by uuid,
+  created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS content_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid REFERENCES organizations(id), brand_id uuid REFERENCES marketing_brands(id),
+  idea_id uuid REFERENCES content_ideas(id), platform text, format text, caption text, script text, hashtags jsonb, media_url text, status text,
+  generated_by uuid, reviewed_by uuid, reviewed_at timestamptz, scheduled_at timestamptz, published_at timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+
 -- ---- Extend the REAL, existing marketing_brands (do not recreate) ----
 ALTER TABLE marketing_brands ADD COLUMN IF NOT EXISTS audience TEXT;
 ALTER TABLE marketing_brands ADD COLUMN IF NOT EXISTS cadence TEXT;

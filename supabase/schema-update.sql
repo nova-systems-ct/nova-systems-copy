@@ -604,7 +604,9 @@ INSERT INTO role_permissions (role, permission_id)
 SELECT v.role, p.id FROM permissions p JOIN (VALUES
   ('nova_auditor',    'overview.view'), ('nova_auditor',    'intelligence.view'), ('nova_auditor', 'academy.view'),
   ('nova_marketing',  'overview.view'), ('nova_marketing',  'growth.view'), ('nova_marketing', 'academy.view'),
-  ('nova_sales',      'overview.view'), ('nova_sales',      'growth.view'), ('nova_sales', 'academy.view'),
+  -- nova_sales: academy.view only. Organization-wide overview/growth were removed by
+  -- sales-team-01 (reps see only their own leads); granting them here re-opened that on any re-run (F-17).
+  ('nova_sales', 'academy.view'),
   ('nova_developer',  'overview.view'), ('nova_developer',  'execution.view'), ('nova_developer', 'academy.view'),
   ('client_owner',    'overview.view'), ('client_owner',    'growth.view'),
   ('client_owner',    'intelligence.view'), ('client_owner', 'companies.view'),

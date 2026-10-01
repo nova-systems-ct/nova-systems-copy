@@ -83,4 +83,5 @@ $$ LANGUAGE plpgsql;
 
 ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS members_read_jobs ON jobs;
-CREATE POLICY members_read_jobs ON jobs FOR SELECT TO authenticated USING (organization_id IS NULL OR is_org_member(organization_id));
+-- Platform jobs (organization_id IS NULL) are service-role only; members see their own org's jobs (F-34).
+CREATE POLICY members_read_jobs ON jobs FOR SELECT TO authenticated USING (organization_id IS NOT NULL AND is_org_member(organization_id));
