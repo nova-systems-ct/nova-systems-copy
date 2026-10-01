@@ -1,0 +1,4 @@
+# Reproducible checkouts (security repair 2026-09-30, audit F-18/F-27): every text file is checked out with LF
+# line endings on every OS. Without this, Windows clones (core.autocrlf=true) got CRLF and the SQL validators and
+# local test harness failed on a fresh checkout. Binary files are detected automatically and left untouched.
+* text=auto eol=lf
