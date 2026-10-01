@@ -65,13 +65,20 @@ function runSuite(name) {
     let out = ''; let err = '';
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { err += d; });
+    // Report as soon as the suite process itself exits (or a few seconds after a timeout kill). Waiting for the
+    // pipes to 'close' could take many minutes when an orphaned postgres child still held them open (F-27).
+    let timedOut = false; let done = false;
     const timer = setTimeout(() => {
       timedOut = true;
       killTree(child.pid);
+      setTimeout(() => finish(null), 5000);
     }, SUITE_TIMEOUT_MS);
-    let timedOut = false;
-    child.on('close', (code) => {
+    child.on('exit', (code) => setTimeout(() => finish(code), 1500)); // grace period to collect the last output
+    child.on('close', (code) => finish(code));
+    function finish(code) {
+      if (done) return; done = true;
       clearTimeout(timer);
+      child.stdout.destroy(); child.stderr.destroy();
       const seconds = (Date.now() - t0) / 1000;
       const m = /(\d+)(?:\/\d+)? passed, (\d+) failed/.exec(out); // "4/5 passed" counts 4, not 5 (F-27)
       const pass = m ? Number(m[1]) : 0;
@@ -80,9 +87,11 @@ function runSuite(name) {
       const skip = out.split('\n').find((l) => l.startsWith('SKIP —'));
       if (code === 3 && skip) return resolve({ status: 'skip', pass, failCount, tail: skip, seconds });
       if (code === 0 && m && failCount === 0) return resolve({ status: 'ok', pass, failCount, tail: `${m[1]} passed, ${m[2]} failed`, seconds });
-      const tail = m ? `${m[1]} passed, ${m[2]} failed` : (err || out || 'no output').trim().split('\n').pop();
+      // With no result line, say how the process ended and show the first error line, not the last stack frame.
+      const errLine = (err.split('\n').find((l) => /Error|timeout|refus/i.test(l)) || err.trim().split('\n').pop() || '').trim();
+      const tail = m ? `${m[1]} passed, ${m[2]} failed` : `no result line; exit code ${code ?? 'none'}; ${errLine ? `error: ${errLine.slice(0, 160)}` : `last output: ${(out.trim().split('\n').pop() || '').slice(0, 120)}`}`;
       resolve({ status: 'fail', pass, failCount, tail, seconds, failLines: out.split('\n').filter((l) => l.startsWith('FAIL')).slice(0, 8) });
-    });
+    }
   });
 }
 
