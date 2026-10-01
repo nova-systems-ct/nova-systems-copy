@@ -1,243 +1,96 @@
+import { resendBase } from './_email.js';
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
-import { uploadToVault } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 
 // Combined intake endpoint — dispatch via ?action=
-//   save-client         POST  save /welcome wizard steps before payment
-//   welcome-complete     POST  finalize client account after payment
-//   clients               GET  &id=<uuid> public: one client's own record (e.g. OnboardSuccess.jsx
-//                                right after payment) — no id: [intelligence.view] full list
+//   save-client         POST  public: record a NEW pending /onboard client (insert only — never
+//                              updates an existing row; tier name/price come from the server table)
+//   welcome-complete     POST  RETIRED (410) — payment status is set only by a verified Stripe
+//                              event (api/stripe.js); no client account/password is created here
+//   clients               GET  [intelligence.view on the Nova organization] client list (optional &id=)
 //   submit-application     POST  submit a job application
-//   check-applicant          POST  applicant portal login (own account only)
+//   check-applicant          POST  RETIRED (410)
 //   applications                GET  [admin.view] list job applications — includes applicant PII
 //   update-application            POST  [admin.view] update an application's status/notes/interview
+//
+// Security repair 2026-09-30 (audit F-03): save-client used to PATCH any client row by a
+// caller-supplied id, welcome-complete marked any client Paid/Active with no payment check and
+// emailed a predictable password, and clients&id= returned a full client row to anyone.
+import { ONBOARD_TIERS } from './_onboardTiers.js';
 
-async function hashPassword(pw) {
-  const crypto = await import('crypto');
-  return crypto.createHash('sha256').update(pw).digest('hex');
+async function novaInternalOrgId(url, key) {
+  const r = await fetch(`${url}/rest/v1/organizations?kind=eq.nova_internal&select=id&limit=1`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+  return r.ok ? ((await r.json())[0]?.id || null) : null;
 }
 
-// Saves the /welcome wizard (steps 1-5 + signature) to Supabase before the
-// client pays. Called right before redirecting to / mounting Stripe payment.
 async function handleSaveClient(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 10, 60_000)) return;
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'We could not save your information right now.' });
 
   const b = req.body || {};
-  const id                = sanitize(b.id, 100) || undefined;
-  const full_name          = sanitize(b.full_name, 150);
-  const business_name       = sanitize(b.business_name, 200);
-  const phone                = sanitizePhone(b.phone);
-  const email                 = sanitizeEmail(b.email);
-  const business_address       = sanitize(b.business_address, 300);
-  const business_type           = sanitize(b.business_type, 100);
-  const current_website          = sanitize(b.current_website, 300);
-  const referral_source           = sanitize(b.referral_source, 100);
-  const tier_name                  = sanitize(b.tier_name, 100);
-  const tier_price                  = Number(b.tier_price) || 0;
-  const signature_data_url           = typeof b.signature_data_url === 'string' ? b.signature_data_url.slice(0, 500000) : '';
-  const language                      = sanitize(b.language, 5) || 'en';
-  const intake_data                    = b.intake_data && typeof b.intake_data === 'object' ? b.intake_data : {};
-
+  const full_name = sanitize(b.full_name, 150);
+  const email = sanitizeEmail(b.email);
+  const tier = ONBOARD_TIERS[sanitize(b.tier_id, 40)];
   if (!full_name || !email) return res.status(400).json({ error: 'Full name and email are required' });
-
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return res.status(200).json({ ok: true, client_id: id || `local-${Date.now()}`, warning: 'Supabase not configured — using local id' });
-  }
+  if (!tier) return res.status(400).json({ error: 'Choose a plan' });
+  const signature_data_url = typeof b.signature_data_url === 'string' && b.signature_data_url.startsWith('data:image/') ? b.signature_data_url.slice(0, 500000) : null;
+  const intakeOk = b.intake_data && typeof b.intake_data === 'object' && !Array.isArray(b.intake_data) && JSON.stringify(b.intake_data).length <= 20000;
 
   const record = {
-    full_name, business_name, phone, email, business_address, business_type,
-    current_website, referral_source, tier_name, tier_price,
-    signature_data_url: signature_data_url || null,
-    language, intake_data, status: 'Pending Payment', payment_status: 'Pending',
+    full_name, email,
+    business_name: sanitize(b.business_name, 200), phone: sanitizePhone(b.phone),
+    business_address: sanitize(b.business_address, 300), business_type: sanitize(b.business_type, 100),
+    current_website: sanitize(b.current_website, 300), referral_source: sanitize(b.referral_source, 100),
+    tier_name: tier.name, tier_price: tier.price, // server-derived — never the browser's figure
+    signature_data_url, language: sanitize(b.language, 5) || 'en',
+    intake_data: intakeOk ? b.intake_data : {},
+    status: 'Pending Payment', payment_status: 'Pending',
   };
+  try {
+    const orgId = await novaInternalOrgId(SUPABASE_URL, SUPABASE_KEY);
+    if (orgId) record.organization_id = orgId;
+  } catch { /* best-effort; the row is still a pending, unpaid record */ }
 
   try {
-    const isUpdate = !!id;
-    const url = isUpdate
-      ? `${SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(id)}`
-      : `${SUPABASE_URL}/rest/v1/clients`;
-
-    const r = await fetch(url, {
-      method: isUpdate ? 'PATCH' : 'POST',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-      },
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/clients`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
       body: JSON.stringify(record),
     });
-
-    if (!r.ok) {
-      console.error('[intake:save-client] Supabase error:', r.status, await r.text());
-      return res.status(500).json({ error: 'Failed to save intake data' });
-    }
-
+    if (!r.ok) { console.error('[intake:save-client] Supabase error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to save intake data' }); }
     const rows = await r.json();
-    return res.status(200).json({ ok: true, client_id: rows[0]?.id });
+    return res.status(200).json({ ok: true, client_id: rows[0]?.id, tier_name: tier.name, tier_price: tier.price });
   } catch (err) {
     console.error('[intake:save-client] Error:', err.message);
     return res.status(500).json({ error: 'Failed to save intake data' });
   }
 }
 
-async function handleWelcomeComplete(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!rateLimit(req, res, 10, 60_000)) return;
-
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const RESEND_KEY   = process.env.RESEND_API_KEY;
-
-  const b = req.body || {};
-  const client_id      = sanitize(b.client_id, 100);
-  const full_name        = sanitize(b.full_name, 150);
-  const business_name     = sanitize(b.business_name, 200);
-  const email               = sanitizeEmail(b.email);
-  const phone                = sanitizePhone(b.phone);
-  const tier_name              = sanitize(b.tier_name, 100);
-  const tier_price               = Number(b.tier_price) || 0;
-  const contract_pdf_base64        = typeof b.contract_pdf_base64 === 'string' ? b.contract_pdf_base64 : '';
-
-  if (!client_id || !email) return res.status(400).json({ error: 'client_id and email are required' });
-
-  const tempPassword = `Nova${(phone || '').replace(/\D/g, '').slice(0, 4) || '0000'}`;
-  let contract_url = null;
-
-  if (SUPABASE_URL && SUPABASE_KEY) {
-    try {
-      await fetch(`${SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(client_id)}`, {
-        method: 'PATCH',
-        headers: {
-          apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json', Prefer: 'return=minimal',
-        },
-        body: JSON.stringify({ status: 'Active', payment_status: 'Paid', first_payment_date: new Date().toISOString() }),
-      });
-    } catch (e) { console.error('[intake:welcome-complete] client update error:', e.message); }
-
-    try {
-      const password_hash = await hashPassword(tempPassword);
-      await fetch(`${SUPABASE_URL}/rest/v1/client_accounts`, {
-        method: 'POST',
-        headers: {
-          apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json', Prefer: 'return=minimal,resolution=merge-duplicates',
-        },
-        body: JSON.stringify({ client_id, email, password_hash, status: 'active' }),
-      });
-    } catch (e) { console.error('[intake:welcome-complete] client_accounts error:', e.message); }
-
-    if (contract_pdf_base64) {
-      const match = contract_pdf_base64.match(/^data:([^;]+);base64,(.+)$/s);
-      if (match) {
-        try {
-          const result = await uploadToVault(SUPABASE_URL, SUPABASE_KEY, {
-            base64: match[2], fileName: `contract-${new Date().toISOString().slice(0, 10)}.pdf`,
-            mimeType: 'application/pdf', category: 'contracts',
-            clientId: client_id, clientName: business_name || full_name, docType: 'Contract', status: 'Signed',
-          });
-          contract_url = result.file_url;
-          await fetch(`${SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(client_id)}`, {
-            method: 'PATCH',
-            headers: {
-              apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-              'Content-Type': 'application/json', Prefer: 'return=minimal',
-            },
-            body: JSON.stringify({ contract_url }),
-          });
-        } catch (e) { console.error('[intake:welcome-complete] contract upload error:', e.message); }
-      }
-    }
-  }
-
-  if (RESEND_KEY) {
-    const FROM = 'Nova Systems <noreply@nova-systems.app>';
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM,
-          to: [email],
-          subject: 'Welcome to Nova Systems 🖤',
-          text: [
-            `Hi ${full_name},`,
-            '',
-            `Welcome to Nova Systems! Your ${tier_name} plan is now active.`,
-            '',
-            'YOUR CLIENT PORTAL LOGIN',
-            '━━━━━━━━━━━━━━━━━━━━━━━━',
-            `Email:    ${email}`,
-            `Password: ${tempPassword}`,
-            '',
-            'Log in at https://nova-systems.app/login to track your services, approve content, and message your team.',
-            '',
-            'Isaac Nova',
-            'Founder, Nova Systems',
-          ].join('\n'),
-        }),
-      });
-    } catch (e) { console.warn('[intake:welcome-complete] client email error:', e.message); }
-
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: FROM,
-          to: ['Isaac_0427@icloud.com'],
-          subject: `New Client Signed: ${business_name || full_name} — $${tier_price}/mo`,
-          text: [
-            'NEW CLIENT — CONTRACT SIGNED & PAID',
-            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-            `Business: ${business_name}`,
-            `Contact:  ${full_name}`,
-            `Email:    ${email}`,
-            `Phone:    ${phone || 'N/A'}`,
-            `Plan:     ${tier_name} — $${tier_price}/mo`,
-            contract_url ? `Contract: ${contract_url}` : '',
-          ].filter(Boolean).join('\n'),
-        }),
-      });
-    } catch (e) { console.warn('[intake:welcome-complete] isaac email error:', e.message); }
-  }
-
-  return res.status(200).json({ ok: true, temp_password: tempPassword, contract_url });
-}
-
-// Lists clients created via the /welcome intake wizard.
+// Staff-only client list, scoped to the Nova organization's rows. Optional &id= narrows it.
 async function handleListClients(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 60, 60_000)) return;
-
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(200).json([]);
-
-  // Public path: a specific id (e.g. OnboardSuccess.jsx reading its own just-created record off
-  // the URL right after payment) is scoped to exactly that row server-side — never the full table
-  // filtered client-side, which is what this used to do (and what the unscoped path below still
-  // requires staff auth for).
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
+  const orgId = await novaInternalOrgId(SUPABASE_URL, SUPABASE_KEY);
+  if (!orgId) return res.status(500).json({ error: 'Nova organization not found' });
   const id = typeof req.query?.id === 'string' ? sanitize(req.query.id, 100) : '';
-
+  const qs = `organization_id=eq.${encodeURIComponent(orgId)}${id ? `&id=eq.${encodeURIComponent(id)}&limit=1` : '&order=created_at.desc'}`;
   try {
-    const qs = id ? `id=eq.${encodeURIComponent(id)}&limit=1` : 'order=created_at.desc';
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/clients?${qs}`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-    });
-    if (!r.ok) { console.error('[intake:clients] Supabase error:', r.status, await r.text()); return res.status(200).json(id ? null : []); }
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/clients?${qs}`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
+    if (!r.ok) { console.error('[intake:clients] Supabase error:', r.status, await r.text()); return res.status(502).json({ error: 'Failed to load clients' }); }
     const rows = await r.json();
     return res.status(200).json(id ? (rows[0] || null) : rows);
   } catch (err) {
     console.error('[intake:clients] Error:', err.message);
-    return res.status(200).json(id ? null : []);
+    return res.status(502).json({ error: 'Failed to load clients' });
   }
 }
 
@@ -425,7 +278,7 @@ async function handleSubmitApplication(req, res) {
   ].filter(Boolean).join('\n');
 
   try {
-    const r1 = await fetch('https://api.resend.com/emails', {
+    const r1 = await fetch(`${resendBase()}/emails`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -467,7 +320,7 @@ async function handleSubmitApplication(req, res) {
   ].join('\n');
 
   try {
-    const r2 = await fetch('https://api.resend.com/emails', {
+    const r2 = await fetch(`${resendBase()}/emails`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -717,11 +570,10 @@ export default async function handler(req, res) {
 
   switch (action) {
     case 'save-client':          return handleSaveClient(req, res);
-    case 'welcome-complete':      return handleWelcomeComplete(req, res);
+    case 'welcome-complete':
+      return res.status(410).json({ error: 'Retired. Payment is confirmed only by the payment provider; no account is created here.' });
     case 'clients':
-      // Scoped-by-id lookup is public (a client reading their own just-created record); the full,
-      // unscoped list is real PII across every client and requires staff auth.
-      if (!req.query?.id && !(await requireStaff(req, res, 'intelligence.view'))) return;
+      if (!(await requireStaff(req, res, 'intelligence.view'))) return;
       return handleListClients(req, res);
     case 'submit-application':      return handleSubmitApplication(req, res);
     // check-applicant retired 2026-09-23 — replaced by real Supabase Auth (see ApplicantLogin.jsx

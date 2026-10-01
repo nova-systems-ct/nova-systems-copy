@@ -1,7 +1,11 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
-import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
+import { sanitize, sanitizeEmail, sanitizePhone } from './_sanitize.js';
 import { requireStaff } from './_auth.js';
+import { requireOrgAccess } from './_orgAccess.js';
+import { sendEmail, resendBase } from './_email.js';
+import { loadInvoice, loadInvoiceClient, createInvoiceCheckout } from './_legacyPayments.js';
+import { textPdf } from './_sales/pdf.js';
 
 // Combined email / notification endpoint — dispatch via ?action=
 //   contact          POST  public — general contact-form email (+ confirmation)
@@ -9,10 +13,10 @@ import { requireStaff } from './_auth.js';
 //   client-message   POST  [admin.view] message to a client (saved + emailed) — the client_email
 //                            to send to is caller-supplied, so this must never be reachable
 //                            unauthenticated (an open relay for arbitrary outbound email otherwise)
-//   send-invoice     POST  public — called by the already-staff-gated dashboard invoice flow, but
-//                            this action itself just sends one email for a caller-provided invoice;
-//                            left public rather than double-gating since api/client.js's invoices
-//                            resource is what actually protects invoice creation
+//   send-invoice     POST  [admin.view on the invoice's organization] emails a STORED invoice to
+//                            its stored client. Recipient, amount, pay link and PDF are all derived
+//                            on the server (security repair 2026-09-30, audit F-04); the body only
+//                            names {organization_id, invoice_id}.
 //   list             GET   [admin.view] admin notifications feed
 //
 // 2026-09-20 correction: the comment previously here said /welcome posts to nova-wave-one's
@@ -39,9 +43,12 @@ async function handleContact(req, res) {
   const message     = sanitize(req.body?.message || req.body?.body, 5000);
   // Legacy callers (ChatBot) pass replyTo/confirmTo/confirmName/subject instead of the Contact
   // page's own field names — kept working rather than forcing every caller to migrate at once.
-  const replyTo     = sanitizeEmail(req.body?.replyTo) || email;
-  const confirmTo   = sanitizeEmail(req.body?.confirmTo) || email;
-  const confirmName = sanitize(req.body?.confirmName, 100) || name || 'there';
+  // Repair 2026-09-30 (F-04): the confirmation goes ONLY to the address the visitor entered as their
+  // own, and legacy replyTo/confirmTo overrides are ignored — otherwise this public form was a relay
+  // that could send Nova-branded mail to any address. Link-like text is stripped from the greeting.
+  const replyTo     = email;
+  const confirmTo   = email;
+  const confirmName = (sanitize(req.body?.confirmName, 60) || name || 'there').replace(/(https?:\/\/|www\.)\S*/gi, '').replace(/[<>]/g, '').trim() || 'there';
   const subject     = sanitize(req.body?.subject, 200);
 
   if (!name || !email || !message) {
@@ -89,7 +96,7 @@ async function handleContact(req, res) {
 
   let alertSent = false;
   try {
-    const r1 = await fetch('https://api.resend.com/emails', {
+    const r1 = await fetch(`${resendBase()}/emails`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -105,7 +112,7 @@ async function handleContact(req, res) {
 
   if (confirmTo) {
     try {
-      await fetch('https://api.resend.com/emails', {
+      await fetch(`${resendBase()}/emails`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -198,7 +205,7 @@ async function handleBookDemo(req, res) {
   try {
     const FROM = 'Nova Systems <noreply@nova-systems.app>';
 
-    await fetch('https://api.resend.com/emails', {
+    await fetch(`${resendBase()}/emails`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -211,14 +218,14 @@ async function handleBookDemo(req, res) {
     });
 
     if (email) {
-      await fetch('https://api.resend.com/emails', {
+      await fetch(`${resendBase()}/emails`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from: FROM,
           to: [email],
           subject: 'Demo request received — Nova Systems',
-          text: `Hi ${name},\n\nYour demo request has been received. Isaac will reach out within 24 hours to confirm your strategy call.\n\n${bodyText}\n\n— Nova Systems\nnova-systems.app`,
+          text: `Hi there,\n\nYour demo request has been received. Nova will reply to this address.\n\n— Nova Systems\nnova-systems.app`,
         }),
       });
     }
@@ -285,7 +292,7 @@ async function handleClientMessage(req, res) {
   }
 
   try {
-    const emailRes = await fetch('https://api.resend.com/emails', {
+    const emailRes = await fetch(`${resendBase()}/emails`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${RESEND_KEY}`,
@@ -316,59 +323,46 @@ async function handleClientMessage(req, res) {
 async function handleSendInvoice(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 15, 60_000)) return;
-
-  const RESEND_KEY = process.env.RESEND_API_KEY;
-  if (!RESEND_KEY) return res.status(200).json({ ok: true, warning: 'Email skipped — Resend not configured' });
-
   const b = req.body || {};
-  const client_email  = sanitizeEmail(b.client_email);
-  const client_name     = sanitize(b.client_name, 200);
-  const invoice_number   = sanitize(b.invoice_number, 50);
-  const total              = Number(b.total) || 0;
-  const due_date             = sanitize(b.due_date, 20);
-  const pay_link               = (() => { try { return sanitizeUrl(b.pay_link || ''); } catch { return ''; } })();
-  const pdf_base64               = typeof b.pdf_base64 === 'string' ? b.pdf_base64 : '';
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
+  const inv = await loadInvoice(sanitize(b.invoice_id, 100), orgId);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found in this organization' });
+  const client = await loadInvoiceClient(inv);
+  const to = sanitizeEmail(client?.email || '');
+  if (!to) return res.status(422).json({ error: 'The invoice\'s client has no email address on file.' });
 
-  if (!client_email) return res.status(400).json({ error: 'client_email is required' });
-
-  const bodyText = [
-    `Hi ${client_name || 'there'},`,
-    '',
-    `Your invoice ${invoice_number} from Nova Systems is ready.`,
-    '',
-    `Total Due: $${total.toFixed(2)}`,
-    due_date ? `Due Date: ${due_date}` : '',
-    '',
-    pay_link ? `Pay now: ${pay_link}` : 'Payment instructions are attached to this email.',
-    '',
-    'Thank you for working with Nova Systems.',
-    '',
-    'Isaac Nova',
-    'Founder, Nova Systems',
-  ].filter(Boolean).join('\n');
-
-  const attachments = pdf_base64
-    ? [{ filename: `${invoice_number || 'invoice'}.pdf`, content: pdf_base64.replace(/^data:[^;]+;base64,/, '') }]
-    : undefined;
-
+  const warnings = [];
+  let payLink = '';
   try {
-    const r = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: 'Nova Systems <noreply@nova-systems.app>',
-        to: [client_email],
-        subject: `Invoice ${invoice_number} — Nova Systems`,
-        text: bodyText,
-        ...(attachments ? { attachments } : {}),
-      }),
-    });
-    if (!r.ok) { console.error('[notify:send-invoice] Resend error:', await r.text()); return res.status(500).json({ error: 'Failed to send invoice email' }); }
-    return res.status(200).json({ ok: true });
+    const out = await createInvoiceCheckout(inv, client);
+    if (out.error) warnings.push(`No online payment link: ${out.error}`); else payLink = out.url;
   } catch (err) {
-    console.error('[notify:send-invoice] Error:', err.message);
-    return res.status(500).json({ error: 'Failed to send invoice email' });
+    console.error('[notify:send-invoice] checkout error:', err.message);
+    warnings.push('No online payment link: the payment provider did not respond.');
   }
+
+  const total = Number(inv.total) || 0;
+  const lines = Array.isArray(inv.line_items) ? inv.line_items : [];
+  const clientName = client?.business_name || client?.full_name || 'there';
+  const pdf = textPdf({ title: `Invoice ${inv.invoice_number || inv.id}`, blocks: [
+    { style: 'h1', text: 'NOVA SYSTEMS' }, { style: 'h2', text: `Invoice ${inv.invoice_number || ''}` },
+    { style: 'p', text: `Billed to: ${clientName}` }, ...(inv.due_date ? [{ style: 'p', text: `Due: ${inv.due_date}` }] : []), { style: 'gap' },
+    ...lines.slice(0, 50).map((l) => ({ style: 'mono', text: `${String(l?.description || l?.name || 'Item').slice(0, 60)}  ${l?.quantity ?? ''}  ${l?.amount ?? l?.price ?? ''}` })),
+    { style: 'gap' }, { style: 'h2', text: `Total due: $${total.toFixed(2)}` },
+    ...(payLink ? [{ style: 'p', text: 'Pay online using the link in the email.' }] : [{ style: 'p', text: 'Payment instructions will be sent separately.' }]),
+  ] });
+  const text = [
+    `Hi ${clientName},`, '', `Your invoice ${inv.invoice_number || ''} from Nova Systems is ready.`, '',
+    `Total Due: $${total.toFixed(2)}`, inv.due_date ? `Due Date: ${inv.due_date}` : '', '',
+    payLink ? `Pay now: ${payLink}` : 'Payment instructions will be sent separately.', '',
+    'Thank you for working with Nova Systems.',
+  ].filter((l) => l !== null).join('\n');
+
+  const sent = await sendEmail({ to, subject: `Invoice ${inv.invoice_number || ''} — Nova Systems`, text, attachments: [{ filename: `${(inv.invoice_number || 'invoice').replace(/[^a-z0-9._-]/gi, '_')}.pdf`, content: pdf.toString('base64') }], idempotencyKey: `invoice-email:${inv.id}:${new Date().toISOString().slice(0, 16)}` });
+  if (sent.skipped) return res.status(200).json({ ok: false, warning: 'Email not sent — Resend is not configured', warnings });
+  if (!sent.ok) return res.status(502).json({ error: 'The email provider did not accept the invoice email', warnings });
+  return res.status(200).json({ ok: true, provider_accepted: true, pay_link_created: !!payLink, warnings });
 }
 
 async function handleList(req, res) {
@@ -402,7 +396,9 @@ export default async function handler(req, res) {
     case 'client-message':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleClientMessage(req, res);
-    case 'send-invoice':      return handleSendInvoice(req, res);
+    case 'send-invoice':
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleSendInvoice(req, res);
     case 'list':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleList(req, res);

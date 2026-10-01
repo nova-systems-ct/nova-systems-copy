@@ -1,9 +1,12 @@
 import crypto from 'crypto';
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
-import { sanitize, sanitizeEmail, sanitizeUrl } from './_sanitize.js';
+import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { stripeRequest } from './_stripe.js';
 import { handleStripeEvent as handleSalesStripeEvent, stripeAllowed } from './_sales/payments.js';
+import { requireStaff } from './_auth.js';
+import { requireOrgAccess } from './_orgAccess.js';
+import { applyLegacyStripeEvent, loadInvoice, loadInvoiceClient, createInvoiceCheckout, createOnboardIntent } from './_legacyPayments.js';
 
 // Combined Stripe endpoint — actions: checkout-session, payment-intent,
 // verify-payment (?action=...), plus the raw-body webhook (auto-detected via
@@ -43,24 +46,10 @@ function verifyStripeSignature(rawBody, sigHeader, secret) {
   }
 }
 
-async function supabasePatch(SUPABASE_URL, SUPABASE_KEY, table, filter, patch) {
-  return fetch(`${SUPABASE_URL}/rest/v1/${table}?${filter}`, {
-    method: 'PATCH',
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
-    },
-    body: JSON.stringify(patch),
-  });
-}
-
 async function handleWebhook(req, res, rawBody) {
   const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const RESEND_KEY = process.env.RESEND_API_KEY;
 
   // 2026-09-20 security fix: this used to skip verification entirely when the secret was unset
   // and still process the event — meaning anyone who knew (or guessed) an invoice_id/client_id
@@ -83,166 +72,71 @@ async function handleWebhook(req, res, rawBody) {
   console.log('[stripe webhook] Event:', event.type);
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.warn('[stripe webhook] Supabase not configured — acknowledging event without processing');
-    return res.status(200).json({ received: true });
+    // Never acknowledge a payment we could not record — Stripe retries a non-2xx response.
+    console.error('[stripe webhook] Supabase not configured — asking Stripe to retry');
+    return res.status(503).json({ error: 'Not ready; please retry.' });
   }
 
   // Sales Team platform: client payments, refunds/disputes and representative payout callbacks. Idempotent per event id;
   // a processing error answers 500 so Stripe retries instead of silently losing a payment confirmation.
   const sales = await handleSalesStripeEvent(event);
   if (sales.error) return res.status(500).json({ error: 'Processing failed; please retry.' });
+  // The Sales Team handler records every checkout/payment_intent event id before acting; a repeat
+  // delivery of an already-processed event must not re-apply anything (F-05).
+  if (sales.duplicate) return res.status(200).json({ received: true, duplicate: true });
 
   try {
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const invoiceId = session.metadata?.invoice_id;
-      const clientId = session.metadata?.client_id;
-
-      if (invoiceId) {
-        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'client_invoices', `id=eq.${invoiceId}`, {
-          status: 'Paid', paid_at: new Date().toISOString(),
-        });
-      } else if (clientId) {
-        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'clients', `id=eq.${clientId}`, {
-          payment_status: 'Paid', status: 'Active', first_payment_date: new Date().toISOString(),
-        });
-      }
-
-      if (RESEND_KEY && session.customer_details?.email) {
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: 'Nova Systems <noreply@nova-systems.app>',
-            to: [session.customer_details.email],
-            subject: 'Payment Received — Nova Systems',
-            text: `Thank you! Your payment of $${(session.amount_total / 100).toFixed(2)} was received.\n\nNova Systems`,
-          }),
-        }).catch(() => {});
-      }
-
-      if (RESEND_KEY && invoiceId) {
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            from: 'Nova Systems <noreply@nova-systems.app>',
-            to: ['Isaac_0427@icloud.com'],
-            subject: `Invoice Paid — $${(session.amount_total / 100).toFixed(2)}`,
-            text: `An invoice was just paid.\n\nAmount: $${(session.amount_total / 100).toFixed(2)}\nPaid by: ${session.customer_details?.email || 'unknown'}\n\nnova-systems.app/dashboard/invoices`,
-          }),
-        }).catch(() => {});
-      }
-    }
-
-    if (event.type === 'payment_intent.succeeded') {
-      const intent = event.data.object;
-      const invoiceId = intent.metadata?.invoice_id;
-      const clientId = intent.metadata?.client_id;
-
-      if (invoiceId) {
-        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'client_invoices', `id=eq.${invoiceId}`, {
-          status: 'Paid', paid_at: new Date().toISOString(),
-        });
-      } else if (clientId) {
-        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'clients', `id=eq.${clientId}`, {
-          payment_status: 'Paid', status: 'Active', first_payment_date: new Date().toISOString(),
-        });
-      }
-    }
+    const out = await applyLegacyStripeEvent(event);
+    if (out.applied || out.reason) console.log('[stripe webhook] legacy:', out.reason);
   } catch (err) {
-    console.error('[stripe webhook] Processing error:', err.message);
+    console.error('[stripe webhook] Legacy processing error:', err.message);
+    // The event id was already recorded as handled above; mark it failed so Stripe's retry is processed
+    // instead of being answered as a duplicate (otherwise a transient error would lose the payment).
+    await fetch(`${SUPABASE_URL}/rest/v1/sales_provider_events?provider=eq.stripe&event_id=eq.${encodeURIComponent(String(event.id || ''))}`, {
+      method: 'PATCH', headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'failed', error: 'legacy processing error; awaiting retry' }),
+    }).catch(() => {});
+    return res.status(500).json({ error: 'Processing failed; please retry.' });
   }
-
   return res.status(200).json({ received: true });
 }
 
-// Redirect-style Stripe Checkout — used for invoice "PAY NOW" links emailed
-// to clients, and as a fallback checkout flow for the /onboard intake wizard.
+// Staff-only: a Checkout link for a STORED invoice. The amount, currency, customer and redirect
+// URLs all come from the server; the caller only names an invoice in an organization where they
+// hold admin.view (F-05). Browser-supplied amounts/URLs are ignored.
 async function handleCheckoutSession(req, res, b) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 10, 60_000)) return;
-
-  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-  if (!STRIPE_SECRET_KEY) {
-    return res.status(500).json({ error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY to enable payments.' });
-  }
-  const allowed = stripeAllowed();
-  if (!allowed.ok) return res.status(409).json({ error: allowed.reason });
-
-  const amount        = Number(b.tier_price ?? b.amount);
-  const client_email   = sanitizeEmail(b.client_email || '');
-  const tier_name       = sanitize(b.tier_name, 100);
-  const client_id        = sanitize(b.client_id, 100);
-  const invoice_id       = sanitize(b.invoice_id, 100);
-  const description       = sanitize(b.description, 200) || (tier_name ? `Nova Systems — ${tier_name} (first month)` : 'Nova Systems Invoice');
-
-  const origin = req.headers.origin || 'https://nova-systems.app';
-  const success_url = (() => { try { return sanitizeUrl(b.success_url || ''); } catch { return ''; } })()
-    || `${origin}/onboard/success?session_id={CHECKOUT_SESSION_ID}&client_id=${encodeURIComponent(client_id)}`;
-  const cancel_url = (() => { try { return sanitizeUrl(b.cancel_url || ''); } catch { return ''; } })()
-    || `${origin}/onboard?step=6`;
-
-  if (!amount || amount <= 0) return res.status(400).json({ error: 'A valid amount is required' });
-
+  if (!(await requireStaff(req, res, 'admin.view'))) return;
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
+  const inv = await loadInvoice(sanitize(b.invoice_id, 100), orgId);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found in this organization' });
   try {
-    const session = await stripeRequest(STRIPE_SECRET_KEY, 'POST', 'checkout/sessions', {
-      mode: 'payment',
-      success_url,
-      cancel_url,
-      customer_email: client_email || undefined,
-      line_items: [{
-        quantity: 1,
-        price_data: {
-          currency: 'usd',
-          unit_amount: Math.round(amount * 100),
-          product_data: { name: description },
-        },
-      }],
-      metadata: { client_id: client_id || '', invoice_id: invoice_id || '', tier_name: tier_name || '' },
-    });
-    return res.status(200).json({ url: session.url, id: session.id });
+    const out = await createInvoiceCheckout(inv, await loadInvoiceClient(inv));
+    if (out.error) return res.status(out.status || 409).json({ error: out.error });
+    return res.status(200).json({ url: out.url, id: out.id, amount_cents: out.amount_cents });
   } catch (err) {
     console.error('[stripe checkout-session] Error:', err.message);
-    return res.status(500).json({ error: err.message || 'Failed to create checkout session' });
+    return res.status(502).json({ error: 'Failed to create checkout session' });
   }
 }
 
-// Used by the /onboard intake wizard — embedded Stripe Elements payment for
-// the client's first month, and by the Nova Vault invoice flow for deposits.
+// /onboard: payment intent for a pending client saved by api/intake.js save-client. The amount is
+// the stored plan's published price (api/_onboardTiers.js); the caller only supplies client_id.
 async function handlePaymentIntent(req, res, b) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 10, 60_000)) return;
-
-  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-  if (!STRIPE_SECRET_KEY) {
-    return res.status(500).json({ error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY to enable payments.' });
-  }
-  const allowed = stripeAllowed();
-  if (!allowed.ok) return res.status(409).json({ error: allowed.reason });
-
-  const amount        = Number(b.amount);
-  const client_email   = sanitizeEmail(b.client_email || '');
-  const tier_name       = sanitize(b.tier_name, 100);
-  const client_id        = sanitize(b.client_id, 100);
-  const invoice_id       = sanitize(b.invoice_id, 100);
-  const description       = sanitize(b.description, 200) || (tier_name ? `Nova Systems — ${tier_name}` : 'Nova Systems Payment');
-
-  if (!amount || amount <= 0) return res.status(400).json({ error: 'A valid amount is required' });
-
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Payment is not available right now' });
+  const clientId = sanitize(b.client_id, 100);
+  if (!clientId) return res.status(400).json({ error: 'client_id is required' });
   try {
-    const intent = await stripeRequest(STRIPE_SECRET_KEY, 'POST', 'payment_intents', {
-      amount: Math.round(amount * 100),
-      currency: 'usd',
-      description,
-      receipt_email: client_email || undefined,
-      'automatic_payment_methods[enabled]': 'true',
-      metadata: { client_id: client_id || '', invoice_id: invoice_id || '', tier_name: tier_name || '' },
-    });
-    return res.status(200).json({ client_secret: intent.client_secret, payment_intent_id: intent.id });
+    const out = await createOnboardIntent(clientId);
+    if (out.error) return res.status(out.status || 409).json({ error: out.error });
+    return res.status(200).json({ client_secret: out.client_secret, payment_intent_id: out.payment_intent_id });
   } catch (err) {
     console.error('[stripe payment-intent] Error:', err.message);
-    return res.status(500).json({ error: err.message || 'Failed to create payment intent' });
+    return res.status(502).json({ error: 'Failed to create payment intent' });
   }
 }
 

@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, AlertTriangle, Loader2, Pen, Globe2 } from "lucide-react";
-import { generateContractPDF } from "@/utils/generatePdf";
 
 const GOLD = "#C9A84C";
 const G = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
@@ -132,7 +131,7 @@ export default function Onboard() {
   const [lang, setLang] = useState("en");
   const t = T[lang];
   const [step, setStep] = useState(1);
-  const [clientId, setClientId] = useState(null);
+  const [, setClientId] = useState(null);
   const [clientSecret, setClientSecret] = useState("");
   const [savingIntake, setSavingIntake] = useState(false);
   const [error, setError] = useState("");
@@ -186,10 +185,10 @@ export default function Onboard() {
       const saveRes = await fetch("/api/intake?action=save-client", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: clientId, full_name: form.full_name, business_name: form.business_name,
+          full_name: form.full_name, business_name: form.business_name,
           phone: form.phone, email: form.email, business_address: form.business_address,
           business_type: form.business_type, current_website: form.current_website,
-          referral_source: form.referral_source, tier_name: tier?.name, tier_price: tier?.price,
+          referral_source: form.referral_source, tier_id: tier?.id,
           signature_data_url: form.signature, language: lang,
           intake_data: { add_ons: form.add_ons, pages_wanted: form.pages_wanted, business_description: form.business_description,
             style_preference: form.style_preference, brand_colors: form.brand_colors, reference_sites: form.reference_sites,
@@ -204,7 +203,8 @@ export default function Onboard() {
 
       const piRes = await fetch("/api/stripe?action=payment-intent", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: tier.price, client_email: form.email, tier_name: tier.name, client_id: saveData.client_id }),
+        // Amount is decided by the server from the saved client's plan — the browser only names the record.
+        body: JSON.stringify({ client_id: saveData.client_id }),
       });
       const piData = await piRes.json();
       if (!piRes.ok) throw new Error(piData.error || "Payment is not available right now");
@@ -215,25 +215,10 @@ export default function Onboard() {
     setSavingIntake(false);
   };
 
+  // The browser cannot confirm a payment. Stripe's signed webhook (api/stripe.js) marks the client
+  // paid after checking the amount against the saved plan; this only moves the visitor on.
   const handlePaymentSuccess = async () => {
-    try {
-      const doc = generateContractPDF({
-        clientName: form.full_name, businessName: form.business_name, tierName: tier.name,
-        tierPrice: tier.price, includedServices: tier.services, signatureDataUrl: form.signature,
-        date: new Date().toLocaleDateString(),
-      });
-      const contract_pdf_base64 = doc.output("datauristring");
-
-      await fetch("/api/intake?action=welcome-complete", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client_id: clientId, full_name: form.full_name, business_name: form.business_name,
-          email: form.email, phone: form.phone, tier_name: tier.name, tier_price: tier.price,
-          contract_pdf_base64,
-        }),
-      });
-    } catch {}
-    navigate(`/onboard/success?client_id=${clientId}`);
+    navigate('/onboard/success');
   };
 
   return (

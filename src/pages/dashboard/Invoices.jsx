@@ -133,19 +133,6 @@ export default function Invoices() {
       // would let them believe the client got a working invoice when they didn't.
       const warnings = []
 
-      let pay_link = ''
-      try {
-        const cs = await fetch('/api/stripe?action=checkout-session', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amount: total, client_email: form.client_email, description: `Invoice ${invoice_number} — Nova Systems`, invoice_id: invoiceId, client_id: form.client_id }),
-        })
-        const csData = await cs.json()
-        if (cs.ok) pay_link = csData.url
-        else warnings.push('Payment link could not be created — ' + (csData.error || 'Stripe is not configured.'))
-      } catch {
-        warnings.push('Payment link could not be created — Stripe request failed.')
-      }
-
       let invoice_pdf_url = ''
       try {
         const vaultRes = await authedFetch('/api/client?resource=vault&op=upload', {
@@ -155,27 +142,24 @@ export default function Invoices() {
         const vaultData = await vaultRes.json()
         if (vaultRes.ok) invoice_pdf_url = vaultData.file_url
       } catch {}
+      void invoice_pdf_url
 
+      // The server builds the email from the STORED invoice: recipient, amount, payment link and PDF
+      // all come from records, not from this page (security repair F-04/F-05).
       if (invoiceId) {
-        await authedFetch('/api/client?resource=invoices', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'update', organization_id: currentOrg.id, id: invoiceId, client_id: form.client_id, invoice_number, line_items: form.line_items, subtotal, tax, total, deposit_amount: form.deposit_amount || null, due_date: form.due_date || null, notes: form.notes, status: 'Unpaid', stripe_payment_link: pay_link, invoice_pdf_url }),
-        })
-      }
-
-      if (form.client_email) {
         try {
-          const notifyRes = await fetch('/api/notify?action=send-invoice', {
+          const notifyRes = await authedFetch('/api/notify?action=send-invoice', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ client_email: form.client_email, client_name: form.client_name, invoice_number, total, due_date: form.due_date, pay_link, pdf_base64: pdfDataUri }),
+            body: JSON.stringify({ organization_id: currentOrg.id, invoice_id: invoiceId }),
           })
           const notifyData = await notifyRes.json().catch(() => ({}))
-          if (!notifyRes.ok || notifyData.warning) {
-            warnings.push(notifyData.warning || notifyData.error || 'Invoice email could not be sent.')
-          }
+          if (!notifyRes.ok || notifyData.warning) warnings.push(notifyData.warning || notifyData.error || 'Invoice email could not be sent.')
+          for (const w of notifyData.warnings || []) warnings.push(w)
         } catch {
           warnings.push('Invoice email could not be sent — request failed.')
         }
+      } else {
+        warnings.push('The invoice could not be saved, so nothing was sent.')
       }
 
       setCreating(false)
@@ -192,8 +176,16 @@ export default function Invoices() {
     setSending(false)
   }
 
+  // Stripe marks invoices paid automatically after verifying the payment. This records an EXTERNAL
+  // payment (check, ACH, cash, wire) and is owner-only, evidence-backed and labelled as such.
   const markPaid = async (inv) => {
-    await authedFetch('/api/client?resource=invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: inv.id, ...inv, status: 'Paid' }) })
+    const method = window.prompt('How was it paid? (check, ach, cash, wire, other)', 'check')
+    if (!method) return
+    const evidence = window.prompt('Evidence: reference number, deposit date, who confirmed it (15+ characters)')
+    if (!evidence) return
+    const r = await authedFetch('/api/client?resource=invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'record-payment', organization_id: inv.organization_id || currentOrg.id, id: inv.id, method: method.trim().toLowerCase(), evidence }) })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok) alert(d.error || 'Could not record the payment.')
     load()
   }
 
