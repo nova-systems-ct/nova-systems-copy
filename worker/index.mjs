@@ -27,11 +27,11 @@
 // scripts/unit_job_queue_correctness_test.mjs for the proof this pattern actually prevents a
 // duplicate side effect on redelivery.
 
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createLocalJobStore } from './localJobStore.mjs';
 import { createPostgresJobStore } from './postgresJobStore.mjs';
+import { fetchPublicPage } from '../api/_auditResearch.js';
 
 const args = process.argv.slice(2);
 const once = args.includes('--once');
@@ -43,24 +43,29 @@ const cancelReason = args.find((a) => a.startsWith('--reason='))?.split('=').sli
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS) || 5000;
 const WORKER_ID = process.env.WORKER_ID || `worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
-function loadEnvFile() {
-  const env = {};
-  try {
-    fs.readFileSync('.env.local', 'utf8').split('\n').forEach((line) => {
-      const m = line.match(/^([A-Z_]+)=(.*)$/);
-      if (m) env[m[1]] = m[2].trim();
-    });
-  } catch { /* no .env.local — fine in local mode */ }
-  return env;
+// Security repair 2026-09-30 (audit F-21): the worker no longer reads .env.local (which holds the
+// PRODUCTION service-role key on developer machines). Credentials come only from the process
+// environment, and a non-local database is used only when NOVA_WORKER_TARGET_REF names that exact
+// Supabase project — a deliberate, per-deployment statement of intent. Anything else fails closed.
+export function workerTarget(env = process.env) {
+  const url = env.SUPABASE_URL || '';
+  if (!url || !env.SUPABASE_SERVICE_ROLE_KEY) return { ok: false, reason: 'no database credentials in the process environment' };
+  let host; try { host = new URL(url).hostname; } catch { return { ok: false, reason: 'SUPABASE_URL is not a valid URL' }; }
+  if (host === '127.0.0.1' || host === 'localhost' || host === '::1') return { ok: true, kind: 'local' };
+  const ref = host.endsWith('.supabase.co') ? host.split('.')[0] : null;
+  if (!ref) return { ok: false, reason: `unrecognised database host ${host}` };
+  if (env.NOVA_WORKER_TARGET_REF !== ref) return { ok: false, reason: `refusing Supabase project ${ref}: set NOVA_WORKER_TARGET_REF=${ref} on the host that is meant to process that project's jobs` };
+  return { ok: true, kind: 'remote', ref };
 }
 
 function buildStore() {
-  const fileEnv = loadEnvFile();
-  const SUPABASE_URL = process.env.SUPABASE_URL || fileEnv.SUPABASE_URL;
-  const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || fileEnv.SUPABASE_SERVICE_ROLE_KEY;
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!forceLocal && SUPABASE_URL && SERVICE_KEY) {
-    console.log(`[worker] Postgres mode — ${SUPABASE_URL}`);
+  if (!forceLocal && (SUPABASE_URL || SERVICE_KEY)) {
+    const t = workerTarget();
+    if (!t.ok) throw new Error(`[worker] Postgres mode refused — ${t.reason}. Use --local for the offline file store.`);
+    console.log(`[worker] Postgres mode — ${t.kind === 'local' ? 'local test database' : `Supabase project ${t.ref}`}`);
     return { store: createPostgresJobStore({ url: SUPABASE_URL, serviceKey: SERVICE_KEY }), url: SUPABASE_URL, serviceKey: SERVICE_KEY, mode: 'postgres' };
   }
   console.log('[worker] Local mode — .data/jobs.local.json (no Supabase credentials found, or --local forced)');
@@ -189,12 +194,13 @@ const handlers = {
 
     if (workerId) await post('worker_heartbeats', { worker_id: workerId, work_item_id: workItemId, status: 'working', note: `Durable job ${job.id}: checking ${url}` });
 
+    // Same SSRF protections as the Nova Audit research fetch: http(s) only, no credentials, standard
+    // ports, no private/loopback/link-local targets, every redirect hop re-validated (audit follow-up).
     const t0 = Date.now();
     let httpStatus = null, ok = false, errMsg = null;
     try {
-      const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 10_000);
-      const r = await fetch(url, { signal: ctrl.signal }); clearTimeout(timer);
-      httpStatus = r.status; ok = true;
+      const page = await fetchPublicPage(url, { timeoutMs: 10_000, ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}), ...(ctx.lookup ? { lookup: ctx.lookup } : {}) });
+      httpStatus = page.status; ok = true;
     } catch (e) { errMsg = e.message; }
     const ms = Date.now() - t0;
 

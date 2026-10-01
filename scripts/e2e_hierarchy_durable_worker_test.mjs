@@ -41,7 +41,12 @@ try {
   await hier('set-worker-status', { token: owner.token, body: { id: worker.id, status: 'training', reason: 'Durable-worker test training.' } });
   await hier('set-worker-status', { token: owner.token, body: { id: worker.id, status: 'active', reason: 'Durable-worker test training complete.' } });
 
-  const checkUrl = `${env.base}/`; // the disposable test env's own stub server — no real external network call
+  // The worker's URL check now refuses private/loopback targets (SSRF guard), so the check targets a
+  // public-looking name whose DNS answer and HTTP transport are injected and routed to the disposable
+  // stub server — still no real external network call.
+  const checkUrl = 'https://status.vendor-check.test/';
+  const lookup = async () => [{ address: '93.184.216.34' }];
+  const fetchImpl = (u, opts) => fetch(`${env.base}/`, { ...opts, redirect: 'manual' });
   let r = await wk('create-work-item', { token: owner.token, body: { title: 'Verify the vendor status page is reachable', category: 'url_check', description: checkUrl } });
   check('a real url_check work item is created', r.status === 200);
   const wiId = r.body.work_item.id;
@@ -58,7 +63,7 @@ try {
   const claimed = await store.claimNext({ workerId: 'durable-worker-test', leaseSeconds: 60 });
   check('the real claim_next_job() function actually claims this exact job (real leasing, not a shortcut)', claimed?.id === jobId && claimed.status === 'leased');
 
-  const result = await handlers.hierarchy_work_item_check(claimed, { url, serviceKey, mode: 'postgres', store });
+  const result = await handlers.hierarchy_work_item_check(claimed, { url, serviceKey, mode: 'postgres', store, lookup, fetchImpl });
   check('the real, unmodified handler ran and returned a real HTTP result (not fabricated)', typeof result.http_status !== 'undefined');
   await store.complete(claimed.id, result);
 
@@ -78,10 +83,19 @@ try {
 
   // Idempotency / redelivery: re-running the SAME handler against the now-past-in_progress work
   // item must not double-apply — the handler checks live status and no-ops.
-  const redeliveryResult = await handlers.hierarchy_work_item_check({ ...claimed, id: jobId }, { url, serviceKey, mode: 'postgres', store });
+  const redeliveryResult = await handlers.hierarchy_work_item_check({ ...claimed, id: jobId }, { url, serviceKey, mode: 'postgres', store, lookup, fetchImpl });
   check('redelivering the same job to the handler is a real, honest no-op (idempotent — item already past in_progress)', redeliveryResult.skipped === true);
   const afterRedelivery = (await env.sql('select count(*) from work_item_evidence where work_item_id=$1', [wiId])).rows[0].count;
   check('redelivery did NOT create a second evidence record', afterRedelivery === '1');
+
+  // SSRF guard: a work item pointing at a loopback/private address is checked but NEVER fetched.
+  r = await wk('create-work-item', { token: owner.token, body: { title: 'Loopback target', category: 'url_check', description: `${env.base}/` } });
+  const wi2 = r.body.work_item.id;
+  await wk('assign-work-item', { token: owner.token, body: { id: wi2, worker_id: worker.id } });
+  r = await wk('start-work-item', { token: owner.token, body: { id: wi2 } });
+  const claimed2 = await store.claimNext({ workerId: 'durable-worker-test', leaseSeconds: 60 });
+  const ssrf = await handlers.hierarchy_work_item_check(claimed2, { url, serviceKey, mode: 'postgres', store });
+  check('SSRF guard: a loopback target is refused (not fetched) and recorded as a failed check', ssrf.ok === false && ssrf.http_status === null);
 } catch (e) { fail++; console.log('FAIL — test crashed:', e.stack || e); }
 finally { await env.stop(); }
 console.log(`\n${pass} passed, ${fail} failed — Nova Hierarchy durable job queue integration (real queue, real claim function, real handler, real local PostgreSQL/PostgREST; local, disposable)`);

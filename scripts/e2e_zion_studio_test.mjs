@@ -15,10 +15,10 @@
 // Usage: node scripts/e2e_zion_studio_test.mjs
 
 import fs from 'node:fs';
-import { requireRealSupabaseOptIn } from './_realSupabaseGuard.mjs';
+import { requireRealSupabaseOptIn, testEnvFile } from './_realSupabaseGuard.mjs';
 
 const env = {};
-fs.readFileSync('.env.local', 'utf8').split('\n').forEach((line) => {
+fs.readFileSync(testEnvFile(), 'utf8').split('\n').forEach((line) => {
   const m = line.match(/^([A-Z_]+)=(.*)$/);
   if (m) env[m[1]] = m[2].trim();
 });
@@ -30,7 +30,7 @@ const SERVICE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 const ANON_KEY = env.VITE_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) {
-  console.error('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / VITE_SUPABASE_ANON_KEY in .env.local');
+  console.error('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / VITE_SUPABASE_ANON_KEY in the test env file (NOVA_TEST_ENV_FILE, default .env.staging.local)');
   process.exit(1);
 }
 requireRealSupabaseOptIn(SUPABASE_URL, 'e2e_zion_studio_test');

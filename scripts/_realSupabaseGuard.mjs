@@ -1,39 +1,42 @@
-// 2026-09-29: this repo's local-disposable-Postgres harness (scripts/testenv/) cannot fully
-// reproduce real Supabase Auth (magic links, real JWT issuance/refresh, admin user management),
-// so a handful of e2e scripts intentionally target a REAL Supabase project via .env.local instead.
-// That's a legitimate design choice for what they test — but nothing about running
-// `node scripts/whatever_test.mjs` visibly signals "this touches a real, possibly-production
-// database" versus the far more common local-harness scripts, and at least one of these was run
-// this session believing it was local-only. It creates and deletes real throwaway rows/users
-// there; cleanup is coded into each script, but a crash before the `finally` block runs (or a
-// permission boundary blocking verification) can leave that cleanup unconfirmed. This guard makes
-// the target impossible to miss and requires an explicit, informed opt-in before any such script
-// proceeds, so nobody — including an agent working from a prior turn's context — can treat one of
-// these as equivalent to a local test by mistake.
+// Guard for the handful of e2e/QA scripts that talk to a REAL Supabase project instead of the local
+// disposable harness (scripts/testenv/). Security repair 2026-09-30 (audit F-21/F-28):
 //
-// Usage: import { requireRealSupabaseOptIn } from './_realSupabaseGuard.mjs'; call it right after
-// loading SUPABASE_URL from .env.local, before making any request.
+//  1. Credentials are read from a DEDICATED test env file — NOVA_TEST_ENV_FILE, default
+//     `.env.staging.local` — never from `.env.local`, which holds production keys on dev machines.
+//  2. A URL on 127.0.0.1/localhost is always allowed (local harness).
+//  3. The production project and the old compromised project are NEVER allowed, whatever flags say.
+//  4. Any other remote project requires BOTH ALLOW_REAL_SUPABASE_TESTS=yes AND
+//     NOVA_TEST_TARGET_REF=<that project's ref> — a flag alone is not trusted; the target is checked.
+import path from 'node:path';
+
+export const NEVER_TEST_AGAINST = new Set([
+  'xizmgruvuazmummotzkp', // Nova production (nova-systems.app, nova-systems.agency)
+  'mokyqxfgvdxajxytkcat', // old nova-jobs / compromised project
+  ...String(process.env.NOVA_PRODUCTION_REFS || '').split(',').map((s) => s.trim()).filter(Boolean),
+]);
+
+export function testEnvFile() {
+  const f = process.env.NOVA_TEST_ENV_FILE || '.env.staging.local';
+  const base = path.basename(f);
+  if (base === '.env.local' || base === '.env') {
+    console.error(`[guard] REFUSING: ${f} is the application's own env file (production credentials on developer machines). Put staging test credentials in .env.staging.local or set NOVA_TEST_ENV_FILE.`);
+    process.exit(1);
+  }
+  return f;
+}
+
+export function projectRefOf(url) {
+  try { const h = new URL(url).hostname; return h.endsWith('.supabase.co') ? h.split('.')[0] : null; } catch { return null; }
+}
+
 export function requireRealSupabaseOptIn(supabaseUrl, scriptName) {
   const looksLocal = /^https?:\/\/(127\.0\.0\.1|localhost)[:/]/i.test(supabaseUrl || '');
-  if (looksLocal) return; // scripts/testenv-style local harness URL — no real target, nothing to guard.
-  if (process.env.ALLOW_REAL_SUPABASE_TESTS === 'yes') {
-    console.log(`[${scriptName}] ALLOW_REAL_SUPABASE_TESTS=yes set — proceeding against a REAL Supabase project (${supabaseUrl}). This creates and deletes real throwaway rows/users there.`);
-    return;
-  }
-  console.error(`
-[${scriptName}] REFUSING TO RUN.
-
-.env.local's SUPABASE_URL (${supabaseUrl || '(not set)'}) does not look like a local test
-environment. This script creates real throwaway rows and real Supabase Auth users against
-whatever project that URL points to, then deletes them — if that project is production (or you're
-not certain), this is exactly the "never test by writing to production" rule this repo operates
-under.
-
-If you have explicitly confirmed this is safe (a real, dedicated staging project — not
-production — or you accept the risk and understand what this script creates), set:
-  ALLOW_REAL_SUPABASE_TESTS=yes
-and re-run. Otherwise, use the local disposable harness (scripts/testenv/) instead, if this
-script's PREREQUISITE comment allows it.
-`);
-  process.exit(1);
+  if (looksLocal) return;
+  const ref = projectRefOf(supabaseUrl);
+  const refuse = (why) => { console.error(`\n[${scriptName}] REFUSING TO RUN: ${why}\n`); process.exit(1); };
+  if (!ref) refuse(`SUPABASE_URL (${supabaseUrl || 'not set'}) is neither local nor a recognisable Supabase project.`);
+  if (NEVER_TEST_AGAINST.has(ref)) refuse(`project ${ref} is a production/legacy project. Tests never run there. Use a dedicated staging project.`);
+  if (process.env.ALLOW_REAL_SUPABASE_TESTS !== 'yes') refuse(`set ALLOW_REAL_SUPABASE_TESTS=yes to run against a real (staging) project. This creates and deletes real rows and users there.`);
+  if (process.env.NOVA_TEST_TARGET_REF !== ref) refuse(`set NOVA_TEST_TARGET_REF=${ref} to confirm this exact project is the intended staging target.`);
+  console.log(`[${scriptName}] running against staging project ${ref} (explicitly confirmed).`);
 }

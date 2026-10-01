@@ -1,13 +1,10 @@
 // Seeds the blog_posts table with the 35-article Nova Insights launch set.
 // Usage: node scripts/seed-insights.js
 // Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in the environment
-// (falls back to reading .env / .env.local from the project root if present).
+// (NO automatic .env/.env.local loading — see the guard below).
 
 import { readFileSync, existsSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function loadEnvFile(path) {
   if (!existsSync(path)) return;
@@ -26,8 +23,19 @@ function loadEnvFile(path) {
   }
 }
 
-loadEnvFile(join(__dirname, '..', '.env.local'));
-loadEnvFile(join(__dirname, '..', '.env'));
+// Security repair 2026-09-30 (audit F-28): no automatic loading of .env.local/.env (production keys
+// on developer machines). Credentials come from the shell or an explicitly named file, and the target
+// project must be named in NOVA_SEED_TARGET_REF — seeding is a deliberate act, never an accident.
+if (process.env.NOVA_SEED_ENV_FILE) {
+  if (/(^|[\\/])\.env(\.local)?$/.test(process.env.NOVA_SEED_ENV_FILE)) { console.error('REFUSING: name a dedicated env file, not .env/.env.local.'); process.exit(1); }
+  loadEnvFile(process.env.NOVA_SEED_ENV_FILE);
+}
+{
+  let ref = null;
+  try { const h = new URL(process.env.SUPABASE_URL || '').hostname; ref = h.endsWith('.supabase.co') ? h.split('.')[0] : (['127.0.0.1', 'localhost'].includes(h) ? 'local' : null); } catch { /* handled below */ }
+  if (!ref) { console.error('REFUSING: SUPABASE_URL is not set to a recognisable target.'); process.exit(1); }
+  if (ref !== 'local' && process.env.NOVA_SEED_TARGET_REF !== ref) { console.error(`REFUSING: set NOVA_SEED_TARGET_REF=${ref} to confirm you intend to write blog posts into that project.`); process.exit(1); }
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1493,7 +1501,7 @@ List every vendor currently touching your marketing, branding, and technology, a
 async function main() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in the environment.');
-    console.error('Set them in .env.local (or export them in your shell) and re-run: node scripts/seed-insights.js');
+    console.error('Export them in your shell (or NOVA_SEED_ENV_FILE) and re-run: node scripts/seed-insights.js');
     process.exit(1);
   }
 
