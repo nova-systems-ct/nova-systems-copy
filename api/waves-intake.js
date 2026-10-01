@@ -1,3 +1,4 @@
+import { resendBase } from './_email.js';
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone, sanitizeUrl } from './_sanitize.js';
@@ -192,7 +193,7 @@ async function handleSubmit(req, res) {
     </div>`;
 
   try {
-    const r1 = await fetch('https://api.resend.com/emails', {
+    const r1 = await fetch(`${resendBase()}/emails`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -231,7 +232,7 @@ async function handleSubmit(req, res) {
     </div>`;
 
   try {
-    const r2 = await fetch('https://api.resend.com/emails', {
+    const r2 = await fetch(`${resendBase()}/emails`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({

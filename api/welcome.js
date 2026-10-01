@@ -1,3 +1,4 @@
+import { resendBase } from './_email.js';
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone } from './_sanitize.js';
@@ -157,7 +158,7 @@ export default async function handler(req, res) {
   if (RESEND_KEY) {
     const FROM = 'Nova Systems <noreply@nova-systems.app>';
     try {
-      await fetch('https://api.resend.com/emails', {
+      await fetch(`${resendBase()}/emails`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
