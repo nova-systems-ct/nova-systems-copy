@@ -39,6 +39,10 @@ export function OrgProvider({ children }) {
     const { data: memberRows, error: mErr } = await supabase
       .from('organization_members')
       .select('id, organization_id, role, member_type, status, organizations ( id, name, slug, kind, status )')
+      // Explicitly the caller's own rows (audit F-24): the UI must never derive menus/permissions
+      // from other people's memberships even if a database policy is ever too broad. Real
+      // enforcement stays on the server (api/*) and in RLS.
+      .eq('staff_user_id', session.user.id)
       .eq('status', 'active')
 
     if (mErr) {

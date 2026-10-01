@@ -145,7 +145,23 @@ async function handleInvite(req, res) {
   return res.status(200).json({ ok: true, email, role, staff_user_id: invitedUser.id });
 }
 
-async function handleUpdateRole(req, res) {
+// Owner protection (audit F-35): the platform must always keep at least one active owner, and only
+// an owner may change or remove an owner/admin account.
+async function ownerGuard({ SUPABASE_URL, SUPABASE_KEY, orgId, staffUserId, caller, removingOwnerRole }) {
+  const H = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+  const tr = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?organization_id=eq.${encodeURIComponent(orgId)}&staff_user_id=eq.${encodeURIComponent(staffUserId)}&select=role,status`, { headers: H });
+  const target = tr.ok ? (await tr.json())[0] : null;
+  if (!target) return { status: 404, error: 'That person is not a member of the Nova organization.' };
+  if (OWNER_ONLY_ROLES.includes(target.role) && !caller.roles.includes('nova_super_admin')) return { status: 403, error: 'Only the owner can change or deactivate an owner or admin account.' };
+  if (target.role === 'nova_super_admin' && removingOwnerRole) {
+    const or = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?organization_id=eq.${encodeURIComponent(orgId)}&role=eq.nova_super_admin&status=eq.active&select=staff_user_id`, { headers: H });
+    const owners = or.ok ? await or.json() : [];
+    if (owners.filter((o) => o.staff_user_id !== staffUserId).length === 0) return { status: 409, error: 'This is the last active owner account. Add another owner first.' };
+  }
+  return null;
+}
+
+async function handleUpdateRole(req, res, caller) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 20, 60_000)) return;
 
@@ -159,8 +175,10 @@ async function handleUpdateRole(req, res) {
 
   const orgId = await getNovaInternalOrgId(SUPABASE_URL, SUPABASE_KEY);
   if (!orgId) return res.status(500).json({ error: 'Nova internal organization not found' });
+  const blocked = await ownerGuard({ SUPABASE_URL, SUPABASE_KEY, orgId, staffUserId, caller, removingOwnerRole: role !== 'nova_super_admin' });
+  if (blocked) return res.status(blocked.status).json({ error: blocked.error });
 
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?organization_id=eq.${orgId}&staff_user_id=eq.${staffUserId}`, {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?organization_id=eq.${encodeURIComponent(orgId)}&staff_user_id=eq.${encodeURIComponent(staffUserId)}`, {
     method: 'PATCH',
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ role }),
@@ -169,7 +187,7 @@ async function handleUpdateRole(req, res) {
   return res.status(200).json({ ok: true });
 }
 
-async function handleDeactivate(req, res) {
+async function handleDeactivate(req, res, caller) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 20, 60_000)) return;
 
@@ -183,10 +201,14 @@ async function handleDeactivate(req, res) {
   const orgId = await getNovaInternalOrgId(SUPABASE_URL, SUPABASE_KEY);
   if (!orgId) return res.status(500).json({ error: 'Nova internal organization not found' });
 
+  if (staffUserId === caller.id) return res.status(409).json({ error: 'You cannot deactivate your own account.' });
+  const blocked = await ownerGuard({ SUPABASE_URL, SUPABASE_KEY, orgId, staffUserId, caller, removingOwnerRole: true });
+  if (blocked) return res.status(blocked.status).json({ error: blocked.error });
+
   // Soft — flips status only. Never deletes the auth user, their history, or any record they
   // created; is_org_member()/has_permission() both filter on status='active', so this alone is
   // enough to cut off access without touching anything else.
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?organization_id=eq.${orgId}&staff_user_id=eq.${staffUserId}`, {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/organization_members?organization_id=eq.${encodeURIComponent(orgId)}&staff_user_id=eq.${encodeURIComponent(staffUserId)}`, {
     method: 'PATCH',
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: 'inactive' }),
@@ -214,7 +236,7 @@ export default async function handler(req, res) {
   const op = typeof req.query?.op === 'string' ? req.query.op : '';
   if (op === 'list') return handleList(req, res);
   if (op === 'invite') return handleInvite(req, res);
-  if (op === 'update-role') return handleUpdateRole(req, res);
-  if (op === 'deactivate') return handleDeactivate(req, res);
+  if (op === 'update-role') return handleUpdateRole(req, res, caller);
+  if (op === 'deactivate') return handleDeactivate(req, res, caller);
   return res.status(400).json({ error: `Unknown op: ${op}` });
 }

@@ -47,9 +47,15 @@ export async function requireStaff(req, res, permission) {
     return null;
   }
 
-  let roles;
+  // Security repair 2026-09-30 (audit F-23): permissions used to be pooled across EVERY organization
+  // a user belonged to, so a role held in a client organization unlocked Nova-wide resources. Now:
+  //  - any active membership still passes a bare requireStaff(req, res) (object-level checks in each
+  //    handler then decide per organization via has_permission), but
+  //  - requireStaff(req, res, permission) is satisfied ONLY by roles held in the Nova Systems
+  //    (nova_internal) organization, and caller.roles lists only those Nova roles.
+  let memberships;
   try {
-    const memberUrl = `${SUPABASE_URL}/rest/v1/organization_members?staff_user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&select=role`;
+    const memberUrl = `${SUPABASE_URL}/rest/v1/organization_members?staff_user_id=eq.${encodeURIComponent(user.id)}&status=eq.active&select=role,organization_id,organizations(kind)`;
     const mRes = await fetch(memberUrl, {
       headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
     });
@@ -57,22 +63,27 @@ export async function requireStaff(req, res, permission) {
       res.status(502).json({ error: 'Membership lookup failed' });
       return null;
     }
-    const rows = await mRes.json();
-    roles = [...new Set(rows.map((r) => r.role))];
+    memberships = await mRes.json();
   } catch {
     res.status(502).json({ error: 'Membership lookup failed' });
     return null;
   }
 
-  if (roles.length === 0) {
+  if (!memberships.length) {
     res.status(403).json({ error: 'No active organization membership' });
     return null;
   }
+  const roles = [...new Set(memberships.filter((m) => m.organizations?.kind === 'nova_internal').map((m) => m.role))];
+  const orgIds = [...new Set(memberships.map((m) => m.organization_id))];
 
-  if (!permission) return { id: user.id, email: user.email, roles };
+  if (!permission) return { id: user.id, email: user.email, roles, orgIds };
+  if (!roles.length) {
+    res.status(403).json({ error: 'Insufficient permissions' });
+    return null;
+  }
 
   try {
-    const permUrl = `${SUPABASE_URL}/rest/v1/role_permissions?role=in.(${roles.join(',')})&select=role,permissions(key)`;
+    const permUrl = `${SUPABASE_URL}/rest/v1/role_permissions?role=in.(${roles.map(encodeURIComponent).join(',')})&select=role,permissions(key)`;
     const pRes = await fetch(permUrl, {
       headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
     });
@@ -91,5 +102,5 @@ export async function requireStaff(req, res, permission) {
     return null;
   }
 
-  return { id: user.id, email: user.email, roles };
+  return { id: user.id, email: user.email, roles, orgIds };
 }

@@ -218,11 +218,12 @@ async function handleInvoices(req, res) {
       deposit_amount: b.deposit_amount != null ? Number(b.deposit_amount) : null,
       due_date: sanitize(b.due_date, 20) || null,
       notes: sanitize(b.notes, 2000),
-      status: sanitize(b.status, 30) || 'Unpaid',
-      stripe_payment_link: sanitize(b.stripe_payment_link, 500) || null,
+      // 'Paid' is never accepted here (F-05): it is set only by a verified Stripe event or by the
+      // owner's evidence-backed record-payment action below. Payment links are created server-side.
+      status: ['Unpaid', 'Overdue', 'Void'].includes(sanitize(b.status, 30)) ? sanitize(b.status, 30) : 'Unpaid',
       invoice_pdf_url: sanitize(b.invoice_pdf_url, 500) || null,
     };
-    if (record.status === 'Paid' && !b.paid_at_skip) record.paid_at = new Date().toISOString();
+    if (action === 'update') delete record.status; // status changes go through dedicated actions only
 
     try {
       // On update, the row must already belong to the caller's authorized org — permission on org
@@ -246,6 +247,25 @@ async function handleInvoices(req, res) {
       console.error('[client:invoices] Error:', err.message);
       return res.status(500).json({ error: 'Failed to save invoice' });
     }
+  }
+
+  if (action === 'record-payment') {
+    // Owner-recorded external payment (check, ACH, cash, wire): allowed, but only by the platform
+    // owner, with written evidence, and labelled separately from provider-confirmed payments.
+    if (!(await isPlatformOwner(req))) return res.status(403).json({ error: 'Only the owner can record an external payment' });
+    const id = sanitize(b.id, 100);
+    const method = ['check', 'ach', 'cash', 'wire', 'other'].includes(b.method) ? b.method : null;
+    const evidence = sanitize(b.evidence, 500);
+    if (!id || !method) return res.status(400).json({ error: 'id and a payment method are required' });
+    if (evidence.length < 15) return res.status(422).json({ error: 'Record the evidence (reference number, deposit date, who confirmed it) — at least 15 characters' });
+    const now = new Date().toISOString();
+    const path = `client_invoices?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&status=neq.Paid`;
+    let r = await sbWrite(path, 'PATCH', { status: 'Paid', paid_at: now, payment_source: 'owner_recorded', payment_method: method, payment_evidence: evidence });
+    if (!r.ok && r.status === 400) return res.status(409).json({ error: 'The payment-evidence columns are not installed yet (run the 2026-09-30 repair migration first)' });
+    if (!r.ok) return res.status(500).json({ error: 'Failed to record payment' });
+    const rows = await r.json();
+    if (!rows.length) return res.status(404).json({ error: 'Invoice not found in this organization, or already paid' });
+    return res.status(200).json({ ok: true, invoice: rows[0], note: 'Recorded by the owner from evidence — not confirmed by a payment provider.' });
   }
 
   if (action === 'delete') {
@@ -490,9 +510,13 @@ async function handleVaultResign(req, res) {
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
 
+  // Signs ONLY the storage path recorded on the vault row itself — a caller-supplied path is ignored,
+  // so this can no longer mint links to arbitrary objects in the bucket (F-08).
   const id = sanitize(req.body?.id, 100);
-  const storagePath = sanitize(req.body?.storage_path, 400);
-  if (!id || !storagePath) return res.status(400).json({ error: 'id and storage_path are required' });
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  const rowRes = await sbSelect(`vault_documents?id=eq.${encodeURIComponent(id)}&select=storage_path&limit=1`);
+  const storagePath = rowRes.ok ? (await rowRes.json())[0]?.storage_path : null;
+  if (!storagePath) return res.status(404).json({ error: 'Document not found' });
 
   try {
     const file_url = await signVaultUrl(SUPABASE_URL, SUPABASE_KEY, storagePath);
@@ -518,19 +542,22 @@ async function handleVaultDelete(req, res) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'Supabase not configured' });
 
   const id = sanitize(req.body?.id, 100);
-  const storagePath = sanitize(req.body?.storage_path, 400);
   if (!id) return res.status(400).json({ error: 'id is required' });
 
   try {
+    // Deletes the row and ONLY the object that row points at (never a caller-supplied path).
     const r = await fetch(`${SUPABASE_URL}/rest/v1/vault_documents?id=eq.${encodeURIComponent(id)}`, {
       method: 'DELETE',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, Prefer: 'return=representation' },
     });
     if (!r.ok) { console.error('[client:vault delete] DB error:', r.status, await r.text()); return res.status(500).json({ error: 'Delete failed' }); }
+    const deleted = await r.json();
+    if (!deleted.length) return res.status(404).json({ error: 'Document not found' });
+    const storagePath = deleted[0].storage_path;
 
     if (storagePath) {
       try {
-        await fetch(`${SUPABASE_URL}/storage/v1/object/nova-vault/${storagePath}`, {
+        await fetch(`${SUPABASE_URL}/storage/v1/object/nova-vault/${storagePath.split('/').map(encodeURIComponent).join('/')}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${SUPABASE_KEY}` },
         });
@@ -854,7 +881,7 @@ async function handleBlogPosts(req, res) {
 
   let qs = 'order=created_at.desc';
   if (slug) qs = `slug=eq.${encodeURIComponent(slug)}`;
-  else if (!admin) qs = `published=eq.true&${qs}`;
+  if (!admin) qs = `published=eq.true&${qs}`; // a slug lookup no longer bypasses publication (F-33)
   qs = `site=eq.nova&${qs}`;
 
   try {
@@ -1343,6 +1370,14 @@ async function requireOrgAccess(req, res, orgId, permission) {
   }
 }
 
+// Organization that owns a row (service-role read). Used to authorize against the OWNER of the
+// target row, never merely the organization id a caller supplied (security repair F-08).
+async function rowOrgId(table, id) {
+  if (!id) return null;
+  const r = await sbSelect(`${table}?id=eq.${encodeURIComponent(id)}&select=organization_id&limit=1`);
+  return r.ok ? ((await r.json())[0]?.organization_id || null) : null;
+}
+
 async function sbSelect(path) {
   const { url, key } = sbEnv();
   return fetch(`${url}/rest/v1/${path}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
@@ -1601,6 +1636,9 @@ async function handleOrders(req, res, caller) {
     if (!prodRows.length) return res.status(404).json({ error: 'Product not found' });
     const product = prodRows[0];
 
+    for (const [table, refId] of [['businesses', sanitize(b.business_id, 100)], ['crm_deals', sanitize(b.deal_id, 100)]]) {
+      if (refId && (await rowOrgId(table, refId)) !== orgId) return res.status(400).json({ error: `${table === 'businesses' ? 'business_id' : 'deal_id'} does not belong to this organization` });
+    }
     const record = {
       organization_id: orgId,
       business_id: sanitize(b.business_id, 100) || null,
@@ -1641,7 +1679,7 @@ async function handleOrders(req, res, caller) {
     history.push({ status, at: new Date().toISOString(), by: caller.email });
     const isTerminal = ['closed', 'cancelled', 'refunded'].includes(status);
     const patch = { status, status_history: history, updated_at: new Date().toISOString(), closed_at: isTerminal ? new Date().toISOString() : existing.closed_at };
-    const r = await sbWrite(`orders?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
+    const r = await sbWrite(`orders?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', patch);
     if (!r.ok) { console.error('[client:orders] update-status error:', await r.text()); return res.status(500).json({ error: 'Failed to update order' }); }
     await sbWrite('order_events', 'POST', { order_id: id, event_type: 'status_changed', actor_user_id: caller.id, detail: { from: existing.status, to: status } });
     const rows = await r.json();
@@ -2713,6 +2751,15 @@ async function handleZionReview(req, res, caller) {
 async function handleApprovalsInbox(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 30, 60_000)) return;
+  // Only items from organizations where the caller actually holds admin.view are listed (F-08).
+  const novaOrg = await novaOrgIdCached();
+  const allowedOrgs = new Map();
+  const canSee = async (orgId) => {
+    const o = orgId || novaOrg; if (!o) return false;
+    if (!allowedOrgs.has(o)) allowedOrgs.set(o, await hasPermissionSilent(req, o, 'admin.view'));
+    return allowedOrgs.get(o);
+  };
+  const novaOk = await canSee(novaOrg);
 
   const [reportsRes, videosRes, postsRes, genericRes] = await Promise.all([
     // Embeds the parent case's organization_id via the case_id FK — audit_reports has no
@@ -2729,21 +2776,23 @@ async function handleApprovalsInbox(req, res) {
   const items = [];
   if (reportsRes.ok) {
     for (const r of await reportsRes.json()) {
+      if (!(await canSee(r.audit_cases?.organization_id))) continue;
       items.push({ item_type: 'audit_report', item_id: r.id, action_summary: `Approve Audit report v${r.version} (case ${String(r.case_id).slice(0, 8)})`, created_at: r.created_at, approve_action: { resource: 'audit', op: 'reports', body: { action: 'approve', id: r.id, case_id: r.case_id, organization_id: r.audit_cases?.organization_id } } });
     }
   }
-  if (videosRes.ok) {
+  if (videosRes.ok && novaOk) {
     for (const v of await videosRes.json()) {
       items.push({ item_type: 'zion_video', item_id: v.id, action_summary: `Review Zion video ${String(v.id).slice(0, 8)} (${v.status.replace(/_/g, ' ')})`, created_at: v.created_at, approve_action: { resource: 'zion', op: 'review', body: { video_id: v.id, action: 'approve' } } });
     }
   }
-  if (postsRes.ok) {
+  if (postsRes.ok && novaOk) {
     for (const p of await postsRes.json()) {
       items.push({ item_type: 'content', item_id: p.id, action_summary: `Approve blog post "${p.title}"`, created_at: p.submitted_at, approve_action: { resource: 'blog', op: 'admin', body: { action: 'approve', id: p.id } } });
     }
   }
   if (genericRes.ok) {
     for (const g of await genericRes.json()) {
+      if (!(await canSee(g.organization_id))) continue;
       items.push({ item_type: g.item_type, item_id: g.id, action_summary: g.action_summary, created_at: g.created_at, cost_cents: g.cost_cents, destination: g.destination, expires_at: g.expires_at, approve_action: { resource: 'approvals', op: null, body: { action: 'approve', id: g.id } } });
     }
   }
@@ -2758,8 +2807,10 @@ async function handleApprovalsGeneric(req, res, caller) {
   const action = sanitize(b.action, 20);
 
   if (action === 'create') {
+    const createOrg = sanitize(b.organization_id, 100) || await novaOrgIdCached();
+    if (!(await requireOrgAccess(req, res, createOrg, 'admin.view'))) return;
     const record = {
-      organization_id: sanitize(b.organization_id, 100) || null,
+      organization_id: createOrg,
       item_type: sanitize(b.item_type, 50),
       item_ref: sanitize(b.item_ref, 200) || null,
       action_summary: sanitize(b.action_summary, 1000),
@@ -2785,6 +2836,10 @@ async function handleApprovalsGeneric(req, res, caller) {
   const existingRows = existingRes.ok ? await existingRes.json() : [];
   if (!existingRows.length) return res.status(404).json({ error: 'Approval request not found' });
   const existing = existingRows[0];
+  // Authorize against the organization that OWNS the request (null = Nova's own queue).
+  if (!(await hasPermissionSilent(req, existing.organization_id || await novaOrgIdCached(), 'admin.view'))) return res.status(404).json({ error: 'Approval request not found' });
+  // Separation of duties is NOT changed here: whether a requester may approve their own request is
+  // an owner policy decision still open (see nova-audit 10_OWNER_DECISIONS #23).
 
   if (action === 'approve' || action === 'reject') {
     if (existing.status !== 'pending') {
@@ -2872,10 +2927,13 @@ async function handleCrystalCustomers(req, res) {
       updated_at: new Date().toISOString(),
     };
     if (!record.name) return res.status(400).json({ error: 'name is required' });
-    const path = action === 'update' && id ? `crystal_customers?id=eq.${encodeURIComponent(id)}` : 'crystal_customers';
-    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    const isUpdate = action === 'update' && id;
+    if (isUpdate) delete record.organization_id; // never re-home a row
+    const path = isUpdate ? `crystal_customers?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}` : 'crystal_customers';
+    const r = await sbWrite(path, isUpdate ? 'PATCH' : 'POST', record);
     if (!r.ok) { console.error('[client:crystal customers] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save customer' }); }
     const rows = await r.json();
+    if (!rows.length) return res.status(404).json({ error: 'Customer not found' });
     return res.status(200).json({ ok: true, customer: rows[0] });
   }
   return res.status(400).json({ error: `Unknown action: ${action}` });
@@ -2913,10 +2971,14 @@ async function handleCrystalProperties(req, res) {
       access_notes: sanitize(b.access_notes, 2000) || null,
     };
     if (!record.customer_id || !record.address_line) return res.status(400).json({ error: 'customer_id and address_line are required' });
-    const path = action === 'update' && id ? `crystal_properties?id=eq.${encodeURIComponent(id)}` : 'crystal_properties';
-    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    if ((await rowOrgId('crystal_customers', record.customer_id)) !== orgId) return res.status(400).json({ error: 'customer_id does not belong to this organization' });
+    const isUpdate = action === 'update' && id;
+    if (isUpdate) delete record.organization_id;
+    const path = isUpdate ? `crystal_properties?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}` : 'crystal_properties';
+    const r = await sbWrite(path, isUpdate ? 'PATCH' : 'POST', record);
     if (!r.ok) { console.error('[client:crystal properties] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save property' }); }
     const rows = await r.json();
+    if (!rows.length) return res.status(404).json({ error: 'Property not found' });
     return res.status(200).json({ ok: true, property: rows[0] });
   }
   return res.status(400).json({ error: `Unknown action: ${action}` });
@@ -2961,9 +3023,11 @@ async function handleCrystalCatalog(req, res) {
     if (record.evidence_requirements === undefined) delete record.evidence_requirements;
     if (!record.name) return res.status(400).json({ error: 'name is required' });
     if (id) {
-      const r = await sbWrite(`crystal_service_catalog?id=eq.${encodeURIComponent(id)}`, 'PATCH', { ...record, version: sanitize(b.version, 10) ? Number(b.version) + 1 : undefined });
+      const { organization_id: _ignored, ...patch } = record; void _ignored;
+      const r = await sbWrite(`crystal_service_catalog?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { ...patch, version: sanitize(b.version, 10) ? Number(b.version) + 1 : undefined });
       if (!r.ok) { console.error('[client:crystal catalog] update error:', await r.text()); return res.status(500).json({ error: 'Failed to update service' }); }
       const rows = await r.json();
+      if (!rows.length) return res.status(404).json({ error: 'Service not found' });
       return res.status(200).json({ ok: true, service: rows[0] });
     }
     const r = await sbWrite('crystal_service_catalog', 'POST', record);
@@ -3009,6 +3073,8 @@ async function handleCrystalQuotes(req, res) {
       status: 'new',
     };
     if (!record.customer_id) return res.status(400).json({ error: 'customer_id is required' });
+    if ((await rowOrgId('crystal_customers', record.customer_id)) !== orgId) return res.status(400).json({ error: 'customer_id does not belong to this organization' });
+    if (record.property_id && (await rowOrgId('crystal_properties', record.property_id)) !== orgId) return res.status(400).json({ error: 'property_id does not belong to this organization' });
     const r = await sbWrite('crystal_quote_requests', 'POST', record);
     if (!r.ok) { console.error('[client:crystal quotes] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create quote request' }); }
     const rows = await r.json();
@@ -3017,6 +3083,7 @@ async function handleCrystalQuotes(req, res) {
 
   const id = sanitize(b.id, 100);
   if (!id) return res.status(400).json({ error: 'id is required' });
+  if ((await rowOrgId('crystal_quote_requests', id)) !== orgId) return res.status(404).json({ error: 'Quote request not found' });
 
   if (action === 'update-scope') {
     const patch = { scope_details: sanitize(b.scope_details, 4000), status: 'scoped', updated_at: new Date().toISOString() };
@@ -3048,6 +3115,7 @@ async function handleCrystalEstimates(req, res, caller) {
     if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
     const quoteId = sanitize(req.query?.quote_request_id, 100);
     if (!quoteId) return res.status(400).json({ error: 'quote_request_id is required' });
+    if ((await rowOrgId('crystal_quote_requests', quoteId)) !== orgId) return res.status(404).json({ error: 'Quote request not found' });
     const r = await sbSelect(`crystal_estimates?quote_request_id=eq.${encodeURIComponent(quoteId)}&order=version.desc`);
     if (!r.ok) { console.error('[client:crystal estimates] error:', await r.text()); return res.status(500).json({ error: 'Failed to load estimates' }); }
     return res.status(200).json(await r.json());
@@ -3060,6 +3128,7 @@ async function handleCrystalEstimates(req, res, caller) {
   const action = sanitize(b.action, 20);
   const quoteId = sanitize(b.quote_request_id, 100);
   if (!quoteId) return res.status(400).json({ error: 'quote_request_id is required' });
+  if ((await rowOrgId('crystal_quote_requests', quoteId)) !== orgId) return res.status(404).json({ error: 'Quote request not found' });
 
   if (action === 'create-draft') {
     const lineItems = Array.isArray(b.line_items) ? b.line_items : [];
@@ -3079,7 +3148,7 @@ async function handleCrystalEstimates(req, res, caller) {
 
   const id = sanitize(b.id, 100);
   if (!id) return res.status(400).json({ error: 'id is required' });
-  const estRes = await sbSelect(`crystal_estimates?id=eq.${encodeURIComponent(id)}&limit=1`);
+  const estRes = await sbSelect(`crystal_estimates?id=eq.${encodeURIComponent(id)}&quote_request_id=eq.${encodeURIComponent(quoteId)}&limit=1`);
   const estRows = estRes.ok ? await estRes.json() : [];
   if (!estRows.length) return res.status(404).json({ error: 'Estimate not found' });
   const estimate = estRows[0];
@@ -3173,6 +3242,13 @@ async function handleCrystalJobs(req, res, caller) {
   // finish their own job); every other action requires full execution.view administrative access.
   const workerOnlyActions = ['complete', 'checklist-item'];
   let orgId = sanitize(b.organization_id, 100);
+  // For every action on an existing job, authorize against the organization that OWNS the job,
+  // never the organization id in the request body (F-08).
+  if (action !== 'create') {
+    const jobOrg = await rowOrgId('crystal_jobs', sanitize(b.id, 100));
+    if (!jobOrg) return res.status(404).json({ error: 'Job not found' });
+    orgId = jobOrg;
+  }
   if (!workerOnlyActions.includes(action)) {
     if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
   }
@@ -3184,7 +3260,7 @@ async function handleCrystalJobs(req, res, caller) {
     const estRows = estRes.ok ? await estRes.json() : [];
     if (!estRows.length) return res.status(404).json({ error: 'Estimate not found' });
     if (estRows[0].status !== 'accepted') return res.status(400).json({ error: 'A job can only be created from an accepted estimate' });
-    const quoteRes = await sbSelect(`crystal_quote_requests?id=eq.${encodeURIComponent(estRows[0].quote_request_id)}&limit=1`);
+    const quoteRes = await sbSelect(`crystal_quote_requests?id=eq.${encodeURIComponent(estRows[0].quote_request_id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
     const quoteRows = quoteRes.ok ? await quoteRes.json() : [];
     if (!quoteRows.length) return res.status(404).json({ error: 'Source quote request not found' });
     const quote = quoteRows[0];
@@ -3210,6 +3286,8 @@ async function handleCrystalJobs(req, res, caller) {
   if (action === 'assign-worker') {
     const workerUserId = sanitize(b.worker_user_id, 100);
     if (!workerUserId) return res.status(400).json({ error: 'worker_user_id is required' });
+    const memRes = await sbSelect(`organization_members?staff_user_id=eq.${encodeURIComponent(workerUserId)}&organization_id=eq.${encodeURIComponent(orgId)}&status=eq.active&select=id&limit=1`);
+    if (!(memRes.ok && (await memRes.json()).length)) return res.status(400).json({ error: 'That person is not an active member of this organization' });
     const r = await sbWrite('crystal_job_assignments', 'POST', { job_id: id, worker_user_id: workerUserId, role: sanitize(b.role, 50) || null });
     if (!r.ok) {
       const text = await r.text();
@@ -3232,7 +3310,7 @@ async function handleCrystalJobs(req, res, caller) {
   if (action === 'update-status') {
     const status = sanitize(b.status, 30);
     if (!['scheduled', 'assigned', 'in_progress', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid status for direct update — completion/invoicing have their own actions' });
-    const r = await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status, updated_at: new Date().toISOString() });
+    const r = await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { status, updated_at: new Date().toISOString() });
     if (!r.ok) { console.error('[client:crystal jobs] update-status error:', await r.text()); return res.status(500).json({ error: 'Failed to update job status' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, job: rows[0] });
@@ -3337,10 +3415,20 @@ async function isWorkerAssignedToJob(userId, jobId) {
   const rows = r.ok ? await r.json() : [];
   return rows.length > 0;
 }
+let _novaOrg = null; let _novaOrgAt = 0;
+async function novaOrgIdCached() {
+  if (_novaOrg && Date.now() - _novaOrgAt < 60_000) return _novaOrg;
+  const r = await sbSelect('organizations?kind=eq.nova_internal&select=id&limit=1');
+  const id = r.ok ? ((await r.json())[0]?.id || null) : null;
+  if (id) { _novaOrg = id; _novaOrgAt = Date.now(); }
+  return id;
+}
+
 // Silent variant of requireOrgAccess for a branch that already has another valid authorization
 // path (an assigned worker) — checks the permission without writing an error response on failure,
 // since the caller here decides what to do with a false result itself rather than short-circuiting.
 async function hasPermissionSilent(req, orgId, permission) {
+  if (!orgId) return false;
   const { url, key } = sbEnv();
   const token = callerToken(req);
   try {
@@ -3373,6 +3461,7 @@ async function handleCrystalInvoices(req, res) {
     const jobId = sanitize(b.job_id, 100);
     const amountCents = Number(b.amount_cents);
     if (!jobId || !Number.isFinite(amountCents)) return res.status(400).json({ error: 'job_id and a real amount_cents are required — unbilled work is never invoiced with an invented amount' });
+    if ((await rowOrgId('crystal_jobs', jobId)) !== orgId) return res.status(400).json({ error: 'job_id does not belong to this organization' });
     const r = await sbWrite('crystal_invoices', 'POST', { organization_id: orgId, job_id: jobId, amount_cents: amountCents, currency: sanitize(b.currency, 10) || 'USD' });
     if (!r.ok) { console.error('[client:crystal invoices] create error:', await r.text()); return res.status(500).json({ error: 'Failed to create invoice' }); }
     await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(jobId)}`, 'PATCH', { status: 'invoiced', updated_at: new Date().toISOString() });
@@ -3384,14 +3473,14 @@ async function handleCrystalInvoices(req, res) {
   if (!id) return res.status(400).json({ error: 'id is required' });
 
   if (action === 'send') {
-    const r = await sbWrite(`crystal_invoices?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'sent', sent_at: new Date().toISOString() });
+    const r = await sbWrite(`crystal_invoices?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { status: 'sent', sent_at: new Date().toISOString() });
     if (!r.ok) { console.error('[client:crystal invoices] send error:', await r.text()); return res.status(500).json({ error: 'Failed to send invoice' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, invoice: rows[0] });
   }
 
   if (action === 'mark-paid') {
-    const r = await sbWrite(`crystal_invoices?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'paid', paid_at: new Date().toISOString(), payment_method: sanitize(b.payment_method, 100) || null });
+    const r = await sbWrite(`crystal_invoices?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { status: 'paid', paid_at: new Date().toISOString(), payment_method: sanitize(b.payment_method, 100) || null });
     if (!r.ok) { console.error('[client:crystal invoices] mark-paid error:', await r.text()); return res.status(500).json({ error: 'Failed to mark invoice paid' }); }
     const rows = await r.json();
     if (rows[0]?.job_id) await sbWrite(`crystal_jobs?id=eq.${encodeURIComponent(rows[0].job_id)}`, 'PATCH', { status: 'paid', updated_at: new Date().toISOString() });
@@ -3408,8 +3497,8 @@ async function handleCrystalFeedback(req, res) {
     const orgId = sanitize(req.query?.organization_id, 100);
     if (!(await requireOrgAccess(req, res, orgId, 'execution.view'))) return;
     const jobId = sanitize(req.query?.job_id, 100);
-    let path = `crystal_feedback?order=created_at.desc`;
-    if (jobId) path = `crystal_feedback?job_id=eq.${encodeURIComponent(jobId)}&order=created_at.desc`;
+    let path = `crystal_feedback?select=*,crystal_jobs!inner(organization_id)&crystal_jobs.organization_id=eq.${encodeURIComponent(orgId)}&order=created_at.desc`;
+    if (jobId) path += `&job_id=eq.${encodeURIComponent(jobId)}`;
     const r = await sbSelect(path);
     if (!r.ok) { console.error('[client:crystal feedback] error:', await r.text()); return res.status(500).json({ error: 'Failed to load feedback' }); }
     return res.status(200).json(await r.json());
@@ -3425,6 +3514,7 @@ async function handleCrystalFeedback(req, res) {
   if (!jobId || !customerId || !Number.isInteger(rating) || rating < 1 || rating > 5) {
     return res.status(400).json({ error: 'job_id, customer_id, and a rating from 1-5 are required' });
   }
+  if ((await rowOrgId('crystal_jobs', jobId)) !== orgId || (await rowOrgId('crystal_customers', customerId)) !== orgId) return res.status(400).json({ error: 'job_id/customer_id do not belong to this organization' });
   const r = await sbWrite('crystal_feedback', 'POST', { job_id: jobId, customer_id: customerId, rating, comments: sanitize(b.comments, 2000) || null });
   if (!r.ok) { console.error('[client:crystal feedback] create error:', await r.text()); return res.status(500).json({ error: 'Failed to record feedback' }); }
   const rows = await r.json();
@@ -3468,7 +3558,7 @@ async function handleCrystalRecurring(req, res) {
   if (action === 'pause' || action === 'resume') {
     const id = sanitize(b.id, 100);
     if (!id) return res.status(400).json({ error: 'id is required' });
-    const r = await sbWrite(`crystal_recurring_schedules?id=eq.${encodeURIComponent(id)}`, 'PATCH', { active: action === 'resume' });
+    const r = await sbWrite(`crystal_recurring_schedules?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { active: action === 'resume' });
     if (!r.ok) { console.error('[client:crystal recurring] pause/resume error:', await r.text()); return res.status(500).json({ error: 'Failed to update recurring schedule' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, schedule: rows[0] });
@@ -3536,8 +3626,10 @@ async function handleMarketingBrands(req, res) {
       updated_at: new Date().toISOString(),
     };
     if (!record.name) return res.status(400).json({ error: 'name is required' });
-    const path = action === 'update' && id ? `marketing_brands?id=eq.${encodeURIComponent(id)}` : 'marketing_brands';
-    const r = await sbWrite(path, action === 'update' && id ? 'PATCH' : 'POST', record);
+    const isUpdate = action === 'update' && id;
+    if (isUpdate) delete record.organization_id;
+    const path = isUpdate ? `marketing_brands?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}` : 'marketing_brands';
+    const r = await sbWrite(path, isUpdate ? 'PATCH' : 'POST', record);
     if (!r.ok) { console.error('[client:marketing brands] save error:', await r.text()); return res.status(500).json({ error: 'Failed to save brand' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, brand: rows[0] });
@@ -3563,6 +3655,7 @@ async function handleMarketingCampaigns(req, res) {
   if (action === 'create') {
     const brandId = sanitize(b.brand_id, 100);
     if (!brandId || !sanitize(b.name, 200)) return res.status(400).json({ error: 'brand_id and name are required' });
+    if ((await rowOrgId('marketing_brands', brandId)) !== orgId) return res.status(400).json({ error: 'brand_id does not belong to this organization' });
     const r = await sbWrite('marketing_campaigns', 'POST', {
       organization_id: orgId, brand_id: brandId, name: sanitize(b.name, 200), goal: sanitize(b.goal, 1000) || null,
       is_template: b.is_template === true, start_date: sanitize(b.start_date, 20) || null, end_date: sanitize(b.end_date, 20) || null,
@@ -3575,7 +3668,7 @@ async function handleMarketingCampaigns(req, res) {
     const id = sanitize(b.id, 100);
     const status = sanitize(b.status, 20);
     if (!id || !['draft', 'active', 'paused', 'completed'].includes(status)) return res.status(400).json({ error: 'id and a valid status are required' });
-    const r = await sbWrite(`marketing_campaigns?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status });
+    const r = await sbWrite(`marketing_campaigns?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { status });
     if (!r.ok) { console.error('[client:marketing campaigns] update-status error:', await r.text()); return res.status(500).json({ error: 'Failed to update campaign' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, campaign: rows[0] });
@@ -3612,6 +3705,7 @@ async function handleMarketingContent(req, res, caller) {
     if (!brandId || !['social_post', 'article', 'video', 'email'].includes(contentType) || !sanitize(b.title, 300)) {
       return res.status(400).json({ error: 'brand_id, a valid content_type, and title are required' });
     }
+    if ((await rowOrgId('marketing_brands', brandId)) !== orgId) return res.status(400).json({ error: 'brand_id does not belong to this organization' });
     const r = await sbWrite('content_ideas', 'POST', {
       organization_id: orgId, brand_id: brandId, campaign_id: sanitize(b.campaign_id, 100) || null,
       journey_entry_id: sanitize(b.journey_entry_id, 100) || null, // optional link back to a Zion journal entry
@@ -3636,7 +3730,7 @@ async function handleMarketingContent(req, res, caller) {
     const patch = { updated_at: new Date().toISOString(), status: 'drafted' };
     if (b.notes !== undefined) patch.notes = sanitize(b.notes, 20000);
     if (b.source_notes !== undefined) patch.source_notes = sanitize(b.source_notes, 4000);
-    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
+    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', patch);
     if (!r.ok) { console.error('[client:marketing content] update-draft error:', await r.text()); return res.status(500).json({ error: 'Failed to update content' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, item: rows[0] });
@@ -3647,23 +3741,23 @@ async function handleMarketingContent(req, res, caller) {
     if (!sanitize(existing.source_notes, 1) && !sanitize(b.source_notes, 1)) {
       return res.status(400).json({ error: 'source_notes (the factual basis for this content) are required before it can pass fact-checking' });
     }
-    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'fact_checked', fact_checked_by: caller.id, fact_checked_at: new Date().toISOString(), source_notes: sanitize(b.source_notes, 4000) || existing.source_notes });
+    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { status: 'fact_checked', fact_checked_by: caller.id, fact_checked_at: new Date().toISOString(), source_notes: sanitize(b.source_notes, 4000) || existing.source_notes });
     if (!r.ok) { console.error('[client:marketing content] fact-check error:', await r.text()); return res.status(500).json({ error: 'Failed to record fact-check' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, item: rows[0] });
   }
 
   if (action === 'approve') {
-    if (!(await requireStaff(req, res, 'admin.view'))) return;
+    if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
     if (existing.status !== 'fact_checked') return res.status(400).json({ error: `Cannot approve from status ${existing.status} — content must be fact-checked first` });
-    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
+    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
     if (!r.ok) { console.error('[client:marketing content] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve content' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, item: rows[0] });
   }
 
   if (action === 'reject') {
-    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'rejected' });
+    const r = await sbWrite(`content_ideas?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { status: 'rejected' });
     if (!r.ok) { console.error('[client:marketing content] reject error:', await r.text()); return res.status(500).json({ error: 'Failed to reject content' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, item: rows[0] });
@@ -3681,6 +3775,7 @@ async function handleMarketingPlatformPosts(req, res, caller) {
     if (!rateLimit(req, res, 60, 60_000)) return;
     const ideaId = sanitize(req.query?.content_item_id, 100);
     if (!ideaId) return res.status(400).json({ error: 'content_item_id is required' });
+    if (!(await hasPermissionSilent(req, await rowOrgId('content_ideas', ideaId), 'growth.view'))) return res.status(404).json({ error: 'Content idea not found' });
     const r = await sbSelect(`content_assets?idea_id=eq.${encodeURIComponent(ideaId)}&order=created_at.asc`);
     if (!r.ok) { console.error('[client:marketing platform posts] error:', await r.text()); return res.status(500).json({ error: 'Failed to load platform posts' }); }
     return res.status(200).json(await r.json());
@@ -3698,7 +3793,7 @@ async function handleMarketingPlatformPosts(req, res, caller) {
     }
     const ideaRes = await sbSelect(`content_ideas?id=eq.${encodeURIComponent(ideaId)}&limit=1`);
     const ideaRows = ideaRes.ok ? await ideaRes.json() : [];
-    if (!ideaRows.length) return res.status(404).json({ error: 'Content idea not found' });
+    if (!ideaRows.length || !(await hasPermissionSilent(req, ideaRows[0].organization_id, 'growth.view'))) return res.status(404).json({ error: 'Content idea not found' });
     if (ideaRows[0].status !== 'approved') return res.status(400).json({ error: 'Only approved content can get a platform-specific variant' });
 
     // publish_mode is derived from the real adapter state, never client-asserted — an unconnected
@@ -3723,6 +3818,7 @@ async function handleMarketingPlatformPosts(req, res, caller) {
 
   const id = sanitize(b.id, 100);
   if (!id) return res.status(400).json({ error: 'id is required' });
+  if (!(await hasPermissionSilent(req, await rowOrgId('content_assets', id), 'growth.view'))) return res.status(404).json({ error: 'Not found' });
 
   if (action === 'export') {
     // A real human downloads the prepared media/copy and posts it by hand — this records that
@@ -3797,6 +3893,7 @@ async function handleMarketingAdapters(req, res, caller) {
     if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
     const accessToken = sanitize(b.access_token, 2000);
     if (!accessToken) return res.status(400).json({ error: 'access_token is required' });
+    if (b.brand_id && (await rowOrgId('marketing_brands', sanitize(b.brand_id, 100))) !== orgId) return res.status(400).json({ error: 'brand_id does not belong to this organization' });
     const record = {
       organization_id: orgId, brand_id: sanitize(b.brand_id, 100) || null, platform,
       account_label: sanitize(b.account_label, 200) || null,
@@ -3813,9 +3910,9 @@ async function handleMarketingAdapters(req, res, caller) {
   if (action === 'test-connection') {
     const accountId = sanitize(b.account_id, 100);
     if (!accountId) return res.status(400).json({ error: 'account_id is required' });
-    const acctRes = await sbSelect(`marketing_social_accounts?id=eq.${encodeURIComponent(accountId)}&limit=1`);
+    const acctRes = await sbSelect(`marketing_social_accounts?id=eq.${encodeURIComponent(accountId)}&platform=eq.${encodeURIComponent(platform)}&limit=1`);
     const acctRows = acctRes.ok ? await acctRes.json() : [];
-    if (!acctRows.length) return res.status(404).json({ error: 'Connection not found' });
+    if (!acctRows.length || !(await hasPermissionSilent(req, acctRows[0].organization_id, 'admin.view'))) return res.status(404).json({ error: 'Connection not found' });
     const account = acctRows[0];
 
     // A real, minimal "who am I" call per platform — proves the token actually works rather than
@@ -3943,15 +4040,15 @@ async function handleVoiceKnowledge(req, res, caller) {
   if (!id) return res.status(400).json({ error: 'id is required' });
 
   if (action === 'approve') {
-    if (!(await requireStaff(req, res, 'admin.view'))) return;
-    const r = await sbWrite(`voice_knowledge_base?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
+    if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
+    const r = await sbWrite(`voice_knowledge_base?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString() });
     if (!r.ok) { console.error('[client:voice knowledge] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve entry' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, entry: rows[0] });
   }
 
   if (action === 'retire') {
-    const r = await sbWrite(`voice_knowledge_base?id=eq.${encodeURIComponent(id)}`, 'PATCH', { status: 'retired' });
+    const r = await sbWrite(`voice_knowledge_base?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}`, 'PATCH', { status: 'retired' });
     if (!r.ok) { console.error('[client:voice knowledge] retire error:', await r.text()); return res.status(500).json({ error: 'Failed to retire entry' }); }
     const rows = await r.json();
     return res.status(200).json({ ok: true, entry: rows[0] });
@@ -4060,7 +4157,7 @@ async function handleVoiceTools(req, res, caller) {
       const slotId = sanitize(input.slot_id, 100);
       // Real conflict handling: only an 'open' slot can be held — a slot already held/booked by
       // a concurrent caller is refused honestly, never silently overwritten.
-      const r = await sbWrite(`voice_calendar_slots?id=eq.${encodeURIComponent(slotId)}&status=eq.open`, 'PATCH', { status: 'held', held_by_session: sessionId, held_until: new Date(Date.now() + HOLD_MINUTES * 60_000).toISOString() });
+      const r = await sbWrite(`voice_calendar_slots?id=eq.${encodeURIComponent(slotId)}&organization_id=eq.${encodeURIComponent(session.organization_id)}&status=eq.open`, 'PATCH', { status: 'held', held_by_session: sessionId, held_until: new Date(Date.now() + HOLD_MINUTES * 60_000).toISOString() });
       const rows = r.ok ? await r.json() : [];
       if (rows.length) { output = { held: true, slot_id: slotId, held_until: rows[0].held_until }; succeeded = true; }
       else { error = 'This slot is no longer available'; httpStatus = 409; }
@@ -4070,7 +4167,7 @@ async function handleVoiceTools(req, res, caller) {
       const contactId = sanitize(input.contact_id, 100);
       // Verification: only the session that actually holds this slot can confirm it — prevents a
       // second caller confirming a slot they never held.
-      const r = await sbWrite(`voice_calendar_slots?id=eq.${encodeURIComponent(slotId)}&status=eq.held&held_by_session=eq.${encodeURIComponent(sessionId)}`, 'PATCH', { status: 'booked', booking_contact_id: contactId || null });
+      const r = await sbWrite(`voice_calendar_slots?id=eq.${encodeURIComponent(slotId)}&organization_id=eq.${encodeURIComponent(session.organization_id)}&status=eq.held&held_by_session=eq.${encodeURIComponent(sessionId)}`, 'PATCH', { status: 'booked', booking_contact_id: contactId || null });
       const rows = r.ok ? await r.json() : [];
       if (rows.length) { output = { booked: true, slot_id: slotId }; succeeded = true; }
       else { error = 'This slot is not currently held by this call — cannot confirm'; httpStatus = 409; }
@@ -4087,7 +4184,7 @@ async function handleVoiceTools(req, res, caller) {
       } else {
         const slotId = sanitize(input.slot_id, 100);
         const newStatus = input.action === 'cancel' ? 'open' : 'open'; // reschedule frees the old slot; the caller then calls hold_slot/confirm_booking on a new one
-        const r = await sbWrite(`voice_calendar_slots?id=eq.${encodeURIComponent(slotId)}&status=eq.booked`, 'PATCH', { status: newStatus, booking_contact_id: null, held_by_session: null, held_until: null });
+        const r = await sbWrite(`voice_calendar_slots?id=eq.${encodeURIComponent(slotId)}&organization_id=eq.${encodeURIComponent(session.organization_id)}&status=eq.booked`, 'PATCH', { status: newStatus, booking_contact_id: null, held_by_session: null, held_until: null });
         const rows = r.ok ? await r.json() : [];
         if (rows.length) { output = { released: true, slot_id: slotId }; succeeded = true; }
         else { error = 'No active booking found on this slot'; httpStatus = 404; }
