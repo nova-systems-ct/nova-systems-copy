@@ -23,6 +23,40 @@ async function loadAppFor(userId) {
 }
 async function activeConfig(key) { return (await dbOne(`sales_config?key=eq.${enc(key)}&status=eq.approved&select=*`))?.value || null; }
 
+// Emails one invitation link and keeps the owner's invitation tracker truthful. The link is sent but never
+// stored: the database keeps only the token's hash and a redacted message body (audit F-36).
+async function sendInvitationEmail(invitationId, email, token, days, idempotencyKey) {
+  const link = `${appBase()}/join/${token}`;
+  const text = (l) => `You have been accepted.\n\nUse this secure link to set up your training account. It works once and expires in ${days} days:\n\n${l}\n\nIf you did not apply to Nova Systems, ignore this email.`;
+  const [nid] = await notify({ userId: null, email, kind: 'invitation', subject: 'You are invited to Nova Systems training', body: text('[invitation link — not stored]'), sendBody: text(link), channels: ['email'], idempotencyKey });
+  const n = nid ? await dbOne(`sales_notifications?id=eq.${enc(nid)}&select=status,provider_message_id,last_error`) : null;
+  if (n?.status === 'sent') await dbPatch('application_invitations', `id=eq.${enc(invitationId)}`, { status: 'sent', sent_at: nowIso(), provider_message_id: n.provider_message_id, delivery_error: null, last_event_at: nowIso() });
+  else if (n?.status === 'failed') await dbPatch('application_invitations', `id=eq.${enc(invitationId)}`, { status: 'failed', delivery_error: n.last_error, last_event_at: nowIso() });
+  else if (n) await dbPatch('application_invitations', `id=eq.${enc(invitationId)}`, { delivery_error: `Email not sent: ${n.status}${n.last_error ? ` (${n.last_error})` : ''}`, last_event_at: nowIso() });
+  return { link, n };
+}
+
+// Maintenance sweep: an invitation whose email FAILED was never delivered, and its link was not stored, so
+// it cannot be replayed. Instead the same invitation gets a fresh token (the undelivered one stops working)
+// and the new link is emailed. Bounded to 5 attempts per invitation; expired or replaced invitations are skipped.
+export async function retryFailedInvitations() {
+  let retried = 0;
+  const failed = await dbGet(`application_invitations?status=eq.failed&expires_at=gt.${enc(nowIso())}&select=id,application_id,email,expires_at&order=created_at.asc&limit=25`);
+  for (const inv of failed) {
+    const app = await dbOne(`applications?id=eq.${enc(inv.application_id)}&select=status`);
+    if (app?.status !== 'accepted') continue;
+    const attempts = (await dbGet(`sales_notifications?kind=eq.invitation&idempotency_key=like.${enc(`invite:${inv.id}*`)}&select=id`)).length;
+    if (attempts >= 5) continue;
+    const token = randomToken(32);
+    const [rotated] = await dbPatch('application_invitations', `id=eq.${enc(inv.id)}&status=eq.failed`, { token_hash: sha256(token), status: 'queued', last_event_at: nowIso() });
+    if (!rotated) continue; // someone else acted on it meanwhile
+    const days = Math.max(1, Math.ceil((new Date(inv.expires_at).getTime() - Date.now()) / 86400e3));
+    await sendInvitationEmail(inv.id, inv.email, token, days, `invite:${inv.id}:retry:${attempts}`);
+    retried++;
+  }
+  return retried;
+}
+
 // =========================================================================================== applicant + public
 export const handleApply = wrap(async (req, res, op) => {
   // ---- public: begin or resume by email (sends a one-time sign-in link; never reveals whether an account exists)
@@ -55,7 +89,7 @@ export const handleApply = wrap(async (req, res, op) => {
     }
     const link = await authMagicLink(email, `${appBase()}/apply/continue`);
     if (!link.ok || !link.json.action_link) return bad(res, 502, 'We could not send your sign-in link. Please try again shortly.');
-    await notify({ userId: null, email, kind: 'apply_link', subject: 'Continue your Nova Systems application', body: `Use this one-time link to continue your application (reference ${app?.reference_code || 'pending'}):\n\n${link.json.action_link}\n\nIf you did not ask for this, ignore this email — nothing happens unless the link is opened.`, channels: ['email'] });
+    await notify({ userId: null, email, kind: 'apply_link', subject: 'Continue your Nova Systems application', body: `Use this one-time link to continue your application (reference ${app?.reference_code || 'pending'}):\n\n[one-time sign-in link — not stored]\n\nIf you did not ask for this, ignore this email — nothing happens unless the link is opened.`, sendBody: `Use this one-time link to continue your application (reference ${app?.reference_code || 'pending'}):\n\n${link.json.action_link}\n\nIf you did not ask for this, ignore this email — nothing happens unless the link is opened.`, channels: ['email'] });
     return res.status(200).json({ ok: true });
   }
 
@@ -287,12 +321,7 @@ export const handleHiring = wrap(async (req, res, op) => {
     const token = randomToken(32);
     const ins = await dbInsert('application_invitations', { application_id: id, email: app.email, token_hash: sha256(token), status: 'queued', created_by: caller.id, expires_at: new Date(Date.now() + days * 86400e3).toISOString() });
     if (ins.conflict) return bad(res, 409, 'Another invitation was created at the same time. Reload.');
-    const link = `${appBase()}/join/${token}`;
-    const [nid] = await notify({ userId: null, email: app.email, kind: 'invitation', subject: 'You are invited to Nova Systems training', body: `You have been accepted.\n\nUse this secure link to set up your training account. It works once and expires in ${days} days:\n\n${link}\n\nIf you did not apply to Nova Systems, ignore this email.`, channels: ['email'], idempotencyKey: `invite:${ins.row.id}` });
-    const n = nid ? await dbOne(`sales_notifications?id=eq.${enc(nid)}&select=status,provider_message_id,last_error`) : null;
-    if (n?.status === 'sent') await dbPatch('application_invitations', `id=eq.${enc(ins.row.id)}`, { status: 'sent', sent_at: nowIso(), provider_message_id: n.provider_message_id, last_event_at: nowIso() });
-    else if (n?.status === 'failed') await dbPatch('application_invitations', `id=eq.${enc(ins.row.id)}`, { status: 'failed', delivery_error: n.last_error, last_event_at: nowIso() });
-    else if (n) await dbPatch('application_invitations', `id=eq.${enc(ins.row.id)}`, { delivery_error: `Email not sent: ${n.status}${n.last_error ? ` (${n.last_error})` : ''}`, last_event_at: nowIso() });
+    const { link, n } = await sendInvitationEmail(ins.row.id, app.email, token, days, `invite:${ins.row.id}`);
     await appEvent(id, 'owner', 'invitation_created', { actor: caller, detail: { invitation_id: ins.row.id, email_status: n?.status } });
     await audit(caller, 'application', id, 'invitation_created', { invitation_id: ins.row.id });
     const live_mode = (env().SALES_EMAIL_MODE || 'dry_run').toLowerCase() === 'live';

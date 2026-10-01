@@ -80,7 +80,7 @@ export const emptyCompetitor = () => ({ id: uid("comp"), name: "", website: "" }
 export const BRAND_PERSONALITIES = ["Professional", "Friendly", "Casual", "Luxury", "Other"];
 
 export const DOCUMENT_CATEGORIES = [
-  { key: "logo", label: "Logo (PNG or SVG preferred)" },
+  { key: "logo", label: "Logo (PNG or JPG preferred)" },
   { key: "price_list", label: "Price List or Menu" },
   { key: "brochure", label: "Brochure or Service Catalog" },
   { key: "photos", label: "Photos of Business" },

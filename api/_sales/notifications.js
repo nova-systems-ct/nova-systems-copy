@@ -6,6 +6,7 @@ import { sanitize } from '../_sanitize.js';
 import { rateLimit } from '../_rateLimit.js';
 import { dbGet, dbOne, dbPatch, enc, inList, nowIso, audit, bad, wrap, requireUser, requirePerm, deliverEmailRow, notify, notifyOwners, safeEqual } from './core.js';
 import { sweepExpiredDocuments } from './documents.js';
+import { retryFailedInvitations } from './hiring.js';
 import { evaluateEntry } from './commissions.js';
 
 // ---------------------------------------------------------------- Resend (Svix-signed) callbacks
@@ -47,13 +48,11 @@ export async function runSalesMaintenance({ now = new Date() } = {}) {
   out.commissions_became_eligible = eligible;
   // email retries: queued or failed with attempts left (dry_run / blocked are deliberate and never retried)
   let retried = 0;
-  for (const row of await dbGet('sales_notifications?channel=eq.email&status=in.(queued,failed)&attempts=lt.5&select=*&order=created_at.asc&limit=50')) {
-    const state = await deliverEmailRow(row); retried++;
-    if (row.kind === 'invitation' && state === 'sent') { // keep the owner's invitation tracker truthful after a successful retry
-      const inv = String(row.idempotency_key || '').split(':')[1]; const fresh = await dbOne(`sales_notifications?id=eq.${enc(row.id)}&select=provider_message_id`);
-      if (inv) await dbPatch('application_invitations', `id=eq.${enc(inv)}&status=in.(queued,failed)`, { status: 'sent', sent_at: nowIso(), provider_message_id: fresh?.provider_message_id || null, delivery_error: null, last_event_at: nowIso() });
-    }
+  for (const row of await dbGet('sales_notifications?channel=eq.email&status=in.(queued,failed)&attempts=lt.5&kind=not.in.(apply_link,invitation,proposal_sent)&select=*&order=created_at.asc&limit=50')) {
+    await deliverEmailRow(row); retried++;
   }
+  // Link-carrying emails are not replayed (their links are not stored, F-36); failed invitations get a fresh link instead.
+  retried += await retryFailedInvitations();
   out.emails_retried = retried;
   // overdue follow-up reminders — once per lead per day, in-app only
   const overdue = await dbGet(`crm_deals?pipeline=eq.nova_sales&assigned_rep_id=not.is.null&stage=in.(new,contacted,qualified,discovery_scheduled,discovery_completed,proposal,awaiting_signature_payment)&next_action_at=lt.${enc(now.toISOString())}&select=id,assigned_rep_id,next_action&limit=500`);

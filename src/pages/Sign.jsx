@@ -215,12 +215,13 @@ export default function Sign() {
       const r = await fetch("/api/contracts?action=sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: contract.id, signed_name: typedName, signature_data: signatureImage, pdf_base64, agreed: true }),
+        // The server generates and keeps the official signed PDF; this local copy is only for the signer.
+        body: JSON.stringify({ id: contract.id, signed_name: typedName, signature_data: signatureImage, content_sha256: contract.content_sha256, agreed: true }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || "Something went wrong. Please try again.");
 
-      navigate(`/sign/${contract.id}/success`, { state: { pdf_base64, signed_name: typedName, pdf_url: data.contract?.pdf_url || "" } });
+      navigate(`/sign/${contract.id}/success`, { state: { pdf_base64, signed_name: typedName } });
     } catch (err) {
       setSubmitError(err.message || "Something went wrong. Please try again.");
     }

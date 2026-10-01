@@ -171,15 +171,20 @@ async function sendEmailNow({ to, subject, text, idempotencyKey }) {
   } catch (e) { return { ok: false, error: e.name === 'AbortError' ? 'provider timeout (outcome unknown)' : e.message }; } finally { clearTimeout(t); }
 }
 // Deliver one email notification row. Honest states: dry_run / blocked / failed / sent (provider accepted). 'sent' is NOT 'delivered'.
-export async function deliverEmailRow(row) {
+// `sendBody` (optional) is the real text for THIS delivery only — used when the message carries a
+// reusable secret (sign-in, invitation or proposal link). The stored row keeps a redacted body, so
+// no usable authentication link sits in the database (audit F-36); such rows are never auto-retried.
+export const SECRET_LINK_KINDS = ['apply_link', 'invitation', 'proposal_sent'];
+export async function deliverEmailRow(row, sendBody = null) {
   const pol = emailPolicy(row.email);
   if (!pol.send) { await dbPatch('sales_notifications', `id=eq.${enc(row.id)}`, { status: pol.status, last_error: pol.reason, attempts: (row.attempts || 0) + 1 }); return pol.status; }
-  const r = await sendEmailNow({ to: row.email, subject: row.subject, text: row.body, idempotencyKey: row.idempotency_key || row.id });
+  if (SECRET_LINK_KINDS.includes(row.kind) && !sendBody) { await dbPatch('sales_notifications', `id=eq.${enc(row.id)}`, { status: 'failed', last_error: 'link not retained; send a new one', attempts: (row.attempts || 0) + 1 }); return 'failed'; }
+  const r = await sendEmailNow({ to: row.email, subject: row.subject, text: sendBody || row.body, idempotencyKey: row.idempotency_key || row.id });
   await dbPatch('sales_notifications', `id=eq.${enc(row.id)}`, r.ok ? { status: 'sent', sent_at: nowIso(), provider_message_id: r.id, last_error: null, attempts: (row.attempts || 0) + 1 } : { status: 'failed', last_error: r.error, attempts: (row.attempts || 0) + 1 });
   return r.ok ? 'sent' : 'failed';
 }
 // Create notification(s). channels: ['in_app'] and/or ['email']. Idempotent per (idempotencyKey + channel).
-export async function notify({ userId = null, email = null, kind, subject, body, link = null, channels = ['in_app', 'email'], idempotencyKey = null }) {
+export async function notify({ userId = null, email = null, kind, subject, body, sendBody = null, link = null, channels = ['in_app', 'email'], idempotencyKey = null }) {
   const out = [];
   for (const channel of channels) {
     if (channel === 'email' && !email) continue;
@@ -187,7 +192,7 @@ export async function notify({ userId = null, email = null, kind, subject, body,
     const key = idempotencyKey ? `${idempotencyKey}:${channel}` : null;
     const ins = await dbInsert('sales_notifications', { user_id: userId, email: channel === 'email' ? email : null, channel, kind, subject, body, link, status: channel === 'in_app' ? 'sent' : 'queued', sent_at: channel === 'in_app' ? nowIso() : null, idempotency_key: key }, { onConflict: key ? 'idempotency_key' : undefined });
     if (ins.conflict || !ins.row) continue;
-    if (channel === 'email') { try { await deliverEmailRow(ins.row); } catch (e) { console.error('[sales:notify] email delivery attempt failed (will be retried by the worker):', e.message); } }
+    if (channel === 'email') { try { await deliverEmailRow(ins.row, sendBody); } catch (e) { console.error('[sales:notify] email delivery attempt failed (will be retried by the worker):', e.message); } }
     out.push(ins.row.id);
   }
   return out;

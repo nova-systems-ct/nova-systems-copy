@@ -23,6 +23,7 @@ import ServicesSection from "./intake/ServicesSection";
 import ChecklistSection from "./intake/ChecklistSection";
 import CompetitorsSection from "./intake/CompetitorsSection";
 import DocumentUploadSection from "./intake/DocumentUploadSection";
+import { currentUploadToken } from "./intake/uploadToken";
 import ReviewSection from "./intake/ReviewSection";
 import PaymentSection from "./intake/PaymentSection";
 import AgreementSection from "./intake/AgreementSection";
@@ -295,19 +296,11 @@ export default function Intake() {
 
     const submissionForm = { ...form, signature_date: new Date().toISOString().slice(0, 10) };
 
-    let pdf_base64 = "";
-    try {
-      const doc = generateIntakeSummaryPDF(submissionForm);
-      pdf_base64 = doc.output("datauristring");
-    } catch (err) {
-      console.warn("[Intake] PDF generation failed (non-fatal):", err.message);
-    }
-
     try {
       const res = await fetch("/api/business-intake?action=submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...submissionForm, pdf_base64 }),
+        body: JSON.stringify({ ...submissionForm, upload_token: currentUploadToken() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Something went wrong submitting your assessment. Please try again.");
@@ -410,7 +403,7 @@ export default function Intake() {
               hint="Help us train your AI. This information will be used to set up your Nova AI agents so they answer exactly like your business would."
             />
           )}
-          {step === 15 && <DocumentUploadSection documentUrls={form.document_urls} onChange={(v) => set({ document_urls: v })} email={form.email} />}
+          {step === 15 && <DocumentUploadSection documentUrls={form.document_urls} onChange={(v) => set({ document_urls: v })} />}
           {step === 16 && (
             <SimpleSection
               config={FINAL_QUESTIONS_FIELDS} data={form.final_questions} onChange={setSection("final_questions")}

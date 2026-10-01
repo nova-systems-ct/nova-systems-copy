@@ -1,15 +1,23 @@
+import { resendBase } from './_email.js';
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone } from './_sanitize.js';
 import { twilioRequest } from './_twilio.js';
+import crypto from 'node:crypto';
+import { requireStaff } from './_auth.js';
 
 // /intake — the 20-step Nova Business Intelligence Assessment — two actions:
 //   submit       POST (?action=submit)      saves the full assessment, links back to the
 //                                            originating /welcome lead, alerts Isaac via SMS,
 //                                            emails the client a PDF summary, and schedules a
 //                                            24-hour-later follow-up email via Resend's scheduled_at.
-//   upload-file  POST (?action=upload-file)  stores a single base64-encoded document upload
-//                                            (section 16) in the nova-intake-files bucket.
+//   upload-token POST (?action=upload-token) issues a short-lived, signed, submission-scoped token
+//   upload-file  POST (?action=upload-file)  stores ONE document under that token's private prefix
+//                                            (type checked from the file bytes, size-capped, no
+//                                            overwrite) and returns its storage path — never a URL
+//   file-url     GET  (?action=file-url&path) [intelligence.view, Nova org] 5-minute signed link
+// Security repair 2026-09-30 (audit F-16): uploads used to be anonymous, public, overwritable, with a
+// caller-chosen content type at a guessable email-based path. The bucket must be PRIVATE.
 
 const CONTACT_METHODS = ['Call', 'Text', 'WhatsApp', 'Email'];
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
@@ -62,7 +70,8 @@ async function handleSubmit(req, res) {
   const financials = deepSanitize(b.financials || {}, 3000);
   const competitors = deepSanitize(b.competitors || {}, 5000);
   const ai_knowledge = deepSanitize(b.ai_knowledge || {}, 5000);
-  const document_urls = deepSanitize(b.document_urls || {}, 2000);
+  const uploadGrant = verifyUploadToken(b.upload_token);
+  const document_urls = ownDocumentPaths(b.document_urls, uploadGrant);
   const final_questions = deepSanitize(b.final_questions || {}, 5000);
 
   const stripe_customer_id = sanitize(b.stripe_customer_id, 100);
@@ -81,7 +90,7 @@ async function handleSubmit(req, res) {
   const call_consent = b.call_consent === true;
   const digital_signature = sanitize(b.digital_signature, 200);
   const signature_date = sanitize(b.signature_date, 20);
-  const pdf_base64 = typeof b.pdf_base64 === 'string' ? b.pdf_base64 : '';
+
 
   if (!name || !email || !phone) return res.status(400).json({ error: 'Name, email, and phone are required' });
   if (!businesses.length) return res.status(400).json({ error: 'At least one business name is required' });
@@ -141,7 +150,7 @@ async function handleSubmit(req, res) {
 
     if (lead_id) {
       try {
-        await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${encodeURIComponent(lead_id)}`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${encodeURIComponent(lead_id)}&email=eq.${encodeURIComponent(email)}`, {
           method: 'PATCH',
           headers: {
             apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
@@ -211,12 +220,10 @@ async function handleSubmit(req, res) {
   const RESEND_KEY = process.env.RESEND_API_KEY;
   if (RESEND_KEY) {
     const FROM = 'Nova Systems <noreply@nova-systems.app>';
-    const attachments = pdf_base64
-      ? [{ filename: `${name.replace(/[^a-z0-9]+/gi, '-')}-assessment.pdf`, content: pdf_base64.replace(/^data:[^;]+;base64,/, '') }]
-      : undefined;
+    const attachments = undefined; // client-supplied PDFs are no longer relayed (F-04/F-16 repair)
 
     try {
-      await fetch('https://api.resend.com/emails', {
+      await fetch(`${resendBase()}/emails`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -239,7 +246,7 @@ async function handleSubmit(req, res) {
     }
 
     try {
-      await fetch('https://api.resend.com/emails', {
+      await fetch(`${resendBase()}/emails`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -267,50 +274,115 @@ async function handleSubmit(req, res) {
   return res.status(200).json({ ok: true, id: submissionId });
 }
 
-// Stores one base64-encoded document (logo, price list, photo, etc.) from
-// section 16 into the nova-intake-files storage bucket (public read — these
-// are business collateral, not sensitive records) and returns its public URL.
+// ---------------------------------------------------------------- private, token-scoped uploads
+const BUCKET = 'nova-intake-files';
+const MAX_FILES_PER_TOKEN = 20;
+const TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
+// Signing key derived from the server-only service-role key (never sent to a browser), so no extra
+// secret has to be provisioned; rotating the service key simply invalidates outstanding tokens.
+const tokenKey = () => crypto.createHash('sha256').update(`nova-intake-upload-v1:${process.env.SUPABASE_SERVICE_ROLE_KEY || ''}`).digest();
+const b64u = (buf) => Buffer.from(buf).toString('base64url');
+
+export function signUploadToken(now = Date.now()) {
+  const payload = b64u(JSON.stringify({ sid: crypto.randomBytes(16).toString('hex'), exp: now + TOKEN_TTL_MS }));
+  return `${payload}.${b64u(crypto.createHmac('sha256', tokenKey()).update(payload).digest())}`;
+}
+export function verifyUploadToken(token, now = Date.now()) {
+  if (typeof token !== 'string' || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
+  const [payload, sig] = token.split('.');
+  if (!payload || !sig) return null;
+  const want = Buffer.from(b64u(crypto.createHmac('sha256', tokenKey()).update(payload).digest()));
+  const got = Buffer.from(sig);
+  if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return null;
+  try {
+    const p = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!/^[0-9a-f]{32}$/.test(p.sid) || !Number.isFinite(p.exp) || now > p.exp) return null;
+    return { sid: p.sid, prefix: `intake/${p.sid}/` };
+  } catch { return null; }
+}
+function ownDocumentPaths(docs, grant) {
+  const out = {};
+  if (!grant || !docs || typeof docs !== 'object') return out;
+  for (const [cat, list] of Object.entries(docs).slice(0, 20)) {
+    if (!Array.isArray(list)) continue;
+    const keep = list.slice(0, MAX_FILES_PER_TOKEN)
+      .filter((f) => f && typeof f.path === 'string' && f.path.startsWith(grant.prefix) && !f.path.includes('..'))
+      .map((f) => ({ path: f.path.slice(0, 300), filename: sanitize(f.filename, 200), content_type: sanitize(f.content_type, 100) }));
+    if (keep.length) out[sanitize(cat, 40).replace(/[^a-z0-9_]/gi, '') || 'other'] = keep;
+  }
+  return out;
+}
+
+// File type decided by the bytes, never by the name or the browser-declared type.
+export function sniffType(buf) {
+  const head = buf.subarray(0, 12);
+  const hex = head.toString('hex');
+  if (buf.subarray(0, 5).toString('latin1') === '%PDF-') return { mime: 'application/pdf', ext: 'pdf' };
+  if (hex.startsWith('89504e470d0a1a0a')) return { mime: 'image/png', ext: 'png' };
+  if (hex.startsWith('ffd8ff')) return { mime: 'image/jpeg', ext: 'jpg' };
+  if (head.toString('latin1', 0, 4) === 'RIFF' && head.toString('latin1', 8, 12) === 'WEBP') return { mime: 'image/webp', ext: 'webp' };
+  if (head.toString('latin1', 0, 4) === 'GIF8') return { mime: 'image/gif', ext: 'gif' };
+  if (hex.startsWith('504b0304')) {
+    const scan = buf.toString('latin1', 0, Math.min(buf.length, 6000));
+    if (/word\//.test(scan)) return { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', ext: 'docx' };
+    if (/xl\//.test(scan)) return { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ext: 'xlsx' };
+  }
+  return null;
+}
+
+async function handleUploadToken(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 5, 60_000)) return;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'File storage is not configured yet' });
+  return res.status(200).json({ ok: true, upload_token: signUploadToken(), expires_in: TOKEN_TTL_MS / 1000 });
+}
+
 async function handleUploadFile(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 30, 60_000)) return;
-
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'File storage is not configured yet' });
 
   const b = req.body || {};
-  const category = (sanitize(b.category, 50).replace(/[^a-z0-9_-]/gi, '') || 'other');
-  const filename = (sanitize(b.filename, 200).replace(/[^a-z0-9._-]/gi, '_') || `file-${Date.now()}`);
-  const content_type = sanitize(b.content_type, 100) || 'application/octet-stream';
-  const email = sanitizeEmail(b.email) || 'anonymous';
+  const grant = verifyUploadToken(b.upload_token);
+  if (!grant) return res.status(401).json({ error: 'Your upload session expired. Reload the page and try again.' });
   const file_base64 = typeof b.file_base64 === 'string' ? b.file_base64 : '';
-
   if (!file_base64) return res.status(400).json({ error: 'file_base64 is required' });
+  let buffer;
+  try { buffer = Buffer.from(file_base64.replace(/^data:[^;]+;base64,/, ''), 'base64'); } catch { return res.status(400).json({ error: 'Invalid file data' }); }
+  if (!buffer.length) return res.status(400).json({ error: 'The file is empty.' });
+  if (buffer.length > MAX_UPLOAD_BYTES) return res.status(413).json({ error: 'File is too large. Please keep files under 4MB.' });
+  const type = sniffType(buffer);
+  if (!type) return res.status(415).json({ error: 'Upload a PDF, PNG, JPG, WebP, GIF, Word (.docx) or Excel (.xlsx) file.' });
 
-  const buffer = Buffer.from(file_base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
-  if (buffer.length > MAX_UPLOAD_BYTES) return res.status(400).json({ error: 'File is too large. Please keep files under 4MB.' });
-
-  const emailSlug = email.replace(/[^a-z0-9]/gi, '_');
-  const path = `${emailSlug}/${category}/${Date.now()}-${filename}`;
-
+  const H = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
   try {
-    const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/nova-intake-files/${path}`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': content_type, 'x-upsert': 'true',
-      },
-      body: buffer,
-    });
-    if (!uploadRes.ok) {
-      console.error('[business-intake:upload-file] Supabase storage error:', uploadRes.status, await uploadRes.text());
-      return res.status(500).json({ error: 'Upload failed. Please try again.' });
-    }
-    return res.status(200).json({ ok: true, url: `${SUPABASE_URL}/storage/v1/object/public/nova-intake-files/${path}` });
+    const list = await fetch(`${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`, { method: 'POST', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefix: grant.prefix, limit: MAX_FILES_PER_TOKEN + 1 }) });
+    if (list.ok && (await list.json()).length >= MAX_FILES_PER_TOKEN) return res.status(429).json({ error: `At most ${MAX_FILES_PER_TOKEN} files per submission.` });
+  } catch { /* count is best-effort */ }
+
+  const safe = (sanitize(b.filename, 120).replace(/\.[^.]*$/, '').replace(/[^a-z0-9_-]/gi, '_') || 'file').slice(0, 60);
+  const path = `${grant.prefix}${Date.now()}-${crypto.randomBytes(6).toString('hex')}-${safe}.${type.ext}`;
+  try {
+    const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, { method: 'POST', headers: { ...H, 'Content-Type': type.mime, 'x-upsert': 'false' }, body: buffer });
+    if (!up.ok) { console.error('[business-intake:upload-file] storage error:', up.status, await up.text()); return res.status(502).json({ error: 'Upload failed. Please try again.' }); }
+    return res.status(200).json({ ok: true, path, content_type: type.mime });
   } catch (err) {
     console.error('[business-intake:upload-file] Error:', err.message);
-    return res.status(500).json({ error: 'Upload failed. Please try again.' });
+    return res.status(502).json({ error: 'Upload failed. Please try again.' });
   }
+}
+
+async function handleFileUrl(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  const path = typeof req.query?.path === 'string' ? req.query.path : '';
+  if (!/^intake\/[0-9a-f]{32}\/[A-Za-z0-9._-]+$/.test(path)) return res.status(400).json({ error: 'Invalid path' });
+  const SUPABASE_URL = process.env.SUPABASE_URL; const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/${BUCKET}/${path}`, { method: 'POST', headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 300 }) });
+  if (!r.ok) return res.status(404).json({ error: 'File not found' });
+  const { signedURL } = await r.json();
+  return res.status(200).json({ ok: true, url: `${SUPABASE_URL}/storage/v1${signedURL}`, expires_in: 300 });
 }
 
 export default async function handler(req, res) {
@@ -320,7 +392,11 @@ export default async function handler(req, res) {
 
   switch (action) {
     case 'submit': return handleSubmit(req, res);
+    case 'upload-token': return handleUploadToken(req, res);
     case 'upload-file': return handleUploadFile(req, res);
+    case 'file-url':
+      if (!(await requireStaff(req, res, 'intelligence.view'))) return;
+      return handleFileUrl(req, res);
     default:
       return res.status(400).json({ error: `Unknown action: ${action}` });
   }

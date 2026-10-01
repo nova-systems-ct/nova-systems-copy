@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Upload, X, FileText, Loader2 } from "lucide-react";
 import { GOLD } from "./ui";
 import { DOCUMENT_CATEGORIES, MAX_UPLOAD_BYTES } from "./constants";
+import { getUploadToken } from "./uploadToken";
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -12,7 +13,7 @@ function fileToBase64(file) {
   });
 }
 
-export default function DocumentUploadSection({ documentUrls, onChange, email }) {
+export default function DocumentUploadSection({ documentUrls, onChange }) {
   const [uploading, setUploading] = useState({});
   const [errors, setErrors] = useState({});
 
@@ -31,16 +32,18 @@ export default function DocumentUploadSection({ documentUrls, onChange, email })
       setUploading((u) => ({ ...u, [category]: (u[category] || 0) + 1 }));
       try {
         const file_base64 = await fileToBase64(file);
+        const upload_token = await getUploadToken();
         const res = await fetch("/api/business-intake?action=upload-file", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ category, filename: file.name, content_type: file.type, file_base64, email }),
+          body: JSON.stringify({ upload_token, filename: file.name, file_base64 }),
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.url) throw new Error(data.error || "Upload failed");
+        if (!res.ok || !data.path) throw new Error(data.error || "Upload failed");
+        // Stored privately — the path is a reference for Nova staff, not a public link.
         onChange({
           ...documentUrls,
-          [category]: [...filesFor(category), { url: data.url, filename: file.name, content_type: file.type }],
+          [category]: [...filesFor(category), { path: data.path, filename: file.name, content_type: data.content_type }],
         });
       } catch (err) {
         setErrors((e) => ({ ...e, [category]: err.message || "Upload failed. Please try again." }));
@@ -49,8 +52,8 @@ export default function DocumentUploadSection({ documentUrls, onChange, email })
     }
   };
 
-  const removeFile = (category, url) => {
-    onChange({ ...documentUrls, [category]: filesFor(category).filter((f) => f.url !== url) });
+  const removeFile = (category, key) => {
+    onChange({ ...documentUrls, [category]: filesFor(category).filter((f) => (f.path || f.url) !== key) });
   };
 
   return (
@@ -69,14 +72,10 @@ export default function DocumentUploadSection({ documentUrls, onChange, email })
             {files.length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
                 {files.map((f) => (
-                  <div key={f.url} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 10px" }}>
-                    {f.content_type?.startsWith("image/") ? (
-                      <img src={f.url} alt={f.filename} style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4 }} />
-                    ) : (
-                      <FileText style={{ width: 16, height: 16, color: GOLD }} />
-                    )}
+                  <div key={f.path || f.url} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 10px" }}>
+                    <FileText style={{ width: 16, height: 16, color: GOLD }} />
                     <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.7)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.filename}</span>
-                    <button type="button" onClick={() => removeFile(cat.key, f.url)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)", display: "flex" }}>
+                    <button type="button" onClick={() => removeFile(cat.key, f.path || f.url)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)", display: "flex" }}>
                       <X style={{ width: 13, height: 13 }} />
                     </button>
                   </div>
