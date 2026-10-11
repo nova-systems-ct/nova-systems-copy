@@ -97,6 +97,9 @@ export async function ownerQuote({ orgId, job, totalCents, depositCents, duratio
 
 // Hold → the database's exclusion constraint settles simultaneous requests; a conflict returns ok:false.
 export async function holdSlot({ orgId, job, slot, actor }) {
+  // Idempotent: the same job asking again for the same time (a redelivery) gets its existing live hold back.
+  const mine = await dbOne(`ops_bookings?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&status=eq.held&start_at=eq.${enc(new Date(slot.start).toISOString())}&hold_expires_at=gt.${enc(nowIso())}&select=*`);
+  if (mine) return { ok: true, booking: mine, job, existing: true };
   const c = await businessContext(orgId);
   const snap = job.price_snapshot; if (!snap) throw ERR(409, 'Quote the job before booking');
   const startMs = new Date(slot.start).getTime();
@@ -144,6 +147,8 @@ export async function handleInboundTurn({ orgId, conversationId, messageId, now 
   if (!msg || msg.direction !== 'inbound') return { skipped: 'not_an_inbound_message' };
   if (msg.purpose && msg.purpose !== 'message' && msg.purpose !== null) return { skipped: `keyword_${msg.purpose}` };
   if (conv.staff_takeover) return { skipped: 'staff_takeover' };
+  // Redelivered turn (e.g. the worker crashed after replying): the reply for this inbound message already exists.
+  if (await dbOne(`wave1_messages?organization_id=eq.${enc(orgId)}&idempotency_key=eq.${enc(`turn:${messageId}`)}&select=id`)) return { skipped: 'already_answered' };
   const contact = await one('crm_contacts', orgId, conv.contact_id);
   if (!contact || contact.suppressed) return { skipped: 'contact_suppressed' };
   const c = await businessContext(orgId);

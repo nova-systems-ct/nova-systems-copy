@@ -34,6 +34,15 @@ export function createPostgresJobStore({ url, serviceKey }) {
       return rows[0] || null;
     },
 
+    // Lease renewal while a handler is still running, so a slow job is never reclaimed by a second worker.
+    async renewLease(jobId, workerId, leaseSeconds = 60) {
+      const r = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}&status=eq.leased&leased_by=eq.${encodeURIComponent(workerId)}`, {
+        method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' },
+        body: JSON.stringify({ leased_until: new Date(Date.now() + leaseSeconds * 1000).toISOString() }),
+      });
+      return r.ok ? (await r.json()).length > 0 : false;
+    },
+
     async complete(jobId, result) {
       const r = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}`, {
         method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' },

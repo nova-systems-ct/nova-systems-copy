@@ -51,7 +51,7 @@ export async function notifyWeeklyReport({ orgId, reportId }) {
   const rep = await dbOne(`ops_weekly_reports?id=eq.${enc(reportId)}&organization_id=eq.${enc(orgId)}&select=*`);
   if (!rep || rep.notification_status !== 'not_sent') return { skipped: rep?.notification_status || 'not_found' };
   const c = await businessContext(orgId);
-  const owner = c.ops.scoreboard_recipient_phone ? await dbOne(`crm_contacts?organization_id=eq.${enc(orgId)}&phone_e164=eq.${enc(c.ops.scoreboard_recipient_phone)}&source=eq.owner_settings&select=*`) : null;
+  const owner = c.ops.scoreboard_recipient_phone ? await dbOne(`crm_contacts?organization_id=eq.${enc(orgId)}&phone_e164=eq.${enc(c.ops.scoreboard_recipient_phone)}&merged_into_id=is.null&select=*`) : null;
   const done = (s, d) => dbPatch('ops_weekly_reports', `id=eq.${enc(rep.id)}&notification_status=eq.not_sent`, { notification_status: s, notification_detail: d });
   if (!owner) { await done('blocked', 'no opted-in owner number configured'); return { status: 'blocked' }; }
   let conv = await dbOne(`wave1_conversations?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(owner.id)}&channel=eq.sms&select=id`);

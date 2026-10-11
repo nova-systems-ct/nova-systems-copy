@@ -289,11 +289,14 @@ async function processOneJob(store, ctx) {
     return true;
   }
   processed++; lastType = job.job_type;
+  const renew = store.renewLease ? setInterval(() => { store.renewLease(job.id, WORKER_ID, 60).catch(() => {}); heartbeat(ctx).catch(() => {}); }, 20_000) : null;
   try {
     const result = await handler(job, ctx);
+    if (renew) clearInterval(renew);
     await store.complete(job.id, result);
     console.log(`[worker] completed job ${job.id}:`, JSON.stringify(result));
   } catch (err) {
+    if (renew) clearInterval(renew);
     const after = await store.fail(job.id, err);
     console.error(`[worker] job ${job.id} failed: ${err.message} — now ${after?.status || 'unknown'}`);
   }

@@ -132,8 +132,9 @@ export async function handleOps(req, res, op) {
         if (b.scoreboard_phone && (!p || b.scoreboard_sms_consent !== true)) return send(res, 400, { error: 'Enter a valid number and confirm the owner agreed to receive the weekly report by text' });
         opsPatch.scoreboard_recipient_phone = p || null;
         if (p) {
-          let c = await dbOne(`crm_contacts?organization_id=eq.${enc(s.orgId)}&phone_e164=eq.${enc(p)}&source=eq.owner_settings&select=id`);
-          if (!c) c = (await dbInsert('crm_contacts', { organization_id: s.orgId, name: 'Owner (weekly report)', phone: p, phone_e164: p, source: 'owner_settings' })).row;
+          // one contact per number per business: reuse it if the owner already exists as a contact (e.g. they called in)
+          let c = await dbOne(`crm_contacts?organization_id=eq.${enc(s.orgId)}&phone_e164=eq.${enc(p)}&merged_into_id=is.null&select=id`);
+          if (!c) { const ins = await dbInsert('crm_contacts', { organization_id: s.orgId, name: 'Owner (weekly report)', phone: p, phone_e164: p, source: 'owner_settings' }); c = ins.row || await dbOne(`crm_contacts?organization_id=eq.${enc(s.orgId)}&phone_e164=eq.${enc(p)}&select=id`); }
           await dbPatch('crm_contacts', `id=eq.${enc(c.id)}&organization_id=eq.${enc(s.orgId)}`, { sms_consent: true, sms_consent_source: 'owner_settings_opt_in', sms_consent_at: nowIso(), marketing_consent_scope: 'weekly operations report only' });
         }
       }
@@ -198,6 +199,18 @@ export async function handleOps(req, res, op) {
       await dbInsert('ops_payment_accounts', row, { onConflict: 'organization_id' }); await dbPatch('ops_payment_accounts', `organization_id=eq.${enc(s.orgId)}`, row);
       await dbInsert('ops_transitions', { organization_id: s.orgId, entity: 'payment_account', entity_id: s.orgId, to_state: mode, actor_type: 'user', actor_id: s.caller.id, reason: row.funds_recipient || 'deposits disabled' });
       return send(res, 200, { ok: true, account: row });
+    }
+
+    if (op === 'voice-settings') {
+      const s = await inOrg(req, res, orgParam, 'ops.configure'); if (!s) return;
+      const status = ['not_configured', 'configured', 'active', 'paused'].includes(b.status) ? b.status : 'configured';
+      const disclosure = sanitize(b.disclosure_script, 400);
+      if (status === 'active' && (!disclosure || !/automated|virtual|AI/i.test(disclosure))) return send(res, 400, { error: 'An active voice assistant must open with a disclosure that the caller is speaking with an automated assistant.' });
+      if (b.recording_enabled === true) return send(res, 400, { error: 'Call recording is not enabled in this version (consent process not approved).' });
+      const row = { organization_id: s.orgId, status, disclosure_script: disclosure || null, transcript_retention_days: b.transcript_retention_days ? Math.min(90, Math.max(1, Math.round(Number(b.transcript_retention_days)))) : null, recording_enabled: false, updated_at: nowIso() };
+      await dbInsert('voice_configurations', row, { onConflict: 'organization_id' }); await dbPatch('voice_configurations', `organization_id=eq.${enc(s.orgId)}`, row);
+      await dbInsert('ops_transitions', { organization_id: s.orgId, entity: 'voice', entity_id: s.orgId, to_state: status, actor_type: 'user', actor_id: s.caller.id, reason: 'voice assistant settings' });
+      return send(res, 200, { ok: true, voice: row });
     }
 
     if (op === 'availability') {

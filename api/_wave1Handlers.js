@@ -271,7 +271,8 @@ export function createTwilioSender(env, fetchImpl = fetch) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10_000);
     try {
-      const r = await fetchImpl(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`, {
+      // TWILIO_API_BASE lets local tests point at a stand-in server; production leaves it unset.
+      const r = await fetchImpl(`${(env.TWILIO_API_BASE || 'https://api.twilio.com').replace(/\/$/, '')}/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`, {
         method: 'POST', signal: ctrl.signal,
         headers: { Authorization: 'Basic ' + Buffer.from(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ To: to, From: from, Body: body, ...(env.WAVE1_PUBLIC_BASE ? { StatusCallback: `${env.WAVE1_PUBLIC_BASE.replace(/\/$/, '')}/api/client?resource=wave1&op=sms-status` } : {}) }),

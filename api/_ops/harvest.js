@@ -33,7 +33,8 @@ export async function createCampaign({ orgId, name, purpose, message, rows, batc
   const ins = await dbInsert('ops_campaigns', { organization_id: orgId, name: String(name || 'Reactivation').slice(0, 120), purpose, message_template: message, batch_size: batchSize, min_gap_seconds: minGap, max_gap_seconds: maxGap, start_at: startAt, message_budget: budget, created_by: actor.id });
   const camp = ins.row;
   const recs = classified.filter((c) => c.phone_e164).map((c) => ({ organization_id: orgId, campaign_id: camp.id, contact_id: c.contact_id || null, phone_e164: c.phone_e164, display_name: c.display_name, last_service_date: c.last_service_date, eligibility: c.eligibility, blocked_reason: c.blocked_reason }));
-  const unique = [...new Map(recs.map((r) => [r.phone_e164, r])).values()];
+  const firstByPhone = new Map(); for (const r of recs) if (!firstByPhone.has(r.phone_e164)) firstByPhone.set(r.phone_e164, r); // the FIRST row for a number is the record; later rows are its duplicates
+  const unique = [...firstByPhone.values()];
   for (let i = 0; i < unique.length; i += 500) await dbInsert('ops_campaign_recipients', unique.slice(i, i + 500));
   await dbInsert('ops_transitions', { organization_id: orgId, entity: 'campaign', entity_id: camp.id, from_state: null, to_state: 'draft', actor_type: 'user', actor_id: actor.id, reason: 'imported for review' });
   return { campaign: camp, preview: summarize(classified) };
@@ -89,11 +90,18 @@ export async function sendCampaignMessage({ orgId, recipientId, now = new Date()
   const conv = await dbOne(`wave1_conversations?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&channel=eq.sms&select=*`);
   if (conv?.last_inbound_at && new Date(conv.last_inbound_at) > new Date(started)) return stop('stopped', 'replied');
   if (await dbOne(`ops_jobs?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&state=eq.confirmed&created_at=gte.${enc(started)}&select=id`)) return stop('stopped', 'booked');
+  if (await dbOne(`ops_jobs?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&state=in.(new,qualifying,owner_quote_required,quoted,booking,awaiting_agreement,awaiting_deposit,escalated)&select=id`)) return stop('stopped', 'active_request');
   const c = await businessContext(orgId);
   const convId = conv?.id || (await dbInsert('wave1_conversations', { organization_id: orgId, contact_id: contact.id, channel: 'sms' }, { onConflict: 'organization_id,contact_id,channel' })).row?.id
     || (await dbOne(`wave1_conversations?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&channel=eq.sms&select=id`))?.id;
   const body = render(camp.message_template, { first_name: (rec.display_name || '').split(' ')[0] || 'there', business_name: c.display_name });
   const r = await sendSms({ orgId, conversationId: convId, contactId: contact.id, body, purpose: 'campaign', idempotencyKey: `campaign:${rec.id}`, isTest: !!contact.is_test, now });
+  if (r.status === 'blocked' && ['min_gap', 'frequency_limit'].includes(r.reason) && enqueue) {
+    const at = new Date(now.getTime() + (r.reason === 'min_gap' ? 11 * 60_000 : 24 * 3600_000)).toISOString();
+    await dbPatch('ops_campaign_recipients', `id=eq.${enc(rec.id)}`, { scheduled_at: at });
+    await enqueue({ job_type: 'ops_campaign_send', organization_id: orgId, payload: { recipient_id: rec.id, deferred: true }, scheduled_at: at, idempotency_key: `ops_campaign_send:${rec.id}:deferred:${at}` });
+    return { deferred: at, reason: r.reason };
+  }
   if (r.status === 'blocked' && r.reason === 'quiet_hours' && r.retryAt && enqueue) {
     await dbPatch('ops_campaign_recipients', `id=eq.${enc(rec.id)}`, { scheduled_at: r.retryAt });
     await enqueue({ job_type: 'ops_campaign_send', organization_id: orgId, payload: { recipient_id: rec.id, deferred: true }, scheduled_at: r.retryAt, idempotency_key: `ops_campaign_send:${rec.id}:deferred:${r.retryAt}` });
