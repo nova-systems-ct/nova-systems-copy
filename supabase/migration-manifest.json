@@ -29,6 +29,7 @@
     "supabase/hierarchy-02-governance-migration-standalone.sql",
     "supabase/hierarchy-03-work-and-reporting-migration-standalone.sql",
     "supabase/hierarchy-04-meetings-migration-standalone.sql",
+    "supabase/ops-01-operational-mvp-migration-standalone.sql",
     "supabase/zz-public-schema-lockdown-standalone.sql"
   ]
 }

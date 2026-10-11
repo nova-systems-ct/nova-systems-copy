@@ -55,10 +55,13 @@ async function main() {
     for (const f of failures) console.log(`   SQL ERROR in ${f.file}: ${f.message}${f.where ? ` (${f.where})` : ''}`);
     check(`all ${manifest.length} files apply to an empty database with zero SQL errors`, failures.length === 0, `${failures.length} file(s) failed`);
     // PostgREST loaded an empty schema at start-up; ask it to reload and wait (bounded) until it sees the tables.
+    // Wait for the LAST tables too: a migration that itself sends NOTIFY pgrst mid-sequence can make PostgREST finish an
+    // older reload after ours, so "organizations is visible" alone does not mean the cache is complete.
+    const mustSee = ['organizations', 'crm_contacts', 'jobs', 'work_items', 'ops_jobs', 'ops_weekly_reports'];
     let seen = false;
     for (let i = 0; i < 30 && !seen; i++) {
       await env.reload();
-      seen = (await env.rest(env.serviceKey, 'organizations?select=id&limit=1')).status === 200;
+      seen = (await Promise.all(mustSee.map((t) => env.rest(env.serviceKey, `${t}?select=*&limit=0`)))).every((r) => r.status === 200);
     }
     check('PostgREST picks up the installed schema within 30 reload attempts', seen);
 

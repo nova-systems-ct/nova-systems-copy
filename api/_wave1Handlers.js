@@ -46,9 +46,16 @@ export async function handleSmsInbound({ url, params, signature }, repo, env) {
   }
 
   const conv = await repo.upsertConversation(orgId, contact.id, 'sms');
-  await repo.insertMessage(orgId, { conversation_id: conv.id, direction: 'inbound', body: params.Body || '', status: 'received', provider: 'twilio', provider_sid: sid, purpose: kind === 'message' ? null : kind });
+  const inbound = await repo.insertMessage(orgId, { conversation_id: conv.id, direction: 'inbound', body: params.Body || '', status: 'received', provider: 'twilio', provider_sid: sid, purpose: kind === 'message' ? null : kind });
   // A reply (or STOP) halts any automated follow-up that was waiting on this contact.
   await repo.updateConversation(orgId, conv.id, { last_inbound_at: now, contact_replied_since_trigger: true });
+  // Nova Operations: STOP cancels anything already queued for this contact; an ordinary message from the customer
+  // starts (or continues) their request and is answered by the durable conversation engine.
+  if (kind === 'opt_out' && repo.cancelQueuedForContact) await repo.cancelQueuedForContact(orgId, contact.id);
+  if (kind === 'message' && inbound && repo.opsEnabled && await repo.opsEnabled(orgId)) {
+    if (!conv.customer_initiated_at) await repo.updateConversation(orgId, conv.id, { customer_initiated_at: now });
+    await repo.enqueueJob({ job_type: 'ops_conversation_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: inbound.id }, idempotency_key: `ops_turn:${sid}` });
+  }
   return twiml(200);
 }
 
@@ -185,8 +192,13 @@ export async function handleFormIntake({ token, body, ip }, repo) {
   if (v.contact.sms_consent && v.contact.phone_e164) {
     await repo.updateContact(orgId, contact.id, { sms_consent: true, sms_consent_source: 'web_form_checkbox', sms_consent_at: now });
   }
-  const conv = await repo.upsertConversation(orgId, contact.id, 'form');
-  await repo.insertMessage(orgId, { conversation_id: conv.id, direction: 'inbound', body: String(body?.fields?.message || '').slice(0, 2000), status: 'received', provider: 'web_form', provider_sid: submissionId ? `${orgId}:${submissionId}` : null });
+  // With a phone number the request continues by text, so it lives in the SMS conversation (one thread, one engine state).
+  const conv = await repo.upsertConversation(orgId, contact.id, v.contact.phone_e164 ? 'sms' : 'form');
+  const formMsg = await repo.insertMessage(orgId, { conversation_id: conv.id, direction: 'inbound', body: String(body?.fields?.message || '').slice(0, 2000), status: 'received', provider: 'web_form', provider_sid: submissionId ? `${orgId}:${submissionId}` : null });
+  if (formMsg && v.contact.phone_e164 && repo.opsEnabled && await repo.opsEnabled(orgId)) {
+    await repo.updateConversation(orgId, conv.id, { customer_initiated_at: now, last_inbound_at: now });
+    await repo.enqueueJob({ job_type: 'ops_conversation_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: formMsg.id }, idempotency_key: `ops_turn:form:${formMsg.id}` });
+  }
   return { status: 200, body: { ok: true } };
 }
 

@@ -28,6 +28,7 @@
 // duplicate side effect on redelivery.
 
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createLocalJobStore } from './localJobStore.mjs';
 import { createPostgresJobStore } from './postgresJobStore.mjs';
@@ -166,6 +167,43 @@ const handlers = {
     return result;
   },
 
+  // ---- Nova Operations (api/_ops). All re-read live state; all idempotent per their keys. ----
+  async ops_conversation_turn(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { handleInboundTurn } = await import('../api/_ops/service.js');
+    return handleInboundTurn({ orgId: job.organization_id, conversationId: job.payload?.conversation_id, messageId: job.payload?.message_id });
+  },
+  async ops_followup_send(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { sendFollowup } = await import('../api/_ops/service.js');
+    return sendFollowup({ orgId: job.organization_id, followupId: job.payload?.followup_id, enqueue: (j) => ctx.store.enqueue(j) });
+  },
+  async ops_campaign_send(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { sendCampaignMessage } = await import('../api/_ops/harvest.js');
+    return sendCampaignMessage({ orgId: job.organization_id, recipientId: job.payload?.recipient_id, enqueue: (j) => ctx.store.enqueue(j) });
+  },
+  // Every 5 minutes: release expired holds, verify referral outcomes, run health checks, page on open incidents.
+  async ops_sentry_sweep(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx);
+    const { expireHolds, verifyReferrals } = await import('../api/_ops/service.js');
+    const { runSentry } = await import('../api/_ops/sentry.js');
+    const expired = await expireHolds();
+    const orgs = await (await fetch(`${ctx.url}/rest/v1/ops_business_settings?select=organization_id`, { headers: { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}` } })).json();
+    let verified = 0; for (const o of orgs) verified += await verifyReferrals(o.organization_id);
+    const sentry = await runSentry();
+    await scheduleNext(ctx, 'ops_sentry_sweep', Number(job.payload?.every_minutes) || 5);
+    return { holds_expired: expired, referrals_verified: verified, ...sentry.summary };
+  },
+  async ops_scoreboard_tick(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { scoreboardTick } = await import('../api/_ops/reports.js');
+    const out = await scoreboardTick();
+    await scheduleNext(ctx, 'ops_scoreboard_tick', 60);
+    return { orgs: out };
+  },
+
   // A trivial handler kept only to give --enqueue-demo something real to run end-to-end in local
   // mode without needing any live credentials.
   async demo_echo(job) {
@@ -214,6 +252,32 @@ const handlers = {
   },
 };
 
+function opsEnv(ctx) { process.env.SUPABASE_URL ||= ctx.url; process.env.SUPABASE_SERVICE_ROLE_KEY ||= ctx.serviceKey; }
+// Recurring jobs keep themselves alive: the next run is enqueued with a slot-based idempotency key, so any
+// number of workers or redeliveries create exactly one next run per slot.
+async function scheduleNext(ctx, jobType, everyMinutes) {
+  if (!ctx.store) return;
+  const next = new Date(Date.now() + everyMinutes * 60_000);
+  const slot = Math.floor(next.getTime() / (everyMinutes * 60_000));
+  await ctx.store.enqueue({ job_type: jobType, payload: { every_minutes: everyMinutes }, scheduled_at: next.toISOString(), idempotency_key: `${jobType}:${slot}` });
+}
+export async function seedRecurring(ctx) {
+  for (const [jobType, every] of [['ops_sentry_sweep', 5], ['ops_scoreboard_tick', 60]]) {
+    const slot = Math.floor(Date.now() / (every * 60_000));
+    await ctx.store.enqueue({ job_type: jobType, payload: { every_minutes: every }, idempotency_key: `${jobType}:${slot}` });
+  }
+}
+// Worker heartbeat (read by Sentry). Written at most every 20 s; stopped_at is set on clean shutdown.
+let lastBeat = 0; let processed = 0; let lastType = null;
+export async function heartbeat(ctx, { stopped = false, force = false } = {}) {
+  if (ctx.mode !== 'postgres' || (!force && !stopped && Date.now() - lastBeat < 20_000)) return;
+  lastBeat = Date.now();
+  const body = { worker_id: WORKER_ID, host: process.env.WORKER_HOST || os.hostname(), last_seen_at: new Date().toISOString(), jobs_processed: processed, last_job_type: lastType, stopped_at: stopped ? new Date().toISOString() : null };
+  try {
+    await fetch(`${ctx.url}/rest/v1/worker_runtime_heartbeats?on_conflict=worker_id`, { method: 'POST', headers: { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(body) });
+  } catch (e) { console.error('[worker] heartbeat failed:', e.message); }
+}
+
 async function processOneJob(store, ctx) {
   const job = await store.claimNext({ workerId: WORKER_ID, leaseSeconds: 60 });
   if (!job) return false;
@@ -224,6 +288,7 @@ async function processOneJob(store, ctx) {
     console.error(`[worker] no handler for job_type '${job.job_type}' — marked for retry/dead-letter`);
     return true;
   }
+  processed++; lastType = job.job_type;
   try {
     const result = await handler(job, ctx);
     await store.complete(job.id, result);
@@ -267,8 +332,10 @@ async function main() {
   let running = true;
   process.on('SIGINT', () => { console.log('\n[worker] shutting down...'); running = false; });
   process.on('SIGTERM', () => { running = false; });
+  if (mode === 'postgres') { await seedRecurring(ctx).catch((e) => console.error('[worker] could not seed recurring jobs:', e.message)); await heartbeat(ctx, { force: true }); }
 
   while (running) {
+    await heartbeat(ctx);
     try {
       const did = await processOneJob(store, ctx);
       if (!did) await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -277,6 +344,7 @@ async function main() {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
   }
+  await heartbeat(ctx, { stopped: true });
 }
 
 // Export for tests (e.g. scripts/e2e_hierarchy_durable_worker_test.mjs, which imports `handlers`

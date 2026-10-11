@@ -86,6 +86,9 @@ async function handleWebhook(req, res, rawBody) {
   if (sales.duplicate) return res.status(200).json({ received: true, duplicate: true });
 
   try {
+    const { applyOpsStripeEvent } = await import('./_ops/service.js');
+    const opsOut = await applyOpsStripeEvent(event);
+    if (opsOut.handled) { console.log('[stripe webhook] ops:', opsOut.reason || (opsOut.applied ? 'applied' : 'ignored')); return res.status(200).json({ received: true }); }
     const out = await applyLegacyStripeEvent(event);
     if (out.applied || out.reason) console.log('[stripe webhook] legacy:', out.reason);
   } catch (err) {

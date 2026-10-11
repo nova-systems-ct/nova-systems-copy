@@ -65,6 +65,11 @@ export function createPostgrestRepo({ url, key }) {
       return { count: rows.length, lastAt: rows[0]?.created_at || null };
     },
 
+    async opsEnabled(org) { const rows = await get(`ops_business_settings?organization_id=eq.${q(org)}&select=organization_id&limit=1`); return rows.length > 0; },
+    async cancelQueuedForContact(org, contactId) {
+      await send(`ops_campaign_recipients?organization_id=eq.${q(org)}&contact_id=eq.${q(contactId)}&send_status=eq.scheduled`, 'PATCH', { send_status: 'stopped', stop_reason: 'opted_out' });
+      await send(`ops_followups?organization_id=eq.${q(org)}&contact_id=eq.${q(contactId)}&status=eq.scheduled`, 'PATCH', { status: 'cancelled', blocked_reason: 'opted_out' });
+    },
     async enqueueJob(job) {
       const r = await send('jobs?on_conflict=idempotency_key', 'POST', job, 'resolution=ignore-duplicates,return=representation');
       if (!r.ok) throw new Error(`enqueue failed ${r.status}`);

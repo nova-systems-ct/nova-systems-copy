@@ -4,6 +4,7 @@ import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 import { handleWave1 } from './_wave1Api.js';
+import { handleOps } from './_ops/index.js';
 import { salesDispatch, SALES_RESOURCES } from './_sales/index.js';
 import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
 import { normalizePhone } from './_wave1.js';
@@ -4262,6 +4263,9 @@ export default async function handler(req, res) {
   switch (resource) {
     case 'wave1':
       return handleWave1(req, res, op, { requireStaff, requireOrgAccess, sanitize, rateLimit });
+
+    case 'ops':
+      return handleOps(req, res, op);
 
     case 'invoices':
       if (!(await requireStaff(req, res, 'admin.view'))) return;

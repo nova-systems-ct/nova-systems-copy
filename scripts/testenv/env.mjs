@@ -76,7 +76,7 @@ export async function startTestEnv({ migrations = [], publicBuckets = ['papers']
   await reload();
 
   const api = {
-    dataDir, pgPort, restPort, base, pool, sql: q, appEnv, serviceKey, anonKey, migrationErrors: errors, stubs: stubs.state, stubServer: stubs, reload,
+    dataDir, pgPort, restPort, base, pool, sql: q, restLog: () => restLog, appEnv, serviceKey, anonKey, migrationErrors: errors, stubs: stubs.state, stubServer: stubs, reload,
     jwt: (userId, email) => signJwt({ sub: userId, email, role: 'authenticated' }, JWT_SECRET),
     // Create a real auth user (in auth.users) and optionally a membership. Returns { id, email, token, password }.
     async createUser({ email, password = 'Passw0rd!test', role = null, orgId = null, status = 'active', name = null, confirm = true } = {}) {
