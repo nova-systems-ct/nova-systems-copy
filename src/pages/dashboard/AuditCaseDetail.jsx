@@ -4,6 +4,7 @@ import { ArrowLeft, PlayCircle, PauseCircle, FileText, Lightbulb, ListChecks, Fi
 import { authedFetch } from '../../lib/apiAuth'
 import { useOrg } from '../../lib/OrgContext'
 import { generateAuditReportPDF } from '../../utils/generatePdf'
+import { AuditCss, IntakeTab, TestsTab, BenchmarksTab, ScenariosTab, FindingDetailsTab, DeliveryTab } from './audit/AuditPlus'
 
 const GOLD = '#C9A84C'
 const G = `linear-gradient(135deg,#8a6b2a 0%,${GOLD} 35%,#E0C476 55%,${GOLD} 80%,#8a6b2a 100%)`
@@ -24,7 +25,8 @@ function fmtRemaining(seconds) {
 export default function AuditCaseDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentOrg } = useOrg()
+  const { currentOrg, currentMembership } = useOrg()
+  const isOwner = currentMembership?.role === 'nova_super_admin'
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [tab, setTab] = useState('evidence')
@@ -135,13 +137,20 @@ export default function AuditCaseDetail() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.07)', overflowX: 'auto' }}>
-        {[['evidence', 'Evidence', FileText, evidence.length], ['findings', 'Findings', Lightbulb, findings.length], ['recommendations', 'Recommendations', ListChecks, recommendations.length], ['report', 'Report', FileCheck2, reports.length]].map(([key, label, Icon, count]) => (
+        {[['intake', 'Intake & clock', ListChecks, 0], ['tests', 'Tests', PlayCircle, 0], ['evidence', 'Evidence', FileText, evidence.length], ['findings', 'Findings', Lightbulb, findings.length], ['recommendations', 'Recommendations', ListChecks, recommendations.length], ['report', 'Report', FileCheck2, reports.length], ['details', 'Finding details', Lightbulb, 0], ['scenarios', 'Scenarios', FileCheck2, 0], ['benchmarks', 'Benchmarks & software', ListChecks, 0], ['delivery', 'Compose & deliver', Send, 0]].map(([key, label, Icon, count]) => (
           <button key={key} onClick={() => setTab(key)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === key ? GOLD : 'transparent'}`, color: tab === key ? GOLD : 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
             <Icon style={{ width: 13, height: 13 }} /> {label} {count > 0 && `(${count})`}
           </button>
         ))}
       </div>
 
+      <AuditCss />
+      {tab === 'intake' && <IntakeTab org={currentOrg.id} caseId={id} isOwner={isOwner} />}
+      {tab === 'tests' && <TestsTab org={currentOrg.id} caseId={id} />}
+      {tab === 'benchmarks' && <BenchmarksTab org={currentOrg.id} caseId={id} />}
+      {tab === 'scenarios' && <ScenariosTab org={currentOrg.id} caseId={id} findings={findings} />}
+      {tab === 'details' && <FindingDetailsTab org={currentOrg.id} caseId={id} findings={findings} onSaved={load} />}
+      {tab === 'delivery' && <DeliveryTab org={currentOrg.id} caseId={id} reports={reports} onSaved={load} />}
       {tab === 'evidence' && <EvidenceTab caseId={id} orgId={currentOrg.id} items={evidence} onSaved={load} />}
       {tab === 'findings' && <FindingsTab caseId={id} orgId={currentOrg.id} items={findings} evidence={evidence} onSaved={load} />}
       {tab === 'recommendations' && <RecommendationsTab caseId={id} orgId={currentOrg.id} items={recommendations} findings={findings} onSaved={load} />}

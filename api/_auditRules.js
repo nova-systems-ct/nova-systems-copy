@@ -60,6 +60,9 @@ export function validateReportForApproval(content, findings) {
     for (const e of errs) problems.push(`${label}: ${e}`);
     if (f.statement_type !== 'unknown' && !f.confidence) problems.push(`${label} has no confidence rating`);
     if (f.statement_type !== 'unknown' && !f.recommended_action) problems.push(`${label} has no recommended action`);
+    // 2026-10-11: every reported finding states customer impact, financial-impact status, limitations,
+    // whether Nova can implement the remedy, and the owner decision required.
+    for (const k of ['customer_impact', 'financial_impact_status', 'limitations', 'nova_can_implement', 'owner_decision']) if (!f[k]) problems.push(`${label} is missing ${k.replace(/_/g, ' ')}`);
   }
   return { ready: problems.length === 0, problems };
 }
@@ -74,3 +77,89 @@ export function checkStatusTransition(to, state) {
   if (['delivered', 'customer_decision', 'implementation', 'outcome_tracking'].includes(to) && !state.hasDelivery) return `A delivery must be recorded before moving to ${to}`;
   return null;
 }
+
+// =============================================================================================
+// 2026-10-11 — evidence-backed audit additions (financial scenarios, test plans, clock policy).
+// =============================================================================================
+export const INPUT_SOURCES = ['verified_record', 'owner_provided', 'observed', 'assumed', 'industry_reference'];
+const SCENARIO_KEYS = ['eligible_volume', 'failure_share', 'conversion', 'average_sale_cents'];
+
+// eligible inquiry volume × failure share × conversion × average sale. Every input names its source. The result
+// is "verified" ONLY when every input is a verified record; anything else is a labeled scenario. Gross opportunity
+// is reported separately from contribution (only when a margin share is supplied).
+export function computeScenario(inputs) {
+  const errors = [];
+  const v = {};
+  for (const k of [...SCENARIO_KEYS, 'margin_share']) {
+    const x = inputs?.[k];
+    if (x == null) { if (k !== 'margin_share') errors.push(`${k} is required`); continue; }
+    if (!INPUT_SOURCES.includes(x.source)) errors.push(`${k} needs a source (${INPUT_SOURCES.join(', ')})`);
+    const n = Number(x.value);
+    if (!Number.isFinite(n) || n < 0) { errors.push(`${k} must be a non-negative number`); continue; }
+    if (['failure_share', 'conversion', 'margin_share'].includes(k) && n > 1) errors.push(`${k} is a share between 0 and 1`);
+    v[k] = n;
+  }
+  if (errors.length) return { ok: false, errors };
+  const monthly = Math.round(v.eligible_volume * v.failure_share * v.conversion * v.average_sale_cents);
+  const sources = Object.fromEntries(Object.entries(inputs).filter(([k]) => [...SCENARIO_KEYS, 'margin_share'].includes(k)).map(([k, x]) => [k, x.source]));
+  const verified = SCENARIO_KEYS.every((k) => inputs[k].source === 'verified_record') && (!inputs.margin_share || inputs.margin_share.source === 'verified_record');
+  return {
+    ok: true, status: verified ? 'verified' : 'scenario',
+    result: {
+      monthly_gross_opportunity_cents: monthly, annual_gross_opportunity_cents: monthly * 12,
+      monthly_contribution_cents: v.margin_share != null ? Math.round(monthly * v.margin_share) : null,
+      formula: 'eligible inquiry volume × failure share × conversion × average sale',
+      input_sources: sources,
+      label: verified ? 'Verified from records' : 'Scenario — depends on the labeled inputs; not a measured loss',
+      note: 'Gross opportunity is not profit. Net benefit also depends on costs, capacity and Nova fees.',
+    },
+  };
+}
+// Scenarios describing the same lost customers share an overlap_group and are counted once (the largest).
+export function totalScenarios(rows) {
+  const byGroup = new Map(); let ungrouped = 0; let counted = 0;
+  for (const s of rows) {
+    const m = s.result?.monthly_gross_opportunity_cents || 0;
+    if (s.overlap_group) byGroup.set(s.overlap_group, Math.max(byGroup.get(s.overlap_group) || 0, m));
+    else { ungrouped += m; counted++; }
+  }
+  const grouped = [...byGroup.values()].reduce((a, b) => a + b, 0);
+  return { monthly_gross_opportunity_cents: ungrouped + grouped, scenarios: rows.length, counted_once_groups: byGroup.size, independent: counted, any_unverified: rows.some((s) => s.status !== 'verified') };
+}
+
+// Active tests need the business's recorded permission; competitors are never actively contacted.
+export function checkTestEntry({ entry, authorization, sameTargetSameDay = 0 }) {
+  if (!['phone', 'form', 'sms', 'public_review'].includes(entry.channel)) return 'Unknown test channel';
+  if (!entry.target) return 'Name the public channel being tested';
+  if (entry.is_competitor && entry.channel !== 'public_review') return 'Competitors are reviewed from public information only. Nova does not call, text or submit forms to competitors to manufacture a benchmark.';
+  if (entry.channel === 'public_review') return null;
+  const a = authorization;
+  if (!a || !a.authorized_by_name || !a.at) return 'Record the business owner’s written permission for active tests first';
+  if (a.cancelled_at) return 'The business cancelled its permission for active tests';
+  if (!Array.isArray(a.channels) || !a.channels.includes(entry.channel)) return `Permission does not cover ${entry.channel} tests`;
+  if (a.ends_on && new Date(entry.planned_at) > new Date(`${a.ends_on}T23:59:59Z`)) return 'This test is after the permission end date';
+  if (!entry.test_identity || entry.test_identity.length < 5) return 'State the clear test identity used (never a made-up urgent customer)';
+  if (/urgent|emergency|asap|flood|leak|broken|accident/i.test(entry.test_identity)) return 'Test identities may not pose as a customer with an urgent or fabricated problem';
+  if (sameTargetSameDay >= (Number(a.max_per_day) || 1)) return 'Daily test limit for this channel reached. Do not repeatedly contact the business.';
+  return null;
+}
+// A business that is closed and does not promise after-hours service has not "failed" by not answering.
+export function interpretTest(t) {
+  if (t.status !== 'done') return 'not_performed';
+  if (t.within_published_hours === false) return 'outside_published_hours_not_scored';
+  if (['answered', 'responded', 'auto_reply'].includes(t.outcome)) return 'responded';
+  if (['no_response', 'voicemail'].includes(t.outcome)) return 'no_live_response';
+  return 'not_applicable';
+}
+
+export function validateClockPolicy(p) {
+  const errors = [];
+  if (!p || typeof p !== 'object') return ['clock policy is required'];
+  if (!p.start_event || String(p.start_event).length < 10) errors.push('describe the clock start event (e.g. "all required inputs received and permission recorded")');
+  if (!['business_hours', 'elapsed_hours'].includes(p.hours_basis)) errors.push('choose business hours or elapsed hours');
+  const h = Number(p.target_hours); if (!Number.isInteger(h) || h < 48 || h > 72) errors.push('target must be a whole number of hours between 48 and 72');
+  if (!p.missing_input_rule || String(p.missing_input_rule).length < 10) errors.push('say what happens when inputs are missing (e.g. clock paused until received)');
+  if (!p.extension_notice || String(p.extension_notice).length < 10) errors.push('say how and when the client is told about an extension');
+  return errors;
+}
+export const FINDING_REPORT_FIELDS = ['customer_impact', 'financial_impact_status', 'limitations', 'nova_can_implement', 'owner_decision'];

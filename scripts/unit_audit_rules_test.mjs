@@ -22,8 +22,9 @@ check('invalid statement type rejected', validateFinding({ statement_type: 'fact
 
 // ---- approval readiness
 const goodContent = Object.fromEntries(REQUIRED_REPORT_SECTIONS.map((s) => [s, `content for ${s}`]));
-const goodFinding = { id: 'f1', title: 'No booking tool detected', statement_type: 'observed_fact', detail: 'd', evidence_count: 1, confidence: 'low', recommended_action: 'Add online booking', review_status: 'reviewed' };
+const goodFinding = { id: 'f1', title: 'No booking tool detected', statement_type: 'observed_fact', detail: 'd', evidence_count: 1, confidence: 'low', recommended_action: 'Add online booking', review_status: 'reviewed', customer_impact: 'Customers cannot book outside business hours', financial_impact_status: 'unknown', limitations: 'Public website only', nova_can_implement: 'yes', owner_decision: 'Approve a booking setup' };
 check('complete report with reviewed, evidenced findings is approval-ready', validateReportForApproval(goodContent, [goodFinding]).ready === true);
+check('a reviewed finding missing its impact/limitations/decision fields blocks approval', !validateReportForApproval(goodContent, [{ ...goodFinding, customer_impact: null }]).ready);
 check('missing section blocks approval', validateReportForApproval({ ...goodContent, limitations: '' }, [goodFinding]).problems.some((p) => /limitations/.test(p)));
 check('a case with no findings cannot be approved', validateReportForApproval(goodContent, []).ready === false);
 check('an unreviewed finding blocks approval', validateReportForApproval(goodContent, [{ ...goodFinding, review_status: 'draft' }]).ready === false);

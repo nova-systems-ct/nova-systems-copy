@@ -11,7 +11,7 @@ import { useLocation } from 'react-router-dom';
 // The marketing chat widget belongs on the public site only — not over the dashboard or a customer's signing/payment page.
 function PublicChatBot() {
   const { pathname } = useLocation();
-  if (/^\/(dashboard|service|rep|sign|proposal|join)(\/|$)/.test(pathname)) return null;
+  if (/^\/(dashboard|service|report|rep|sign|proposal|join)(\/|$)/.test(pathname)) return null;
   return <ChatBot />;
 }
 import Home from './pages/Home';
@@ -44,6 +44,7 @@ const Accessibility = lazy(() => import('./pages/Accessibility'));
 const ServiceAgreement = lazy(() => import('./pages/ServiceAgreement'));
 const Sign = lazy(() => import('./pages/Sign'));
 const ServiceLink = lazy(() => import('./pages/ServiceLink'));
+const ReportLink = lazy(() => import('./pages/ReportLink'));
 const OpsLayout = lazy(() => import('./pages/dashboard/ops/OpsLayout'));
 const OpsOverview = lazy(() => import('./pages/dashboard/ops/OpsOverview'));
 const OpsInbox = lazy(() => import('./pages/dashboard/ops/OpsInbox'));
@@ -201,6 +202,7 @@ function App() {
             <Route path="/join/:token" element={<JoinInvitation />} />
             <Route path="/proposal/:token" element={<ClientProposal />} />
             <Route path="/service/:token" element={<ServiceLink />} />
+            <Route path="/report/:token" element={<ReportLink />} />
 
             {/* Representative / candidate workspace */}
             <Route path="/rep" element={<RepLayout />}>

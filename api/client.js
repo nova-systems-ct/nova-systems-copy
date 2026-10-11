@@ -5,6 +5,7 @@ import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 import { handleWave1 } from './_wave1Api.js';
 import { handleOps } from './_ops/index.js';
+import { handleAuditExtra, handleReportView } from './_auditExtra.js';
 import { salesDispatch, SALES_RESOURCES } from './_sales/index.js';
 import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
 import { normalizePhone } from './_wave1.js';
@@ -1945,6 +1946,7 @@ async function handleAuditCases(req, res, caller) {
   // is the one explicit transition that sets start_condition_met_at, and it's set exactly once.
   if (action === 'mark-ready') {
     if (existing.start_condition_met_at) return res.status(400).json({ error: 'This case has already started its clock' });
+    if (!existing.clock_policy_approved_at) return res.status(409).json({ error: 'The owner must approve the clock policy (start event, hours basis, 48–72h target, missing inputs, extension notice) before the clock starts' });
     const startAt = new Date().toISOString();
     const patch = { status: 'researching', start_condition_met_at: startAt, updated_at: startAt };
     const r = await sbWrite(`audit_cases?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
@@ -4357,8 +4359,11 @@ export default async function handler(req, res) {
     }
 
     case 'audit': {
+      // Public: a client opens the exact approved report through its delivery link (token-scoped, expiring).
+      if (op === 'report-view' || op === 'report-view-pdf') { if (!rateLimit(req, res, 30, 60_000)) return; return handleReportView(req, res, op); }
       const caller = await requireStaff(req, res);
       if (!caller) return;
+      if (['intake', 'finding-details', 'test-plan', 'competitors', 'software', 'scenarios', 'compose', 'report-pdf', 'publish', 'revoke'].includes(op)) return handleAuditExtra(req, res, op, caller);
       if (op === 'cases') return handleAuditCases(req, res, caller);
       if (op === 'evidence') return handleAuditEvidence(req, res, caller);
       if (op === 'findings') return handleAuditFindings(req, res, caller);

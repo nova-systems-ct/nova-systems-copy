@@ -148,7 +148,7 @@ try {
   await page.goto(`${base}/dashboard/ops/monitoring`);
   await page.getByRole('button', { name: 'Run checks now' }).click();
   await page.getByText(/Checked \d+ items/).waitFor({ timeout: 15000 });
-  check('Monitoring runs measured checks and shows unconfigured providers honestly', await page.getByText('not configured').first().isVisible());
+  check('Monitoring runs measured checks and shows unconfigured providers honestly', await page.getByText('not configured').first().waitFor({ timeout: 10000 }).then(() => true, () => false));
   await shot(page, '08-monitoring');
 
   // ================================================================ phone layout of the owner overview
@@ -159,6 +159,31 @@ try {
   const mobileFits = await ownerPhone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
   check('the owner overview fits a phone screen', mobileFits);
   await shot(ownerPhone, '09-overview-mobile');
+
+  // ================================================================ audit: staff tabs + the client's secure report page
+  const { contentHash } = await import('../api/_auditRules.js');
+  const content = { title: 'Operational Findings & Revenue Opportunity Report', executive_summary: 'TEST summary: no online booking path; customers arriving after hours cannot book.', business_identity: { name: 'TEST Browser Detailing' }, findings: [{ title: 'No online booking path', customer_impact: 'After-hours visitors cannot book', financial_impact_status: 'unknown' }], recommendations: [{ priority: 1, mechanism: 'Booking link with real availability' }], evidence_reviewed: [{ source: 'TEST fixture page', observation: 'No booking link' }], limitations: 'Operational review, not a CPA financial audit.', next_steps: 'Decide on installation.' };
+  const ac = (await one("insert into audit_cases (organization_id, scope, status) values ($1,'digital','approved') returning id", [nova])).id;
+  const rep = (await one("insert into audit_reports (case_id, version, status, content, content_sha256, approved_content_sha256, approved_by, approved_at) values ($1,1,'approved',$2,$3,$3,$4, now()) returning id", [ac, content, contentHash(content), owner.id])).id;
+  const pub = await client({ resource: 'audit', op: 'publish', method: 'POST', token: owner.token, body: { organization_id: nova, report_id: rep } });
+  const rtoken = pub.body.link.split('/report/')[1];
+  const rp = await phone.newPage();
+  await rp.goto(`${base}/report/${rtoken}`);
+  await rp.getByRole('heading', { name: 'Operational Findings & Revenue Opportunity Report' }).waitFor({ timeout: 15000 });
+  check('the client opens the approved report through the secure link on a phone', await rp.getByText('Prioritized installation recommendation').isVisible() && await rp.getByText(/not a CPA financial audit/).first().isVisible());
+  const dl = rp.waitForEvent('download', { timeout: 15000 }).catch(() => null);
+  await rp.getByRole('button', { name: 'Download PDF' }).click();
+  check('the client can download the PDF of that exact version', !!(await dl));
+  await shot(rp, '10-client-report-mobile');
+  await page.evaluate((id) => { for (const k of Object.keys(localStorage)) if (/org/i.test(k)) localStorage.setItem(k, id) }, nova); // audits are Nova's own cases: switch the dashboard back to Nova Systems
+  await page.goto(`${base}/dashboard/audit/${ac}`);
+  await page.getByRole('button', { name: /Intake & clock/ }).click();
+  await page.getByText(/Clock policy/).waitFor({ timeout: 15000 });
+  check('the audit case page shows intake, clock policy and test permission sections', await page.getByText(/Permission for active tests/).isVisible());
+  await page.getByRole('button', { name: /Scenarios/ }).click();
+  await page.getByText(/A scenario is not a measured loss/).waitFor({ timeout: 10000 });
+  check('the scenarios tab states that a scenario is not a measured loss', true);
+  await shot(page, '11-audit-scenarios');
 
   // ================================================================ password recovery: works once, never twice; sign-out
   const rec = await (await browser.newContext()).newPage();

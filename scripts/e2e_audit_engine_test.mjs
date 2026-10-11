@@ -42,6 +42,10 @@ try {
   r = await audit('cases', { token: ownerA.token, body: { organization_id: orgA, action: 'update-status', id: caseId, status: 'researching' } });
   check('cannot skip the clock start (mark-ready) via update-status', r.status === 409);
   r = await audit('cases', { token: ownerA.token, body: { organization_id: orgA, action: 'mark-ready', id: caseId } });
+  check('the clock cannot start before the owner approves the clock policy', r.status === 409);
+  r = await audit('intake', { token: ownerA.token, body: { organization_id: orgA, case_id: caseId, clock_policy: { start_event: 'All required inputs received and test permission recorded', hours_basis: 'business_hours', target_hours: 60, missing_input_rule: 'Clock pauses until the missing input arrives', extension_notice: 'Client is told by email before the deadline with the new date' }, approve_clock_policy: true } });
+  check('the owner records and approves the clock policy (48–72h target)', r.status === 200 && !!r.body.case.clock_policy_approved_at, JSON.stringify(r.body).slice(0, 200));
+  r = await audit('cases', { token: ownerA.token, body: { organization_id: orgA, action: 'mark-ready', id: caseId } });
   check('mark-ready starts the clock', r.status === 200 && !!(await env.sql('select start_condition_met_at from audit_cases where id=$1', [caseId])).rows[0].start_condition_met_at);
   await audit('cases', { token: ownerA.token, body: { organization_id: orgA, action: 'update-status', id: caseId, status: 'researching' } });
   r = await audit('cases', { token: ownerA.token, body: { organization_id: orgA, action: 'update-status', id: caseId, status: 'evidence_gathered' } });
@@ -58,6 +62,8 @@ try {
   check('with real linked evidence it saves as a real DRAFT finding', r.status === 200 && r.body.finding.review_status === 'draft');
   const findingId = r.body.finding.id;
   check('the evidence link is a real row in audit_finding_evidence', (await env.sql('select count(*) from audit_finding_evidence where finding_id=$1 and evidence_id=$2', [findingId, evId])).rows[0].count === '1');
+  r = await audit('finding-details', { token: ownerA.token, body: { organization_id: orgA, case_id: caseId, finding_id: findingId, customer_impact: 'Callers on mobile cannot tap to call', financial_impact_status: 'unknown', limitations: 'Public page HTML only; no call logs reviewed', nova_can_implement: 'yes', owner_decision: 'Approve adding a click-to-call button' } });
+  check('the finding records customer impact, financial-impact status, limitations, implementability and the owner decision', r.status === 200 && r.body.finding.financial_impact_status === 'unknown');
   r = await audit('findings', { token: ownerA.token, body: { organization_id: orgA, case_id: caseId, action: 'review', id: findingId, review_status: 'reviewed' } });
   check('the finding can be marked reviewed, with a real reviewer id stamped', r.status === 200 && r.body.finding.reviewed_by === ownerA.id);
 

@@ -71,6 +71,9 @@ r = await call('cases', { body: { organization_id: 'orgA', action: 'update-statu
 check('cannot mark a case "delivered" with no delivery record', r.code === 409);
 r = await call('cases', { body: { organization_id: 'orgA', action: 'update-status', id: caseA, status: 'researching' } });
 check('cannot skip the clock start via update-status', r.code === 409 && /mark-ready/.test(r.body.error));
+r = await call('cases', { body: { organization_id: 'orgA', action: 'mark-ready', id: caseA } });
+check('the clock cannot start before the owner approves the clock policy', r.code === 409 && /clock policy/.test(r.body.error));
+T.audit_cases.find((c) => c.id === caseA).clock_policy_approved_at = new Date().toISOString(); // owner approval (recorded via the intake op in the real API)
 await call('cases', { body: { organization_id: 'orgA', action: 'mark-ready', id: caseA } });
 r = await call('cases', { body: { organization_id: 'orgA', action: 'update-status', id: caseA, status: 'evidence_gathered' } });
 check('after mark-ready ordinary progress is allowed', r.code === 200);
@@ -93,6 +96,7 @@ check('an "unknown" gap can be recorded without evidence', r.code === 200);
 r = await call('findings', { body: { organization_id: 'orgA', case_id: caseA, action: 'review', id: f1, review_status: 'reviewed' } });
 check('an evidenced finding can be marked reviewed', r.code === 200 && r.body.finding.review_status === 'reviewed' && r.body.finding.reviewed_by === 'user1');
 await call('findings', { body: { organization_id: 'orgA', case_id: caseA, action: 'review', id: fUnknown, review_status: 'reviewed' } });
+for (const f of T.audit_findings.filter((x) => x.case_id === caseA)) Object.assign(f, { customer_impact: 'Callers cannot reach a person after hours', financial_impact_status: 'unknown', limitations: 'Public observation only', nova_can_implement: 'yes', owner_decision: 'Decide whether to install after-hours handling' }); // set through the finding-details op in the real API
 r = await call('findings', { body: { organization_id: 'orgA', case_id: caseA2, action: 'review', id: f1, review_status: 'rejected' } });
 check("a finding cannot be reviewed through a different case's id", r.code === 404);
 r = await call('recommendations', { body: { organization_id: 'orgA', case_id: caseA2, finding_id: f1, mechanism: 'm' } });
