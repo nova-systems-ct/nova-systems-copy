@@ -330,7 +330,7 @@ export async function applyOpsStripeEvent(event) {
     if (obj.amount_total !== dep.amount_cents || String(obj.currency).toLowerCase() !== dep.currency.toLowerCase()) return { handled: true, applied: false, reason: 'amount or currency mismatch' };
     if (dep.provider_session_id && obj.id !== dep.provider_session_id) return { handled: true, applied: false, reason: 'session does not match deposit' };
     if (dep.status === 'paid') return { handled: true, applied: false, reason: 'already paid' };
-    await transition({ orgId, entity: 'deposit', table: 'ops_deposits', id: dep.id, from: dep.status, to: dep.status === 'created' ? 'checkout_open' : dep.status, actor, reason: 'provider session', patch: { provider_session_id: obj.id } }).catch(() => null);
+    if (dep.status === 'created') await transition({ orgId, entity: 'deposit', table: 'ops_deposits', id: dep.id, from: 'created', to: 'checkout_open', actor, reason: 'provider session', patch: { provider_session_id: obj.id } }).catch(() => null);
     const cur = await one('ops_deposits', orgId, dep.id);
     await transition({ orgId, entity: 'deposit', table: 'ops_deposits', id: dep.id, from: cur.status, to: 'paid', actor, reason: 'Stripe confirmed payment', evidence: { event_id: event.id, amount_total: obj.amount_total }, patch: { paid_at: nowIso(), provider_event_id: event.id, provider_payment_intent: obj.payment_intent || null, livemode: !!event.livemode } });
     const job = await one('ops_jobs', orgId, dep.job_id);

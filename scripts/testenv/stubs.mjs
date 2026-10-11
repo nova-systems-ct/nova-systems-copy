@@ -53,8 +53,42 @@ export function createStubs({ pool, jwtSecret, postgrestPort, publicBuckets = []
       if (u.banned_until && new Date(u.banned_until) > new Date()) return json(res, 400, { error: 'user_banned', error_description: 'User is banned' });
       if (!u.email_confirmed_at) return json(res, 400, { error: 'email_not_confirmed' });
       await pool.query('update auth.users set last_sign_in_at = now() where id = $1', [u.id]);
-      return json(res, 200, { access_token: signJwt({ sub: u.id, email: u.email, role: 'authenticated' }, jwtSecret), token_type: 'bearer', expires_in: 3600, refresh_token: crypto.randomBytes(12).toString('hex'), user: userOut(u) });
+      const prt = crypto.randomBytes(12).toString('hex'); state.refresh = state.refresh || new Map(); state.refresh.set(prt, u.id);
+      return json(res, 200, { access_token: signJwt({ sub: u.id, email: u.email, role: 'authenticated' }, jwtSecret), token_type: 'bearer', expires_in: 3600, refresh_token: prt, user: userOut(u) });
     }
+    // ---- self-service flows (as Supabase Auth): recovery email link (single use), verify redirect, password
+    // update, refresh, logout. Recovery never reveals whether an email has an account.
+    if (path === '/recover' && req.method === 'POST') {
+      const b = j(); const u = b.email && (await findUserByEmail(b.email));
+      if (u) {
+        const token = crypto.randomBytes(16).toString('hex');
+        state.magicLinks.set(token, { userId: u.id, email: u.email, used: false, exp: Date.now() + 3600e3, type: 'recovery' });
+        state.generatedLinks.push({ email: u.email.toLowerCase(), token, type: 'recovery', redirect_to: url.searchParams.get('redirect_to') || b.redirect_to || '' });
+        state.outbox.push({ id: `recovery_${token.slice(0, 6)}`, to: [u.email], subject: 'Reset your password (stand-in)', text: '[recovery link — held by the auth stand-in]' });
+      }
+      return json(res, 200, {});
+    }
+    if (path === '/verify' && req.method === 'GET') {
+      const t = state.magicLinks.get(url.searchParams.get('token') || ''); const to = url.searchParams.get('redirect_to') || '/';
+      if (!t || t.used || t.exp < Date.now()) { res.writeHead(303, { Location: `${to}#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired` }); return res.end(); }
+      t.used = true;
+      const rt = crypto.randomBytes(12).toString('hex'); state.refresh = state.refresh || new Map(); state.refresh.set(rt, t.userId);
+      const at = signJwt({ sub: t.userId, email: t.email, role: 'authenticated' }, jwtSecret);
+      res.writeHead(303, { Location: `${to}#access_token=${at}&expires_at=${Math.floor(Date.now() / 1000) + 3600}&expires_in=3600&refresh_token=${rt}&token_type=bearer&type=${url.searchParams.get('type') || 'magiclink'}` }); return res.end();
+    }
+    if (path === '/user' && req.method === 'PUT') {
+      const { payload } = roleOf(req); if (!payload?.sub) return json(res, 401, { message: 'invalid JWT' });
+      const b = j(); if (b.password) { if (String(b.password).length < 8) return json(res, 422, { code: 'weak_password', message: 'Password should be at least 8 characters.' }); await pool.query('update auth.users set encrypted_password=$1 where id=$2', [hashPw(b.password), payload.sub]); }
+      return json(res, 200, userOut(await findUserById(payload.sub)));
+    }
+    if (path === '/token' && req.method === 'POST' && url.searchParams.get('grant_type') === 'refresh_token') {
+      state.refresh = state.refresh || new Map(); const { refresh_token: rt } = j(); const uid = state.refresh.get(rt);
+      if (!uid) return json(res, 400, { error: 'invalid_grant', error_description: 'Invalid Refresh Token' });
+      state.refresh.delete(rt); const u = await findUserById(uid); const nrt = crypto.randomBytes(12).toString('hex'); state.refresh.set(nrt, uid);
+      return json(res, 200, { access_token: signJwt({ sub: u.id, email: u.email, role: 'authenticated' }, jwtSecret), token_type: 'bearer', expires_in: 3600, refresh_token: nrt, user: userOut(u) });
+    }
+    if (path === '/logout' && req.method === 'POST') { res.writeHead(204, { 'Access-Control-Allow-Origin': '*' }); return res.end(); }
+
     if (!isService(req)) return json(res, 401, { message: 'service role required' });
     if (path === '/admin/users' && req.method === 'POST') {
       const b = j(); if (!b.email) return json(res, 422, { message: 'email required' });

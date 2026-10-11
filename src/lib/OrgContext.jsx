@@ -16,7 +16,7 @@ export function OrgProvider({ children }) {
   const [currentOrgId, setCurrentOrgId] = useState(null)
   const [user, setUser] = useState(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (preferOrgId = null) => {
     setLoading(true)
     setError(null)
     if (!supabase) {
@@ -78,7 +78,10 @@ export function OrgProvider({ children }) {
     const validIds = rows.map((r) => r.organization_id)
     let stored = null
     try { stored = localStorage.getItem(STORAGE_KEY) } catch {}
-    const initial = stored && validIds.includes(stored) ? stored : (validIds[0] || null)
+    // preferOrgId (e.g. a business just created) is honored only if the server's fresh membership list includes it
+    const preferred = typeof preferOrgId === 'string' && validIds.includes(preferOrgId) ? preferOrgId : null
+    const initial = preferred || (stored && validIds.includes(stored) ? stored : (validIds[0] || null))
+    if (preferred) { try { localStorage.setItem(STORAGE_KEY, preferred) } catch {} }
     setCurrentOrgId(initial)
     setLoading(false)
   }, [])

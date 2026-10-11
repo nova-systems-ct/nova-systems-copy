@@ -2,12 +2,15 @@
 // Resend and Stripe replaced by local stand-ins. Lets a browser (Playwright) exercise the actual screens end to end.
 // NOT Supabase, NOT production. Disposable. Nothing leaves this machine.
 import http from 'node:http';
+import fs from 'node:fs';
 import { createServer } from 'vite';
 import { startTestEnv } from './env.mjs';
 import { allMigrations } from './migrations.mjs';
 
-export async function startHarness({ vitePort = 5199, apiPort = 8799, seed } = {}) {
-  const env = await startTestEnv({ migrations: allMigrations(), publicBuckets: [], quiet: true });
+export async function startHarness({ vitePort = 5199, apiPort = 8799, seed, manifest = false } = {}) {
+  // manifest:true builds the database from supabase/migration-manifest.json on the Supabase platform emulation only (strict clean install)
+  const migrations = manifest ? JSON.parse(fs.readFileSync('supabase/migration-manifest.json', 'utf8')).order : allMigrations();
+  const env = await startTestEnv({ migrations, publicBuckets: [], quiet: true, ...(manifest ? { bootstrap: 'platform' } : {}) });
   Object.assign(process.env, env.appEnv, { APP_BASE_URL: `http://localhost:${vitePort}`, SALES_EMAIL_MODE: 'dry_run' });
   const modules = new Map();
   const load = async (name) => { if (!modules.has(name)) modules.set(name, await import(`../../api/${name}.js`)); return modules.get(name); };

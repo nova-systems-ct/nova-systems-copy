@@ -303,6 +303,18 @@ export async function handleOps(req, res, op) {
       return send(res, 200, { status: r.status, reason: r.reason || null, automation_paused: true });
     }
 
+    if (op === 'conversation') {
+      const s = await inOrg(req, res, orgParam, 'ops.view'); if (!s) return;
+      const o = `organization_id=eq.${enc(s.orgId)}`;
+      const conv = await dbOne(`wave1_conversations?id=eq.${enc(sanitize(q.id, 60))}&${o}&select=id,channel,status,staff_takeover,engine_state,customer_initiated_at,is_test,contact_id,crm_contacts(name,phone_e164,suppressed,sms_consent)`);
+      if (!conv) return send(res, 404, { error: 'Not found' });
+      const [messages, job] = await Promise.all([
+        dbGet(`wave1_messages?conversation_id=eq.${enc(conv.id)}&${o}&select=id,direction,body,status,blocked_reason,purpose,automated,created_at,submitted_at&order=created_at.asc&limit=300`),
+        dbOne(`ops_jobs?conversation_id=eq.${enc(conv.id)}&${o}&select=id,state,fulfillment_status&order=created_at.desc`),
+      ]);
+      return send(res, 200, { conversation: conv, messages, job });
+    }
+
     if (op === 'conversations') {
       const s = await inOrg(req, res, orgParam, 'ops.view'); if (!s) return;
       return send(res, 200, await dbGet(`wave1_conversations?organization_id=eq.${enc(s.orgId)}&select=id,channel,status,staff_takeover,engine_state,last_inbound_at,last_outbound_at,is_test,contact_id,crm_contacts(name,phone_e164,suppressed)&order=last_inbound_at.desc.nullslast&limit=100`));

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, authRedirect } from "@/lib/supabaseClient";
 import { safeReturnTo } from "@/lib/returnTo";
 import { useSEO } from "@/hooks/useSEO";
 
@@ -24,12 +24,16 @@ export default function AuthCallback() {
       return;
     }
     let settled = false;
+    // An invalid, expired or already-used link: say so; never fall through to a sign-in.
+    if (authRedirect.error) { setStatus("error"); return; }
+    const isRecovery = authRedirect.type === "recovery";
+    const toReset = () => navigate(`/reset-password?returnTo=${encodeURIComponent(destination)}`, { replace: true });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       if (settled) return;
-      if (event === "PASSWORD_RECOVERY") {
+      if (event === "PASSWORD_RECOVERY" || (isRecovery && session)) {
         settled = true;
-        navigate(`/reset-password?returnTo=${encodeURIComponent(destination)}`, { replace: true });
+        toReset();
       } else if (session) {
         settled = true;
         navigate(destination, { replace: true });
@@ -42,7 +46,7 @@ export default function AuthCallback() {
       if (settled) return;
       if (data?.session) {
         settled = true;
-        navigate(destination, { replace: true });
+        if (isRecovery) toReset(); else navigate(destination, { replace: true });
       }
     });
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
-  LayoutDashboard, BrainCircuit, TrendingUp, PlayCircle, Building2, ShieldCheck,
+  LayoutDashboard, BrainCircuit, TrendingUp, PlayCircle, Building2, ShieldCheck, Workflow,
   LogOut, Menu, X, ChevronsUpDown, Check, Users,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
@@ -31,6 +31,7 @@ const ROLE_LABELS = {
 // <RequirePermission> so direct navigation can't bypass this.
 const NAV = [
   { to: '/dashboard',              label: 'Overview',     icon: LayoutDashboard, exact: true, permission: 'overview.view' },
+  { to: '/dashboard/ops',          label: 'Operations',   icon: Workflow,        match: ['/dashboard/ops'], permission: 'ops.view' },
   { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit,    match: ['/dashboard/intelligence', '/dashboard/intake-forms', '/dashboard/audit'], permission: 'intelligence.view' },
   { to: '/dashboard/growth',       label: 'Growth',        icon: TrendingUp,      match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/sales', '/dashboard/pilots', '/dashboard/pilot-console', '/dashboard/leads', '/dashboard/zion', '/dashboard/marketing'], permission: 'growth.view' },
   { to: '/dashboard/execution',    label: 'Execution',     icon: PlayCircle,      match: ['/dashboard/execution', '/dashboard/tasks'], permission: 'execution.view' },
@@ -96,14 +97,14 @@ export default function DashboardLayout() {
   const loc = useLocation()
   const [open, setOpen] = useState(false)
   const checkingSession = useAuthGuard()
-  const { loading: orgLoading, noAccess, hasPermission, currentMembership, currentOrg, user } = useOrg()
+  const { loading: orgLoading, noAccess, hasPermission, currentMembership, currentOrg, user, organizations: myOrgs } = useOrg()
 
   const logout = async () => {
     if (supabase) { try { await supabase.auth.signOut() } catch {} }
     navigate('/login')
   }
 
-  if (checkingSession || orgLoading) {
+  if (checkingSession || (orgLoading && !myOrgs.length)) { // a background membership refresh must not blank the page
     return (
       <div style={{ minHeight: '100vh', background: NAVY, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p style={{ color: GOLD, fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Loading Nova HQ…</p>

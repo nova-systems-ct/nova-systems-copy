@@ -6,6 +6,14 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import PageNotFound from './lib/PageNotFound';
 import ScrollToTop from './components/ScrollToTop';
 import ChatBot from './components/ChatBot';
+import { useLocation } from 'react-router-dom';
+
+// The marketing chat widget belongs on the public site only — not over the dashboard or a customer's signing/payment page.
+function PublicChatBot() {
+  const { pathname } = useLocation();
+  if (/^\/(dashboard|service|rep|sign|proposal|join)(\/|$)/.test(pathname)) return null;
+  return <ChatBot />;
+}
 import Home from './pages/Home';
 
 // Every route below Home is lazy — a homepage visitor (and the PageSpeed/Lighthouse run against
@@ -35,6 +43,18 @@ const CookiePolicy = lazy(() => import('./pages/CookiePolicy'));
 const Accessibility = lazy(() => import('./pages/Accessibility'));
 const ServiceAgreement = lazy(() => import('./pages/ServiceAgreement'));
 const Sign = lazy(() => import('./pages/Sign'));
+const ServiceLink = lazy(() => import('./pages/ServiceLink'));
+const OpsLayout = lazy(() => import('./pages/dashboard/ops/OpsLayout'));
+const OpsOverview = lazy(() => import('./pages/dashboard/ops/OpsOverview'));
+const OpsInbox = lazy(() => import('./pages/dashboard/ops/OpsInbox'));
+const OpsRequests = lazy(() => import('./pages/dashboard/ops/OpsRequests'));
+const OpsJobDetail = lazy(() => import('./pages/dashboard/ops/OpsJobDetail'));
+const OpsCampaigns = lazy(() => import('./pages/dashboard/ops/OpsCampaigns'));
+const OpsCampaignDetail = lazy(() => import('./pages/dashboard/ops/OpsCampaigns').then((m) => ({ default: m.OpsCampaignDetail })));
+const OpsReports = lazy(() => import('./pages/dashboard/ops/OpsReports'));
+const OpsReportDetail = lazy(() => import('./pages/dashboard/ops/OpsReports').then((m) => ({ default: m.OpsReportDetail })));
+const OpsMonitoring = lazy(() => import('./pages/dashboard/ops/OpsMonitoring'));
+const OpsSettings = lazy(() => import('./pages/dashboard/ops/OpsSettings'));
 const SignSuccess = lazy(() => import('./pages/SignSuccess'));
 const Onboard = lazy(() => import('./pages/Onboard'));
 const OnboardSuccess = lazy(() => import('./pages/OnboardSuccess'));
@@ -180,6 +200,7 @@ function App() {
             <Route path="/apply/status" element={<SalesApply />} />
             <Route path="/join/:token" element={<JoinInvitation />} />
             <Route path="/proposal/:token" element={<ClientProposal />} />
+            <Route path="/service/:token" element={<ServiceLink />} />
 
             {/* Representative / candidate workspace */}
             <Route path="/rep" element={<RepLayout />}>
@@ -213,6 +234,18 @@ function App() {
               <Route path="execution" element={<RequirePermission permission="execution.view"><Execution /></RequirePermission>} />
               <Route path="companies" element={<RequirePermission permission="companies.view"><Companies /></RequirePermission>} />
               <Route path="admin" element={<RequirePermission permission="admin.view"><Admin /></RequirePermission>} />
+              <Route path="ops" element={<RequirePermission permission="ops.view"><OpsLayout /></RequirePermission>}>
+                <Route index element={<OpsOverview />} />
+                <Route path="inbox" element={<OpsInbox />} />
+                <Route path="requests" element={<OpsRequests />} />
+                <Route path="requests/:id" element={<OpsJobDetail />} />
+                <Route path="campaigns" element={<OpsCampaigns />} />
+                <Route path="campaigns/:id" element={<OpsCampaignDetail />} />
+                <Route path="reports" element={<OpsReports />} />
+                <Route path="reports/:id" element={<OpsReportDetail />} />
+                <Route path="monitoring" element={<OpsMonitoring />} />
+                <Route path="settings" element={<OpsSettings />} />
+              </Route>
               <Route path="command" element={<RequirePermission permission="command.view"><Command /></RequirePermission>} />
               <Route path="command/workforce" element={<RequirePermission permission="command.view"><CommandWorkforce /></RequirePermission>} />
               <Route path="command/meetings" element={<RequirePermission permission="command.view"><CommandMeetings /></RequirePermission>} />
@@ -269,7 +302,7 @@ function App() {
             <Route path="*" element={<PageNotFound />} />
           </Routes>
         </Suspense>
-        <ChatBot />
+        <PublicChatBot />
       </Router>
       <Toaster />
     </QueryClientProvider>
