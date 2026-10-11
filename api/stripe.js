@@ -1,0 +1,253 @@
+import crypto from 'crypto';
+import { setCors } from './_cors.js';
+import { rateLimit } from './_rateLimit.js';
+import { sanitize, sanitizeEmail } from './_sanitize.js';
+import { stripeRequest } from './_stripe.js';
+import { handleStripeEvent as handleSalesStripeEvent, stripeAllowed } from './_sales/payments.js';
+import { requireStaff } from './_auth.js';
+import { requireOrgAccess } from './_orgAccess.js';
+import { applyLegacyStripeEvent, loadInvoice, loadInvoiceClient, createInvoiceCheckout, createOnboardIntent } from './_legacyPayments.js';
+
+// Combined Stripe endpoint — actions: checkout-session, payment-intent,
+// verify-payment (?action=...), plus the raw-body webhook (auto-detected via
+// the stripe-signature header). bodyParser is disabled so the webhook can
+// verify the exact raw payload; JSON actions parse the raw body themselves.
+export const config = { api: { bodyParser: false } };
+
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+async function parseJsonBody(req) {
+  const rawBody = await readRawBody(req);
+  if (!rawBody.length) return {};
+  try { return JSON.parse(rawBody.toString('utf8')); } catch { return {}; }
+}
+
+function verifyStripeSignature(rawBody, sigHeader, secret) {
+  if (!sigHeader) return false;
+  const parts = Object.fromEntries(sigHeader.split(',').map((p) => p.split('=')));
+  const timestamp = parts.t;
+  const signature = parts.v1;
+  if (!timestamp || !signature) return false;
+  // Replay protection: reject events signed more than 5 minutes ago (Stripe's recommended tolerance).
+  if (!Number.isFinite(Number(timestamp)) || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  const signedPayload = `${timestamp}.${rawBody.toString('utf8')}`;
+  const expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  } catch {
+    return false;
+  }
+}
+
+async function handleWebhook(req, res, rawBody) {
+  const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  // 2026-09-20 security fix: this used to skip verification entirely when the secret was unset
+  // and still process the event — meaning anyone who knew (or guessed) an invoice_id/client_id
+  // could POST a forged checkout.session.completed body and get it marked Paid for free, no
+  // Stripe involvement required. Absent credentials must fail safely (reject), not fail open.
+  if (!WEBHOOK_SECRET) {
+    console.error('[stripe webhook] STRIPE_WEBHOOK_SECRET not set — rejecting unverifiable webhook');
+    return res.status(503).json({ error: 'Webhook verification is not configured.' });
+  }
+  const ok = verifyStripeSignature(rawBody, req.headers['stripe-signature'], WEBHOOK_SECRET);
+  if (!ok) return res.status(400).json({ error: 'Invalid signature' });
+
+  let event;
+  try {
+    event = JSON.parse(rawBody.toString('utf8'));
+  } catch {
+    return res.status(400).json({ error: 'Invalid JSON payload' });
+  }
+
+  console.log('[stripe webhook] Event:', event.type);
+
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    // Never acknowledge a payment we could not record — Stripe retries a non-2xx response.
+    console.error('[stripe webhook] Supabase not configured — asking Stripe to retry');
+    return res.status(503).json({ error: 'Not ready; please retry.' });
+  }
+
+  // Sales Team platform: client payments, refunds/disputes and representative payout callbacks. Idempotent per event id;
+  // a processing error answers 500 so Stripe retries instead of silently losing a payment confirmation.
+  const sales = await handleSalesStripeEvent(event);
+  if (sales.error) return res.status(500).json({ error: 'Processing failed; please retry.' });
+  // The Sales Team handler records every checkout/payment_intent event id before acting; a repeat
+  // delivery of an already-processed event must not re-apply anything (F-05).
+  if (sales.duplicate) return res.status(200).json({ received: true, duplicate: true });
+
+  try {
+    const out = await applyLegacyStripeEvent(event);
+    if (out.applied || out.reason) console.log('[stripe webhook] legacy:', out.reason);
+  } catch (err) {
+    console.error('[stripe webhook] Legacy processing error:', err.message);
+    // The event id was already recorded as handled above; mark it failed so Stripe's retry is processed
+    // instead of being answered as a duplicate (otherwise a transient error would lose the payment).
+    await fetch(`${SUPABASE_URL}/rest/v1/sales_provider_events?provider=eq.stripe&event_id=eq.${encodeURIComponent(String(event.id || ''))}`, {
+      method: 'PATCH', headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'failed', error: 'legacy processing error; awaiting retry' }),
+    }).catch(() => {});
+    return res.status(500).json({ error: 'Processing failed; please retry.' });
+  }
+  return res.status(200).json({ received: true });
+}
+
+// Staff-only: a Checkout link for a STORED invoice. The amount, currency, customer and redirect
+// URLs all come from the server; the caller only names an invoice in an organization where they
+// hold admin.view (F-05). Browser-supplied amounts/URLs are ignored.
+async function handleCheckoutSession(req, res, b) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 10, 60_000)) return;
+  if (!(await requireStaff(req, res, 'admin.view'))) return;
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
+  const inv = await loadInvoice(sanitize(b.invoice_id, 100), orgId);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found in this organization' });
+  try {
+    const out = await createInvoiceCheckout(inv, await loadInvoiceClient(inv));
+    if (out.error) return res.status(out.status || 409).json({ error: out.error });
+    return res.status(200).json({ url: out.url, id: out.id, amount_cents: out.amount_cents });
+  } catch (err) {
+    console.error('[stripe checkout-session] Error:', err.message);
+    return res.status(502).json({ error: 'Failed to create checkout session' });
+  }
+}
+
+// /onboard: payment intent for a pending client saved by api/intake.js save-client. The amount is
+// the stored plan's published price (api/_onboardTiers.js); the caller only supplies client_id.
+async function handlePaymentIntent(req, res, b) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 10, 60_000)) return;
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Payment is not available right now' });
+  const clientId = sanitize(b.client_id, 100);
+  if (!clientId) return res.status(400).json({ error: 'client_id is required' });
+  try {
+    const out = await createOnboardIntent(clientId);
+    if (out.error) return res.status(out.status || 409).json({ error: out.error });
+    return res.status(200).json({ client_secret: out.client_secret, payment_intent_id: out.payment_intent_id });
+  } catch (err) {
+    console.error('[stripe payment-intent] Error:', err.message);
+    return res.status(502).json({ error: 'Failed to create payment intent' });
+  }
+}
+
+// Used by the /intake business-intake form's final step — collects a card via
+// Stripe Elements and saves it for future off-session charging without
+// charging anything now (zero-amount SetupIntent).
+async function handleSetupIntent(req, res, b) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 10, 60_000)) return;
+
+  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+  if (!STRIPE_SECRET_KEY) {
+    return res.status(500).json({ error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY to enable payments.' });
+  }
+  const allowed = stripeAllowed();
+  if (!allowed.ok) return res.status(409).json({ error: allowed.reason });
+
+  const email = sanitizeEmail(b.email || '');
+  const name = sanitize(b.name, 200);
+  const payment_method_id = sanitize(b.payment_method_id, 100);
+  if (!payment_method_id) return res.status(400).json({ error: 'payment_method_id is required' });
+
+  try {
+    const customer = await stripeRequest(STRIPE_SECRET_KEY, 'POST', 'customers', {
+      email: email || undefined,
+      name: name || undefined,
+      payment_method: payment_method_id,
+    });
+
+    const setupIntent = await stripeRequest(STRIPE_SECRET_KEY, 'POST', 'setup_intents', {
+      customer: customer.id,
+      payment_method: payment_method_id,
+      confirm: 'true',
+      'payment_method_types[0]': 'card',
+      usage: 'off_session',
+    });
+
+    if (setupIntent.status !== 'succeeded') {
+      return res.status(200).json({
+        ok: false,
+        requires_action: setupIntent.status === 'requires_action',
+        client_secret: setupIntent.client_secret,
+        status: setupIntent.status,
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      customer_id: customer.id,
+      payment_method_id,
+      setup_intent_id: setupIntent.id,
+    });
+  } catch (err) {
+    console.error('[stripe setup-intent] Error:', err.message);
+    return res.status(500).json({ error: err.message || 'Failed to save payment method' });
+  }
+}
+
+async function handleVerifyPayment(req, res, b) {
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 20, 60_000)) return;
+
+  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+  if (!STRIPE_SECRET_KEY) return res.status(500).json({ error: 'Stripe is not configured' });
+
+  const session_id = sanitize(req.query?.session_id || b.session_id, 200);
+  if (!session_id) return res.status(400).json({ error: 'session_id is required' });
+
+  try {
+    const session = await stripeRequest(STRIPE_SECRET_KEY, 'GET', `checkout/sessions/${encodeURIComponent(session_id)}`);
+    return res.status(200).json({
+      payment_status: session.payment_status,
+      customer_email: session.customer_details?.email || session.customer_email,
+      amount_total: session.amount_total ? session.amount_total / 100 : null,
+      metadata: session.metadata || {},
+    });
+  } catch (err) {
+    console.error('[stripe verify-payment] Error:', err.message);
+    return res.status(500).json({ error: err.message || 'Failed to verify payment' });
+  }
+}
+
+export default async function handler(req, res) {
+  // Stripe calls this directly (server-to-server) with a signature header —
+  // route it to the webhook handler before anything else touches the body.
+  if (req.headers['stripe-signature']) {
+    const rawBody = await readRawBody(req);
+    return handleWebhook(req, res, rawBody);
+  }
+  // Resend delivery callbacks (Svix-signed): updates the Sales Team email delivery ledger. Shares this raw-body function so the
+  // project stays within the 12-function limit.
+  if (req.headers['svix-signature']) {
+    const rawBody = await readRawBody(req);
+    const secret = process.env.RESEND_WEBHOOK_SECRET;
+    if (!secret) return res.status(503).json({ error: 'Webhook verification is not configured.' });
+    const { verifySvix, handleResendEvent } = await import('./_sales/notifications.js');
+    if (!verifySvix(req.headers, rawBody, secret)) return res.status(400).json({ error: 'Invalid signature' });
+    let event; try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).json({ error: 'Invalid JSON payload' }); }
+    try { await handleResendEvent(event); } catch (err) { console.error('[resend webhook] processing failed:', err.message); return res.status(500).json({ error: 'Processing failed; please retry.' }); }
+    return res.status(200).json({ received: true });
+  }
+
+  if (setCors(req, res)) return;
+
+  const action = typeof req.query?.action === 'string' ? req.query.action : '';
+  const b = req.method === 'POST' ? await parseJsonBody(req) : {};
+
+  if (action === 'checkout-session') return handleCheckoutSession(req, res, b);
+  if (action === 'payment-intent') return handlePaymentIntent(req, res, b);
+  if (action === 'setup-intent') return handleSetupIntent(req, res, b);
+  if (action === 'verify-payment') return handleVerifyPayment(req, res, b);
+
+  return res.status(400).json({ error: `Unknown action: ${action}` });
+}

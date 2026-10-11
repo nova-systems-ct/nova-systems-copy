@@ -1,0 +1,294 @@
+// Nova's durable background worker — the always-on process described in
+// docs/RUNTIME_HOSTING_RECOMMENDATION.md. Polls the jobs table (supabase/durable-jobs-migration-
+// standalone.sql) and executes whatever handler is registered for each job's job_type.
+//
+// Two runnable modes, picked automatically (override with --local):
+//   - Postgres mode (default when SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are set): real
+//     production behavior, safe concurrent leasing via the claim_next_job() SQL function.
+//   - Local mode (--local, or automatic when those env vars are absent): a JSON-file-backed store
+//     at .data/jobs.local.json — genuinely runnable on this machine right now, with real
+//     persistence across restarts, no external service required.
+//
+// Usage:
+//   node worker/index.mjs               # poll forever (Ctrl+C to stop)
+//   node worker/index.mjs --once        # claim and process at most one job, then exit
+//   node worker/index.mjs --local       # force the local file store even if Supabase env vars exist
+//   node worker/index.mjs --enqueue-sales-maintenance  # start the self-rescheduling Sales Team maintenance loop
+//   node worker/index.mjs --enqueue-demo  # enqueue one demo marketing_publish job, for a real
+//                                          end-to-end local smoke test
+//   node worker/index.mjs --cancel=<job-id> [--reason="..."]  # cancel a pending/leased job —
+//                                          terminal, never reclaimed after (see
+//                                          scripts/unit_job_queue_correctness_test.mjs)
+//
+// DELIVERY GUARANTEE: this queue is at-least-once, not exactly-once — a job whose worker crashes
+// after a real side effect but before calling complete() WILL be handed to another worker again.
+// Every handler registered below MUST be idempotent (check current state, treat "already done" as
+// a no-op) rather than assume single delivery. See marketing_publish for the pattern, and
+// scripts/unit_job_queue_correctness_test.mjs for the proof this pattern actually prevents a
+// duplicate side effect on redelivery.
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createLocalJobStore } from './localJobStore.mjs';
+import { createPostgresJobStore } from './postgresJobStore.mjs';
+import { fetchPublicPage } from '../api/_auditResearch.js';
+
+const args = process.argv.slice(2);
+const once = args.includes('--once');
+const forceLocal = args.includes('--local');
+const enqueueDemo = args.includes('--enqueue-demo');
+const enqueueSalesMaintenance = args.includes('--enqueue-sales-maintenance');
+const cancelId = args.find((a) => a.startsWith('--cancel='))?.split('=')[1];
+const cancelReason = args.find((a) => a.startsWith('--reason='))?.split('=').slice(1).join('=');
+const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS) || 5000;
+const WORKER_ID = process.env.WORKER_ID || `worker-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+
+// Security repair 2026-09-30 (audit F-21): the worker no longer reads .env.local (which holds the
+// PRODUCTION service-role key on developer machines). Credentials come only from the process
+// environment, and a non-local database is used only when NOVA_WORKER_TARGET_REF names that exact
+// Supabase project — a deliberate, per-deployment statement of intent. Anything else fails closed.
+export function workerTarget(env = process.env) {
+  const url = env.SUPABASE_URL || '';
+  if (!url || !env.SUPABASE_SERVICE_ROLE_KEY) return { ok: false, reason: 'no database credentials in the process environment' };
+  let host; try { host = new URL(url).hostname; } catch { return { ok: false, reason: 'SUPABASE_URL is not a valid URL' }; }
+  if (host === '127.0.0.1' || host === 'localhost' || host === '::1') return { ok: true, kind: 'local' };
+  const ref = host.endsWith('.supabase.co') ? host.split('.')[0] : null;
+  if (!ref) return { ok: false, reason: `unrecognised database host ${host}` };
+  if (env.NOVA_WORKER_TARGET_REF !== ref) return { ok: false, reason: `refusing Supabase project ${ref}: set NOVA_WORKER_TARGET_REF=${ref} on the host that is meant to process that project's jobs` };
+  return { ok: true, kind: 'remote', ref };
+}
+
+function buildStore() {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!forceLocal && (SUPABASE_URL || SERVICE_KEY)) {
+    const t = workerTarget();
+    if (!t.ok) throw new Error(`[worker] Postgres mode refused — ${t.reason}. Use --local for the offline file store.`);
+    console.log(`[worker] Postgres mode — ${t.kind === 'local' ? 'local test database' : `Supabase project ${t.ref}`}`);
+    return { store: createPostgresJobStore({ url: SUPABASE_URL, serviceKey: SERVICE_KEY }), url: SUPABASE_URL, serviceKey: SERVICE_KEY, mode: 'postgres' };
+  }
+  console.log('[worker] Local mode — .data/jobs.local.json (no Supabase credentials found, or --local forced)');
+  return { store: createLocalJobStore(), url: null, serviceKey: null, mode: 'local' };
+}
+
+// ------------------------------------------------------------------------------- job handlers
+// Each handler receives (job, ctx) and must either return a result (job completes) or throw (job
+// retries with backoff, or moves to dead_letter once max_attempts is exhausted — see
+// worker/jobQueueEngine.mjs). Register new job types here as new durable work is built; the queue
+// itself never needs to change for a new job_type (see the migration's own header comment).
+const handlers = {
+  // §17: a blog post reaches its scheduled_at — this is what makes "Schedule" in Blog.jsx actually
+  // fire, instead of just recording intent nobody ever acts on. Direct Postgres write (same fields
+  // handleBlogAdmin's publish-now action sets) since the worker already holds the service-role key
+  // for job leasing — no need to hop back through the HTTP API for its own scheduled action.
+  async marketing_publish(job, ctx) {
+    if (ctx.mode !== 'postgres') {
+      return { skipped: true, reason: 'marketing_publish requires the real blog_posts table — nothing to do in local demo mode' };
+    }
+    const postId = job.payload?.post_id;
+    if (!postId) throw new Error('marketing_publish job is missing payload.post_id');
+    const headers = { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}`, 'Content-Type': 'application/json' };
+    const getRes = await fetch(`${ctx.url}/rest/v1/blog_posts?id=eq.${encodeURIComponent(postId)}&select=status`, { headers });
+    const [post] = getRes.ok ? await getRes.json() : [];
+    if (!post) throw new Error(`blog_posts row ${postId} not found`);
+    if (!['approved', 'scheduled'].includes(post.status)) {
+      // The post was pulled back to draft (request-changes) or already published by a manual
+      // "Publish Now" click after scheduling — either way, this stale job must not force it live.
+      return { skipped: true, reason: `post status is ${post.status}, no longer eligible for scheduled publish` };
+    }
+    const patchRes = await fetch(`${ctx.url}/rest/v1/blog_posts?id=eq.${encodeURIComponent(postId)}`, {
+      method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' },
+      body: JSON.stringify({ status: 'published', published: true, updated_at: new Date().toISOString() }),
+    });
+    if (!patchRes.ok) throw new Error(`Failed to publish post ${postId}: ${patchRes.status} ${await patchRes.text()}`);
+    const [published] = await patchRes.json();
+    return { published: true, post_id: published.id, slug: published.slug };
+  },
+
+  // §17 approved email sequences. Payload: {enrollment_id}. Re-reads live state every run (so an
+  // unsubscribe/reply/pause since enqueue always wins), asks the pure engine what to do, and is
+  // idempotent per step via the engine's key. DRY-RUN unless SEQUENCE_SEND_ENABLED=true — no real
+  // campaign email goes out from development or an unconfigured worker.
+  async email_sequence_step(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    const { decideNextAction, applyOutcome } = await import('./emailSequenceEngine.mjs');
+    const headers = { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}`, 'Content-Type': 'application/json' };
+    const get = async (path) => { const r = await fetch(`${ctx.url}/rest/v1/${path}`, { headers }); return r.ok ? r.json() : []; };
+    const [enrollment] = await get(`marketing_sequence_enrollments?id=eq.${encodeURIComponent(job.payload?.enrollment_id)}`);
+    if (!enrollment) throw new Error('enrollment not found');
+    const [sequence] = await get(`marketing_sequences?id=eq.${enrollment.sequence_id}`);
+    const [subscriber] = await get(`newsletter_subscribers?id=eq.${enrollment.subscriber_id}`);
+    const decision = decideNextAction({ enrollment, sequence, subscriber });
+    if (decision.action === 'wait' || decision.action === 'none') return decision;
+    let result = decision;
+    if (decision.action === 'send') {
+      const live = process.env.SEQUENCE_SEND_ENABLED === 'true' && process.env.RESEND_API_KEY;
+      if (live) {
+        const r = await fetch('https://api.resend.com/emails', {
+          method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': decision.idempotencyKey },
+          body: JSON.stringify({ from: process.env.SEQUENCE_FROM_ADDRESS, to: subscriber.email, subject: decision.step.subject, html: decision.step.body }),
+        });
+        if (!r.ok) throw new Error(`Resend rejected the send: ${r.status} ${await r.text()}`);
+        result = { ...decision, delivered: 'provider_accepted' };
+      } else {
+        result = { ...decision, delivered: 'dry_run' };
+      }
+    }
+    const next = applyOutcome(enrollment, decision);
+    await fetch(`${ctx.url}/rest/v1/marketing_sequence_enrollments?id=eq.${enrollment.id}`, {
+      method: 'PATCH', headers, body: JSON.stringify({ status: next.status, stopped_reason: next.stopped_reason || null, current_step: next.current_step, last_step_at: next.last_step_at || null }),
+    });
+    return result;
+  },
+
+  // Wave One missed-call follow-up. Payload: {contact_id, conversation_id, call_sid}. Eligibility is
+  // re-evaluated against LIVE state here; live SMS only when WAVE1_SEND_ENABLED=true (else a recorded dry run).
+  async wave1_missed_call_followup(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    const { runMissedCallFollowup, createTwilioSender } = await import('../api/_wave1Handlers.js');
+    const { createPostgrestRepo } = await import('../api/_wave1Repo.js');
+    const repo = createPostgrestRepo({ url: ctx.url, key: ctx.serviceKey });
+    return runMissedCallFollowup(job, repo, createTwilioSender(process.env), process.env);
+  },
+
+  // Sales Team platform maintenance: expires invitations/proposals/documents, promotes commissions whose hold-back ended, retries failed
+  // emails (never dry_run/blocked ones), and sends overdue-follow-up reminders. Every step is idempotent, so at-least-once delivery is
+  // safe. Re-enqueues itself for the next slot (idempotency key = slot) so one worker keeps it alive without a separate scheduler.
+  async sales_maintenance(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    process.env.SUPABASE_URL ||= ctx.url; process.env.SUPABASE_SERVICE_ROLE_KEY ||= ctx.serviceKey;
+    const { runSalesMaintenance } = await import('../api/_sales/notifications.js');
+    const result = await runSalesMaintenance();
+    const every = Number(job.payload?.every_minutes) || 15; const next = new Date(Date.now() + every * 60_000);
+    const slot = `${next.toISOString().slice(0, 13)}:${Math.floor(next.getUTCMinutes() / every)}`;
+    if (ctx.store) await ctx.store.enqueue({ job_type: 'sales_maintenance', payload: { every_minutes: every }, scheduled_at: next.toISOString(), idempotency_key: `sales_maintenance:${slot}` });
+    return result;
+  },
+
+  // A trivial handler kept only to give --enqueue-demo something real to run end-to-end in local
+  // mode without needing any live credentials.
+  async demo_echo(job) {
+    return { echoed: job.payload, at: new Date().toISOString() };
+  },
+
+  // Nova Hierarchy — real durable execution of a work item, via the SAME queue every other
+  // scheduled/background need shares (never a second queue). Payload: {work_item_id, worker_id, url}.
+  // Does genuinely real, non-fabricated work (an HTTP reachability check) — no AI call is made here;
+  // "durable worker execution" and "AI-authored output" are separate concerns, and this handler only
+  // ever proves the former. Emits real heartbeats, attaches real evidence/output, advances the work
+  // item to in_review. Idempotent: re-delivery after a crash just re-checks the same URL and
+  // re-advances a still-in_progress item — never double-applies to one already past in_progress.
+  async hierarchy_work_item_check(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    const { work_item_id: workItemId, worker_id: workerId, url } = job.payload || {};
+    if (!workItemId || !url) throw new Error('hierarchy_work_item_check job is missing work_item_id or url');
+    const headers = { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}`, 'Content-Type': 'application/json' };
+    const post = (path, body) => fetch(`${ctx.url}/rest/v1/${path}`, { method: 'POST', headers: { ...headers, Prefer: 'return=representation' }, body: JSON.stringify(body) });
+    const patch = (path, body) => fetch(`${ctx.url}/rest/v1/${path}`, { method: 'PATCH', headers, body: JSON.stringify(body) });
+    const get = async (path) => { const r = await fetch(`${ctx.url}/rest/v1/${path}`, { headers }); return r.ok ? r.json() : []; };
+
+    const [wi] = await get(`work_items?id=eq.${encodeURIComponent(workItemId)}&select=status`);
+    if (!wi) throw new Error(`work item ${workItemId} not found`);
+    if (wi.status !== 'in_progress') return { skipped: true, reason: `work item is ${wi.status}, not in_progress — nothing to do (already advanced, likely a redelivery)` };
+
+    if (workerId) await post('worker_heartbeats', { worker_id: workerId, work_item_id: workItemId, status: 'working', note: `Durable job ${job.id}: checking ${url}` });
+
+    // Same SSRF protections as the Nova Audit research fetch: http(s) only, no credentials, standard
+    // ports, no private/loopback/link-local targets, every redirect hop re-validated (audit follow-up).
+    const t0 = Date.now();
+    let httpStatus = null, ok = false, errMsg = null;
+    try {
+      const page = await fetchPublicPage(url, { timeoutMs: 10_000, ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}), ...(ctx.lookup ? { lookup: ctx.lookup } : {}) });
+      httpStatus = page.status; ok = true;
+    } catch (e) { errMsg = e.message; }
+    const ms = Date.now() - t0;
+
+    await post('work_item_evidence', { work_item_id: workItemId, source: url, observation: ok ? `HTTP ${httpStatus} in ${ms}ms, checked at ${new Date().toISOString()}` : `Request failed: ${errMsg}`, collected_by: null });
+    await post('work_item_outputs', { work_item_id: workItemId, content: { checked_url: url, http_status: httpStatus, response_time_ms: ms, ok, error: errMsg }, produced_by: null });
+    await patch(`work_items?id=eq.${encodeURIComponent(workItemId)}&status=eq.in_progress`, { status: 'in_review', updated_at: new Date().toISOString() });
+    await post('work_item_events', { work_item_id: workItemId, from_status: 'in_progress', to_status: 'in_review', changed_by: null, reason: `Durable job ${job.id} completed its real check and submitted for review.` });
+    if (workerId) await post('worker_heartbeats', { worker_id: workerId, work_item_id: workItemId, status: 'idle', note: 'Check complete, awaiting review.' });
+
+    return { checked_url: url, http_status: httpStatus, response_time_ms: ms, ok };
+  },
+};
+
+async function processOneJob(store, ctx) {
+  const job = await store.claimNext({ workerId: WORKER_ID, leaseSeconds: 60 });
+  if (!job) return false;
+  console.log(`[worker] claimed job ${job.id} (${job.job_type}), attempt ${job.attempts}/${job.max_attempts}`);
+  const handler = handlers[job.job_type];
+  if (!handler) {
+    await store.fail(job.id, new Error(`No handler registered for job_type '${job.job_type}'`));
+    console.error(`[worker] no handler for job_type '${job.job_type}' — marked for retry/dead-letter`);
+    return true;
+  }
+  try {
+    const result = await handler(job, ctx);
+    await store.complete(job.id, result);
+    console.log(`[worker] completed job ${job.id}:`, JSON.stringify(result));
+  } catch (err) {
+    const after = await store.fail(job.id, err);
+    console.error(`[worker] job ${job.id} failed: ${err.message} — now ${after?.status || 'unknown'}`);
+  }
+  return true;
+}
+
+async function main() {
+  const { store, url, serviceKey, mode } = buildStore();
+  const ctx = { url, serviceKey, mode, store };
+
+  if (enqueueDemo) {
+    const { job, deduped } = await store.enqueue({ job_type: 'demo_echo', payload: { hello: 'nova', at: new Date().toISOString() } });
+    console.log(deduped ? '[worker] demo job already existed (deduped)' : `[worker] enqueued demo job ${job.id}`);
+  }
+
+  if (enqueueSalesMaintenance) {
+    const slot = new Date().toISOString().slice(0, 13);
+    const { job, deduped } = await store.enqueue({ job_type: 'sales_maintenance', payload: { every_minutes: 15 }, idempotency_key: `sales_maintenance:boot:${slot}` });
+    console.log(deduped ? '[worker] sales_maintenance already enqueued for this hour' : `[worker] enqueued sales_maintenance job ${job.id} (it re-enqueues itself every 15 minutes)`);
+  }
+
+  if (cancelId) {
+    const result = await store.cancel(cancelId, cancelReason);
+    if (result?.error) console.error(`[worker] cancel failed: ${result.error}`);
+    else console.log(`[worker] cancelled job ${cancelId}`);
+    return;
+  }
+
+  if (once) {
+    const did = await processOneJob(store, ctx);
+    console.log(did ? '[worker] processed one job, exiting (--once)' : '[worker] no eligible job found, exiting (--once)');
+    return;
+  }
+
+  console.log(`[worker] ${WORKER_ID} polling every ${POLL_INTERVAL_MS}ms — Ctrl+C to stop`);
+  let running = true;
+  process.on('SIGINT', () => { console.log('\n[worker] shutting down...'); running = false; });
+  process.on('SIGTERM', () => { running = false; });
+
+  while (running) {
+    try {
+      const did = await processOneJob(store, ctx);
+      if (!did) await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    } catch (err) {
+      console.error('[worker] poll loop error:', err.message);
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+  }
+}
+
+// Export for tests (e.g. scripts/e2e_hierarchy_durable_worker_test.mjs, which imports `handlers`
+// and `buildStore` directly rather than spawning this file as a child process — a real OS
+// subprocess making outbound fetch() calls was found to hang indefinitely in this sandbox, a
+// sandbox networking constraint on nested child processes, not a defect in this code; see
+// docs/NOVA_HIERARCHY_BUILD_STATE.md). Only run main() when this file is executed directly.
+export { handlers, buildStore, processOneJob };
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  main().catch((err) => {
+    console.error('[worker] FATAL:', err);
+    process.exit(1);
+  });
+}

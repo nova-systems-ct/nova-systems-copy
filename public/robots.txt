@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /api/
+Disallow: /applicant-login
+Disallow: /application-status
+Disallow: /employee-dashboard
+Disallow: /set-password
+Allow: /
+
+Sitemap: https://nova-systems.app/sitemap.xml
