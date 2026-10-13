@@ -12,16 +12,16 @@ Passing these tests is not Supabase, Twilio or Stripe test-mode verification, an
 | Production verified | **no** |
 
 ## Clean-checkout verification (§17)
-Export of commit `c2274e4` (`git archive`) into `C:\Users\NVUBCrosbyUBMS07\nova-clean-check-c2274e4`, then:
+Export of the final commit `44a62af` (`git archive`, no `.git`, no env files) into `C:\Users\NVUBCrosbyUBMS07\nova-clean-check-44a62af`, then:
 
 | Step | Command | Result |
 |---|---|---|
-| Lockfile install | `npm ci` | CC_NPMCI |
-| Build | `npm run build` | CC_BUILD |
-| Lint | `npm run lint` | CC_LINT |
-| Unit + schema checks | `node scripts/verify_local_all.mjs` | CC_LOCAL |
-| All integration/e2e suites incl. browser | `node scripts/verify_sales_team_e2e.mjs` | CC_E2E |
-| Secrets in tracked files | pattern scan (Stripe/Twilio/Resend/Anthropic/AWS keys, JWTs, private keys) | CC_SECRETS |
+| Lockfile install | `npm ci` | pass |
+| Build | `npm run build` | pass |
+| Lint | `npm run lint` | pass (0 errors) |
+| Unit + schema checks | `node scripts/verify_local_all.mjs` | 24/24 suites PASS (incl. lockdown check) |
+| All integration/e2e suites incl. browser | `node scripts/verify_sales_team_e2e.mjs` | **27 PASS, 0 FAIL, 2 TIMEOUT** (1,355 checks passed). `e2e_ops_harvest_test` and `e2e_hierarchy_meetings_test` printed nothing before the 420 s limit; re-run alone in the same checkout they passed 20/20 and 25/25 in about 20 s each. **The aggregate run is not a clean pass** — see "Aggregate-run instability". |
+| Secrets in tracked files | pattern scan (Stripe/Twilio/Resend/Anthropic/AWS keys, JWTs, private keys) | 0 matches |
 | Secrets in browser bundle | same patterns + `service_role` over `dist/` (199 files) | none found |
 | Env files tracked | `git ls-files` for `.env*` | only `.env.example` |
 
@@ -69,4 +69,15 @@ Screenshots: `docs/acceptance-screenshots/01-businesses.png` … `11-audit-scena
 ## Known issue during the full regression
 In the 2026-10-12 full run, `e2e_ops_browser_test` exited with Windows code 0xC0000409 (a crash inside the
 browser process) before printing a result; it is recorded as FAIL for that run. Re-run alone: 30/30 passed.
-CC_BROWSER_NOTE
+
+## Aggregate-run instability (unresolved)
+Three full aggregate runs on this computer each had one or two suites stall or crash — **a different suite each time**:
+- 2026-10-12 (working copy): `e2e_ops_browser_test` crashed inside Chromium (0xC0000409).
+- 2026-10-13 (`c2274e4` export): `e2e_sales_pipeline_catalog_test` began receiving 401 from the local auth stand-in partway through, crashed, then hung. Re-run alone three times: 92/92 each time.
+- 2026-10-13 (`44a62af` export): `e2e_ops_harvest_test` and `e2e_hierarchy_meetings_test` stalled with no output; stopping them took 63 and 32 minutes instead of seconds. Re-run alone: pass.
+
+Every suite passes alone and the stalls move between suites, which points at the local test environment (embedded
+PostgreSQL on Windows across ~30 sequential suites, or the computer sleeping) rather than product code. That is a working
+explanation, not a proven root cause. Mitigation in `44a62af`: every e2e suite force-exits after printing its result, so a
+crash no longer hangs until the timeout. Next step: run the aggregate on a machine that cannot sleep (or in CI) and capture
+the auth stand-in's log at the first 401.

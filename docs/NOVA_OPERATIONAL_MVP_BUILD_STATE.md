@@ -37,6 +37,6 @@ Nothing has been pushed, deployed, or applied to any production or staging datab
 - The 10 product modules marked "not started" in `docs/requirement-matrix.md` outside this MVP's scope (Crystal, Zion Studio, Integration Center, etc.).
 
 ## Known defects / risks
-- `e2e_ops_browser_test` crashed once inside Chromium (Windows exit 0xC0000409) during the full regression; re-run alone passed 30/30. Treat as an intermittent browser-process crash; re-run if seen.
+- Full aggregate e2e runs are not yet clean on this computer: one or two suites stall or crash per run, a different suite each time; every suite passes alone. See `NOVA_OPERATIONAL_MVP_ACCEPTANCE.md` → "Aggregate-run instability".
 - The unexplained pushes to GitHub on the original repository are unresolved (see owner actions).
 - `public/logo.png` is 256 px — too small for the printed brochure cover.
