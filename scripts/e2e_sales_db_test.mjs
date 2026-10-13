@@ -90,3 +90,6 @@ try {
 } finally { await env.stop(); }
 console.log(`\n${pass} passed, ${fail} failed — sales-team database checks (real PostgreSQL + PostgREST, local, disposable — not Supabase, not production)`);
 process.exitCode = fail ? 1 : 0;
+// Force-exit once results are printed: embedded-postgres child pipes on Windows can otherwise keep a finished
+// (or crashed) suite alive until the aggregate runner's timeout (seen 2026-10-13 in a clean-checkout run).
+process.exit(process.exitCode ?? 0);

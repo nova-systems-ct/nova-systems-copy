@@ -140,3 +140,6 @@ try {
 finally { await env.stop(); await prov.stop(); }
 console.log(`\n${pass} passed, ${fail} failed — Nova Sentry, AI voice receptionist and weekly scheduler (real handlers + worker + local PostgreSQL; providers are local stand-ins: "simulated provider")`);
 process.exitCode = fail ? 1 : 0;
+// Force-exit once results are printed: embedded-postgres child pipes on Windows can otherwise keep a finished
+// (or crashed) suite alive until the aggregate runner's timeout (seen 2026-10-13 in a clean-checkout run).
+process.exit(process.exitCode ?? 0);

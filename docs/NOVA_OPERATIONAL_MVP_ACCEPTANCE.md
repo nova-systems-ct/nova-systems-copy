@@ -1,0 +1,72 @@
+# Nova Operational MVP — acceptance evidence (2026-10-13)
+
+**Scope of every result below: local only.** Real local PostgreSQL (embedded) + PostgREST, the real API handlers,
+the real worker and a real Chromium browser. Supabase Auth/Storage, Twilio, Stripe and Resend are **local stand-ins**.
+Passing these tests is not Supabase, Twilio or Stripe test-mode verification, and not deployment verification.
+
+| Level | Result |
+|---|---|
+| Built | yes — all pillars and screens below |
+| Locally tested | yes — results below |
+| Real staging provider verified | **no** — no staging project exists (owner action 6) |
+| Production verified | **no** |
+
+## Clean-checkout verification (§17)
+Export of commit `c2274e4` (`git archive`) into `C:\Users\NVUBCrosbyUBMS07\nova-clean-check-c2274e4`, then:
+
+| Step | Command | Result |
+|---|---|---|
+| Lockfile install | `npm ci` | CC_NPMCI |
+| Build | `npm run build` | CC_BUILD |
+| Lint | `npm run lint` | CC_LINT |
+| Unit + schema checks | `node scripts/verify_local_all.mjs` | CC_LOCAL |
+| All integration/e2e suites incl. browser | `node scripts/verify_sales_team_e2e.mjs` | CC_E2E |
+| Secrets in tracked files | pattern scan (Stripe/Twilio/Resend/Anthropic/AWS keys, JWTs, private keys) | CC_SECRETS |
+| Secrets in browser bundle | same patterns + `service_role` over `dist/` (199 files) | none found |
+| Env files tracked | `git ls-files` for `.env*` | only `.env.example` |
+
+## Journeys (§16)
+| | Requirement | Evidence (suite → checks) |
+|---|---|---|
+| **A** | Audit: isolated test business, public/authorized evidence, findings, labeled scenarios, report, exact-version approval, PDF download, secure delivery, client sees only the approved report | `e2e_audit_report_delivery_test` (30), `e2e_audit_engine_test` (30), browser screens 10–11 |
+| **B** | Core: form and SMS inquiry → reply → qualification → deterministic price → availability → hold/booking → exact-terms signature → Stripe test checkout → verified webhook → one order + fulfillment task → owner/client screens | `e2e_ops_core_journey_test` (67 + live-key check), `e2e_ops_browser_test` (30); voice tested separately in `e2e_ops_sentry_voice_test` (36) — the form test does not prove voice |
+| **C** | Harvest: missed call → eligible follow-up → reply → booking; mixed-permission import; only approved eligible records; suppressed blocked; opt-out after enqueue sends nothing; neutral review/referral; truthful outcome | `e2e_ops_harvest_test` (20), `e2e_ops_core_journey_test` (follow-up/referral) |
+| **D** | Sentry: stop worker → incident → alert (stand-in email) → recover → queue resumes without duplicates; weekly report from persisted events, reconciled; Sunday 18:00 across DST | `e2e_ops_sentry_voice_test` (36), `unit_ops_rules_test` (56), core test reconciliation check |
+
+## Security and failure cases (§16 E)
+| Case | Proven in |
+|---|---|
+| Anonymous cannot read private records | `e2e_security_personas_test`, `e2e_schema_lockdown_test` (48), `e2e_ops_core_journey_test` |
+| Client A cannot access client B | `e2e_ops_core_journey_test` (isolation section), `e2e_security_personas_test`, `e2e_audit_report_delivery_test` |
+| Rep cannot read unassigned/private client data | `e2e_security_personas_test`, `e2e_sales_pipeline_catalog_test` |
+| User cannot promote themselves | `e2e_ops_core_journey_test`, `e2e_security_personas_test` |
+| Suspended user cannot continue protected actions | `e2e_hierarchy_registry_test`, `e2e_sales_documents_activation_test`, `e2e_sales_journeys_test` |
+| Forged Twilio/Stripe callback rejected | `e2e_ops_core_journey_test`, `e2e_ops_sentry_voice_test`, `e2e_security_personas_test` |
+| Missing webhook configuration fails closed | `e2e_ops_core_journey_test` (Stripe secret and Twilio token removed → callbacks refused, nothing changes), `unit_wave1_api_test` (preflight flags it) |
+| Duplicate callback cannot duplicate booking/order/payment | `e2e_ops_core_journey_test`, `e2e_ops_harvest_test`, `e2e_security_personas_test` |
+| Failed processing remains retryable | `e2e_ops_sentry_voice_test` (crash → re-run, no duplicate), `e2e_security_personas_test` |
+| Customer/model cannot invent a price | `unit_ops_rules_test`, `e2e_ops_core_journey_test` (discount request) |
+| Prompt injection cannot invoke unauthorized tools | `unit_ops_rules_test`, `e2e_ops_core_journey_test` |
+| Two simultaneous customers cannot take one slot | `e2e_ops_core_journey_test` (database exclusion constraint; one wins) |
+| Provider timeout does not become success | `e2e_ops_core_journey_test` |
+| Opt-out blocks queued sends | `e2e_ops_harvest_test`, `e2e_ops_core_journey_test` |
+| No permanent private-document URLs | `e2e_ops_core_journey_test` (5-minute signed link), `e2e_security_personas_test` |
+| Missing consent blocks reactivation | `e2e_ops_harvest_test` |
+| Live payment gate blocks live keys | `e2e_ops_core_journey_test` (live key refused before any checkout; live-mode event ignored), `e2e_sales_commissions_test` |
+| Dashboard URL does not bypass login | `e2e_ops_browser_test` (deep link → login; sign-out blocks dashboard) |
+| Recovery link cannot be reused | `e2e_ops_browser_test` |
+| Audit fetch rejects private/internal addresses | `unit_audit_rules_test` |
+| Report changes invalidate old approval | `e2e_audit_report_delivery_test` |
+| Report totals do not double-count | `unit_ops_rules_test`, `e2e_audit_report_delivery_test` |
+| Kill switch prevents new side effects | `e2e_ops_core_journey_test` |
+
+## Browser checks and screenshots (§17)
+`e2e_ops_browser_test` drives real screens at desktop and phone sizes: sign-in, deep link, refresh, sign-out,
+access denial, empty states, owner workspace, customer signing/deposit page on a phone, weekly report, monitoring,
+client audit report on a phone. Every record shown is a labeled Nova TEST record.
+Screenshots: `docs/acceptance-screenshots/01-businesses.png` … `11-audit-scenarios.png`.
+
+## Known issue during the full regression
+In the 2026-10-12 full run, `e2e_ops_browser_test` exited with Windows code 0xC0000409 (a crash inside the
+browser process) before printing a result; it is recorded as FAIL for that run. Re-run alone: 30/30 passed.
+CC_BROWSER_NOTE

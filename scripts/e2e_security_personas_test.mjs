@@ -280,3 +280,6 @@ try {
 finally { await env.stop(); }
 console.log(`\n${pass} passed, ${fail} failed — security persona checks (real handlers + real local PostgreSQL/PostgREST; auth/storage/email are stand-ins; Stripe never contacted)`);
 process.exitCode = fail ? 1 : 0;
+// Force-exit once results are printed: embedded-postgres child pipes on Windows can otherwise keep a finished
+// (or crashed) suite alive until the aggregate runner's timeout (seen 2026-10-13 in a clean-checkout run).
+process.exit(process.exitCode ?? 0);

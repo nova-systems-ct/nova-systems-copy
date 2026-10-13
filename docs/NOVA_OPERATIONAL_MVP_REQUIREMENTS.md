@@ -49,6 +49,6 @@ Nothing here is staging- or production-verified.
 | §16 | Acceptance A–E | see `NOVA_OPERATIONAL_MVP_ACCEPTANCE.md` | — | locally verified (with stand-ins) | Staging verification |
 | §17 | Clean checkout, build, lint, regressions, browser, secrets scan | see acceptance doc | — | locally verified | — |
 | §18 | Installation sequence + readiness matrix | `NOVA_OPERATIONAL_MVP_INSTALLATION.md`, `..._READINESS.md` | — | prepared | Owner approvals |
-| §19 | Business cards + six-panel brochure proofs | `collateral/` | review PDFs | proofs prepared | Confirmed phone/email, printer specs |
-| §20 | Prospect lists A–D | `prospects/` | source URLs per row | see that folder's README for actual counts | — |
+| §19 | Business cards + six-panel brochure proofs | `collateral/` (HTML source, review + print-layout PDFs, `PREPRINT_CHECKLIST.md`) | rendered and visually checked | proofs prepared, not printed | Confirm title/phone/email/QR destination; vector logo; printer specs |
+| §20 | Prospect lists A–D | `prospects/` (XLSX + 4 CRM CSVs, playbook, source notes) | source URLs per row; CSVs pass the CRM's `validateProspect` | prepared: A 17, B 17, C 14, D 12 (targets 25/25/25/20; 21 more await verification) | Owner approval of lists and callers; DNC screening |
 | §21 | Sales preparation | `docs/NOVA_SALES_PLAYBOOK.md` | — | prepared | Salesperson classification/compensation |

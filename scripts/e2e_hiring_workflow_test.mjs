@@ -11,3 +11,6 @@
 // the real Supabase project via .env.local.
 console.log('e2e_hiring_workflow_test: retired — see scripts/e2e_jobs_hiring_test.mjs and scripts/e2e_sales_hiring_test.mjs');
 process.exitCode = 0;
+// Force-exit once results are printed: embedded-postgres child pipes on Windows can otherwise keep a finished
+// (or crashed) suite alive until the aggregate runner's timeout (seen 2026-10-13 in a clean-checkout run).
+process.exit(process.exitCode ?? 0);

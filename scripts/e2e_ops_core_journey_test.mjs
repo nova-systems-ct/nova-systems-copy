@@ -169,6 +169,11 @@ try {
   r = await client({ resource: 'ops', op: 'customer-agreement-pdf', method: 'GET', query: { token } });
   const pdf = r.body?.url ? await fetch(r.body.url) : null;
   check('the signed copy downloads through a 5-minute link only', r.status === 200 && r.body.expires_in === 300 && pdf?.status === 200 && (await pdf.text()).startsWith('%PDF'));
+  process.env.STRIPE_SECRET_KEY = 'sk_live_not_a_real_key';
+  const sessionsBefore = stripeReqs.filter((x) => x.url.endsWith('/checkout/sessions')).length;
+  r = await cust('customer-deposit', { token });
+  check('a live Stripe key is refused before any checkout is created', r.status === 409 && stripeReqs.filter((x) => x.url.endsWith('/checkout/sessions')).length === sessionsBefore && !(await one('select id from ops_deposits where job_id=$1', [job.id])), JSON.stringify(r.body));
+  process.env.STRIPE_SECRET_KEY = 'sk_test_ops_local_only';
   r = await cust('customer-deposit', { token });
   let dep = await one('select * from ops_deposits where job_id=$1', [job.id]);
   const sReq = stripeReqs.find((x) => x.url.endsWith('/checkout/sessions'));
@@ -179,6 +184,13 @@ try {
   // ================================================================ Stripe webhook
   const ev = (over = {}, obj = {}) => ({ id: `evt_ops_${crypto.randomBytes(4).toString('hex')}`, type: 'checkout.session.completed', livemode: false, ...over, data: { object: { id: dep.provider_session_id, payment_status: 'paid', amount_total: 5000, currency: 'usd', payment_intent: 'pi_test_ops_1', metadata: { ops_deposit_id: dep.id, organization_id: biz, job_id: job.id }, ...obj } } });
   check('a forged Stripe event is rejected', (await webhook(ev(), { secret: 'whsec_wrong' })).status === 400);
+  delete process.env.STRIPE_WEBHOOK_SECRET;
+  const noSecret = await webhook(ev());
+  process.env.STRIPE_WEBHOOK_SECRET = WH;
+  delete process.env.TWILIO_AUTH_TOKEN;
+  const smsNoToken = await sms(CUSTOMER, 'hello without a configured token');
+  process.env.TWILIO_AUTH_TOKEN = TW_TOKEN;
+  check('missing webhook configuration fails closed: Stripe and Twilio callbacks are refused and change nothing', noSecret.status >= 400 && smsNoToken.status >= 400 && (await one('select status from ops_deposits where id=$1', [dep.id])).status === 'checkout_open', JSON.stringify([noSecret.status, smsNoToken.status]));
   await webhook(ev({}, { amount_total: 100 }));
   check('a signed event for the wrong amount does not mark the deposit paid', (await one('select status from ops_deposits where id=$1', [dep.id])).status === 'checkout_open');
   await webhook(ev({ livemode: true }));
@@ -306,3 +318,6 @@ try {
 finally { setSenderForTests(null); await env.stop(); await new Promise((r) => stripeSrv.close(r)); }
 console.log(`\n${pass} passed, ${fail} failed — Nova Operations core journey (real handlers + worker + local PostgreSQL; SMS/Stripe are local stand-ins: "simulated provider")`);
 process.exitCode = fail ? 1 : 0;
+// Force-exit once results are printed: embedded-postgres child pipes on Windows can otherwise keep a finished
+// (or crashed) suite alive until the aggregate runner's timeout (seen 2026-10-13 in a clean-checkout run).
+process.exit(process.exitCode ?? 0);
