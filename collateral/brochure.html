@@ -1,0 +1,177 @@
+<!doctype html>
+<!--
+  Nova Systems six-panel tri-fold brochure — editable source.
+  US Letter landscape (11in x 8.5in trim), roll fold, 0.125in bleed (page = 11.25in x 8.75in).
+  Panel widths (trim): fold-in panel 3.6042in, the other two 3.6979in each (fold-in panel 1/16in narrower).
+    Outside, left→right: [fold-in flap] [back cover] [front cover]
+    Inside,  left→right: [inside 1] [inside 2] [inside 3 = back of flap, narrow]
+  Copy matches the website's four-pillar section and the product readiness matrix. No prices, no
+  testimonials, no results claims. Values marked data-confirm need Isaac's confirmation (PREPRINT_CHECKLIST.md).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nova Systems brochure</title>
+<style>
+  :root { --black:#0A0A0A; --white:#FAFAFA; --gold:#C9A84C; --muted:rgba(250,250,250,0.68); --bleed:0.125in; --safe:0.25in; }
+  @page { size: 11.25in 8.75in; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--black); font-family: "Helvetica Neue", Arial, sans-serif; color: var(--white); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sheet { position: relative; width: 11.25in; height: 8.75in; background: var(--black); display: flex; padding: var(--bleed); page-break-after: always; overflow: hidden; }
+  .panel { position: relative; height: 8.5in; padding: var(--safe) calc(var(--safe) + 0.05in); display: flex; flex-direction: column; }
+  .narrow { width: 3.6042in; } .wide { width: 3.6979in; }
+  /* bleed: first and last panels extend into the bleed visually via the sheet background */
+
+  h1 { font-size: 22pt; line-height: 1.12; font-weight: 800; }
+  h2 { font-size: 13pt; font-weight: 800; margin-bottom: 6pt; line-height: 1.2; }
+  .kicker { font-size: 6.5pt; letter-spacing: 0.3em; text-transform: uppercase; color: var(--gold); font-weight: 700; margin-bottom: 6pt; }
+  p, li { font-size: 8.6pt; line-height: 1.5; color: var(--muted); }
+  .note { font-size: 7.4pt; color: rgba(250,250,250,0.45); margin-top: 4pt; }
+  .block { margin-bottom: 16pt; }
+  .rule { width: 0.5in; height: 1.5px; background: var(--gold); margin: 10pt 0 14pt; }
+  ol { padding-left: 13pt; } ol li { margin-bottom: 7pt; } ol li::marker { color: var(--gold); font-weight: 700; }
+  .status { width: 100%; border-collapse: collapse; margin-top: 4pt; }
+  .status td { font-size: 7.6pt; padding: 4pt 0; border-bottom: 0.5pt solid rgba(250,250,250,0.12); vertical-align: top; color: var(--muted); }
+  .status td:last-child { text-align: right; white-space: nowrap; padding-left: 6pt; font-weight: 700; }
+  .ok { color: #7BD389 !important; } .pilot { color: var(--gold) !important; } .notlive { color: #F07167 !important; }
+  .contact p { font-size: 8.6pt; color: var(--white); line-height: 1.6; }
+  .qr { width: 1in; height: 1in; border: 1px dashed var(--gold); display: flex; align-items: center; justify-content: center; text-align: center; font-size: 6pt; color: var(--gold); padding: 4pt; margin-top: 10pt; }
+  .front { justify-content: space-between; }
+  .front img { mix-blend-mode: lighten; width: 1.9in; height: 1.9in; align-self: center; margin-top: 0.6in; }
+  .cta { display: inline-block; background: var(--gold); color: var(--black); font-weight: 800; font-size: 8pt; letter-spacing: 0.15em; text-transform: uppercase; padding: 7pt 12pt; margin-top: 8pt; }
+  .fine { font-size: 6.6pt; color: rgba(250,250,250,0.4); margin-top: auto; line-height: 1.45; }
+  .inside p, .inside li { font-size: 9.4pt; }
+  .inside h2 { font-size: 14pt; }
+  .inside p.kicker { font-size: 6.8pt; }
+  .inside p.note { font-size: 7.8pt; }
+  .inside .block { margin-bottom: 22pt; }
+  .goldbar { position: absolute; left: 0; right: 0; bottom: 0; height: 0.08in; background: var(--gold); }
+
+  /* Review mode: trim (pink), folds (green dashed), safe area (blue dashed), confirm markers (yellow) */
+  .review .sheet::before { content: ""; position: absolute; inset: var(--bleed); outline: 0.6pt solid #e0447a; z-index: 9; pointer-events: none; }
+  .review .panel::after { content: ""; position: absolute; inset: var(--safe); outline: 0.5pt dashed #3fa7ff; pointer-events: none; }
+  .review .panel + .panel { border-left: 0.6pt dashed #39d98a; }
+  .review [data-confirm] { background: rgba(255,214,0,0.18); outline: 0.5pt dotted #ffd600; }
+  .review .label { position: absolute; top: 2pt; left: 4pt; font-size: 6pt; color: #39d98a; z-index: 10; }
+  .print .label { display: none; }
+  .print .qr { border-style: solid; }
+</style>
+</head>
+<body>
+
+<!-- ============ OUTSIDE ============ -->
+<section class="sheet">
+  <div class="panel narrow">
+    <span class="label">OUTSIDE · fold-in flap</span>
+    <p class="kicker">Start here</p>
+    <h2>How a Nova Audit works</h2>
+    <div class="rule"></div>
+    <ol>
+      <li><strong style="color:var(--white)">You tell us what to look at.</strong> Your services, hours and how customers reach you.</li>
+      <li><strong style="color:var(--white)">We agree the timing.</strong> The 48–72 hour window starts only once your inputs are in and the plan is approved.</li>
+      <li><strong style="color:var(--white)">We review and, with your written permission, test.</strong> Public website and listings; calls and forms only where you authorize them. We never pose as a fake emergency.</li>
+      <li><strong style="color:var(--white)">You get a written report.</strong> What we observed is kept separate from what we estimate, and every number shows its source.</li>
+      <li><strong style="color:var(--white)">You decide.</strong> Each recommendation says whether Nova can implement it. Nothing changes without your approval.</li>
+    </ol>
+  </div>
+
+  <div class="panel wide">
+    <span class="label">OUTSIDE · back cover</span>
+    <p class="kicker">Straight answers</p>
+    <h2>What is available today</h2>
+    <table class="status">
+      <tr><td>Nova Audit — review and written report</td><td class="ok">Available</td></tr>
+      <tr><td>Text and web-form replies, booking, agreements</td><td class="pilot">Limited pilot</td></tr>
+      <tr><td>Deposits through Stripe-hosted checkout</td><td class="pilot">Limited pilot</td></tr>
+      <tr><td>Missed-call text-back and past-customer follow-up (with permission)</td><td class="pilot">Limited pilot</td></tr>
+      <tr><td>Monitoring and the Sunday report</td><td class="pilot">Limited pilot</td></tr>
+      <tr><td>AI phone receptionist</td><td class="notlive">Not live yet</td></tr>
+    </table>
+    <p class="note">Status as of this printing. Pricing is quoted per business after a conversation; it is not printed here.</p>
+    <div class="rule"></div>
+    <div class="contact">
+      <p class="kicker" style="margin-bottom:4pt">Contact</p>
+      <p data-confirm="phone">(203) 706-0504</p>
+      <p data-confirm="email">hello@nova-systems.app</p>
+      <p data-confirm="web — site currently disabled">nova-systems.app</p>
+      <p data-confirm="location">Waterbury, Connecticut</p>
+    </div>
+    <div class="qr" data-confirm="QR destination">QR PLACEHOLDER<br>destination not confirmed</div>
+    <p class="fine">Nova Systems LLC. Nova is an operations firm, not an advertising agency. We do not sell customer data.</p>
+  </div>
+
+  <div class="panel wide front">
+    <span class="label">OUTSIDE · front cover</span>
+    <img src="../public/logo.png" alt="Nova Systems">
+    <div>
+      <h1>From the first inquiry to a booked, paid job.</h1>
+      <div class="rule"></div>
+      <p>Operations for local service businesses: answer, book, follow up — and know it is working.</p>
+    </div>
+    <div class="goldbar"></div>
+  </div>
+</section>
+
+<!-- ============ INSIDE ============ -->
+<section class="sheet inside">
+  <div class="panel wide">
+    <span class="label">INSIDE · panel 1</span>
+    <p class="kicker">What Nova does</p>
+    <h2>Four parts, one job: fewer missed customers.</h2>
+    <div class="rule"></div>
+    <div class="block">
+      <p class="kicker">Nova Audit</p>
+      <h2>Find out what happens to your inquiries</h2>
+      <p>We review your public website, listings and contact paths and, with your written permission, test how calls and forms are answered. You get a report that separates what we observed from what we estimate, with the source of every number.</p>
+      <p class="note">Delivered within an agreed 48–72 hour window once your inputs are in.</p>
+    </div>
+    <div class="block">
+      <p class="kicker">Nova Core</p>
+      <h2>Answer, qualify and book — with your prices</h2>
+      <p>Customers who text or fill in your form get a prompt reply, choose a service from your approved price list, pick a real open time, sign your agreement and pay a deposit through Stripe. The assistant never invents prices or discounts.</p>
+      <p class="note">Anything unusual, upset or urgent goes to a person on your team.</p>
+    </div>
+  </div>
+
+  <div class="panel wide">
+    <span class="label">INSIDE · panel 2</span>
+    <div class="block" style="margin-top:0.55in">
+      <p class="kicker">Nova Harvest</p>
+      <h2>Follow up on the customers you already have</h2>
+      <p>A missed call can get one text back where the caller has given permission. Past customers who agreed to hear from you can be invited back, after you approve the list, the message and the schedule. Feedback requests are neutral and go to every customer.</p>
+      <p class="note">Opt-outs are honored immediately, including messages already queued.</p>
+    </div>
+    <div class="block">
+      <p class="kicker">Nova Sentry</p>
+      <h2>Know it is working — every week</h2>
+      <p>We monitor the system's health and alert a person when something fails. Every Sunday evening you get a short report of inquiries, bookings, signed agreements and confirmed deposits, built from recorded events.</p>
+      <p class="note">If something cannot be measured, the report says so instead of guessing.</p>
+    </div>
+    <div class="rule"></div>
+    <div class="block">
+      <p class="kicker">What we do not do</p>
+      <p>We do not run ads, buy contact lists, or text anyone who has not given permission. We never invent prices, reviews or results, and we do not change anything in your business without your approval.</p>
+    </div>
+  </div>
+
+  <div class="panel narrow">
+    <span class="label">INSIDE · panel 3 (back of flap)</span>
+    <p class="kicker">How we work</p>
+    <h2>A person is always in the loop</h2>
+    <p>When a customer is upset, asks for a person, needs a custom quote, or the system is unsure, the conversation goes to your team and automation pauses. The assistant does not handle emergencies or give medical or legal advice.</p>
+    <div class="rule"></div>
+    <h2>Your customers' data</h2>
+    <p>Each business's records are kept separate. Signed agreements open through short-lived private links. Card details are entered on Stripe's page, never given to Nova. We do not sell data.</p>
+    <div class="rule"></div>
+    <h2>Next step</h2>
+    <p>Ask for a Nova Audit. We will agree what to look at and when, before anything starts.</p>
+    <span class="cta">Request an audit</span>
+    <div class="qr" data-confirm="QR destination">QR PLACEHOLDER<br>destination not confirmed</div>
+  </div>
+</section>
+
+<script>
+  document.body.classList.add(new URLSearchParams(location.search).get("mode") === "print" ? "print" : "review");
+</script>
+</body>
+</html>
