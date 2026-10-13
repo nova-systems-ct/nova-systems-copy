@@ -128,7 +128,7 @@ function IntroScreen({ onBegin }) {
         </p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 32, alignItems: "center" }}>
-          {["Takes 30 to 60 minutes.", "Your progress saves automatically.", "Your information is 100% secure and confidential."].map((t) => (
+          {["Takes 30 to 60 minutes.", "Your progress saves automatically.", "Your information is kept private and shared only with the Nova team preparing your proposal."].map((t) => (
             <div key={t} style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: GOLD, flexShrink: 0 }} />
               <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>{t}</span>

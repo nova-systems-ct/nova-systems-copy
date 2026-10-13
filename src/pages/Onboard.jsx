@@ -75,9 +75,9 @@ const TIERS = [
   { id: "website-social", name: "Tier 3 — Website + Social Media", price: 2500, hasWebsite: true, hasSocial: true,
     services: ["Custom Website", "SEO Setup", "Social Media Management", "Content Calendar"] },
   { id: "full-ai", name: "Tier 4 — Full System + AI Agent", price: 3500, hasWebsite: true, hasSocial: true,
-    services: ["Custom Website", "SEO Setup", "Social Media Management", "AI Phone Agent", "CRM & Lead Tracking"] },
+    services: ["Custom Website", "SEO Setup", "Social Media Management", "AI Phone Agent (pilot — not live yet)", "CRM & Lead Tracking"] },
   { id: "everything", name: "Tier 5 — Everything", price: 5000, hasWebsite: true, hasSocial: true,
-    services: ["Custom Website", "SEO Setup", "Social Media Management", "AI Phone Agent", "CRM & Lead Tracking", "Content Creation", "Reputation Management", "Email & SMS Marketing"] },
+    services: ["Custom Website", "SEO Setup", "Social Media Management", "AI Phone Agent (pilot — not live yet)", "CRM & Lead Tracking", "Content Creation", "Reputation Management", "Email & SMS Marketing"] },
   { id: "partner", name: "Partner Program", price: 1000, hasWebsite: false, hasSocial: false,
     services: ["Revenue Intelligence Dashboard", "Priority Support", "Quarterly Strategy Session"] },
 ];

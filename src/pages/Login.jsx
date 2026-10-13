@@ -14,10 +14,10 @@ const GOLD_GRADIENT = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${G
 // used exactly as supplied (no re-encoding).
 
 const features = [
-  { icon: Bot, label: "AI ECOSYSTEMS", sub: "Automated workflows and phone agents, live." },
-  { icon: Globe, label: "WEB INFRASTRUCTURE", sub: "Sites, portals, and platforms built to convert." },
-  { icon: Palette, label: "BRAND AND IDENTITY", sub: "Every asset, from digital to physical." },
-  { icon: Workflow, label: "FULL OPERATIONS", sub: "CRM, contracts, and cloud infrastructure." },
+  { icon: Globe, label: "NOVA AUDIT", sub: "Evidence-based review of how inquiries are handled." },
+  { icon: Bot, label: "NOVA CORE", sub: "Inquiries to bookings, agreements and deposits." },
+  { icon: Palette, label: "NOVA HARVEST", sub: "Permission-based follow-up and reactivation." },
+  { icon: Workflow, label: "NOVA SENTRY", sub: "Monitoring and a weekly report from real events." },
 ];
 
 const inputStyle = {

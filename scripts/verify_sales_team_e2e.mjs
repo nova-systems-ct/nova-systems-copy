@@ -20,12 +20,13 @@ import { execFileSync } from 'node:child_process';
 const ALL = [
   'e2e_clean_install_test', 'e2e_production_patch_test', 'e2e_mvp_security_fix_test', 'e2e_org_membership_read_test', 'e2e_schema_lockdown_test',
   'e2e_security_personas_test',
+  'e2e_ops_core_journey_test', 'e2e_ops_harvest_test', 'e2e_ops_sentry_voice_test', 'e2e_audit_report_delivery_test',
   'e2e_sales_db_test', 'e2e_sales_hiring_test', 'e2e_jobs_hiring_test', 'e2e_audit_engine_test', 'e2e_hierarchy_registry_test', 'e2e_hierarchy_governance_test', 'e2e_hierarchy_workitems_test', 'e2e_hierarchy_meetings_test', 'e2e_hierarchy_durable_worker_test', 'e2e_sales_academy_test', 'e2e_sales_documents_activation_test', 'e2e_sales_pipeline_catalog_test', 'e2e_sales_closing_test', 'e2e_sales_commissions_test', 'e2e_sales_notifications_dashboard_test', 'e2e_sales_journeys_test',
-  'e2e_sales_browser_test', 'e2e_hierarchy_browser_test',
+  'e2e_sales_browser_test', 'e2e_hierarchy_browser_test', 'e2e_ops_browser_test',
 ];
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
 const suites = only.length ? ALL.filter((s) => only.includes(s)) : ALL;
-const SUITE_TIMEOUT_MS = Number(process.env.NOVA_SUITE_TIMEOUT_MS) || 240_000; // database suites take 12-40s, browser suites ~2 min
+const SUITE_TIMEOUT_MS = Number(process.env.NOVA_SUITE_TIMEOUT_MS) || 420_000; // database suites take 12-60s, browser suites up to ~4 min
 
 function killTree(pid) {
   try {

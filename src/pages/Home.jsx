@@ -5,22 +5,20 @@ import FadeUp from "@/components/FadeUp";
 import WaveOnePopup from "@/components/WaveOnePopup";
 import { useSEO } from "@/hooks/useSEO";
 import HeroSection from "@/components/home/HeroSection";
-import ServiceGrid from "@/components/home/ServiceGrid";
+import FourPillarsSection from "@/components/home/FourPillarsSection";
+import AvailabilitySection from "@/components/home/AvailabilitySection";
 import ProcessSection from "@/components/home/ProcessSection";
 import WhyNovaSection from "@/components/home/WhyNovaSection";
 import WaveOneFeature from "@/components/home/WaveOneFeature";
 import ClientsSection from "@/components/home/ClientsSection";
-import TestimonialsSection from "@/components/home/TestimonialsSection";
 import AuditCTA from "@/components/home/AuditCTA";
-import NovaConnectSection from "@/components/home/NovaConnectSection";
 import ConnecticutSection from "@/components/home/ConnecticutSection";
-import PricingPreviewSection from "@/components/home/PricingPreviewSection";
 import FinalCTASection from "@/components/home/FinalCTASection";
 
 export default function Home() {
   useSEO({
-    title: "Nova Systems — AI and Technology Infrastructure for Connecticut Businesses",
-    description: "Nova Systems builds websites, AI phone systems, social media, branding, and full business infrastructure for Connecticut businesses. Based in Waterbury CT. English and Español.",
+    title: "Nova Systems — Inquiry, Booking and Follow-up Operations for Local Businesses",
+    description: "Nova Systems helps Connecticut service businesses answer inquiries, book appointments, send approved agreements, collect deposits, follow up with permission, and check every week that it works. Based in Waterbury, CT.",
   });
 
   return (
@@ -28,16 +26,16 @@ export default function Home() {
       <Navbar />
       <main className="pt-16">
         <HeroSection />
-        <FadeUp><ServiceGrid /></FadeUp>
+        <FadeUp><FourPillarsSection /></FadeUp>
         <FadeUp><ProcessSection /></FadeUp>
         <FadeUp><WhyNovaSection /></FadeUp>
         <FadeUp><WaveOneFeature /></FadeUp>
         <FadeUp><ClientsSection /></FadeUp>
-        <FadeUp><TestimonialsSection /></FadeUp>
+        {/* Testimonials are not shown until written permission for each quote is on file (owner decision #9). */}
         <FadeUp><AuditCTA /></FadeUp>
-        <FadeUp><NovaConnectSection /></FadeUp>
+        <FadeUp><AvailabilitySection /></FadeUp>
         <FadeUp><ConnecticutSection /></FadeUp>
-        <FadeUp><PricingPreviewSection /></FadeUp>
+        {/* Prices are not published until the owner approves one price list (owner decision #8). */}
         <FadeUp><FinalCTASection /></FadeUp>
       </main>
       <Footer />
