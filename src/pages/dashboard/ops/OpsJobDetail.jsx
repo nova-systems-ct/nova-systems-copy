@@ -60,10 +60,13 @@ export default function OpsJobDetail() {
 function Actions({ job, booking, agreement, deposit, conversation, doAct, busy, orgId, canConfigure }) {
   const [service, setService] = useState(''); const [reason, setReason] = useState(''); const [notes, setNotes] = useState('')
   const [quote, setQuote] = useState({ total: '', deposit: '', reason: '' }); const [link, setLink] = useState(null)
+  const [moveReason, setMoveReason] = useState(''); const [tellCustomer, setTellCustomer] = useState(true)
   const prices = useLoad(() => api('prices', { org: orgId }), [orgId])
   const slots = useLoad(() => (job.price_snapshot?.service_key && !job.price_snapshot.owner_quote ? api('availability', { org: orgId, query: { service_key: job.price_snapshot.service_key, limit: 6 } }) : Promise.resolve(null)), [orgId, job.price_snapshot?.service_key])
   const approved = (prices.data || []).filter((p) => p.status === 'approved')
   const terminal = ['lost', 'cancelled'].includes(job.state)
+  // Times that overlap the current appointment are refused by the server; do not offer them.
+  const moveSlots = (slots.data?.slots || []).filter((s) => !booking || new Date(s.start) >= new Date(booking.end_at) || (s.end && new Date(s.end) <= new Date(booking.start_at)))
   return (
     <Card title="Actions">
       {terminal && <Notice tone="warn">This request is {job.state}. No further actions.</Notice>}
@@ -99,6 +102,15 @@ function Actions({ job, booking, agreement, deposit, conversation, doAct, busy, 
           {link && <Notice>Customer link (share only with this customer): <span style={{ wordBreak: 'break-all' }}>{link}</span></Notice>}
         </div>
       )}
+      {!terminal && ['held', 'confirmed'].includes(booking?.status) && ['booking', 'awaiting_agreement', 'awaiting_deposit', 'confirmed', 'escalated'].includes(job.state) && (
+        <Field label="Move this appointment (the new time is checked again before it is held)" id="move">
+          <input id="move" aria-label="Reason for the move" className="ops-input" placeholder="Reason (required)" value={moveReason} onChange={(e) => setMoveReason(e.target.value)} />
+          {conversation && <label style={{ display: 'block', fontSize: 12, color: C.dim, margin: '6px 0' }}><input type="checkbox" checked={tellCustomer} onChange={(e) => setTellCustomer(e.target.checked)} /> Text the customer the new time</label>}
+          {slots.loading ? <Loading what="Checking availability" /> : !moveSlots.length ? <Empty>{slots.data?.reason ? `No times: ${slots.data.reason.replace(/_/g, ' ')}` : 'No open times found.'}</Empty> : (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{moveSlots.map((s) => <button key={s.start} className="ops-btn" disabled={busy || !moveReason.trim()} onClick={() => doAct('reschedule', { start: s.start, reason: moveReason, notify_customer: !!conversation && tellCustomer }, (x) => [x.unchanged ? 'Already at that time.' : 'Appointment moved.', x.customer_notice ? `Text: ${x.customer_notice.status.replace(/_/g, ' ')}.` : '', x.agreement_note || ''].filter(Boolean).join(' '))}>{new Date(s.start).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</button>)}</div>
+          )}
+        </Field>
+      )}
       {['ready', 'in_progress'].includes(job.fulfillment_status) && (
         <div style={{ marginBottom: 12 }}>
           {job.fulfillment_status === 'ready' && <button className="ops-btn" disabled={busy} onClick={() => doAct('start', {}, 'Work started.')} style={{ marginRight: 8 }}>Start work</button>}
@@ -112,12 +124,12 @@ function Actions({ job, booking, agreement, deposit, conversation, doAct, busy, 
           {conversation.staff_takeover ? <button className="ops-btn" disabled={busy} onClick={() => doAct('resume', {}, 'Automation resumed.')}>Hand back to the assistant</button> : <button className="ops-btn" disabled={busy} onClick={() => doAct('escalate', {}, 'You have taken over; the assistant is paused for this customer.')}>Take over the conversation</button>}
         </div>
       )}
-      {!terminal && job.state !== 'confirmed' && (
+      {!terminal && !['in_progress', 'completed'].includes(job.fulfillment_status) && (
         <div>
           <input aria-label="Reason" className="ops-input" placeholder="Reason (required to cancel or mark lost)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button className="ops-btn danger" disabled={busy || !reason} onClick={() => doAct('lost', { reason }, 'Marked lost.')}>Mark lost</button>
-            <button className="ops-btn danger" disabled={busy || !reason} onClick={() => doAct('cancel', { reason }, (x) => x.note || 'Cancelled.')}>Cancel request</button>
+            {job.state !== 'confirmed' && <button className="ops-btn danger" disabled={busy || !reason} onClick={() => doAct('lost', { reason }, 'Marked lost.')}>Mark lost</button>}
+            <button className="ops-btn danger" disabled={busy || !reason} onClick={() => doAct('cancel', { reason }, (x) => [x.note || 'Cancelled.', ...(x.calendar || []).filter((c) => c.status === 'cancel_failed').map(() => 'The calendar provider did not confirm the cancellation — check the calendar.')].join(' '))}>{job.state === 'confirmed' ? 'Cancel appointment' : 'Cancel request'}</button>
           </div>
         </div>
       )}

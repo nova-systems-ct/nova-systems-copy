@@ -134,6 +134,12 @@ try {
   check('the job page shows each state separately (confirmed, booking confirmed, agreement signed, deposit paid, ready for work)', ['confirmed', 'signed', 'paid', 'ready'].every((w) => states.join(' ').includes(w)), JSON.stringify(states));
   check('the timeline lists every change with who made it', (await page.locator('ol li').count()) >= 8);
   await shot(page, '06-job-detail');
+  const beforeMove = await one("select id, start_at from ops_bookings where job_id=$1 and status='confirmed'", [jobId]);
+  await page.getByLabel('Reason for the move').fill('TEST: customer asked for another day');
+  await page.getByRole('button', { name: /^[A-Z][a-z]{2}, [A-Z][a-z]{2} \d+/ }).first().click();
+  await page.getByText(/Appointment moved\./).waitFor({ timeout: 15000 });
+  const afterMove = await one("select id, start_at from ops_bookings where job_id=$1 and status='confirmed'", [jobId]);
+  check('the owner moves the confirmed appointment from the screen: one confirmed booking at a new time, the old one cancelled', !!afterMove && afterMove.id !== beforeMove.id && String(afterMove.start_at) !== String(beforeMove.start_at) && (await one('select status from ops_bookings where id=$1', [beforeMove.id])).status === 'cancelled');
   await page.getByLabel('Completion notes').fill('TEST: full detail done');
   await page.getByRole('button', { name: 'Mark completed' }).click();
   await page.getByText(/Marked completed/).waitFor({ timeout: 10000 });
