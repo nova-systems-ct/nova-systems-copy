@@ -96,10 +96,42 @@ function runSuite(name) {
   });
 }
 
+// Host suspension (2026-10-15 diagnosis): on this Modern Standby laptop the 2026-10-13 stalls lined up with
+// Kernel-Power 506/507 (connected-standby enter/exit) events — e2e_ops_harvest_test started 15s after standby began at
+// 11:54:18 and finished seconds after wake at 12:57:21; e2e_hierarchy_meetings_test likewise ended 12s after the 13:39:43 wake.
+// While suspended, every process (including this runner's own timeout timer) is frozen, so a "420s timeout" took 63 minutes.
+// Two measures: (1) hold a keep-awake power request for the whole run (ES_CONTINUOUS|ES_SYSTEM_REQUIRED|ES_DISPLAY_REQUIRED
+// via a PowerShell helper that exits with this process); (2) detect suspension directly (a 1s heartbeat that sees a wall-clock
+// gap > 15s) and report such a suite as SUSPENDED with the measured gap, re-running it once — never as PASS from the interrupted run.
+function holdAwake() {
+  if (process.platform !== 'win32' || process.env.NOVA_NO_KEEPAWAKE) return null;
+  const ps = `Add-Type -Name P -Namespace W -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint f);'
+    if ([W.P]::SetThreadExecutionState([uint32]2147483651) -eq 0) { Write-Output 'keepawake:failed' } else { Write-Output 'keepawake:on' }
+    try { (Get-Process -Id ${process.pid}).WaitForExit() } catch {}`;
+  const child = spawn('powershell', ['-NoProfile', '-Command', ps], { stdio: ['ignore', 'pipe', 'ignore'] });
+  child.stdout.on('data', (d) => { const t = String(d).trim(); if (t) console.log(`       (${t === 'keepawake:on' ? 'keep-awake power request held for this run' : 'WARNING: keep-awake request refused — a sleeping computer will stall suites'})`); });
+  child.unref();
+  return child;
+}
+let lastBeat = Date.now(); let suspendedMs = 0;
+const beat = setInterval(() => { const now = Date.now(); const gap = now - lastBeat - 1000; if (gap > 15_000) suspendedMs += gap; lastBeat = now; }, 1000);
+beat.unref();
+const awake = holdAwake();
+process.on('exit', () => { try { awake?.kill(); } catch { /* gone */ } });
+
 const rows = []; let total = 0;
 for (const s of suites) {
   console.log(`RUN  ${s} ...`);
-  const r = await runSuite(s);
+  suspendedMs = 0; lastBeat = Date.now();
+  let r = await runSuite(s);
+  if (suspendedMs > 0) {
+    const gap = Math.round(suspendedMs / 1000);
+    console.log(`SUSPEND ${s.padEnd(42)} host was suspended for ${gap}s during this suite (${r.status}); result discarded, re-running once`);
+    rows.push({ s: `${s} (interrupted run)`, label: 'SUSPEND', tail: `host suspended ${gap}s`, seconds: r.seconds, informational: true });
+    suspendedMs = 0; lastBeat = Date.now();
+    r = await runSuite(s);
+    if (suspendedMs > 0) r = { ...r, status: 'timeout', tail: `host suspended again (${Math.round(suspendedMs / 1000)}s) — no valid result` };
+  }
   total += r.pass;
   const label = { ok: 'PASS', fail: 'FAIL', skip: 'SKIP', timeout: 'TIMEOUT' }[r.status];
   rows.push({ s, label, tail: r.tail, seconds: r.seconds });
@@ -108,8 +140,9 @@ for (const s of suites) {
   reapOrphanedTestPostgres();
 }
 const count = (l) => rows.filter((x) => x.label === l).length;
+const counted = rows.filter((x) => !x.informational);
 console.log('\nSUMMARY');
 for (const x of rows) console.log(`  ${x.label.padEnd(7)} ${x.s}`);
 console.log(`\n${count('PASS')} PASS, ${count('FAIL')} FAIL, ${count('SKIP')} SKIP, ${count('TIMEOUT')} TIMEOUT — ${total} checks passed in total`);
 console.log('Local disposable PostgreSQL + PostgREST; auth, storage, email and payments are stand-ins. Not evidence about production.');
-process.exit(count('PASS') === rows.length && rows.length > 0 ? 0 : 1);
+process.exit(count('PASS') === counted.length && counted.length > 0 ? 0 : 1);
