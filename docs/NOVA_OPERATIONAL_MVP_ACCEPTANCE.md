@@ -81,3 +81,22 @@ PostgreSQL on Windows across ~30 sequential suites, or the computer sleeping) ra
 explanation, not a proven root cause. Mitigation in `44a62af`: every e2e suite force-exits after printing its result, so a
 crash no longer hangs until the timeout. Next step: run the aggregate on a machine that cannot sleep (or in CI) and capture
 the auth stand-in's log at the first 401.
+
+## 2026-10-15 — standby diagnosis, fix, and repeat runs
+Cause of the Oct 13 stalls: Windows Modern Standby froze the suites (Kernel-Power 506/507 times match each stall).
+Runner now holds a keep-awake request and reports host suspension as SUSPEND (re-run once; never counted as PASS).
+
+| Clean export | Run | Result |
+|---|---|---|
+| `60d5a45` | 1 | 29 PASS, 0 FAIL, 0 TIMEOUT (1,400 checks) |
+| `60d5a45` | 2 | 29 PASS, 0 FAIL, 0 TIMEOUT (1,400 checks) |
+| `60d5a45` | 3 | 29 PASS, 0 FAIL, 0 TIMEOUT (1,400 checks) |
+| `22a6459` (adds calendar suite) | 1 | 29 PASS, 1 FAIL, 1 SUSPEND — battery hit critical (Kernel-Power 524) and Windows forced sleep at 15:22:40; the suite after wake (`e2e_hierarchy_registry_test`) crashed 0xC0000409; alone: 49/49 |
+| `22a6459` | 2 | 28 PASS, 2 FAIL — `e2e_sales_closing_test` and `e2e_hierarchy_browser_test` crashed 0xC0000409 with no suspension |
+
+**Unresolved: intermittent 0xC0000409 process crashes.** Different suites each time; each passes alone. This laptop's
+Windows Error Reporting shows kernel crashes (blue screens) on 2026-06-15, 07-21, 08-29, 09-24, 09-27, 09-29 and 10-08
+with bug checks 0x1E/c000001d (illegal instruction), 0x3B, 0x7E, 0x7F and 0x101 (CLOCK_WATCHDOG_TIMEOUT), plus
+watchdog live-kernel reports. That pattern points at machine instability (hardware, firmware or a driver), which would
+also explain random user-mode fast-fail crashes — a working explanation, not proven. Next: run the aggregate on another
+machine or in CI, and run Windows Memory Diagnostic / check Dell BIOS and driver updates on this laptop.
