@@ -24,6 +24,17 @@ Nothing below has been done. Each item is a separate approval or configuration o
 5. **Rotate credentials** in the order of `docs/SECURITY_CREDENTIALS_AND_LEGACY_PAUSE_PLAN_2026-09-30.md`. Also change
    the password you pasted into the Claude chat on 2026-10-15 (treat it as exposed).
 
+## Login on the preview link (diagnosed 2026-10-15)
+"Login is not configured" comes from `src/pages/Login.jsx` when `src/lib/supabaseClient.js` gets no
+`VITE_SUPABASE_URL` or `VITE_SUPABASE_ANON_KEY` at build time. In Vercel project **nova-systems-copy** both are set for
+**Production only**, so every **Preview** build (e.g. `mvp/operational` @ 22a6459,
+nova-systems-copy-git-mvp-operational-nova-systems1.vercel.app) is built without them. Production (nova-systems.app,
+`main` @ bd53133) and nova-systems.agency both contain the values and do not show this message.
+Server variables are Production-only too (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, …), so a preview's API would fail
+even after login. Fix = give Preview its own (staging) values for, at minimum:
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (browser, rebuilt on deploy), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+`APP_BASE_URL`, `SALES_EMAIL_MODE=dry_run` — then Redeploy the preview. Do not copy the production service-role key to Preview.
+
 ## Before any real customer
 6. **Create a staging Supabase project** and run the installation sequence there first.
    Put its keys in a local `.env.staging` file or the Vercel *Preview* environment yourself — never paste them in chat. The free Supabase plan allows two active projects; check whether that would add a charge before creating it.
