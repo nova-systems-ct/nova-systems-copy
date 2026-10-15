@@ -114,7 +114,10 @@ function holdAwake() {
   return child;
 }
 let lastBeat = Date.now(); let suspendedMs = 0;
-const beat = setInterval(() => { const now = Date.now(); const gap = now - lastBeat - 1000; if (gap > 15_000) suspendedMs += gap; lastBeat = now; }, 1000);
+// beatOnce also runs right after each suite returns: after a freeze, the suite's exit event can resolve before the
+// heartbeat timer gets its turn (found by the freeze test below), so the gap must be measured directly too.
+const beatOnce = () => { const now = Date.now(); const gap = now - lastBeat - 1000; if (gap > 15_000) suspendedMs += gap; lastBeat = now; };
+const beat = setInterval(beatOnce, 1000);
 beat.unref();
 const awake = holdAwake();
 process.on('exit', () => { try { awake?.kill(); } catch { /* gone */ } });
@@ -123,13 +126,16 @@ const rows = []; let total = 0;
 for (const s of suites) {
   console.log(`RUN  ${s} ...`);
   suspendedMs = 0; lastBeat = Date.now();
-  let r = await runSuite(s);
+  // Test hook for the detector itself: freeze this process (as a suspended host would) once, during the first suite.
+  const freeze = Number(process.env.NOVA_TEST_FREEZE_RUNNER_MS) || 0;
+  if (freeze && s === suites[0] && !rows.length) setTimeout(() => { const t = Date.now(); while (Date.now() - t < freeze) { /* simulated suspension */ } }, 2000);
+  let r = await runSuite(s); beatOnce();
   if (suspendedMs > 0) {
     const gap = Math.round(suspendedMs / 1000);
     console.log(`SUSPEND ${s.padEnd(42)} host was suspended for ${gap}s during this suite (${r.status}); result discarded, re-running once`);
     rows.push({ s: `${s} (interrupted run)`, label: 'SUSPEND', tail: `host suspended ${gap}s`, seconds: r.seconds, informational: true });
     suspendedMs = 0; lastBeat = Date.now();
-    r = await runSuite(s);
+    r = await runSuite(s); beatOnce();
     if (suspendedMs > 0) r = { ...r, status: 'timeout', tail: `host suspended again (${Math.round(suspendedMs / 1000)}s) — no valid result` };
   }
   total += r.pass;
@@ -143,6 +149,6 @@ const count = (l) => rows.filter((x) => x.label === l).length;
 const counted = rows.filter((x) => !x.informational);
 console.log('\nSUMMARY');
 for (const x of rows) console.log(`  ${x.label.padEnd(7)} ${x.s}`);
-console.log(`\n${count('PASS')} PASS, ${count('FAIL')} FAIL, ${count('SKIP')} SKIP, ${count('TIMEOUT')} TIMEOUT — ${total} checks passed in total`);
+console.log(`\n${count('PASS')} PASS, ${count('FAIL')} FAIL, ${count('SKIP')} SKIP, ${count('TIMEOUT')} TIMEOUT, ${count('SUSPEND')} SUSPEND (re-run) — ${total} checks passed in total`);
 console.log('Local disposable PostgreSQL + PostgREST; auth, storage, email and payments are stand-ins. Not evidence about production.');
 process.exit(count('PASS') === counted.length && counted.length > 0 ? 0 : 1);
