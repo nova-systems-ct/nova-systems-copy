@@ -282,11 +282,16 @@ export async function handleOps(req, res, op) {
         const to = action === 'cancel' ? 'cancelled' : 'lost';
         const reason = sanitize(b.reason, 300); if (!reason) return send(res, 400, { error: 'A reason is required' });
         const j = await S.transition({ orgId: s.orgId, entity: 'job', table: 'ops_jobs', id: job.id, field: 'state', from: job.state, to, actor: s.actor, reason, patch: action === 'lost' ? { lost_reason: reason } : {} });
-        for (const bk of await dbGet(`ops_bookings?organization_id=eq.${enc(s.orgId)}&job_id=eq.${enc(job.id)}&status=in.(held,confirmed)&select=id,status`)) await S.transition({ orgId: s.orgId, entity: 'booking', table: 'ops_bookings', id: bk.id, from: bk.status, to: 'cancelled', actor: s.actor, reason, patch: { cancelled_at: nowIso(), cancel_reason: reason } });
+        const calendar = [];
+        for (const bk of await dbGet(`ops_bookings?organization_id=eq.${enc(s.orgId)}&job_id=eq.${enc(job.id)}&status=in.(held,confirmed)&select=id,status,provider,provider_booking_id`)) {
+          await S.transition({ orgId: s.orgId, entity: 'booking', table: 'ops_bookings', id: bk.id, from: bk.status, to: 'cancelled', actor: s.actor, reason, patch: { cancelled_at: nowIso(), cancel_reason: reason } });
+          calendar.push({ booking_id: bk.id, ...(await S.cancelProviderBooking({ orgId: s.orgId, booking: bk, reason })) });
+        }
         if (job.fulfillment_status !== 'not_ready' && R.canTransition('fulfillment', job.fulfillment_status, 'cancelled')) await S.transition({ orgId: s.orgId, entity: 'fulfillment', table: 'ops_jobs', id: job.id, field: 'fulfillment_status', from: job.fulfillment_status, to: 'cancelled', actor: s.actor, reason });
         const paid = await dbOne(`ops_deposits?organization_id=eq.${enc(s.orgId)}&job_id=eq.${enc(job.id)}&status=eq.paid&select=id`);
-        return send(res, 200, { ok: true, job: j, note: paid ? 'A paid deposit exists. Refunds are issued in Stripe; the refund event updates this record.' : null });
+        return send(res, 200, { ok: true, job: j, calendar, note: paid ? 'A paid deposit exists. Refunds are issued in Stripe; the refund event updates this record.' : null });
       }
+      if (action === 'reschedule') { const r = await S.rescheduleJob({ orgId: s.orgId, job, start: sanitize(b.start, 40), reason: sanitize(b.reason, 300), actor: s.actor, notifyCustomer: b.notify_customer === true }); return send(res, r.ok ? 200 : 409, r.ok ? r : { error: r.reason === 'slot_taken' ? 'That time is no longer available' : r.reason === 'overlaps_current_booking' ? r.detail : `The calendar did not accept the move (${r.reason})`, reason: r.reason, detail: r.detail || null }); }
       if (action === 'start') return send(res, 200, { job: await S.transition({ orgId: s.orgId, entity: 'fulfillment', table: 'ops_jobs', id: job.id, field: 'fulfillment_status', from: job.fulfillment_status, to: 'in_progress', actor: s.actor, reason: 'work started' }) });
       if (action === 'complete' || action === 'no_show') return send(res, 200, { job: await S.completeJob({ orgId: s.orgId, jobId: job.id, actor: s.actor, notes: sanitize(b.notes, 2000), outcome: action === 'complete' ? 'completed' : 'no_show', enqueue }) });
       if (action === 'apply-referral') return send(res, 200, { referral: await S.applyReferralCode({ orgId: s.orgId, jobId: job.id, code: b.code, actor: s.actor }) });

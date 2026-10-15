@@ -3,7 +3,7 @@
 import { dbGet, dbOne, dbInsert, dbPatch, dbRpc, enc, nowIso, appBase } from '../_sales/core.js';
 import { stripeRequest } from '../_stripe.js';
 import { textPdf } from '../_sales/pdf.js';
-import { calcomConfigured, getSlots as calcomSlots, createBooking as calcomCreate, mapBookingStatus } from '../_calcom.js';
+import { calcomConfigured, getSlots as calcomSlots, createBooking as calcomCreate, rescheduleBooking as calcomReschedule, cancelBooking as calcomCancel } from '../_calcom.js';
 import * as R from './rules.js';
 import { sendSms, orgSettings } from './messaging.js';
 import { extractService } from './model.js';
@@ -51,6 +51,7 @@ export async function availability(orgId, serviceKey, { now = new Date(), limit 
     if (!calcomConfigured(process.env) || !eventTypeId) return { ok: false, reason: 'calendar_provider_not_configured', slots: [] };
     try {
       const ext = await calcomSlots(process.env, { eventTypeId, startDate: now.toISOString().slice(0, 10), endDate: new Date(now.getTime() + c.ops.booking_horizon_days * 86400_000).toISOString().slice(0, 10), timeZone: c.wave.timezone });
+      if (!ext.ok) return { ok: false, reason: 'calendar_provider_error', detail: `${ext.kind}${ext.status ? ` ${ext.status}` : ''}${ext.error ? `: ${ext.error}` : ''}`, slots: [] };
       const open = new Set((ext.slots || []).map((s) => new Date(s.start || s).toISOString()));
       slots = slots.filter((s) => open.has(s.start)).slice(0, limit); // must be free in BOTH Nova and the provider
     } catch (e) { return { ok: false, reason: 'calendar_provider_error', detail: e.message, slots: [] }; }
@@ -212,6 +213,70 @@ async function notifyEscalation({ orgId, job, reason, c }) {
   return { owner_contacts: contacts.length };
 }
 
+// ---------------------------------------------------------------------------------------------- reschedule / cancel
+// Move a job's active booking to a new time. The new time is held through the same database exclusion constraint as any
+// booking (so it cannot collide with another customer); a confirmed booking stays confirmed only if its calendar source of
+// truth (Nova, or Cal.com's own reply) accepts the move. The old booking is cancelled only after the new one exists.
+export async function rescheduleJob({ orgId, job, start, reason, actor, notifyCustomer = false }) {
+  if (!['booking', 'awaiting_agreement', 'awaiting_deposit', 'confirmed', 'escalated'].includes(job.state)) throw ERR(409, `Job is ${job.state}; there is no booking to move`);
+  const startMs = new Date(start).getTime();
+  if (!Number.isFinite(startMs) || startMs <= Date.now()) throw ERR(400, 'Choose a valid future start time');
+  if (!reason || String(reason).trim().length < 3) throw ERR(400, 'A reason is required');
+  const old = await dbOne(`ops_bookings?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&status=in.(held,confirmed)&select=*&order=created_at.desc`);
+  if (!old) throw ERR(409, 'This job has no active booking to move');
+  if (new Date(old.start_at).getTime() === startMs) return { ok: true, unchanged: true, booking: old };
+  const c = await businessContext(orgId);
+  const snap = job.price_snapshot; if (!snap) throw ERR(409, 'The job has no quote');
+  const end = new Date(startMs + (snap.duration_minutes + (snap.buffer_minutes || 0)) * 60_000).toISOString();
+  const others = (await dbGet(`ops_bookings?organization_id=eq.${enc(orgId)}&status=in.(held,confirmed)&end_at=gte.${enc(nowIso())}&id=neq.${enc(old.id)}&select=start_at,end_at,status,hold_expires_at`))
+    .filter((b) => b.status === 'confirmed' || !b.hold_expires_at || new Date(b.hold_expires_at).getTime() > Date.now());
+  if (startMs < new Date(old.end_at).getTime() && new Date(old.start_at).getTime() < new Date(end).getTime()) return { ok: false, reason: 'overlaps_current_booking', detail: 'Pick a time that does not overlap the current appointment, or cancel and rebook.' };
+  if (others.some((b) => startMs < new Date(b.end_at).getTime() && new Date(b.start_at).getTime() < new Date(end).getTime())) return { ok: false, reason: 'slot_taken' };
+  let nb;
+  try { [nb] = await dbRpc('ops_hold_slot', { p_org: orgId, p_job: job.id, p_contact: job.contact_id, p_start: new Date(startMs).toISOString(), p_end: end, p_hold_minutes: c.ops.hold_minutes, p_is_test: !!job.is_test }).then((r) => (Array.isArray(r) ? r : [r])); }
+  catch (e) { if (/23P01|exclusion|ops_bookings_no_overlap|conflicting key/i.test(`${e.message} ${e.detail}`)) return { ok: false, reason: 'slot_taken' }; throw e; }
+  await dbInsert('ops_transitions', { organization_id: orgId, entity: 'booking', entity_id: nb.id, from_state: null, to_state: 'held', actor_type: actor?.type || 'system', actor_id: actor?.id ? String(actor.id) : null, reason: `reschedule from ${old.start_at}: ${String(reason).slice(0, 200)}`, evidence: { from_booking_id: old.id, from_start: old.start_at, to_start: nb.start_at } });
+  const why = `rescheduled: ${String(reason).slice(0, 200)}`;
+  let calendar = { provider: old.provider || 'nova', status: 'nova_calendar' };
+  if (old.status === 'confirmed') {
+    if (old.provider === 'calcom' && old.provider_booking_id) {
+      const r = await calcomReschedule(process.env, old.provider_booking_id, { startIso: nb.start_at, reason });
+      if (!r.ok) {
+        // Release the new hold; the original appointment stands. An ambiguous reply needs a person to check Cal.com.
+        await transition({ orgId, entity: 'booking', table: 'ops_bookings', id: nb.id, from: 'held', to: 'cancelled', actor, reason: `calendar provider did not accept the move (${r.kind})`, patch: { cancelled_at: nowIso(), cancel_reason: `provider ${r.kind}` } });
+        if (r.kind === 'ambiguous') await notifyEscalation({ orgId, job, reason: 'calendar_reschedule_outcome_unknown_check_calcom', c });
+        return { ok: false, reason: r.kind === 'ambiguous' ? 'calendar_outcome_unknown' : 'calendar_rejected', detail: r.error || null };
+      }
+      calendar = { provider: 'calcom', status: r.status, provider_booking_id: r.uid };
+      if (r.status === 'confirmed') await transition({ orgId, entity: 'booking', table: 'ops_bookings', id: nb.id, from: 'held', to: 'confirmed', actor, reason: 'calendar provider accepted the new time', patch: { provider: 'calcom', provider_booking_id: r.uid, provider_status: r.status, confirmed_at: nowIso() } });
+      else await dbPatch('ops_bookings', `id=eq.${enc(nb.id)}&organization_id=eq.${enc(orgId)}`, { provider: 'calcom', provider_booking_id: r.uid, provider_status: r.status });
+    } else {
+      await transition({ orgId, entity: 'booking', table: 'ops_bookings', id: nb.id, from: 'held', to: 'confirmed', actor, reason: 'confirmed in the Nova calendar at the new time', patch: { confirmed_at: nowIso(), provider_status: 'nova_confirmed' } });
+    }
+  }
+  await transition({ orgId, entity: 'booking', table: 'ops_bookings', id: old.id, from: old.status, to: 'cancelled', actor, reason: why, patch: { cancelled_at: nowIso(), cancel_reason: why } });
+  const agreement = await dbOne(`ops_agreements?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&status=in.(sent,signed)&select=id,status&order=created_at.desc`);
+  let notice = null;
+  if (notifyCustomer && job.conversation_id && job.contact_id) {
+    notice = await sendSms({ orgId, conversationId: job.conversation_id, contactId: job.contact_id, body: `Your ${snap.service_name || 'appointment'} has moved to ${R.formatSlot(nb.start_at, c.wave.timezone)}. Reply here if that time does not work.`, purpose: 'booking_confirmation', idempotencyKey: `resched:${nb.id}`, actor, isTest: !!job.is_test });
+  }
+  const booking = await one('ops_bookings', orgId, nb.id);
+  return { ok: true, booking, previous_booking_id: old.id, calendar,
+    agreement_note: agreement ? (agreement.status === 'signed' ? 'The signed agreement names the original time. If the time is a term of your agreement, send an updated agreement for signature.' : 'The agreement awaiting signature names the original time. Send it again so it shows the new time.') : null,
+    customer_notice: notice ? { status: notice.status, reason: notice.reason || null } : null };
+}
+
+// Cancels the calendar provider's copy of a booking (Nova's own row is moved by the caller). Failures become an incident,
+// never a silent success.
+export async function cancelProviderBooking({ orgId, booking, reason }) {
+  if (booking.provider !== 'calcom' || !booking.provider_booking_id) return { provider: booking.provider || 'nova', status: 'not_applicable' };
+  const r = await calcomCancel(process.env, booking.provider_booking_id, reason);
+  if (r.ok) { await dbPatch('ops_bookings', `id=eq.${enc(booking.id)}&organization_id=eq.${enc(orgId)}`, { provider_status: 'cancelled' }); return { provider: 'calcom', status: 'cancelled' }; }
+  await dbPatch('ops_bookings', `id=eq.${enc(booking.id)}&organization_id=eq.${enc(orgId)}`, { provider_status: `cancel_failed:${r.kind}` });
+  await dbInsert('ops_incidents', { organization_id: orgId, check_key: `calendar_cancel_failed:${booking.id}`, severity: 'warning', title: 'Booking cancelled in Nova but not confirmed cancelled in Cal.com — check the calendar', detail: { booking_id: booking.id, provider_booking_id: booking.provider_booking_id, kind: r.kind } }).catch(() => null);
+  return { provider: 'calcom', status: 'cancel_failed', kind: r.kind };
+}
+
 // ---------------------------------------------------------------------------------------------- customer link
 export async function jobByToken(token) {
   if (!token || String(token).length < 20) return null;
@@ -364,10 +429,14 @@ export async function confirmJob({ orgId, job, actor, reason }) {
       const contact = await one('crm_contacts', orgId, job.contact_id, 'name,email,phone_e164');
       try {
         const b = await calcomCreate(process.env, { eventTypeId: c.ops.calcom_event_types?.[job.price_snapshot?.service_key], startIso: booking.start_at, attendee: { name: contact?.name || 'Customer', email: contact?.email, timeZone: c.wave.timezone, phoneNumber: contact?.phone_e164 }, metadata: { ops_booking_id: booking.id } });
-        const st = mapBookingStatus(b.status);
-        const patch = { provider: 'calcom', provider_booking_id: b.uid || b.id, provider_status: b.status };
-        if (st === 'confirmed') await transition({ orgId, entity: 'booking', table: 'ops_bookings', id: booking.id, from: 'held', to: 'confirmed', actor, reason: 'calendar provider accepted', patch: { ...patch, confirmed_at: nowIso() } });
-        else await dbPatch('ops_bookings', `id=eq.${enc(booking.id)}&organization_id=eq.${enc(orgId)}`, patch);
+        if (!b.ok) {
+          await dbPatch('ops_bookings', `id=eq.${enc(booking.id)}&organization_id=eq.${enc(orgId)}`, { provider: 'calcom', provider_status: b.kind === 'ambiguous' ? 'outcome_unknown' : `failed:${b.kind}` });
+          await notifyEscalation({ orgId, job, reason: (b.kind === 'ambiguous' ? 'calendar_outcome_unknown_check_calcom' : `calendar_booking_failed_${b.kind}`).slice(0, 120), c });
+        } else {
+          const patch = { provider: 'calcom', provider_booking_id: b.uid, provider_status: b.status };
+          if (b.status === 'confirmed') await transition({ orgId, entity: 'booking', table: 'ops_bookings', id: booking.id, from: 'held', to: 'confirmed', actor, reason: 'calendar provider accepted', patch: { ...patch, confirmed_at: nowIso() } });
+          else await dbPatch('ops_bookings', `id=eq.${enc(booking.id)}&organization_id=eq.${enc(orgId)}`, patch);
+        }
       } catch (e) { await notifyEscalation({ orgId, job, reason: `calendar_booking_failed: ${e.message}`.slice(0, 120), c }); }
     } else {
       await transition({ orgId, entity: 'booking', table: 'ops_bookings', id: booking.id, from: 'held', to: 'confirmed', actor, reason: 'confirmed in the Nova calendar (source of truth for this business)', patch: { confirmed_at: nowIso(), provider_status: 'nova_confirmed' } });

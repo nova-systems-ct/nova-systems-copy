@@ -53,6 +53,16 @@ export async function getBooking(env, uid, fetchImpl) {
   return status ? { ok: true, uid, status, start: r.data.start, end: r.data.end } : { ok: false, kind: 'rejected', error: 'Unrecognized booking status' };
 }
 
+// POST /v2/bookings/{uid}/reschedule (cal-api-version 2026-02-25, per Cal.com's API reference read 2026-10-15). The reply's
+// booking is the NEW booking with its own uid; "pending" stays a request awaiting the host.
+export async function rescheduleBooking(env, uid, { startIso, reason }, fetchImpl) {
+  const r = await call(env, { method: 'POST', path: `/bookings/${encodeURIComponent(uid)}/reschedule`, version: V.bookings, body: { start: startIso, ...(reason ? { reschedulingReason: String(reason).slice(0, 300) } : {}) }, fetchImpl });
+  if (!r.ok) return r;
+  const status = mapBookingStatus(r.data?.status);
+  if (!status || !r.data?.uid) return { ok: false, kind: 'ambiguous', error: 'Cal.com replied without a recognizable booking uid/status' };
+  return { ok: true, uid: r.data.uid, status, start: r.data.start, end: r.data.end };
+}
+
 export async function cancelBooking(env, uid, reason, fetchImpl) {
   return call(env, { method: 'POST', path: `/bookings/${encodeURIComponent(uid)}/cancel`, version: V.bookings, body: reason ? { cancellationReason: String(reason).slice(0, 300) } : {}, fetchImpl });
 }
