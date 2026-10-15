@@ -104,15 +104,44 @@ try {
   r = await audit('publish', O({ report_id: rep.id }));
   const token = r.body.link?.split('/report/')[1];
   check('publishing creates a secure, expiring client link (nothing emailed) — "available to client" ≠ "sent"', r.status === 200 && !!token && /Nothing was emailed/.test(r.body.note));
+  // ---------------------------------------------------------------- automatic delivery email
+  r = await audit('publish', O({ report_id: rep.id, email_to: 'not-an-email' }));
+  check('an invalid recipient is refused before any link is created', r.status === 400);
+  r = await audit('publish', O({ report_id: rep.id, email_to: 'client-owner@shine.example.test' }));
+  check('email defaults to dry run: recorded on the delivery, nothing sent to the provider', r.status === 200 && r.body.notification_status === 'dry_run' && env.stubs.outbox.length === 0, JSON.stringify(r.body).slice(0, 200));
+  Object.assign(process.env, { SALES_EMAIL_MODE: 'live', SALES_EMAIL_ALLOWLIST: '@shine.example.test' });
+  r = await audit('publish', O({ report_id: rep.id, email_to: 'client-owner@shine.example.test' }));
+  const mail = env.stubs.outbox.at(-1); const mailedToken = r.body.link?.split('/report/')[1];
+  check('live mode emails the approved-version link to the client; delivery shows provider acceptance (not "delivered")', r.status === 200 && r.body.notification_status === 'sent' && mail?.to?.[0] === 'client-owner@shine.example.test' && mail.text.includes(`/report/${mailedToken}`) && /not proof it reached/.test(r.body.note), JSON.stringify(r.body).slice(0, 200));
+  const dRow = await one('select notification_status, provider_accepted_at from audit_deliveries where link_token_hash is not null order by requested_at desc limit 1');
+  check('the delivery record stores the email outcome', dRow.notification_status === 'sent' && !!dRow.provider_accepted_at);
+  const nRow = await one("select body, idempotency_key from sales_notifications where kind='audit_report_link' and status='sent'");
+  check('the stored notification never contains the usable link (only the hash is kept)', !!nRow && !nRow.body.includes(mailedToken) && !!nRow.idempotency_key);
+  const before = env.stubs.outbox.length;
+  r = await audit('publish', O({ report_id: rep.id, email_to: 'CLIENT-OWNER@shine.example.test' }));
+  check('the same version is not emailed twice to the same address by accident', r.status === 409 && env.stubs.outbox.length === before && /resend/.test(r.body.error));
+  r = await audit('publish', O({ report_id: rep.id, email_to: 'client-owner@shine.example.test', resend: true }));
+  check('an explicit resend sends one new link', r.status === 200 && r.body.notification_status === 'sent' && env.stubs.outbox.length === before + 1);
+  r = await audit('publish', O({ report_id: rep.id, email_to: 'someone@elsewhere.test' }));
+  check('a recipient outside the allowlist is not emailed and the delivery says so', r.status === 200 && r.body.notification_status === 'failed' && /ALLOWLIST/.test(r.body.notification_detail || ''));
+  env.stubs.failEmails = true;
+  r = await audit('publish', O({ report_id: rep.id, email_to: 'billing@shine.example.test' }));
+  check('a provider failure is recorded as failed, with instructions, never as sent', r.status === 200 && r.body.notification_status === 'failed' && /not sent/.test(r.body.note));
+  env.stubs.failEmails = false;
+  r = await audit('publish', O({ report_id: rep.id, email_to: 'billing@shine.example.test' }));
+  check('after a failed email, publishing again is allowed and succeeds', r.status === 200 && r.body.notification_status === 'sent');
+  Object.assign(process.env, { SALES_EMAIL_MODE: 'dry_run' });
+  await env.sql('update audit_deliveries set revoked_at = now() where report_id=$1 and link_token_hash <> $2', [rep.id, (await one('select link_token_hash from audit_deliveries where report_id=$1 order by requested_at asc limit 1', [rep.id])).link_token_hash]);
+
   const view = (t = token) => call({ resource: 'audit', op: 'report-view', method: 'GET', query: { token: t } });
   r = await view();
   check('the client link shows exactly the approved report', r.status === 200 && r.body.version === rep.version && r.body.content.title === 'Operational Findings & Revenue Opportunity Report');
-  check('opening is recorded (first view, count)', (await one('select view_count, first_viewed_at from audit_deliveries where report_id=$1', [rep.id])).view_count === 1);
+  check('opening is recorded (first view, count)', (await one('select view_count, first_viewed_at from audit_deliveries where report_id=$1 order by requested_at asc limit 1', [rep.id])).view_count === 1);
   check('a guessed link shows nothing', (await view('x'.repeat(32))).status === 404);
   await env.sql("update audit_reports set content = jsonb_set(content, '{executive_summary}', '\"TAMPERED\"') where id=$1", [rep.id]);
   r = await view();
   check('content changed after approval invalidates the client link (no tampered report is ever shown)', r.status === 410);
-  const del = await one('select id from audit_deliveries where report_id=$1', [rep.id]);
+  const del = await one('select id from audit_deliveries where report_id=$1 order by requested_at asc limit 1', [rep.id]);
   r = await audit('revoke', O({ delivery_id: del.id }));
   check('Nova can revoke a client link', r.status === 200 && (await view()).status === 404);
 } catch (e) { fail++; console.log('FAIL — test crashed:', e.stack || e); }

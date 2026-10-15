@@ -174,7 +174,7 @@ async function sendEmailNow({ to, subject, text, idempotencyKey }) {
 // `sendBody` (optional) is the real text for THIS delivery only — used when the message carries a
 // reusable secret (sign-in, invitation or proposal link). The stored row keeps a redacted body, so
 // no usable authentication link sits in the database (audit F-36); such rows are never auto-retried.
-export const SECRET_LINK_KINDS = ['apply_link', 'invitation', 'proposal_sent'];
+export const SECRET_LINK_KINDS = ['apply_link', 'invitation', 'proposal_sent', 'audit_report_link'];
 export async function deliverEmailRow(row, sendBody = null) {
   const pol = emailPolicy(row.email);
   if (!pol.send) { await dbPatch('sales_notifications', `id=eq.${enc(row.id)}`, { status: pol.status, last_error: pol.reason, attempts: (row.attempts || 0) + 1 }); return pol.status; }

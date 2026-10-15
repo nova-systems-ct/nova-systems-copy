@@ -3,7 +3,7 @@
 // Staff ops require intelligence.view on the case's organization (re-checked per object). Public ops are scoped by a
 // random delivery token whose hash is stored; they expose only the approved, unchanged report.
 import { requireOrgAccess } from './_orgAccess.js';
-import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, appBase } from './_sales/core.js';
+import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, appBase, notify } from './_sales/core.js';
 import { sanitize } from './_sanitize.js';
 import { textPdf } from './_sales/pdf.js';
 import { contentHash, computeScenario, totalScenarios, checkTestEntry, interpretTest, validateClockPolicy, REQUIRED_REPORT_SECTIONS, validateFinding } from './_auditRules.js';
@@ -173,9 +173,28 @@ export async function handleAuditExtra(req, res, op, caller) {
       const latest = await dbOne(`audit_reports?case_id=eq.${enc(rep.case_id)}&select=version&order=version.desc`);
       if (latest.version > rep.version) return send(res, 409, { error: `Superseded by v${latest.version}` });
       if (contentHash(rep.content) !== rep.approved_content_sha256) return send(res, 409, { error: 'Content changed after approval — approve the new version first' });
+      // Optional automatic email of the link. Retry protection: one email per (report version, recipient) unless the
+      // owner explicitly asks to resend; the link itself is never stored, so a failed email is fixed by publishing again.
+      const emailTo = b.email_to == null || b.email_to === '' ? null : sanitize(String(b.email_to), 200).toLowerCase();
+      if (emailTo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTo)) return send(res, 400, { error: 'email_to is not a valid email address' });
+      const keyPrefix = emailTo ? `audit-report:${rep.id}:${emailTo}:` : null;
+      if (emailTo && !b.resend) {
+        const prior = await dbGet(`sales_notifications?idempotency_key=like.${enc(keyPrefix)}*&status=in.(sent,delivered,queued,sending)&select=id,status,sent_at&limit=1`);
+        if (prior.length) return send(res, 409, { error: `Version ${rep.version} was already emailed to ${emailTo} (${prior[0].status}). Pass resend: true to send a new link.` });
+      }
       const t = newToken(); const days = Math.min(60, Math.max(1, Number(b.days) || 30));
-      const d = (await dbInsert('audit_deliveries', { report_id: rep.id, delivery_method: 'secure_link', delivered_by: caller.id, report_content_sha256: rep.approved_content_sha256, link_token_hash: t.hash, link_expires_at: new Date(Date.now() + days * 86400_000).toISOString(), available_at: nowIso(), notification_status: 'not_requested' })).row;
-      return send(res, 200, { ok: true, delivery_id: d.id, link: `${appBase()}/report/${t.token}`, expires_at: d.link_expires_at, note: 'Available to the client through this link only. Nothing was emailed; send the link yourself or record a notification separately. Opening is recorded.' });
+      const link = `${appBase()}/report/${t.token}`;
+      const d = (await dbInsert('audit_deliveries', { report_id: rep.id, delivery_method: 'secure_link', delivered_by: caller.id, report_content_sha256: rep.approved_content_sha256, link_token_hash: t.hash, link_expires_at: new Date(Date.now() + days * 86400_000).toISOString(), available_at: nowIso(), notification_status: emailTo ? 'queued' : 'not_requested' })).row;
+      if (!emailTo) return send(res, 200, { ok: true, delivery_id: d.id, link, expires_at: d.link_expires_at, notification_status: 'not_requested', note: 'Available to the client through this link only. Nothing was emailed. Opening is recorded.' });
+      const subject = `Your Nova Systems report (version ${rep.version})`;
+      const body = (l) => `Your ${REPORT_TITLE} is ready.\n\nOpen it with this private link. It shows the approved version ${rep.version} only and expires on ${d.link_expires_at.slice(0, 10)}:\n\n${l}\n\nIf you were not expecting this report, ignore this email.`;
+      const ids = await notify({ email: emailTo, kind: 'audit_report_link', subject, body: body('[secure link sent separately; not stored]'), sendBody: body(link), channels: ['email'], idempotencyKey: `${keyPrefix}${d.id}` });
+      const row = ids.length ? await dbOne(`sales_notifications?id=eq.${enc(ids[0])}&select=status,last_error,provider_message_id`) : null;
+      const st = row?.status || 'failed';
+      const mapped = st === 'sent' || st === 'delivered' ? 'sent' : st === 'dry_run' ? 'dry_run' : st === 'queued' || st === 'sending' ? 'queued' : 'failed';
+      await dbPatch('audit_deliveries', `id=eq.${enc(d.id)}`, { notification_status: mapped, ...(mapped === 'sent' ? { provider_accepted_at: nowIso() } : {}), ...(mapped === 'failed' ? { failed_at: nowIso(), failure_reason: String(row?.last_error || 'email not sent').slice(0, 300) } : {}) });
+      return send(res, 200, { ok: true, delivery_id: d.id, link, expires_at: d.link_expires_at, notification_status: mapped, notification_detail: row?.last_error || null,
+        note: mapped === 'sent' ? 'The email provider accepted the message. That is not proof it reached the inbox.' : mapped === 'dry_run' ? 'Email is in dry-run mode: recorded, not sent.' : 'The email was not sent. Revoke this link and publish again, or send the link yourself.' });
     }
     return send(res, 400, { error: `Unknown audit op: ${op}` });
   } catch (e) {

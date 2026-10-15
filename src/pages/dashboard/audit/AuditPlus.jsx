@@ -208,7 +208,7 @@ export function FindingDetailsTab({ org, caseId, findings, onSaved }) {
 }
 
 export function DeliveryTab({ org, caseId, reports, onSaved }) {
-  const act = useAction(); const [summary, setSummary] = useState(''); const [limits, setLimits] = useState(''); const [next, setNext] = useState(''); const [link, setLink] = useState(null)
+  const act = useAction(); const [summary, setSummary] = useState(''); const [limits, setLimits] = useState(''); const [next, setNext] = useState(''); const [link, setLink] = useState(null); const [emailTo, setEmailTo] = useState('')
   const approved = (reports || []).filter((r) => r.status === 'approved')
   const download = async (id) => { const r = await act.run(() => call('report-pdf', { org, caseId, query: { report_id: id } }), 'PDF ready.'); if (r?.pdf_base64) { const a = document.createElement('a'); a.href = `data:application/pdf;base64,${r.pdf_base64}`; a.download = r.filename; a.click() } }
   return (
@@ -226,11 +226,13 @@ export function DeliveryTab({ org, caseId, reports, onSaved }) {
           <div key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '6px 0', borderBottom: `1px solid ${C.line}` }}>
             <span style={{ fontSize: 13 }}>v{r.version} · approved {when(r.approved_at)}</span>
             <button className="ops-btn" onClick={() => download(r.id)}>Download PDF</button>
-            <button className="ops-btn primary" onClick={async () => { const x = await act.run(() => call('publish', { org, caseId, method: 'POST', body: { report_id: r.id } }), (y) => y.note); if (x?.link) setLink(x.link) }}>Make available to client</button>
+            <button className="ops-btn" onClick={async () => { const x = await act.run(() => call('publish', { org, caseId, method: 'POST', body: { report_id: r.id } }), (y) => y.note); if (x?.link) setLink(x.link) }}>Make available (link only)</button>
+            <button className="ops-btn primary" disabled={act.busy || !emailTo.trim()} onClick={async () => { const x = await act.run(() => call('publish', { org, caseId, method: 'POST', body: { report_id: r.id, email_to: emailTo.trim() } }), (y) => `Email: ${y.notification_status}. ${y.note}`); if (x?.link) setLink(x.link) }}>Email link to client</button>
           </div>
         ))}
+        <Field label="Client email for the report link" id="dv-email"><input id="dv-email" type="email" className="ops-input" placeholder="owner@client-business.com" value={emailTo} onChange={(e) => setEmailTo(e.target.value)} /></Field>
         {link && <Notice tone="ok">Client link (shown once; share only with the client): <span style={{ wordBreak: 'break-all' }}>{link}</span></Notice>}
-        <p style={{ color: C.faint, fontSize: 12 }}>States are kept separate: generated → approved → available to client → notification sent → provider-confirmed delivery. Making a link available does not send anything.</p>
+        <p style={{ color: C.faint, fontSize: 12 }}>States are kept separate: generated → approved → available to client → notification sent → provider-confirmed delivery. "Make available" sends nothing. "Email link to client" sends the link once per version and address; a second send needs an explicit resend through the API.</p>
       </Card>
     </div>
   )
