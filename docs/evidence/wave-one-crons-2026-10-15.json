@@ -1,0 +1,53 @@
+{
+ "enabledAt": 1783640789457,
+ "disabledAt": null,
+ "updatedAt": 1786543352969,
+ "deploymentId": "dpl_ev5mn1WtQ7ijGxEQcNTnrxTW9rPN",
+ "definitions": [
+  {
+   "host": "nova-wave-dkq0wydr7-nova-systems1.vercel.app",
+   "path": "/api/nova-flow?action=process_pending",
+   "schedule": "0 10 * * *"
+  },
+  {
+   "host": "nova-wave-dkq0wydr7-nova-systems1.vercel.app",
+   "path": "/api/nova-insights?action=generate_briefing",
+   "schedule": "0 7 * * *"
+  },
+  {
+   "host": "nova-wave-dkq0wydr7-nova-systems1.vercel.app",
+   "path": "/api/nova-insights?action=generate_opportunity_feed",
+   "schedule": "30 7 * * *"
+  },
+  {
+   "host": "nova-wave-dkq0wydr7-nova-systems1.vercel.app",
+   "path": "/api/nova-insights?action=generate_weekly_report",
+   "schedule": "0 9 * * 1"
+  },
+  {
+   "host": "nova-wave-dkq0wydr7-nova-systems1.vercel.app",
+   "path": "/api/nova-reviews?action=fetch_reviews",
+   "schedule": "0 9 * * *"
+  },
+  {
+   "host": "nova-wave-dkq0wydr7-nova-systems1.vercel.app",
+   "path": "/api/nova-revive?action=check_all_leads",
+   "schedule": "0 0 * * *"
+  },
+  {
+   "host": "nova-wave-dkq0wydr7-nova-systems1.vercel.app",
+   "path": "/api/nova-revive?action=weekly_report",
+   "schedule": "0 9 * * 1"
+  },
+  {
+   "host": "nova-wave-dkq0wydr7-nova-systems1.vercel.app",
+   "path": "/api/nova-social?action=publish_due_posts",
+   "schedule": "0 8 * * *"
+  },
+  {
+   "host": "nova-wave-dkq0wydr7-nova-systems1.vercel.app",
+   "path": "/api/nova-tron?action=run_analysis",
+   "schedule": "0 5 * * *"
+  }
+ ]
+}
