@@ -93,6 +93,7 @@ DECLARE
     'crystal_recurring_schedules',
     'crystal_service_catalog',
     'decision_records',
+    'demo_sessions',
     'escalation_events',
     'escalations',
     'executive_assignments',
