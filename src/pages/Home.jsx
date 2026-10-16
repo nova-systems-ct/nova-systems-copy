@@ -2,7 +2,6 @@ import React from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FadeUp from "@/components/FadeUp";
-import WaveOnePopup from "@/components/WaveOnePopup";
 import { useSEO } from "@/hooks/useSEO";
 import HeroSection from "@/components/home/HeroSection";
 import FourPillarsSection from "@/components/home/FourPillarsSection";
@@ -39,7 +38,6 @@ export default function Home() {
         <FadeUp><FinalCTASection /></FadeUp>
       </main>
       <Footer />
-      <WaveOnePopup />
     </div>
   );
 }

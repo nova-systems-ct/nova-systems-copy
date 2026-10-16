@@ -28,16 +28,16 @@ const sections = [
     icon: Bot,
     tag: "02 — AI AND BUSINESS AUTOMATION",
     title: "AI and Business Automation",
-    desc: "Bring your business into the future. We design automated workflows, AI phone agents to handle inbound calls, lead tracking pipelines, and CRM systems that scale your revenue automatically.",
+    desc: "Bring your business into the future. We set up the workflows behind Nova Core, Harvest and Sentry — inquiry handling, booking, follow-up and monitoring — after a Nova Audit shows what is worth fixing. An AI voice receptionist is in testing and is not offered yet.",
     features: [
-      "AI phone agents for inbound calls",
+      "Missed-call text-back and follow-up (consent-based)",
       "Automated workflow design",
       "Lead tracking pipelines",
       "Custom CRM systems",
       "Follow-up and booking automation",
       "Cloud infrastructure setup",
     ],
-    keywords: "AI phone agent Connecticut, business automation CT, AI for small business Connecticut, automated lead tracking",
+    keywords: "business automation CT, inquiry and booking automation Connecticut, AI for small business Connecticut, automated lead tracking",
   },
   {
     icon: Palette,
@@ -60,7 +60,7 @@ export default function Solutions() {
   const navigate = useNavigate();
   useSEO({
     title: "Business Technology Solutions in Connecticut — Nova Systems",
-    description: "Web development, AI automation, and branding solutions for Connecticut businesses. Nova Systems builds custom websites, AI phone agents, CRM systems, and full brand identity — Waterbury to Fairfield County.",
+    description: "Web development, AI automation, and branding solutions for Connecticut businesses. Nova Systems builds custom websites, inquiry-to-booking workflows, and full brand identity — Waterbury to Fairfield County.",
   });
 
   return (

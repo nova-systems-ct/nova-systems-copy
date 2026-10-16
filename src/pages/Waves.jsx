@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import Footer from "@/components/Footer";
 import FadeUp from "@/components/FadeUp";
 import { useSEO } from "@/hooks/useSEO";
 import novaLogo from "@/assets/nova logo.png";
 import {
-  ArrowRight, Mic, MessageSquare, Mail as MailIcon,
-  Share2, RefreshCcw, ClipboardCheck, ShieldCheck, Crown, Sparkles,
+  ArrowRight, Workflow, RefreshCcw, ClipboardCheck, ShieldCheck, Activity, Mic,
   UtensilsCrossed, Scissors, Stethoscope, HardHat, Building2, ShoppingBag,
 } from "lucide-react";
 
@@ -15,15 +14,14 @@ const GOLD_BRIGHT = "#E0C476";
 const GOLD_DARK = "#8a6b2a";
 const G = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 
-const TICKER_ITEMS = ["Nova Voice", "Nova Blue", "Nova Email", "Nova Social", "Nova Revive", "Nova Audit"];
+const TICKER_ITEMS = ["Nova Audit", "Nova Core", "Nova Harvest", "Nova Sentry"];
 
-const ENGINES = [
-  { name: "Nova Voice", color: "#a78bfa", Icon: Mic, desc: "AI phone agent answering every call 24/7 in English and Spanish. Never miss a lead again.", stat: "24/7 coverage, EN + ES" },
-  { name: "Nova Blue", color: "#C9A84C", Icon: MessageSquare, desc: "AI SMS agent following up with every lead automatically.", stat: "98% of texts read within 3 minutes" },
-  { name: "Nova Email", color: "#2dd4bf", Icon: MailIcon, desc: "AI managing your entire inbox. Every inquiry answered professionally.", stat: "Replies in under 2 minutes" },
-  { name: "Nova Social", color: "#e879f9", Icon: Share2, desc: "AI handling every Instagram, TikTok, Facebook, and LinkedIn DM and comment.", stat: "Turns attention into appointments", gradient: "linear-gradient(135deg,#f472b6,#a78bfa)" },
-  { name: "Nova Revive", color: "#fb923c", Icon: RefreshCcw, desc: "AI reactivating every dead lead in your database.", stat: "Recovers revenue you already paid for" },
-  { name: "Nova Audit", color: GOLD, Icon: ClipboardCheck, desc: "Full business intelligence scan showing exactly where you lose money and what competitors do better.", stat: "Delivered as a premium PDF report" },
+// Availability labels must match what is actually running (docs/NOVA_OPERATIONAL_MVP_READINESS.md). No outcome statistics.
+const PILLARS = [
+  { name: "Nova Audit", Icon: ClipboardCheck, status: "Available now", desc: "Nova looks at how your business handles new customers — phone, texts, web form, booking, payment and follow-up — and writes down what it finds, with the source and date of every observation. Estimates are labelled as estimates." },
+  { name: "Nova Core", Icon: Workflow, status: "Pilot only", desc: "Workers that carry out the routine steps of a sale: answer the inquiry, ask your qualifying questions, quote only prices you approved, offer real open times, book, send the agreement and pass the job to your team." },
+  { name: "Nova Harvest", Icon: RefreshCcw, status: "Pilot only", desc: "Follow-up on customers you already have: a text back after a missed call, check-ins with past customers and old quotes, and honest review and referral invitations — only to people who gave permission." },
+  { name: "Nova Sentry", Icon: Activity, status: "Pilot only", desc: "Watches that the other three keep working, alerts a named person when something fails, and sends a weekly scoreboard built from your actual records." },
 ];
 
 const INDUSTRIES = [
@@ -35,28 +33,10 @@ const INDUSTRIES = [
   { name: "Retail & Boutiques", Icon: ShoppingBag },
 ];
 
-function useSpotsRemaining() {
-  const [spots, setSpots] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    const load = () => {
-      fetch("/api/waves-intake?action=spots").then((r) => r.json()).then((d) => {
-        if (!cancelled) setSpots(Number.isFinite(d?.spots_remaining) ? d.spots_remaining : 7);
-      }).catch(() => { if (!cancelled) setSpots(7); });
-    };
-    load();
-    const interval = setInterval(load, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
-  return spots;
-}
-
 export default function Waves() {
-  const spots = useSpotsRemaining();
-
   useSEO({
-    title: "Wave One — The AI Revenue Engine for Connecticut Businesses | Nova Systems",
-    description: "Wave One is now open. Six AI engines, one partner, one check. Limited enrollment for Connecticut businesses ready to stop losing revenue to missed calls, slow follow-up, and dead leads.",
+    title: "Wave One Pilot — Nova Systems for Connecticut Businesses",
+    description: "Apply for Nova Systems' Wave One pilot: a complimentary Nova Audit first, then, if you choose, a clearly labelled pilot of Nova Core, Harvest and Sentry. Connecticut businesses.",
   });
 
   const scrollToEngines = () => {
@@ -77,7 +57,7 @@ export default function Waves() {
           <span className="text-xs font-bold tracking-[0.2em] uppercase" style={{ color: GOLD }}>NOVA SYSTEMS</span>
         </Link>
         <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-bold tracking-[0.15em] uppercase" style={{ background: `${GOLD}18`, color: GOLD, border: `1px solid ${GOLD}45` }}>
-          Wave One — Now Open
+          Wave One Pilot
         </span>
       </div>
 
@@ -90,19 +70,19 @@ export default function Waves() {
             <span className="absolute inline-flex h-full w-full rounded-full" style={{ background: GOLD, animation: "wavePulse 1.8s ease-in-out infinite" }} />
             <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ background: GOLD }} />
           </span>
-          <span className="text-xs md:text-sm font-semibold tracking-wide" style={{ color: "rgba(255,255,255,0.7)" }}>Limited Enrollment Open</span>
+          <span className="text-xs md:text-sm font-semibold tracking-wide" style={{ color: "rgba(255,255,255,0.7)" }}>Pilot applications open</span>
         </div>
 
         <h1 className="relative font-black leading-[0.98] max-w-5xl mb-6" style={{ fontSize: "clamp(2.4rem, 6vw, 5rem)", letterSpacing: "-0.03em" }}>
-          The AI Revenue Engine for<br className="hidden md:block" /> Connecticut Businesses.
+          Find out where customers slip away.<br className="hidden md:block" /> Then fix the parts worth fixing.
         </h1>
 
         <p className="relative text-lg md:text-2xl font-bold mb-6" style={{ color: GOLD }}>
-          Wave One. Six engines. One partner. One check.
+          Wave One: the first Connecticut businesses to run Nova.
         </p>
 
         <p className="relative text-sm md:text-base max-w-2xl leading-relaxed mb-10" style={{ color: "rgba(255,255,255,0.5)" }}>
-          We are selecting a limited group of Connecticut businesses to deploy our full AI Revenue Engine before the public launch. Early partners lock in a lower rate, skip setup fees, and go live in 14 days.
+          Every Wave One business starts with a complimentary Nova Audit. If the findings are worth acting on, you decide the scope and Nova installs it as a clearly labelled pilot. Pricing is set in writing for your scope before anything starts.
         </p>
 
         <div className="relative flex flex-col sm:flex-row items-center gap-4 mb-16">
@@ -110,7 +90,7 @@ export default function Waves() {
             Apply for Early Access <ArrowRight className="w-4 h-4" />
           </Link>
           <button onClick={scrollToEngines} className="inline-flex items-center justify-center gap-2 px-9 py-4 text-xs font-bold tracking-[0.15em] uppercase rounded-lg transition-all hover:bg-white/5" style={{ border: "1px solid rgba(255,255,255,0.25)", color: "#fff" }}>
-            See What Is Included
+            See The Four Pillars
           </button>
         </div>
 
@@ -130,12 +110,12 @@ export default function Waves() {
       <FadeUp>
         <section className="py-24 px-6" style={{ background: "#050400" }}>
           <div className="max-w-6xl mx-auto text-center">
-            <h2 className="text-3xl md:text-5xl font-black mb-16 max-w-3xl mx-auto leading-tight">Your Business Is Losing Money Right Now.</h2>
+            <h2 className="text-3xl md:text-5xl font-black mb-16 max-w-3xl mx-auto leading-tight">Most Owners Cannot Answer These Three Questions.</h2>
             <div className="grid md:grid-cols-3 gap-6 mb-14 text-left">
               {[
-                { emoji: "📞", text: "35% of calls go unanswered after hours. Those callers call your competitor next." },
-                { emoji: "⏱️", text: "Average business takes 12 hours to reply to a lead. You have 5 minutes before they move on." },
-                { emoji: "💀", text: "Thousands in dead leads sitting in your database. Nobody is following up. That money is gone." },
+                { emoji: "📞", text: "How many calls go unanswered after hours, and what happens to those callers?" },
+                { emoji: "⏱️", text: "How long does a new inquiry from your website or a text wait for a reply?" },
+                { emoji: "🗂️", text: "How many past customers and old quotes have never been followed up?" },
               ].map((c, i) => (
                 <div key={i} className="rounded-2xl p-8" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
                   <div className="text-3xl mb-5">{c.emoji}</div>
@@ -143,34 +123,38 @@ export default function Waves() {
                 </div>
               ))}
             </div>
-            <p className="text-2xl md:text-3xl font-black" style={{ color: GOLD }}>Nova Systems fixes all three. Automatically.</p>
+            <p className="text-2xl md:text-3xl font-black" style={{ color: GOLD }}>The Nova Audit finds out, with evidence.</p>
           </div>
         </section>
       </FadeUp>
 
-      {/* SECTION 3 — THE 6 ENGINES */}
+      {/* SECTION 3 — THE FOUR PILLARS */}
       <section id="wave-engines" className="py-24 px-6" style={{ background: "#0a0800" }}>
         <div className="max-w-6xl mx-auto">
           <FadeUp>
-            <h2 className="text-3xl md:text-5xl font-black text-center mb-16">Wave One Includes All 6 Engines.</h2>
+            <h2 className="text-3xl md:text-5xl font-black text-center mb-16">The Four Pillars.</h2>
           </FadeUp>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-14">
-            {ENGINES.map((e, i) => (
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            {PILLARS.map((e, i) => (
               <FadeUp key={e.name} delay={i * 60}>
                 <div className="h-full rounded-2xl p-7" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style={{ background: e.gradient || `${e.color}20`, border: `1px solid ${e.color}50` }}>
-                    <e.Icon className="w-5 h-5" style={{ color: e.gradient ? "#fff" : e.color }} />
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style={{ background: `${GOLD}20`, border: `1px solid ${GOLD}50` }}>
+                    <e.Icon className="w-5 h-5" style={{ color: GOLD }} />
                   </div>
-                  <h3 className="text-base font-black mb-2" style={{ color: GOLD }}>{e.name}</h3>
-                  <p className="text-sm leading-relaxed mb-4" style={{ color: "rgba(255,255,255,0.55)" }}>{e.desc}</p>
-                  <p className="text-xs font-bold" style={{ color: e.color }}>{e.stat}</p>
+                  <h3 className="text-base font-black mb-1" style={{ color: GOLD }}>{e.name}</h3>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] mb-3" style={{ color: e.status === "Available now" ? "#FAFAFA" : "rgba(250,250,250,0.55)" }}>{e.status}</p>
+                  <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.55)" }}>{e.desc}</p>
                 </div>
               </FadeUp>
             ))}
           </div>
+          <p className="flex items-start gap-2 max-w-3xl mx-auto text-xs leading-relaxed mb-12" style={{ color: "rgba(255,255,255,0.45)" }}>
+            <Mic className="w-4 h-4 shrink-0" style={{ color: GOLD }} />
+            An AI voice receptionist is being tested and is not offered yet. Wave One pilots handle texts and web inquiries; calls go to your team as they do today.
+          </p>
           <div className="text-center">
             <Link to="/waves/form" className="inline-flex items-center gap-2 px-9 py-4 text-xs font-bold tracking-[0.15em] uppercase rounded-lg transition-all hover:opacity-85" style={{ background: G, color: "#0a0800" }}>
-              Get All 6 Engines <ArrowRight className="w-4 h-4" />
+              Apply For The Pilot <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
         </div>
@@ -180,12 +164,12 @@ export default function Waves() {
       <FadeUp>
         <section className="py-24 px-6" style={{ background: "#050400" }}>
           <div className="max-w-5xl mx-auto text-center">
-            <h2 className="text-3xl md:text-5xl font-black mb-16">Live in 14 Days. Here Is How.</h2>
+            <h2 className="text-3xl md:text-5xl font-black mb-16">How Wave One Works.</h2>
             <div className="grid md:grid-cols-3 gap-8 text-left">
               {[
-                { n: "01", title: "You apply", desc: "Takes 5 minutes. Tell us about your business and your biggest challenge." },
-                { n: "02", title: "We build your system", desc: "Our team trains your AI on everything about your business. Voice, SMS, email, social — all configured for you." },
-                { n: "03", title: "You grow", desc: "Your AI Revenue Engine goes live. Every call answered. Every lead followed up. Every channel covered." },
+                { n: "01", title: "You apply", desc: "Tell us about your business and how customers reach you today." },
+                { n: "02", title: "Nova audits", desc: "With your written permission, Nova reviews your channels and writes up what it found — observations, owner-reported facts and labelled estimates kept separate." },
+                { n: "03", title: "You decide", desc: "If something is worth fixing, you approve a written scope and price. Nova installs it as a labelled pilot, and you see the weekly scoreboard from your own records." },
               ].map((s) => (
                 <div key={s.n}>
                   <p className="text-4xl font-black mb-4" style={{ color: `${GOLD}50` }}>{s.n}</p>
@@ -198,40 +182,27 @@ export default function Waves() {
         </section>
       </FadeUp>
 
-      {/* SECTION 5 — WAVE ONE OFFER */}
+      {/* SECTION 5 — WHAT A PILOT IS */}
       <FadeUp>
         <section className="py-24 px-6" style={{ background: "#1A1100" }}>
           <div className="max-w-5xl mx-auto text-center">
-            <h2 className="text-3xl md:text-5xl font-black mb-16" style={{ color: GOLD }}>Wave One Early Partner Rate</h2>
+            <h2 className="text-3xl md:text-5xl font-black mb-16" style={{ color: GOLD }}>What A Pilot Means</h2>
             <div className="grid md:grid-cols-3 gap-6 mb-14 text-left">
               {[
-                { Icon: ShieldCheck, title: "Zero Setup Fees", desc: "Early partners pay no implementation fee.", value: "Value: $2,500" },
-                { Icon: Crown, title: "Locked Monthly Rate", desc: "Your rate is locked for 12 months. No price increases." },
-                { Icon: Sparkles, title: "Priority Support", desc: "Direct line to Isaac and the Nova Systems team." },
+                { Icon: ShieldCheck, title: "Your approval first", desc: "Prices, agreement wording and who may be contacted are set by you. Nova never quotes a price you have not approved." },
+                { Icon: Activity, title: "Real records", desc: "The weekly scoreboard is built from your bookings, agreements and deposits. Estimates are labelled, and test activity is never counted." },
+                { Icon: ClipboardCheck, title: "Honest limits", desc: "A pilot is labelled as a pilot. If something is not ready, Nova says so instead of selling it." },
               ].map((b) => (
                 <div key={b.title} className="rounded-2xl p-8" style={{ background: "rgba(0,0,0,0.35)", border: `1px solid ${GOLD}35` }}>
                   <b.Icon className="w-7 h-7 mb-5" style={{ color: GOLD }} />
                   <h3 className="text-base font-black mb-2 text-white">{b.title}</h3>
-                  <p className="text-sm leading-relaxed mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>{b.desc}</p>
-                  {b.value && <p className="text-xs font-bold" style={{ color: GOLD }}>{b.value}</p>}
+                  <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.5)" }}>{b.desc}</p>
                 </div>
               ))}
             </div>
-
-            <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full mb-10" style={{ background: "rgba(0,0,0,0.4)", border: `1px solid ${GOLD}40` }}>
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full rounded-full" style={{ background: "#f87171", animation: "wavePulse 1.8s ease-in-out infinite" }} />
-                <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: "#f87171" }} />
-              </span>
-              <span className="text-sm font-bold text-white">
-                {spots === null ? "Loading spots..." : `${spots} spot${spots === 1 ? "" : "s"} remaining`}
-              </span>
-            </div>
-            <div>
-              <Link to="/waves/form" className="inline-flex items-center gap-2 px-10 py-5 text-sm font-bold tracking-[0.15em] uppercase rounded-lg transition-all hover:opacity-85" style={{ background: G, color: "#0a0800" }}>
-                Lock In My Spot <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
+            <Link to="/waves/form" className="inline-flex items-center gap-2 px-10 py-5 text-sm font-bold tracking-[0.15em] uppercase rounded-lg transition-all hover:opacity-85" style={{ background: G, color: "#0a0800" }}>
+              Apply For Wave One <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
         </section>
       </FadeUp>
@@ -240,7 +211,7 @@ export default function Waves() {
       <FadeUp>
         <section className="py-24 px-6" style={{ background: "#0a0800" }}>
           <div className="max-w-5xl mx-auto text-center">
-            <h2 className="text-3xl md:text-5xl font-black mb-16">Wave One Is For Connecticut Businesses That Are Ready.</h2>
+            <h2 className="text-3xl md:text-5xl font-black mb-16">Built For Local Businesses That Win Customers By Phone, Text And Booking.</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-5 mb-12">
               {INDUSTRIES.map((ind) => (
                 <div key={ind.name} className="rounded-2xl p-6 flex flex-col items-center gap-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -259,15 +230,15 @@ export default function Waves() {
       {/* SECTION 7 — FINAL CTA */}
       <section className="py-24 px-6 text-center" style={{ background: "#000", borderTop: `1px solid ${GOLD}`, borderBottom: `1px solid ${GOLD}` }}>
         <div className="max-w-3xl mx-auto">
-          <h2 className="text-3xl md:text-5xl font-black mb-5 leading-tight">The Public Launch Is Coming. Early Partners Go First.</h2>
+          <h2 className="text-3xl md:text-5xl font-black mb-5 leading-tight">Start With The Audit.</h2>
           <p className="text-sm md:text-base mb-10" style={{ color: "rgba(255,255,255,0.5)" }}>
-            Once Wave One capacity is filled this page closes. Applications reviewed within 24 hours.
+            Every application is reviewed personally by the Nova team. There is no obligation to buy anything after the audit.
           </p>
           <Link to="/waves/form" className="inline-flex items-center gap-2 px-10 py-5 text-sm font-bold tracking-[0.15em] uppercase rounded-lg transition-all hover:opacity-85 mb-5" style={{ background: G, color: "#0a0800" }}>
             Apply Now <ArrowRight className="w-4 h-4" />
           </Link>
           <p className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
-            No commitment required. Free Nova Audit included with every application.
+            The Nova Audit is complimentary for Wave One applicants.
           </p>
         </div>
       </section>

@@ -29,8 +29,8 @@ const values = [
 export default function Company() {
   const navigate = useNavigate();
   useSEO({
-    title: "About Nova Systems — Connecticut AI and Technology Agency",
-    description: "Nova Systems is a Connecticut-based technology and AI agency founded by Isaac Nova in Waterbury, CT — building elite digital infrastructure for businesses of every size.",
+    title: "About Nova Systems — Connecticut Technology Company",
+    description: "Nova Systems is a Connecticut technology company founded by Isaac Nova in Waterbury, CT — building elite digital infrastructure for businesses of every size.",
   });
 
   return (
@@ -61,7 +61,7 @@ export default function Company() {
               }}>Engineered for Perfection.</span>
             </h1>
             <p className="text-base leading-relaxed max-w-xl" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Nova Systems is a Connecticut-based technology and AI agency building elite digital infrastructure for businesses of every size.
+              Nova Systems is a Connecticut technology company building elite digital infrastructure for businesses of every size.
             </p>
             <div className="flex items-center gap-2 mt-6" style={{ color: "rgba(255,255,255,0.3)" }}>
               <MapPin className="w-3.5 h-3.5" style={{ color: GOLD }} />
@@ -106,7 +106,7 @@ export default function Company() {
                   {[
                     "Waterbury, Connecticut",
                     "Founded Nova Systems at 19",
-                    "Building CT's first AI-focused agency",
+                    "Building Nova Audit, Core, Harvest and Sentry",
                     "Serving Waterbury to Fairfield County",
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2.5">
