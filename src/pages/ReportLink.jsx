@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { useSEO } from '@/hooks/useSEO'
 
 const C = { bg: '#0A0A0A', panel: '#111111', line: 'rgba(250,250,250,0.12)', text: '#FAFAFA', dim: 'rgba(250,250,250,0.65)', gold: '#C9A84C', red: '#F07167' }
 const NAMES = { executive_summary: 'Executive summary', business_identity: 'Business', findings: 'Findings', recommendations: 'Prioritized installation recommendation', estimates_and_assumptions: 'Financial scenarios and assumptions', scope_and_method: 'Scope, method and tests', competitor_benchmarks: 'Competitor benchmarks', software_review: 'Software review', evidence_reviewed: 'Evidence appendix', limitations: 'Limitations', next_steps: 'Next steps' }
@@ -13,6 +14,7 @@ function Value({ v }) {
 
 // Client view of the exact approved audit report, through Nova's secure delivery link.
 export default function ReportLink() {
+  useSEO({ title: 'Your Nova report — Nova Systems', robots: 'noindex, nofollow' })
   const { token } = useParams()
   const [d, setD] = useState(null); const [err, setErr] = useState(null)
   useEffect(() => { fetch(`/api/client?resource=audit&op=report-view&token=${encodeURIComponent(token)}`).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Unavailable'); setD(j) }).catch((e) => setErr(e.message)) }, [token])

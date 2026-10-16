@@ -11,4 +11,10 @@
   <url><loc>https://nova-systems.app/terms</loc></url>
   <url><loc>https://nova-systems.app/privacy</loc></url>
   <url><loc>https://nova-systems.app/service-agreement</loc></url>
+  <url>
+    <loc>https://nova-systems.app/demo</loc>
+  </url>
+  <url>
+    <loc>https://nova-systems.app/waves</loc>
+  </url>
 </urlset>

@@ -29,9 +29,9 @@ function StateIcon({ s }) {
 const STATE_WORD = { pending: "Waiting", processing: "Working…", completed: "Done", failed: "Failed", awaiting_action: "Needs a person" };
 
 export default function Demo() {
-  useSEO({ title: "Five-Minute Demo — Nova Systems", description: "See one evidenced check of your public website and watch Nova Core's workers handle a made-up inquiry in a demo workspace — in about five minutes." });
   const [params, setParams] = useSearchParams();
   const token = params.get("session");
+  useSEO({ title: "Five-Minute Demo — Nova Systems", description: "See one evidenced check of your public website and watch Nova Core's workers handle a made-up inquiry in a demo workspace — in about five minutes.", robots: token ? "noindex, nofollow" : null });
   const [form, setForm] = useState({ name: "", business_name: "", website: "", email: "", concern: CONCERNS[0], concern_detail: "", marketing_consent: false, company_url_confirm: "" });
   const submissionId = useMemo(newId, []);
   const [errors, setErrors] = useState({}); const [error, setError] = useState(null); const [busy, setBusy] = useState(false);

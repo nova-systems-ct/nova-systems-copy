@@ -21,10 +21,10 @@ export default function Footer() {
               </p>
             </div>
             <p className="text-xs font-semibold tracking-wide mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>
-              Revenue Intelligence. Systems. Growth.
+              Diagnose. Execute. Recover. Monitor.
             </p>
             <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.35)" }}>
-              Waterbury, Connecticut. Elite digital infrastructure — whatever your business needs, we build it.
+              Waterbury, Connecticut. Nova finds where inquiries and customers are lost, runs the steps that win them, and checks every week that it keeps working.
             </p>
             {/* Social icons */}
             <div className="flex gap-3 mt-5">

@@ -51,6 +51,9 @@ try {
   await page.getByRole('link', { name: /WATCH THE 5-MINUTE DEMO/ }).click();
   await page.waitForURL(/\/demo$/, { timeout: 15000 });
   check('the home page leads to the demo', /\/demo$/.test(page.url()));
+  await page.getByRole('button', { name: /Start the demo/ }).waitFor({ timeout: 15000 });
+  const seo = await page.evaluate(() => ({ canonical: document.querySelector('link[rel="canonical"]')?.href, robots: document.querySelector('meta[name="robots"]')?.content || null, desc: document.querySelector('meta[name="description"]')?.content }));
+  check('the public demo page is indexable with its own canonical URL on nova-systems.app', seo.canonical === 'https://nova-systems.app/demo' && seo.robots === null, JSON.stringify(seo));
   await page.getByRole('button', { name: /Start the demo/ }).click();
   await page.getByText('Please enter your name.').waitFor({ timeout: 10000 });
   check('an empty form shows which fields are needed', await page.getByText('Please enter a valid email address.').first().isVisible());
@@ -74,6 +77,10 @@ try {
   const url = page.url();
   await page.reload(); await page.getByText('Your demo summary (saved)').waitFor({ timeout: 15000 });
   check('the saved summary reopens from the page link after a refresh', url.includes('session=') && await page.getByText(/answered HTTP 404/).first().isVisible());
+  check("a visitor's private session page tells search engines not to index it", (await page.evaluate(() => document.querySelector('meta[name="robots"]')?.content)) === 'noindex, nofollow');
+  await page.goto(`${base}/`);
+  const home = await page.evaluate(() => ({ canonical: document.querySelector('link[rel="canonical"]')?.href, desc: document.querySelector('meta[name="description"]')?.content || '', ld: document.querySelector('script[type="application/ld+json"]')?.textContent || '' }));
+  check('the home page describes the operational product (not websites/social media/branding) and declares the organization', home.canonical === 'https://nova-systems.app/' && !/websites|social media|branding/i.test(home.desc) && /"@type":"Organization"/.test(home.ld), JSON.stringify(home).slice(0, 300));
   const sess = await one("select * from demo_sessions where email='visitor@broken.example.test'");
   check('the session, scan, worker steps and summary are stored; the lead is in Nova CRM', sess.status === 'completed' && sess.scan.result === 'issue_found' && sess.worker_steps.length === 7 && !!sess.nova_deal_id);
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
+import { useSEO } from '@/hooks/useSEO'
 
 const C = { bg: '#0A0A0A', panel: '#111111', line: 'rgba(250,250,250,0.12)', text: '#FAFAFA', dim: 'rgba(250,250,250,0.65)', gold: '#C9A84C', red: '#F07167', green: '#7BD389', amber: '#E9B44C' }
 const money = (c, cur = 'usd') => (c == null ? '—' : `${String(cur).toLowerCase() === 'usd' ? '$' : ''}${(c / 100).toFixed(2)}`)
@@ -8,6 +9,7 @@ const call = (op, { method = 'GET', token, body } = {}) => fetch(`/api/client?re
 
 // Customer page for one request: review the exact agreement, sign it, pay the deposit through Stripe's hosted page.
 export default function ServiceLink() {
+  useSEO({ title: 'Your booking — Nova Systems', robots: 'noindex, nofollow' })
   const { token } = useParams(); const [sp] = useSearchParams()
   const [d, setD] = useState(null); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [msg, setMsg] = useState(null)
   const [name, setName] = useState(''); const [consent, setConsent] = useState(false)
