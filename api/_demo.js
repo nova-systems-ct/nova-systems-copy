@@ -22,7 +22,7 @@ export const DEMO_SLUG = 'nova-demo-workspace';
 const MAX_FETCHES = 4;
 const LIMITS = () => ({ perIpPerDay: Number(process.env.DEMO_MAX_PER_IP_PER_DAY) || 5, perDay: Number(process.env.DEMO_MAX_PER_DAY) || 300 });
 export const CONSENT_TEXT = 'Nova Systems may email me about Nova products and services. I can unsubscribe at any time.';
-export const DEMO_INQUIRY = 'Hi, do you have time this week for a full detail on my car?'; // sent by a made-up DEMO customer
+export const DEMO_INQUIRY = 'Hi, do you have time this week for a full detail on my car?'; // sent by a sample customer in the demonstration workspace
 
 // ------------------------------------------------------------------------------------------------ scan (pure + injectable)
 const digits = (s) => String(s || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
@@ -156,7 +156,7 @@ async function runStep(sess, key, ws) {
     const conv = (await dbInsert('wave1_conversations', { organization_id: orgId, contact_id: contact.id, channel: 'form', is_test: true, customer_initiated_at: nowIso() })).row;
     const j = await S.openJobForConversation({ orgId, contact, conversation: conv, channel: 'form', isTest: true });
     await dbPatch('demo_sessions', `id=eq.${enc(sess.id)}`, { demo_job_id: j.id, demo_org_id: orgId });
-    return { record_id: j.id, detail: `A web-form inquiry arrived from a made-up DEMO customer: "${DEMO_INQUIRY}"` };
+    return { record_id: j.id, detail: `A web-form inquiry arrived from a sample customer: "${DEMO_INQUIRY}"` };
   }
   if (!job) throw Object.assign(new Error('The demo inquiry was not created'), { status: 409 });
   if (key === 'qualify') {
@@ -167,7 +167,7 @@ async function runStep(sess, key, ws) {
   }
   if (key === 'price') {
     const r = await S.quoteJob({ orgId, job, serviceKey: job.qualification?.service_key, actor });
-    return { record_id: job.id, detail: `Quoted only from the business's approved price list: ${R.formatMoney(r.quote.total_cents, r.quote.currency)} with a ${R.formatMoney(r.quote.deposit_cents, r.quote.currency)} deposit (made-up demo prices).` };
+    return { record_id: job.id, detail: `Quoted only from the business's approved price list: ${R.formatMoney(r.quote.total_cents, r.quote.currency)} with a ${R.formatMoney(r.quote.deposit_cents, r.quote.currency)} deposit (sample demonstration prices).` };
   }
   if (key === 'availability') {
     const a = await S.availability(orgId, job.qualification?.service_key, { limit: 3 });
@@ -217,15 +217,32 @@ async function sessionByToken(req) {
   return s && new Date(s.expires_at) > new Date() ? s : null;
 }
 
+// Visitor-facing failure copy (plain; the real cause goes to the server log for staff).
+export const VISITOR_ERROR = {
+  start: "We couldn't start your demo. Please try again.",
+  scan: "We couldn't finish checking the website. Please try again.",
+  step: "That step couldn't run. Please try again.",
+  finish: "We couldn't save your summary. Please try again.",
+  session: "We couldn't load this demo. Please try again.",
+  default: "Something went wrong. Please try again.",
+};
+const configured = () => !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+
 export async function handleDemo(req, res, op) {
   const b = req.body || {};
+  // Without its database the demo cannot save anything. Say so plainly (503) and log the exact cause, instead of a 500.
+  if (!configured()) {
+    console.error('[demo] not configured: SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY is missing in this environment');
+    if (op === 'status') return send(res, 200, { workers_available: false, available: false });
+    return send(res, 503, { error: VISITOR_ERROR[op] || VISITOR_ERROR.default, code: 'not_configured' });
+  }
   try {
     if (op === 'setup') {
       const caller = await requireStaff(req, res); if (!caller) return;
       if (!isOwner(caller)) return send(res, 403, { error: 'Only the Nova owner can set up the demo workspace.' });
       return send(res, 200, await setupWorkspace(caller));
     }
-    if (op === 'status') { if (!rateLimit(req, res, 30, 60_000)) return; const ws = await demoWorkspace(); return send(res, 200, { workers_available: ws.ready }); }
+    if (op === 'status') { if (!rateLimit(req, res, 30, 60_000)) return; const ws = await demoWorkspace(); return send(res, 200, { workers_available: ws.ready, available: true }); }
 
     if (op === 'start') {
       if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
@@ -285,7 +302,7 @@ export async function handleDemo(req, res, op) {
       if (!ws.ready) return send(res, 409, { error: 'The worker demo is not available right now.', reason: ws.reason });
       const started_at = nowIso();
       let out;
-      try { out = await runStep(sess, key, ws); } catch (e) { console.error('[demo] step failed', key, e.message, e.detail ? String(e.detail).slice(0, 200) : ''); out = { status: 'failed', detail: 'This step failed. Nothing was faked: the failure is shown as it happened.' }; }
+      try { out = await runStep(sess, key, ws); } catch (e) { console.error('[demo] step failed', key, e.message, e.detail ? String(e.detail).slice(0, 200) : ''); out = { status: 'failed', detail: 'This step could not finish. The result is shown exactly as it happened.' }; }
       const row = { key, label: STEPS[idx].label, status: out.status || 'completed', started_at, finished_at: nowIso(), detail: out.detail, record_id: out.record_id || null, ...(out.slots ? { slots: out.slots } : {}), ...(out.timeline ? { timeline: out.timeline } : {}), ...(out.customer_link ? { customer_link: out.customer_link } : {}) };
       const latest = (await dbOne(`demo_sessions?id=eq.${enc(sess.id)}&select=worker_steps`)).worker_steps || [];
       const nextSteps = [...latest.filter((s) => s.key !== key), row];
@@ -304,7 +321,7 @@ export async function handleDemo(req, res, op) {
         checks_run: (sess.scan?.checks || []).map((c) => ({ label: c.label, result: c.result, url: c.url, checked_at: c.checked_at })),
         workers: steps.map((s) => ({ label: s.label, status: s.status })), workers_completed: steps.filter((s) => s.status === 'completed').length, workers_total: STEPS.length,
         next_step: 'Request the full Nova Audit: Nova reviews your phone, text, form, booking, payment and follow-up paths with your permission and delivers a written report within 48–72 hours of confirming scope, access and inputs.',
-        demo_note: 'The worker half ran in Nova\'s DEMO workspace with a made-up customer and made-up prices. Nothing was sent to anyone, no real appointment exists, and no money moved.',
+        demo_note: 'The worker steps ran in Nova\'s demonstration workspace with a sample customer and sample prices. No message was sent, no real appointment exists, and no money moved.',
       };
       let alert = 'not_configured';
       const staff = process.env.OPS_ALERT_EMAIL || process.env.ISAAC_ALERT_EMAIL;
@@ -325,6 +342,6 @@ export async function handleDemo(req, res, op) {
   } catch (e) {
     if (e.status && e.status < 500) return send(res, e.status, { error: e.message });
     console.error('[demo]', e.message, e.detail ? String(e.detail).slice(0, 300) : '');
-    return send(res, 500, { error: 'Something went wrong. Nothing was faked; please try again.' });
+    return send(res, 500, { error: VISITOR_ERROR[op] || VISITOR_ERROR.default, code: 'server_error' });
   }
 }

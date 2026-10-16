@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Loader2, AlertTriangle, Circle, Search, Workflow, ArrowRight, Clock } from "lucide-react";
 import Navbar from "@/components/Navbar";
@@ -33,7 +33,8 @@ export default function Demo() {
   const token = params.get("session");
   useSEO({ title: "Five-Minute Demo — Nova Systems", description: "See one evidenced check of your public website and watch Nova Core's workers handle a made-up inquiry in a demo workspace — in about five minutes.", robots: token ? "noindex, nofollow" : null });
   const [form, setForm] = useState({ name: "", business_name: "", website: "", email: "", concern: CONCERNS[0], concern_detail: "", marketing_consent: false, company_url_confirm: "" });
-  const submissionId = useMemo(newId, []);
+  const [submissionId, setSubmissionId] = useState(newId);
+  const [failures, setFailures] = useState(0); const [runTick, setRunTick] = useState(0);
   const [errors, setErrors] = useState({}); const [error, setError] = useState(null); const [busy, setBusy] = useState(false);
   const [session, setSession] = useState(null); const [running, setRunning] = useState(null); const [workersAvailable, setWorkersAvailable] = useState(null);
   const [now, setNow] = useState(Date.now()); const started = useRef(false);
@@ -61,17 +62,21 @@ export default function Demo() {
           }
         }
         setRunning("finish"); s = await API("finish", { body: { token } }); setSession(s);
-      } catch (e) { setError(e.message); }
+      } catch (e) { setError(e.message || "Something went wrong. Please try again."); started.current = false; }
       finally { setRunning(null); }
     })();
-  }, [token, session, workersAvailable]);
+  }, [token, session, workersAvailable, runTick]);
 
   const submit = async (e) => {
     e.preventDefault(); if (busy) return; setBusy(true); setErrors({}); setError(null);
     try {
       const j = await API("start", { body: { ...form, concern: form.concern_detail.trim() ? `${form.concern}: ${form.concern_detail.trim()}` : form.concern, submission_id: submissionId } });
       started.current = false; setSession(j.session); setParams({ session: j.token }, { replace: true });
-    } catch (err) { setErrors(err.fields || {}); setError(err.status === 409 ? "This form was already sent — your demo is running." : err.message); }
+    } catch (err) {
+      setErrors(err.fields || {});
+      if (err.status === 409) { setSubmissionId(newId()); setError("Your earlier attempt reached us but did not finish. Press Start the demo once more."); }
+      else { setError(err.fields ? err.message : "We couldn't start your demo. Please try again."); if (!err.fields) setFailures((n) => n + 1); }
+    }
     finally { setBusy(false); }
   };
 
@@ -85,7 +90,7 @@ export default function Demo() {
         <p className="text-xs font-bold tracking-[0.2em] uppercase mb-3" style={{ color: GOLD }}>Five-minute demo</p>
         <h1 className="font-black leading-tight mb-4" style={{ fontSize: "clamp(1.9rem, 5vw, 3rem)" }}>See where an inquiry can slip — then watch the workers handle one.</h1>
         <p className="text-base leading-relaxed mb-10" style={{ color: muted }}>
-          First, Nova checks a few public pages of your website and shows you one thing it can actually verify — or tells you honestly that nothing was found. Then you watch Nova Core's workers take a made-up inquiry from arrival to a prepared agreement, in a demo workspace. This is not the full Nova Audit, which takes 48–72 hours once scope, access and inputs are confirmed.
+          First, we check your public website for a useful finding. Then watch Nova's workers handle a sample inquiry in a demonstration workspace. This short demonstration is not the full Nova Audit, which is delivered within 48–72 hours once scope, access and inputs are confirmed.
         </p>
 
         {!token && (
@@ -111,6 +116,11 @@ export default function Demo() {
               <p className="mt-2"><strong style={{ color: WHITE }}>How your information is used:</strong> Nova saves it as a request in its own records so the team can follow up about this demo. Nova reads only the public pages of the website you give. Nothing is sent to your customers or staff, no call or booking is made at your business, and no payment is taken. See the <Link to="/privacy" style={{ color: GOLD }}>privacy policy</Link>.</p>
             </div>
             {error && <p role="alert" className="mt-4 text-sm" style={{ color: "#E8B04B" }}>{error}</p>}
+            {failures >= 2 && (
+              <div className="mt-3 text-sm rounded-lg p-4" style={{ background: "rgba(250,250,250,0.04)", border: "1px solid rgba(250,250,250,0.12)", color: muted }}>
+                Still not working? Email <a href={`mailto:hello@nova-systems.app?subject=${encodeURIComponent("Five-minute demo")}&body=${encodeURIComponent(`Business: ${form.business_name}\nWebsite: ${form.website}\nConcern: ${form.concern}`)}`} style={{ color: GOLD }}>hello@nova-systems.app</a> and we will run it with you, or <Link to="/request-audit" style={{ color: GOLD }}>request the full Nova Audit</Link>. Your details are still in the form.
+              </div>
+            )}
             <button type="submit" disabled={busy} className="mt-6 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 text-xs font-bold tracking-[0.15em] uppercase rounded-lg" style={{ background: GOLD_GRADIENT, color: BLACK, opacity: busy ? 0.6 : 1 }}>
               {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Starting…</> : <>Start the demo <ArrowRight className="w-4 h-4" /></>}
             </button>
@@ -134,8 +144,8 @@ export default function Demo() {
 
             <section style={card} aria-labelledby="part2">
               <h2 id="part2" className="flex items-center gap-2 text-lg font-black mb-1"><Workflow className="w-5 h-5" style={{ color: GOLD }} /> Part 2 — Nova Core's workers, live</h2>
-              <p className="text-sm mb-4" style={{ color: muted }}>A made-up customer sends an inquiry to a made-up business in Nova's DEMO workspace. Each line below is a real action Nova's system performs and records as it happens — made-up prices, a demo calendar, no real appointment, no money.</p>
-              {workersAvailable === false && !session.steps.some((s) => s.status !== "pending") ? <p className="text-sm" style={{ color: "#E8B04B" }}>The worker demo is not available right now, so it is not shown. Nothing has been simulated in its place.</p> : (
+              <p className="text-sm mb-4" style={{ color: muted }}>A sample customer sends an inquiry to a sample business in Nova's demonstration workspace. Each line below is an action Nova's system performs and records as it happens, with sample prices and a demonstration calendar — no real appointment is made and no money moves.</p>
+              {workersAvailable === false && !session.steps.some((s) => s.status !== "pending") ? <p className="text-sm" style={{ color: "#E8B04B" }}>The worker demonstration isn't available right now. You can still request the full Nova Audit below.</p> : (
                 <ol className="space-y-3">
                   {session.steps.map((s) => { const st = running === s.key ? "processing" : s.status; return (
                     <li key={s.key} className="flex gap-3">
@@ -143,7 +153,7 @@ export default function Demo() {
                       <div className="min-w-0">
                         <p className="text-sm font-bold">{s.label} <span className="font-normal" style={{ color: muted }}>· {STATE_WORD[st] || st}</span></p>
                         {s.detail && <p className="text-sm leading-relaxed" style={{ color: muted }}>{s.detail}</p>}
-                        {s.customer_link && <a href={s.customer_link} target="_blank" rel="noreferrer" className="text-sm" style={{ color: GOLD }}>Open the made-up customer's signing page (test mode)</a>}
+                        {s.customer_link && <a href={s.customer_link} target="_blank" rel="noreferrer" className="text-sm" style={{ color: GOLD }}>Open the sample customer's signing page (test mode)</a>}
                       </div>
                     </li>); })}
                 </ol>
@@ -162,7 +172,13 @@ export default function Demo() {
                 <p className="text-xs mt-3" style={{ color: "rgba(250,250,250,0.45)" }}>Keep this page's link to reopen the summary for 30 days.</p>
               </section>
             )}
-            {error && <p role="alert" className="text-sm" style={{ color: "#E8B04B" }}>{error}</p>}
+            {error && (
+              <div role="alert" className="text-sm" style={{ color: "#E8B04B" }}>
+                <p>{error}</p>
+                <button type="button" disabled={!!running} onClick={() => { setError(null); setFailures((n) => n + 1); started.current = false; setRunTick((t) => t + 1); }} className="mt-2 underline" style={{ color: GOLD }}>Try again</button>
+                {failures >= 2 && <p className="mt-2" style={{ color: muted }}>Still not working? Email <a href="mailto:hello@nova-systems.app?subject=Five-minute%20demo" style={{ color: GOLD }}>hello@nova-systems.app</a> or <Link to="/request-audit" style={{ color: GOLD }}>request the full Nova Audit</Link>.</p>}
+              </div>
+            )}
           </div>
         )}
       </main>

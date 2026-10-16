@@ -157,6 +157,12 @@ try {
   check('no text message was sent to anyone during any demo', prov.twilio.messages.length === 0 && (await one("select count(*)::int n from wave1_messages where direction='outbound' and status in ('provider_accepted','delivered','queued')")).n === 0);
   check('no payment was attempted', prov.stripe.requests.length === 0);
   check('no email left the system (dry run)', env.stubs.outbox.length === 0);
+  // ---------------------------------------------------------------- an environment without its database (the 2026-10-16 Preview failure)
+  const savedKey = process.env.SUPABASE_SERVICE_ROLE_KEY; delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const st = await demo('status', {}, { method: 'GET' });
+  const nc = await demo('start', form({ submission_id: sid() }));
+  process.env.SUPABASE_SERVICE_ROLE_KEY = savedKey;
+  check('without database configuration, the demo answers plainly (503 "We couldn\'t start your demo. Please try again.") instead of a server error, and reports itself unavailable', st.status === 200 && st.body.available === false && nc.status === 503 && nc.body.code === 'not_configured' && nc.body.error === "We couldn't start your demo. Please try again.", JSON.stringify([st.body, nc.status, nc.body]));
   check("demo activity lives only in the test-marked DEMO workspace — none in Nova's own operational records", (await one('select count(*)::int n from ops_jobs where organization_id=$1', [nova])).n === 0 && (await one('select bool_and(is_test) t from ops_jobs where organization_id=$1', [demoOrg])).t === true);
 } catch (e) { fail++; console.log('FAIL — test crashed:', e.stack || e); }
 finally { globalThis.fetch = realFetch; dns.lookup = realLookup; await env.stop(); await prov.stop(); }
