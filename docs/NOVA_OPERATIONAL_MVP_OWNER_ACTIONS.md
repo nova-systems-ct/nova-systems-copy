@@ -38,10 +38,16 @@ even after login. Fix = give Preview its own (staging) values for, at minimum:
 8. **Twilio:** buy or assign a Nova test number; complete A2P 10DLC registration; point the webhooks; provide the Nova-owned test phones for `OPS_SEND_ALLOWLIST`.
 9. **Approve real prices** for each service (one price list for Nova itself too — owner decision #8). Draft prices are never quoted.
 10. **Have an attorney review the customer agreement template** and the privacy/terms text. Approval in the app is a business approval only.
-11. **Decide who receives customer deposits.** Options: the business's own Stripe account (connection not built), or deposits off. Nova's test account is for Nova TEST businesses only; live payments stay disabled.
+11. ~~Decide who receives customer deposits~~ — **decided 2026-10-16: each client's own connected Stripe account; Nova bills its fees separately.** Built as Stripe Connect direct charges (test mode). To use it: in Stripe (test mode) enable Connect for Nova's account; add a **Connect** webhook endpoint `https://<deployment>/api/stripe` for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded`, and put its signing secret in Vercel as `STRIPE_CONNECT_WEBHOOK_SECRET` (separate from `STRIPE_WEBHOOK_SECRET`); have each business connect its account, then enter its `acct_…` id in the business's Settings → Payments (Nova asks Stripe to confirm it is connected and can take charges). Live use stays blocked until you approve it.
 12. **Approve the AI voice disclosure wording** and whether the voice assistant should be offered at all in the first pilots.
 13. **Missed-call text policy:** the default texts only callers with recorded consent. Any broader policy needs legal review and your written attestation in Settings.
 14. **Attribution method, Nova fee and labor baseline** for the weekly report — or leave them blank and the report says "not calculable".
+
+## Website demo and search (added 2026-10-16)
+D1. **Set up the demo workspace once** (after the demo migration is applied in that environment): signed in as the Nova owner, call `POST /api/client?resource=demo&op=setup` (or ask Claude Code to run it with your session). It creates the DEMO workspace with made-up prices and a demo agreement approved under your name. Until then the site shows the worker half as "not available" — never simulated.
+D2. **Optional variables:** `OPS_ALERT_EMAIL` (who is told when a demo finishes; still dry-run until `SALES_EMAIL_MODE=live`), `DEMO_IP_SALT` (any random string), `DEMO_MAX_PER_IP_PER_DAY` (default 5), `DEMO_MAX_PER_DAY` (default 300).
+D3. **nova-systems.agency** still serves the old Wave One site (title "Nova Wave One", no description or canonical, no robots.txt) and is indexable — likely part of why search results describe an agency. Decide: redirect it to https://nova-systems.app (Vercel → nova-wave-one → Settings → Domains → Redirect), or keep it and accept a separate listing.
+D4. **Google Search Console** (no access from this session): after the corrected site is deployed to production, verify https://nova-systems.app, submit https://nova-systems.app/sitemap.xml, and use URL Inspection → Request indexing for /, /demo, /waves, /solutions. Search results update on Google's schedule; nothing can force immediate re-indexing or control third-party AI summaries.
 
 ## Commercial and sales
 15. **Testimonials:** provide written permission for each quote, or keep them off the site (they are removed from the homepage).
