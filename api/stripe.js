@@ -59,8 +59,12 @@ async function handleWebhook(req, res, rawBody) {
     console.error('[stripe webhook] STRIPE_WEBHOOK_SECRET not set — rejecting unverifiable webhook');
     return res.status(503).json({ error: 'Webhook verification is not configured.' });
   }
-  const ok = verifyStripeSignature(rawBody, req.headers['stripe-signature'], WEBHOOK_SECRET);
-  if (!ok) return res.status(400).json({ error: 'Invalid signature' });
+  // Two Stripe endpoints may post here: the platform endpoint (STRIPE_WEBHOOK_SECRET) and the Connect endpoint for events on
+  // businesses' connected accounts (STRIPE_CONNECT_WEBHOOK_SECRET). Each has its own signing secret.
+  const viaPlatform = verifyStripeSignature(rawBody, req.headers['stripe-signature'], WEBHOOK_SECRET);
+  const CONNECT_SECRET = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+  const viaConnect = !viaPlatform && !!CONNECT_SECRET && verifyStripeSignature(rawBody, req.headers['stripe-signature'], CONNECT_SECRET);
+  if (!viaPlatform && !viaConnect) return res.status(400).json({ error: 'Invalid signature' });
 
   let event;
   try {
@@ -70,6 +74,8 @@ async function handleWebhook(req, res, rawBody) {
   }
 
   console.log('[stripe webhook] Event:', event.type);
+  // An event signed by the Connect endpoint must name a connected account, and a platform-signed event must not.
+  if (viaConnect !== !!event.account) return res.status(400).json({ error: 'Event source does not match its endpoint' });
 
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     // Never acknowledge a payment we could not record — Stripe retries a non-2xx response.
@@ -79,7 +85,8 @@ async function handleWebhook(req, res, rawBody) {
 
   // Sales Team platform: client payments, refunds/disputes and representative payout callbacks. Idempotent per event id;
   // a processing error answers 500 so Stripe retries instead of silently losing a payment confirmation.
-  const sales = await handleSalesStripeEvent(event);
+  // Connected-account events are a business's own customer payments, never Nova's billing: skip Nova's sales handler.
+  const sales = event.account ? { skipped: true } : await handleSalesStripeEvent(event);
   if (sales.error) return res.status(500).json({ error: 'Processing failed; please retry.' });
   // The Sales Team handler records every checkout/payment_intent event id before acting; a repeat
   // delivery of an already-processed event must not re-apply anything (F-05).

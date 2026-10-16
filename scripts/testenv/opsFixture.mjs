@@ -22,11 +22,14 @@ export async function startProviderStandIns() {
       res.statusCode = 201; res.end(JSON.stringify({ sid, status: 'queued' }));
     });
   });
-  const stripe = { requests: [] };
+  // accounts: Connect accounts this stand-in "platform" knows ({acct_id: {charges_enabled, name}}); anything else is 404.
+  const stripe = { requests: [], accounts: {} };
   const stripeSrv = http.createServer((req, res) => {
     let d = ''; req.on('data', (c) => (d += c)); req.on('end', () => {
-      stripe.requests.push({ url: req.url, idem: req.headers['idempotency-key'], body: new URLSearchParams(d) });
+      stripe.requests.push({ url: req.url, method: req.method, idem: req.headers['idempotency-key'], account: req.headers['stripe-account'] || null, body: new URLSearchParams(d) });
       res.setHeader('Content-Type', 'application/json');
+      const acct = /\/accounts\/(acct_[A-Za-z0-9]+)$/.exec(req.url);
+      if (acct && req.method === 'GET') { const a = stripe.accounts[acct[1]]; if (!a) { res.statusCode = 404; return res.end(JSON.stringify({ error: { message: 'No such account' } })); } return res.end(JSON.stringify({ id: acct[1], charges_enabled: !!a.charges_enabled, business_profile: { name: a.name || null } })); }
       if (req.url.endsWith('/checkout/sessions')) { const id = `cs_test_sim_${stripe.requests.length}`; return res.end(JSON.stringify({ id, url: `https://checkout.stripe.test/pay/${id}` })); }
       res.statusCode = 404; res.end('{}');
     });

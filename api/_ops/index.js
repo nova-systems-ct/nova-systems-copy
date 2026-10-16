@@ -11,6 +11,7 @@ import { rateLimit } from '../_rateLimit.js';
 import { normalizePhone } from '../_wave1.js';
 import { createPostgresJobStore } from '../../worker/postgresJobStore.mjs';
 import * as R from './rules.js';
+import { stripeRequest } from '../_stripe.js';
 import * as S from './service.js';
 import * as H from './harvest.js';
 import * as M from './sentry.js';
@@ -195,7 +196,19 @@ export async function handleOps(req, res, op) {
       if (!mode) return send(res, 400, { error: 'Unknown mode' });
       if (mode === 'nova_test_platform' && !isNovaOwner(s.caller)) return send(res, 403, { error: 'Only the Nova owner can enable test-mode deposits on Nova\'s own Stripe test account.' });
       if (mode === 'nova_test_platform' && !(await dbOne(`ops_business_settings?organization_id=eq.${enc(s.orgId)}&is_test=eq.true&select=organization_id`))) return send(res, 409, { error: 'Test-mode deposits on Nova\'s account are only for Nova-owned TEST businesses. A real business needs its own payment account arrangement.' });
-      const row = { organization_id: s.orgId, mode, stripe_account_ref: mode === 'client_connected_account' ? sanitize(b.stripe_account_ref, 60) || null : null, funds_recipient: mode === 'nova_test_platform' ? 'Nova Systems Stripe TEST mode — no real money moves' : mode === 'client_connected_account' ? 'The business\'s own Stripe account (connection not yet built)' : null, live_enabled: false, approved_by: s.caller.id, approved_at: nowIso(), updated_at: nowIso() };
+      let connectedName = null;
+      if (mode === 'client_connected_account') {
+        const ref = sanitize(b.stripe_account_ref, 60);
+        if (!R.isStripeAccountId(ref)) return send(res, 400, { error: 'Enter the business\'s connected Stripe account id (acct_…).' });
+        const key = String(process.env.STRIPE_SECRET_KEY || '');
+        if (!key) return send(res, 409, { error: 'Stripe is not configured, so the connected account cannot be verified.' });
+        // Ask Stripe (as Nova's platform) whether this account is connected to Nova and can take charges. Never assumed.
+        let acc; try { acc = await stripeRequest(key, 'GET', `accounts/${encodeURIComponent(ref)}`); } catch (e) { return send(res, 409, { error: 'Stripe did not confirm this account is connected to Nova.', detail: String(e.message).slice(0, 160) }); }
+        if (!acc || acc.id !== ref) return send(res, 409, { error: 'Stripe did not confirm this account is connected to Nova.' });
+        if (acc.charges_enabled !== true) return send(res, 409, { error: 'This Stripe account cannot take payments yet (Stripe reports charges disabled). Finish the account setup in Stripe first.' });
+        connectedName = acc.business_profile?.name || acc.settings?.dashboard?.display_name || ref;
+      }
+      const row = { organization_id: s.orgId, mode, stripe_account_ref: mode === 'client_connected_account' ? sanitize(b.stripe_account_ref, 60) : null, funds_recipient: mode === 'nova_test_platform' ? 'Nova Systems Stripe TEST mode — no real money moves' : mode === 'client_connected_account' ? `The business's own Stripe account (${connectedName}) — Nova never receives the customer's money` : null, live_enabled: false, approved_by: s.caller.id, approved_at: nowIso(), updated_at: nowIso() };
       await dbInsert('ops_payment_accounts', row, { onConflict: 'organization_id' }); await dbPatch('ops_payment_accounts', `organization_id=eq.${enc(s.orgId)}`, row);
       await dbInsert('ops_transitions', { organization_id: s.orgId, entity: 'payment_account', entity_id: s.orgId, to_state: mode, actor_type: 'user', actor_id: s.caller.id, reason: row.funds_recipient || 'deposits disabled' });
       return send(res, 200, { ok: true, account: row });
@@ -417,7 +430,7 @@ export async function readiness(orgId) {
     item('timezone_hours', 'Time zone and business hours', !!wave?.timezone && wave?.business_hours && Object.keys(wave.business_hours).length > 0, wave?.timezone || 'not set'),
     item('prices', 'Approved prices', prices.length > 0, `${prices.length} approved`),
     item('agreement', 'Approved agreement template', templates.length > 0 ? (templates.some((t) => t.legal_review === 'attorney_reviewed') ? true : 'partial') : false, templates.length ? (templates.some((t) => t.legal_review === 'attorney_reviewed') ? 'attorney reviewed' : 'business-approved; not legally reviewed') : 'none approved'),
-    item('payments', 'Deposits', pay?.mode === 'nova_test_platform' ? 'partial' : false, pay?.mode === 'nova_test_platform' ? 'TEST mode only (Nova test account)' : pay?.mode === 'client_connected_account' ? 'business account connection not built' : 'not configured'),
+    item('payments', 'Deposits', pay?.mode === 'nova_test_platform' ? 'partial' : false, pay?.mode === 'nova_test_platform' ? 'TEST mode only (Nova test account)' : pay?.mode === 'client_connected_account' ? "Business's own Stripe account connected (test mode until live use is approved)" : 'not configured'),
     item('stripe_webhook', 'Payment confirmation webhook', !!env.STRIPE_WEBHOOK_SECRET && !!env.STRIPE_SECRET_KEY, env.STRIPE_WEBHOOK_SECRET ? 'configured' : 'missing STRIPE_WEBHOOK_SECRET'),
     item('sms', 'Text messaging', sendMode() === 'live' && wave?.provider_registration === 'approved' && !!wave?.sms_number_ref ? true : false, `${sendMode()}; registration ${wave?.provider_registration || 'unknown'}; number ${wave?.sms_number_ref ? 'assigned' : 'none'}`),
     item('voice', 'AI voice receptionist', voice?.status === 'active' && !!voice?.disclosure_script && sendMode() === 'live' ? true : false, voice ? `${voice.status}${voice.disclosure_script ? '' : '; no disclosure script'}` : 'not configured'),

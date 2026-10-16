@@ -293,7 +293,7 @@ export async function customerView(token) {
     dbOne(`ops_bookings?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&status=in.(held,confirmed,completed)&select=id,start_at,end_at,status,hold_expires_at,provider&order=created_at.desc`),
     dbOne(`ops_agreements?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&status=in.(sent,signed)&select=id,title,body_rendered,content_sha256,status,expires_at,esign_consent_text,signer_name,signed_at`),
     dbOne(`ops_deposits?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&select=id,amount_cents,currency,status,livemode,paid_at&order=created_at.desc`),
-    dbOne(`ops_payment_accounts?organization_id=eq.${enc(orgId)}&select=mode,funds_recipient,live_enabled`),
+    dbOne(`ops_payment_accounts?organization_id=eq.${enc(orgId)}&select=mode,funds_recipient,live_enabled,stripe_account_ref`),
   ]);
   const holdExpired = booking?.status === 'held' && new Date(booking.hold_expires_at) < new Date();
   return {
@@ -302,7 +302,7 @@ export async function customerView(token) {
     booking: booking ? { start_at: booking.start_at, status: holdExpired ? 'expired' : booking.status, hold_expires_at: booking.hold_expires_at } : null,
     agreement: agreement ? { id: agreement.id, title: agreement.title, text: agreement.body_rendered, content_sha256: agreement.content_sha256, status: agreement.status, expires_at: agreement.expires_at, consent_text: agreement.esign_consent_text, signer_name: agreement.signer_name, signed_at: agreement.signed_at } : null,
     deposit: deposit ? { status: deposit.status, amount_cents: deposit.amount_cents, currency: deposit.currency, test_mode: !deposit.livemode, paid_at: deposit.paid_at } : null,
-    payments: { available: account?.mode === 'nova_test_platform' && String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_test'), mode: account?.mode || 'not_configured', funds_recipient: account?.funds_recipient || null },
+    payments: { available: (account?.mode === 'nova_test_platform' || (account?.mode === 'client_connected_account' && R.isStripeAccountId(account?.stripe_account_ref))) && String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_test'), mode: account?.mode || 'not_configured', funds_recipient: account?.funds_recipient || null },
   };
 }
 
@@ -355,7 +355,10 @@ export async function customerDepositCheckout(token) {
   const acct = await dbOne(`ops_payment_accounts?organization_id=eq.${enc(orgId)}&select=*`);
   const key = String(process.env.STRIPE_SECRET_KEY || '');
   if (!acct || acct.mode === 'not_configured') throw ERR(409, 'Online deposits are not set up for this business yet. The business will contact you.');
-  if (acct.mode === 'client_connected_account') throw ERR(409, 'Deposits to the business\'s own Stripe account are not available yet.');
+  // Client-owned payments (owner decision 2026-10-16): the deposit is a direct charge on the business's own connected Stripe
+  // account. Nova's account never receives the customer's money; Nova bills its own fees separately.
+  const connected = acct.mode === 'client_connected_account';
+  if (connected && !R.isStripeAccountId(acct.stripe_account_ref)) throw ERR(409, 'The business has not connected its Stripe account yet. The business will contact you.');
   if (!key) throw ERR(409, 'Online payment is not configured.');
   if (key.startsWith('sk_live') || key.startsWith('rk_live')) throw ERR(409, 'Live payments are disabled.');
   const booking = await dbOne(`ops_bookings?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&status=in.(held,confirmed)&select=*&order=created_at.desc`);
@@ -375,7 +378,7 @@ export async function customerDepositCheckout(token) {
     metadata: { ops_deposit_id: dep.id, organization_id: orgId, job_id: job.id, expected_amount_cents: String(dep.amount_cents) },
     payment_intent_data: { metadata: { ops_deposit_id: dep.id, organization_id: orgId, job_id: job.id } },
     expires_at: Math.floor(Date.now() / 1000) + 31 * 60,
-  }, { idempotencyKey: `ops-deposit:${dep.id}:${dep.amount_cents}` });
+  }, { idempotencyKey: `ops-deposit:${dep.id}:${dep.amount_cents}`, ...(connected ? { stripeAccount: acct.stripe_account_ref } : {}) });
   await transition({ orgId, entity: 'deposit', table: 'ops_deposits', id: dep.id, from: dep.status, to: 'checkout_open', actor: { type: 'customer' }, reason: 'Stripe Checkout session created', patch: { provider_session_id: session.id, checkout_url: session.url } }).catch((e) => { if (e.status !== 409) throw e; });
   return { url: session.url };
 }
@@ -386,6 +389,12 @@ export async function applyOpsStripeEvent(event) {
   if (!meta.ops_deposit_id) return { handled: false };
   const dep = await dbOne(`ops_deposits?id=eq.${enc(String(meta.ops_deposit_id).slice(0, 60))}&organization_id=eq.${enc(String(meta.organization_id || '').slice(0, 60))}&select=*`);
   if (!dep) return { handled: true, applied: false, reason: 'deposit not found for that organization' };
+  // The event must come from the account that holds the money: the business's connected account for a connected deposit,
+  // Nova's own platform account (no event.account) otherwise. A matching id from another account is ignored.
+  if (dep.account_mode === 'client_connected_account') {
+    const acct = await dbOne(`ops_payment_accounts?organization_id=eq.${enc(dep.organization_id)}&select=stripe_account_ref`);
+    if (!event.account || event.account !== acct?.stripe_account_ref) return { handled: true, applied: false, reason: 'event is not from the business\'s connected account' };
+  } else if (event.account) return { handled: true, applied: false, reason: 'connected-account event for a platform deposit' };
   const orgId = dep.organization_id; const actor = { type: 'provider', id: event.id };
   const type = event.type;
   if (['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(type)) {

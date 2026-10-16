@@ -30,6 +30,7 @@ export function computeQuote(rule, optionKeys = []) {
     },
   };
 }
+export const isStripeAccountId = (v) => /^acct_[A-Za-z0-9]{6,40}$/.test(String(v || ''));
 export const formatMoney = (cents, currency = 'usd') => `${currency.toLowerCase() === 'usd' ? '$' : `${currency.toUpperCase()} `}${(cents / 100).toFixed(2)}`;
 
 // =============================================================================================
