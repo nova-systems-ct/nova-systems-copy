@@ -12,6 +12,9 @@
 // running — a real orphan-leak was found and manually cleaned up before this rewrite.
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 // Security repair 2026-09-30 (audit F-27): every local real-database suite, including the security, schema and
 // browser suites. The run no longer stops at the first failure; each suite is reported PASS / FAIL / SKIP / TIMEOUT
@@ -81,17 +84,18 @@ function runSuite(name) {
       clearTimeout(timer);
       child.stdout.destroy(); child.stderr.destroy();
       const seconds = (Date.now() - t0) / 1000;
+      const raw = { out, err, code };
       const m = /(\d+)(?:\/\d+)? passed, (\d+) failed/.exec(out); // "4/5 passed" counts 4, not 5 (F-27)
       const pass = m ? Number(m[1]) : 0;
       const failCount = m ? Number(m[2]) : null;
-      if (timedOut) return resolve({ status: 'timeout', pass, failCount, tail: `killed after ${SUITE_TIMEOUT_MS / 1000}s with no result — process tree terminated`, seconds });
+      if (timedOut) return resolve({ ...raw, status: 'timeout', pass, failCount, tail: `killed after ${SUITE_TIMEOUT_MS / 1000}s with no result — process tree terminated`, seconds });
       const skip = out.split('\n').find((l) => l.startsWith('SKIP —'));
-      if (code === 3 && skip) return resolve({ status: 'skip', pass, failCount, tail: skip, seconds });
-      if (code === 0 && m && failCount === 0) return resolve({ status: 'ok', pass, failCount, tail: `${m[1]} passed, ${m[2]} failed`, seconds });
+      if (code === 3 && skip) return resolve({ ...raw, status: 'skip', pass, failCount, tail: skip, seconds });
+      if (code === 0 && m && failCount === 0) return resolve({ ...raw, status: 'ok', pass, failCount, tail: `${m[1]} passed, ${m[2]} failed`, seconds });
       // With no result line, say how the process ended and show the first error line, not the last stack frame.
       const errLine = (err.split('\n').find((l) => /Error|timeout|refus/i.test(l)) || err.trim().split('\n').pop() || '').trim();
       const tail = m ? `${m[1]} passed, ${m[2]} failed` : `no result line; exit code ${code ?? 'none'}; ${errLine ? `error: ${errLine.slice(0, 160)}` : `last output: ${(out.trim().split('\n').pop() || '').slice(0, 120)}`}`;
-      resolve({ status: 'fail', pass, failCount, tail, seconds, failLines: out.split('\n').filter((l) => l.startsWith('FAIL')).slice(0, 8) });
+      resolve({ ...raw, status: 'fail', pass, failCount, tail, seconds, failLines: out.split('\n').filter((l) => l.startsWith('FAIL')).slice(0, 8) });
     }
   });
 }
@@ -122,6 +126,14 @@ beat.unref();
 const awake = holdAwake();
 process.on('exit', () => { try { awake?.kill(); } catch { /* gone */ } });
 
+// Evidence: full stdout+stderr of every suite that does not PASS is kept (default %TEMP%/nova-e2e-logs/<run>/).
+const LOG_DIR = process.env.NOVA_E2E_LOG_DIR || path.join(os.tmpdir(), 'nova-e2e-logs', new Date().toISOString().replace(/[:.]/g, '-'));
+const keepLog = (name, r, attempt = '') => { try { fs.mkdirSync(LOG_DIR, { recursive: true }); const file = path.join(LOG_DIR, `${name}${attempt}.log`); fs.writeFileSync(file, `status=${r.status} exit=${r.code ?? 'none'} seconds=${r.seconds?.toFixed?.(1)}
+--- stdout ---
+${r.out || ''}
+--- stderr ---
+${r.err || ''}`); return file; } catch { return null; } };
+
 const rows = []; let total = 0;
 for (const s of suites) {
   console.log(`RUN  ${s} ...`);
@@ -132,6 +144,7 @@ for (const s of suites) {
   let r = await runSuite(s); beatOnce();
   if (suspendedMs > 0) {
     const gap = Math.round(suspendedMs / 1000);
+    keepLog(s, r, '.interrupted');
     console.log(`SUSPEND ${s.padEnd(42)} host was suspended for ${gap}s during this suite (${r.status}); result discarded, re-running once`);
     rows.push({ s: `${s} (interrupted run)`, label: 'SUSPEND', tail: `host suspended ${gap}s`, seconds: r.seconds, informational: true });
     suspendedMs = 0; lastBeat = Date.now();
@@ -143,6 +156,7 @@ for (const s of suites) {
   rows.push({ s, label, tail: r.tail, seconds: r.seconds });
   console.log(`${label.padEnd(7)} ${s.padEnd(42)} ${r.tail} (${r.seconds.toFixed(0)}s)`);
   (r.failLines || []).forEach((l) => console.log(`        ${l}`));
+  if (r.status !== 'ok' && r.status !== 'skip') { const lf = keepLog(s, r); if (lf) console.log(`        full output: ${lf}`); }
   reapOrphanedTestPostgres();
 }
 const count = (l) => rows.filter((x) => x.label === l).length;
