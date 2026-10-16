@@ -59,8 +59,8 @@ const sections = [
 export default function Solutions() {
   const navigate = useNavigate();
   useSEO({
-    title: "Business Technology Solutions in Connecticut — Nova Systems",
-    description: "Web development, AI automation, and branding solutions for Connecticut businesses. Nova Systems builds custom websites, inquiry-to-booking workflows, and full brand identity — Waterbury to Fairfield County.",
+    title: "Solutions — Nova Systems",
+    description: "After a Nova Audit, Nova installs the workers that handle inquiries, booking, agreements and follow-up, and monitors that they keep working. Website and brand work is available as part of a scoped project.",
   });
 
   return (

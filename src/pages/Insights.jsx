@@ -27,7 +27,7 @@ export default function Insights() {
 
   useSEO({
     title: "Nova Insights — AI and Business Growth Strategies for Connecticut",
-    description: "Digital architecture, AI strategy, and growth intelligence for Connecticut businesses — from Nova Systems, Waterbury CT's AI and technology agency.",
+    description: "Notes from Nova Systems on where local businesses lose inquiries and customers, and how intake, booking, follow-up and monitoring can be run reliably. Waterbury, Connecticut.",
   });
 
   useEffect(() => {
