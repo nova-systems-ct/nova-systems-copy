@@ -5,6 +5,7 @@ import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 import { handleWave1 } from './_wave1Api.js';
 import { handleOps } from './_ops/index.js';
+import { handleDemo } from './_demo.js';
 import { handleAuditExtra, handleReportView } from './_auditExtra.js';
 import { salesDispatch, SALES_RESOURCES } from './_sales/index.js';
 import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
@@ -4268,6 +4269,9 @@ export default async function handler(req, res) {
 
     case 'ops':
       return handleOps(req, res, op);
+
+    case 'demo': // public five-minute website demo (session-token scoped); 'setup' is Nova-owner only
+      return handleDemo(req, res, op);
 
     case 'invoices':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
