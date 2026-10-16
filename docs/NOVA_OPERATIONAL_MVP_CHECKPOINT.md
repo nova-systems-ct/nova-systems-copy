@@ -53,3 +53,14 @@ npm ci
 node scripts/verify_local_all.mjs
 node scripts/verify_sales_team_e2e.mjs     # keep-awake held; SUSPEND lines mean the host slept
 ```
+
+## Update 2026-10-15 evening
+- **wave-one crons DISABLED** 2026-10-16 02:25:53 UTC via the Vercel API (definitions kept; .agency still serves).
+- Runner keeps full stdout/stderr of every non-passing suite (`0e32a6d`).
+- Website (`58e9b83`): Wave One page rebuilt around the four pillars with honest availability; home scarcity popup
+  removed; "AI agency" / AI-phone-agent claims removed from Company and Solutions. Legal pages and /onboard untouched.
+- Final 22a6459 runs were not clean (forced sleep at critical battery; 0xC0000409 crashes — see ACCEPTANCE).
+  A clean-export run of the newest commit is queued to start automatically when the laptop is on AC power.
+- **Chrome tools are not available in this session** (claude-in-chrome disconnected mid-session). Staging setup in
+  Supabase/Vercel must be done from a session started with `claude --chrome`.
+- Pushed through `22a6459`; later commits are local until `git push`.
