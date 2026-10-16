@@ -64,3 +64,16 @@ node scripts/verify_sales_team_e2e.mjs     # keep-awake held; SUSPEND lines mean
 - **Chrome tools are not available in this session** (claude-in-chrome disconnected mid-session). Staging setup in
   Supabase/Vercel must be done from a session started with `claude --chrome`.
 - Pushed through `22a6459`; later commits are local until `git push`.
+
+## Update 2026-10-16 — website demo, search identity, client-owned deposits
+| Commit | Change | Local evidence |
+|---|---|---|
+| `d982f8a`, `22de835` | Five-minute website demo (`/demo`; entry from home hero + navbar): bounded public-site scan with one evidenced observation or an honest "nothing verified", then real Core service steps in an isolated DEMO workspace; saved summary; 48–72 h audit invitation | e2e_demo_test 38/38; e2e_demo_browser_test 15/15 (desktop + phone); submit → summary 1.2 s locally (made-up site that answers instantly) |
+| `ad1917e`, `22765c5` | Search identity: site-wide title/description/OG/Organization JSON-LD describe the operational product; per-page canonical (all pages used to declare "/"); noindex on report/service/dashboard/demo-session; sitemap adds /demo, /waves; CSP allows the environment's Supabase project (staging login would otherwise be blocked) | browser checks in e2e_demo_browser_test |
+| `e267ca0` | Client-owned deposits via Stripe Connect direct charges; account verified with Stripe; separate Connect webhook secret; events only from the account holding the money | e2e_ops_connected_deposit_test 17/17; core 69/69; commissions 82/82; security personas 90/90 |
+| `79dfb77` | demo_sessions added to the lockdown list | check_migration_lockdown PASS; e2e_schema_lockdown 48/48; clean install 17/17 |
+| `0e32a6d`, harness | Failure logs kept; Vite readiness before browser tests | — |
+
+Clean-export full runs: `5d6e17a` run 2 = **30/30 PASS, 1,431 checks** (first fully clean run since the standby fix);
+run 1 had one cold-start page timeout (fixed by the harness readiness change). Later commits: see ACCEPTANCE / latest run.
+Not done here: anything needing Chrome (staging project, Preview variables), Search Console, deploys, real providers.
