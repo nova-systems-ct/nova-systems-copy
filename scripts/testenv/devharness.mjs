@@ -33,6 +33,14 @@ export async function startHarness({ vitePort = 5199, apiPort = 8799, seed, mani
   process.env.VITE_SUPABASE_URL = env.base; process.env.VITE_SUPABASE_ANON_KEY = env.anonKey;
   const vite = await createServer({ configFile: 'vite.config.js', logLevel: 'error', server: { port: vitePort, strictPort: true, proxy: { '/api': `http://127.0.0.1:${apiPort}` } } });
   await vite.listen();
+  // Readiness, not a longer timeout: Vite compiles modules on first request, and on a loaded machine the first page.goto
+  // of a browser suite timed out at 30 s while that compile ran (clean run 2026-10-16, e2e_sales_browser_test). Request the
+  // HTML and transform the app entry (and its import graph via warmupRequest) before any test navigates.
+  const t0 = Date.now();
+  await fetch(`http://localhost:${vitePort}/`).then((r) => r.text());
+  await vite.warmupRequest?.('/src/main.jsx').catch?.(() => {});
+  await fetch(`http://localhost:${vitePort}/src/main.jsx`).then((r) => r.text()).catch(() => {});
+  if (process.env.NOVA_HARNESS_DEBUG) console.log(`[harness] vite warm in ${Date.now() - t0} ms`);
   const ctx = { env, apiPort, vitePort, base: `http://localhost:${vitePort}` };
   if (seed) await seed(ctx);
   return { ...ctx, async stop() { await vite.close(); await new Promise((r) => api.close(r)); await env.stop(); } };

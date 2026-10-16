@@ -117,7 +117,7 @@ try {
   check('repeating a step does not create a second inquiry', stepAgain.status === 200 && (await one('select count(*)::int n from ops_jobs where organization_id=$1 and id=$2', [demoOrg, jobA.id])).n === 1 && (await one("select count(*)::int n from crm_contacts where organization_id=$1 and name like $2", [demoOrg, `DEMO Customer ${sessA.id.slice(0, 4)}%`])).n === 1);
   r = await demo('finish', { token: A.token });
   const elapsed = (Date.now() - t0) / 1000;
-  check(`the demo finishes with a saved summary, the finding, worker results and the 48–72-hour audit invitation (scan → summary in ${elapsed.toFixed(1)} s)`, r.status === 200 && r.body.summary?.finding && r.body.summary.workers_completed === 7 && /48–72 hours/.test(r.body.summary.next_step) && r.body.audit_request_url === '/intake' && elapsed < 300);
+  check(`the demo finishes with a saved summary, the finding, worker results and the 48–72-hour audit invitation (scan → summary in ${elapsed.toFixed(1)} s)`, r.status === 200 && r.body.summary?.finding && r.body.summary.workers_completed === 7 && /48–72 hours/.test(r.body.summary.next_step) && r.body.audit_request_url === '/request-audit' && elapsed < 300);
   check('Nova staff are alerted through the controlled path (dry run here: recorded, not sent)', (await one("select status from sales_notifications where kind='demo_completed'")).status === 'dry_run' && (await one('select staff_alert_status from demo_sessions where id=$1', [sessA.id])).staff_alert_status === 'dry_run');
   check('the CRM deal gets a completion note', (await one("select count(*)::int n from crm_activities where deal_id=$1 and body like 'Website demo completed%'", [sessA.nova_deal_id])).n === 1);
 

@@ -207,7 +207,7 @@ function view(sess, ws) {
     scan: sess.scan, steps: STEPS.map((d) => ({ ...d, ...((sess.worker_steps || []).find((s) => s.key === d.key) || { status: 'pending' }) })).map(({ slots: _x, ...s }) => s),
     workspace_ready: ws ? ws.ready : undefined, summary: sess.summary, completed_at: sess.completed_at,
     timings: { scan_seconds: sess.scan_finished_at ? (new Date(sess.scan_finished_at) - new Date(sess.submitted_at)) / 1000 : null, total_seconds: sess.completed_at ? (new Date(sess.completed_at) - new Date(sess.submitted_at)) / 1000 : null },
-    audit_request_url: '/intake', expires_at: sess.expires_at,
+    audit_request_url: '/request-audit', expires_at: sess.expires_at,
   };
 }
 async function sessionByToken(req) {

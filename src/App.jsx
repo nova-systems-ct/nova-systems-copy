@@ -60,6 +60,7 @@ const SignSuccess = lazy(() => import('./pages/SignSuccess'));
 const Onboard = lazy(() => import('./pages/Onboard'));
 const OnboardSuccess = lazy(() => import('./pages/OnboardSuccess'));
 const Waves = lazy(() => import('./pages/Waves'));
+const Demo = lazy(() => import('./pages/Demo'));
 const WavesForm = lazy(() => import('./pages/WavesForm'));
 // CRM Dashboard
 const DashboardRoot = lazy(() => import('./components/dashboard/DashboardRoot'));
@@ -193,6 +194,7 @@ function App() {
             <Route path="/onboard" element={<Onboard />} />
             <Route path="/onboard/success" element={<OnboardSuccess />} />
             <Route path="/waves" element={<Waves />} />
+            <Route path="/demo" element={<Demo />} />
             <Route path="/waves/form" element={<WavesForm />} />
 
             {/* Sales Team platform — public */}

@@ -80,6 +80,13 @@ export default function Navbar() {
             <LogIn className="w-3.5 h-3.5" /> LOG IN
           </Link>
           <Link
+            to="/demo"
+            className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold tracking-wider uppercase transition-opacity hover:opacity-85"
+            style={{ border: `1px solid ${GOLD}`, color: "#FAFAFA" }}
+          >
+            5-MIN DEMO
+          </Link>
+          <Link
             to="/request-audit"
             className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold tracking-wider uppercase transition-opacity hover:opacity-85"
             style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
@@ -123,6 +130,14 @@ export default function Navbar() {
               )}
             </Link>
           ))}
+          <Link
+            to="/demo"
+            onClick={() => setMobileOpen(false)}
+            className="block text-center px-5 py-3 text-xs font-bold tracking-wider uppercase mt-1"
+            style={{ border: `1px solid ${GOLD}`, color: "#FAFAFA" }}
+          >
+            TRY THE 5-MINUTE DEMO
+          </Link>
           <Link
             to="/request-audit"
             onClick={() => setMobileOpen(false)}

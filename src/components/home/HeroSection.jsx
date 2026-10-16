@@ -165,6 +165,13 @@ export default function HeroSection() {
               START YOUR BUSINESS DIAGNOSTIC <ChevronRight className="w-4 h-4" />
             </Link>
             <Link
+              to="/demo"
+              className="inline-flex items-center gap-3 font-bold uppercase tracking-widest transition-opacity hover:opacity-85"
+              style={{ border: `1px solid ${GOLD}`, color: "#FAFAFA", width: "fit-content", fontSize: 12, padding: "17px 28px" }}
+            >
+              WATCH THE 5-MINUTE DEMO <ChevronRight className="w-4 h-4" />
+            </Link>
+            <Link
               to="/#process"
               className="inline-flex items-center gap-2 font-bold uppercase tracking-widest transition-colors hover:text-white"
               style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, padding: "18px 8px" }}
