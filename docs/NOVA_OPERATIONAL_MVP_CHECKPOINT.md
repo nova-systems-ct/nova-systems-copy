@@ -77,3 +77,12 @@ node scripts/verify_sales_team_e2e.mjs     # keep-awake held; SUSPEND lines mean
 Clean-export full runs: `5d6e17a` run 2 = **30/30 PASS, 1,431 checks** (first fully clean run since the standby fix);
 run 1 had one cold-start page timeout (fixed by the harness readiness change). Later commits: see ACCEPTANCE / latest run.
 Not done here: anything needing Chrome (staging project, Preview variables), Search Console, deploys, real providers.
+
+## Update 2026-10-16 (later) — local staging prepared; hosted staging blocked
+- Hosted Supabase staging is blocked (overdue Supabase invoice). Deployed /demo failure confirmed from Vercel logs:
+  `[demo] Supabase is not configured` (Preview has no database variables). Fixed handling in `b5faa92`.
+- Local staging prepared (`ac95793`, docs/LOCAL_STAGING.md) but **not run**: this computer has no WSL 2 / Docker.
+  Isaac's one action is in that guide. After it: `node scripts/local/staging.mjs up|migrate|provision|serve|worker`.
+- Website audit (built app, real Chromium): 20 public routes × phone + desktop — no horizontal overflow, no script
+  errors, no broken internal links or home-page anchors.
+- A clean-export full run of the newest commit is queued and starts on AC power.
