@@ -39,7 +39,7 @@ try {
   // ------------------------------------------------------------ 1. a visitor, from the homepage
   const v = await (await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true })).newPage();
   await v.goto(`${APP}/`);
-  check('the homepage explains Nova Audit, Nova Agents and customer acquisition', await seen(v.getByText(/Inspect your real customer journey and records/)) && await seen(v.getByText(/Agents that perform approved actions across your channels/)) && await seen(v.getByText(/How Nova helps you win more of the customers who already reach out/)));
+  check('the homepage explains the Triangle of Nova: Audit, Agents, Demand', await seen(v.getByText('Find where customers, money and time are lost')) && await seen(v.getByText('Workers that carry out the approved work')) && await seen(v.getByText('Go out and create new sales opportunities')));
   check('the homepage puts the audit request and the demo up front', await seen(v.getByRole('link', { name: /REQUEST YOUR AUDIT/ })) && await seen(v.getByRole('link', { name: /WATCH THE 5-MINUTE DEMO/ })));
   await shot(v, '01-home-phone');
   await v.getByRole('link', { name: /REQUEST YOUR AUDIT/ }).first().click();

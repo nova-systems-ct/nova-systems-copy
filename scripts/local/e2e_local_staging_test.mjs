@@ -84,7 +84,7 @@ try {
     const l1 = (again.body?.lessons || []).find((l) => l.order_index === 1);
     check('lesson progress is saved and still there when read back', [200, 409].includes(enroll.status) && done.status === 200 && l1?.completed === true, JSON.stringify([enroll.status, done.status, done.body?.error]).slice(0, 160));
     const lessonTitles = (again.body?.lessons || []).map((l) => l.title).join(' | ');
-    check('the training teaches the four pillars and what is live today', /Four Pillars/.test(lessonTitles) && /Not Live/.test(lessonTitles), lessonTitles.slice(0, 200));
+    check('the training teaches the Triangle of Nova and what is live today', /Triangle of Nova/.test(lessonTitles) && /Not Live/.test(lessonTitles), lessonTitles.slice(0, 200));
     const self = await api(rep.access_token, 'academy', 'issue-certificate', { body: { program_id: fundamentals.id } });
     check('the representative cannot certify themselves before the requirements are met', self.status >= 400, String(self.status));
   }

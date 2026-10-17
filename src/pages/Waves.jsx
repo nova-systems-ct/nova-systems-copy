@@ -14,14 +14,13 @@ const GOLD_BRIGHT = "#E0C476";
 const GOLD_DARK = "#8a6b2a";
 const G = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${GOLD_BRIGHT} 55%, ${GOLD} 80%, ${GOLD_DARK} 100%)`;
 
-const TICKER_ITEMS = ["Nova Audit", "Nova Core", "Nova Harvest", "Nova Sentry"];
+const TICKER_ITEMS = ["Nova Audit", "Nova Agents", "Nova Demand", "Nova Revive", "Nova Sentry"];
 
 // Availability labels must match what is actually running (docs/NOVA_OPERATIONAL_MVP_READINESS.md). No outcome statistics.
 const PILLARS = [
   { name: "Nova Audit", Icon: ClipboardCheck, status: "Available now", desc: "Nova looks at how your business handles new customers — phone, texts, web form, booking, payment and follow-up — and writes down what it finds, with the source and date of every observation. Estimates are labelled as estimates." },
-  { name: "Nova Core", Icon: Workflow, status: "Pilot only", desc: "Workers that carry out the routine steps of a sale: answer the inquiry, ask your qualifying questions, quote only prices you approved, offer real open times, book, send the agreement and pass the job to your team." },
-  { name: "Nova Harvest", Icon: RefreshCcw, status: "Pilot only", desc: "Follow-up on customers you already have: a text back after a missed call, check-ins with past customers and old quotes, and honest review and referral invitations — only to people who gave permission." },
-  { name: "Nova Sentry", Icon: Activity, status: "Pilot only", desc: "Watches that the other three keep working, alerts a named person when something fails, and sends a weekly scoreboard built from your actual records." },
+  { name: "Nova Agents", Icon: Workflow, status: "Pilot only", desc: "Workers that carry out the routine steps of a sale: answer the inquiry, ask your qualifying questions, quote only prices you approved, offer real open times, book, send the agreement and pass the job to your team. Nova Revive follows up on stalled quotes and unfinished bookings; Nova Sentry watches that it all keeps working." },
+  { name: "Nova Demand", Icon: RefreshCcw, status: "Prepared with you", desc: "A campaign to create new opportunities: a service you can deliver, suitable buyers, a clear offer, permitted outreach, and replies moved into the Agents. Nothing is sent until you approve the campaign." },
 ];
 
 const INDUSTRIES = [
@@ -90,7 +89,7 @@ export default function Waves() {
             Apply for Early Access <ArrowRight className="w-4 h-4" />
           </Link>
           <button onClick={scrollToEngines} className="inline-flex items-center justify-center gap-2 px-9 py-4 text-xs font-bold tracking-[0.15em] uppercase rounded-lg transition-all hover:bg-white/5" style={{ border: "1px solid rgba(255,255,255,0.25)", color: "#fff" }}>
-            See The Four Pillars
+            See What Nova Does
           </button>
         </div>
 
@@ -132,7 +131,7 @@ export default function Waves() {
       <section id="wave-engines" className="py-24 px-6" style={{ background: "#0a0800" }}>
         <div className="max-w-6xl mx-auto">
           <FadeUp>
-            <h2 className="text-3xl md:text-5xl font-black text-center mb-16">The Four Pillars.</h2>
+            <h2 className="text-3xl md:text-5xl font-black text-center mb-16">The Triangle of Nova.</h2>
           </FadeUp>
           <div className="grid md:grid-cols-2 gap-6 mb-8">
             {PILLARS.map((e, i) => (

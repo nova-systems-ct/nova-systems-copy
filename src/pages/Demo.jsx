@@ -143,7 +143,7 @@ export default function Demo() {
             </section>
 
             <section style={card} aria-labelledby="part2">
-              <h2 id="part2" className="flex items-center gap-2 text-lg font-black mb-1"><Workflow className="w-5 h-5" style={{ color: GOLD }} /> Part 2 — Nova Core's workers, live</h2>
+              <h2 id="part2" className="flex items-center gap-2 text-lg font-black mb-1"><Workflow className="w-5 h-5" style={{ color: GOLD }} /> Part 2 — Nova's agents, live</h2>
               <p className="text-sm mb-4" style={{ color: muted }}>A sample customer sends an inquiry to a sample business in Nova's demonstration workspace. Each line below is an action Nova's system performs and records as it happens, with sample prices and a demonstration calendar — no real appointment is made and no money moves.</p>
               {workersAvailable === false && !session.steps.some((s) => s.status !== "pending") ? <p className="text-sm" style={{ color: "#E8B04B" }}>The worker demonstration isn't available right now. You can still request the full Nova Audit below.</p> : (
                 <ol className="space-y-3">
