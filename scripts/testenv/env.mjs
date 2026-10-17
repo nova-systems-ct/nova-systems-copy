@@ -28,7 +28,7 @@ process.on('beforeExit', () => { process.exit(process.exitCode ?? 0); });
 export const JWT_SECRET = 'local-test-jwt-secret-please-do-not-use-anywhere-else-0123456789';
 
 const freePort = () => new Promise((res) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
-const waitFor = async (fn, ms, what) => { const t0 = Date.now(); let last; while (Date.now() - t0 < ms) { try { if (await fn()) return; } catch (e) { last = e; } await new Promise((r) => setTimeout(r, 200)); } throw new Error(`timeout waiting for ${what}: ${last?.message || ''}`); };
+const waitFor = async (fn, ms, what) => { const t0 = Date.now(); let last; while (Date.now() - t0 < ms) { try { if (await fn()) return; } catch (e) { if (e.fatal) throw e; last = e; } await new Promise((r) => setTimeout(r, 200)); } throw new Error(`timeout waiting for ${what}: ${last?.message || ''}`); };
 
 // bootstrap: 'full' (default) also pre-creates the legacy Nova tables production already had; 'platform' creates only
 // what Supabase itself provides (roles, auth, storage), so a migration list must build everything else (clean install).
@@ -59,11 +59,21 @@ export async function startTestEnv({ migrations = [], publicBuckets = ['papers']
   // PostgREST
   const restPort = await freePort();
   const conf = path.join(dataDir, 'postgrest.conf');
-  fs.writeFileSync(conf, [`db-uri = "postgres://authenticator:test@127.0.0.1:${pgPort}/postgres"`, 'db-schemas = "public"', 'db-anon-role = "anon"', `jwt-secret = "${JWT_SECRET}"`, `server-port = ${restPort}`, 'server-host = "127.0.0.1"', 'db-pool = 5'].join('\n'));
+  // log-level info: the connection and schema-cache phases are logged, so an intermittent slow start (seen 2026-10-17:
+  // "Starting PostgREST 16.4..." then silence for 120 s, with 3.4–5.3 GB RAM free) shows WHERE it stalls.
+  fs.writeFileSync(conf, [`db-uri = "postgres://authenticator:test@127.0.0.1:${pgPort}/postgres"`, 'db-schemas = "public"', 'db-anon-role = "anon"', `jwt-secret = "${JWT_SECRET}"`, `server-port = ${restPort}`, 'server-host = "127.0.0.1"', 'db-pool = 5', 'log-level = "info"'].join('\n'));
   const libpq = path.join(ROOT, '.testenv', 'node_modules', '@embedded-postgres', 'windows-x64', 'native', 'bin');
+  const spawnedAt = Date.now();
   const proc = spawn(pgExe, [conf], { env: { ...process.env, PATH: `${libpq}${path.delimiter}${process.env.PATH}` }, stdio: ['ignore', 'pipe', 'pipe'] });
-  let restLog = ''; proc.stdout.on('data', (d) => (restLog += d)); proc.stderr.on('data', (d) => (restLog += d));
-  await waitFor(async () => { const r = await fetch(`http://127.0.0.1:${restPort}/`); return r.status < 500; }, 120000, 'PostgREST' /* cold first start on Windows has exceeded 60s (F-27) */).catch((e) => { throw new Error(`${e.message}\n${restLog.slice(-800)}`); });
+  let restLog = ''; const stamp = (d) => { restLog += String(d).split(/\r?\n/).filter(Boolean).map((l) => `[+${Date.now() - spawnedAt}ms] ${l}\n`).join(''); };
+  proc.stdout.on('data', stamp); proc.stderr.on('data', stamp);
+  let restExit = null; proc.on('exit', (code, signal) => { restExit = { code, signal, at_ms: Date.now() - spawnedAt }; });
+  await waitFor(async () => {
+    if (restExit) throw Object.assign(new Error(`PostgREST exited (code ${restExit.code}, signal ${restExit.signal}) after ${restExit.at_ms} ms`), { fatal: true });
+    const r = await fetch(`http://127.0.0.1:${restPort}/`); return r.status < 500;
+  }, 120000, 'PostgREST' /* cold first start on Windows has exceeded 60s (F-27) */).catch((e) => { throw new Error(`${e.message} (port ${restPort}, ${Date.now() - spawnedAt} ms after spawn, process ${restExit ? `exited: ${JSON.stringify(restExit)}` : `still running, pid ${proc.pid}`})\n${restLog.slice(-2000)}`); });
+  const restReadyMs = Date.now() - spawnedAt;
+  if (restReadyMs > 15000) console.error(`[testenv] PostgREST took ${restReadyMs} ms to accept connections\n${restLog.slice(-1500)}`);
 
   const stubs = createStubs({ pool, jwtSecret: JWT_SECRET, postgrestPort: restPort, publicBuckets });
   await new Promise((r) => stubs.server.listen(0, '127.0.0.1', r));
