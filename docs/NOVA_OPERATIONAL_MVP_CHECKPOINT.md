@@ -30,6 +30,16 @@ Sentry and Scale underneath). Owner to-do list: `docs/NOVA_OPERATIONAL_MVP_OWNER
 - Run 9 pass 1 on `341746b`: 36/37 suites, 1564 checks, 16 min, no PostgREST start-up timeout, no suspend. The one failure
   (`e2e_ops_browser_test`: a confirmation wiped by the list refresh) was a real UI bug, fixed in `f64059d` and now
   checked explicitly (fails without the fix, passes with it).
+- **Final verification queued 2026-10-17 19:20** (not yet a result): a detached process waits for run 9 pass 2 (old
+  commit `341746b`) to finish, then exports the then-current HEAD (expected `6f0fca9` or this docs commit) and runs
+  `npm ci`, build, lint, `verify_local_all`, and the full aggregate twice under Node 22. The run waits for AC power
+  before starting and is paused if the computer sleeps. Logs (scratchpad of this Claude session):
+  `…\scratchpad\final10\` — `chain.log` (start/end and commit), `commit.txt`, `steps.log`, `aggregate_1.log`,
+  `aggregate_2.log`, `fail_logs_N\` (each failed suite's full output, with free memory and PostgREST timings).
+  Full path: `C:\Users\NVUBCR~1\AppData\Local\Temp\claude\C--Users-NVUBCrosbyUBMS07\0b6faf8f-e3e8-4db7-8a2f-959b933b9147\scratchpad\final10\`.
+  Run 9 logs: same folder, `final9\`.
+- All suites run against **local disposable PostgreSQL + PostgREST** (or local Supabase in Docker for the staging
+  suites) with stand-ins for Auth/Storage/email/Twilio/Stripe. They are not real-provider tests.
 - Earlier intermittent PostgREST start-up timeouts: memory pressure ruled out (3.4–5.3 GB free at failure). PostgREST now
   logs its connection and schema-cache phases with timings, and a dead process fails immediately.
 
