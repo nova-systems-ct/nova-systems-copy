@@ -1,98 +1,35 @@
-# Nova Operational MVP — checkpoint (2026-10-15)
+# Nova — authoritative checkpoint (2026-10-17)
 
-Working copy `C:\Users\NVUBCrosbyUBMS07\nova-mvp-work`, branch `mvp/operational`. Isaac connected it to
-`origin` (github.com/nova-systems-ct/nova-systems-copy) and pushed `2ded64c` on 2026-10-15; Vercel built a
-protected preview of that commit. Later commits below are local until pushed.
+One current record. Earlier dated notes live in git history (`git log -p -- docs/NOVA_OPERATIONAL_MVP_CHECKPOINT.md`).
+Product authority: the owner's master execution prompt of 2026-10-17 (Triangle of Nova: Audit, Agents, Demand;
+Revive and Sentry underneath).
 
-## Verified on 2026-10-15
-- **Hosting.** nova-systems.app → Vercel project `nova-systems-copy`; production is still `bd53133` (Sept 27).
-  nova-systems.agency → project `nova-wave-one`, production deployment from Aug 12 (`2486c3e`). Both answer 200.
-- **The two "unexplained" pushes (Oct 1).** GitHub's repository activity API lists both
-  (`6ce1d1b` at 13:40:52Z, `b144f7d` at 13:56:05Z) as pushes by the GitHub account `isaac0427-ship-it` — the
-  same account behind every push since Sept 21 and today's push. Vercel's deployment metadata shows ordinary
-  Git deployments (no deploy hook). What made Git push on this computer is still not identified; no evidence of
-  another account or token.
-- **The repository is PUBLIC.** `nova-systems-ct/nova-systems-copy` is readable without signing in. Full-history
-  scan of every pushed branch: no live keys, no private keys, no service-role JWTs; only `.env.example` was ever
-  committed. Code, security reports, the prepared production patch and prospect lists are public.
-- **nova-wave-one's 9 crons are ENABLED** (since 2026-07-09) against the Aug 12 deployment, which holds live
-  Stripe/Twilio/Resend keys and the production service-role key. Definitions saved before any change:
-  `docs/evidence/wave-one-crons-2026-10-15.json` (paths and schedules are also in `nova-wave-one/vercel.json`).
-  Disabling them from this session was blocked by the permission system — owner action 2.
-- **Combined test-run stalls: cause found.** The Oct 13 stalls coincide exactly with Windows Modern Standby
-  (Kernel-Power 506/507). Harvest started 15 s after standby began at 11:54:18 and finished seconds after the
-  12:57:21 wake; meetings ended 12 s after the 13:39:43 wake. The runner's own timer was frozen too (hence
-  "420 s" timeouts lasting 63 and 32 min). The Oct 11 Chromium crash (0xC0000409) did NOT coincide with standby
-  and is not explained.
-  Fix (`60d5a45`, `b2c3972`): keep-awake power request for the run; a suspension detector that reports SUSPEND,
-  discards that result and re-runs once (proven with a simulated 20 s freeze).
+## Source and environments
+| Item | State |
+|---|---|
+| Repository / branch | `nova-mvp-work`, branch `mvp/operational`, remote github.com/nova-systems-ct/nova-systems-copy — **public** (verified 2026-10-17) |
+| Pushed to GitHub | owner pushes; check `git status -sb` for local commits not yet pushed |
+| Production (nova-systems.app) | `main@bd53133` (2026-09-27): old site; /demo and /book "Page not found"; no Stripe, worker or texting configuration |
+| Vercel Preview (mvp/operational) | builds, but has no database variables → /demo answers "We couldn't start your demo" |
+| Hosted staging | blocked (overdue Supabase invoice) |
+| **Local staging** | real Supabase in Docker; app http://localhost:5180 — `docs/LOCAL_STAGING.md` |
+| Runtime | use **Node 22 LTS** locally: Node 24.15 on Windows aborts (libuv assertion, exit 0xC0000409) under network load — 40/40 crashes vs 0/20 in the same reproduction |
+| nova-wave-one crons | disabled since 2026-10-16 02:25 UTC (re-verified 2026-10-17) |
 
-## Built today (each with tests; see commits)
-| Commit | Change | Evidence |
+## Gates (master prompt §3)
+| Gate | Status | Evidence |
 |---|---|---|
-| `60d5a45`, `b2c3972` | Runner keep-awake + suspension detection | freeze test: SUSPEND 19 s → re-run PASS |
-| `9fd4147` | Audit report link emailed automatically (dry run default, allowlist, once per version+address, failures recorded) | e2e_audit_report_delivery 40/40 |
-| `db86eee` | Academy Fundamentals: four pillars, what is live today (voice/deposits NOT for sale), online + in-person audit scope | e2e_sales_academy 84/84, journeys 72/72 |
-| `3e654ad` | Calendar: reschedule; provider-side cancel; 2 Cal.com bugs fixed (provider error shown as "no times"; accepted bookings never confirmed) | e2e_ops_calendar (new) 19/19; core 69/69; harvest 20/20; sentry/voice 36/36 |
-| `26ec1dd` | Job screen: move appointment; cancel confirmed appointment | e2e_ops_browser 31/31 |
+| A — internal foundation | **locally verified**: auth, roles, recovery, isolation; owner home leads with the product; Nova runs on Nova (full Operations tabs) | `scripts/local/e2e_local_staging_test.mjs` 31/31; `scripts/local/e2e_owner_walkthrough_test.mjs` 19/19 |
+| B — full audit on Nova | **public evidence + hosting configuration**: 7 evidenced findings, financial impact unknown, draft report awaiting owner approval. Private records, a live inquiry and a live call were not tested (need owner go-ahead) | `docs/evidence/nova-live-audit-2026-10-17.json`; `scripts/local/record_nova_audit.mjs` |
+| C — install and operate on Nova | **partial, locally verified**: Install Systems plan from the audit — 8 of 14 components done, including a controlled TEST inquiry → quote; public /book form → real time → signature → confirmed booking | walkthrough 19/19; Operations → Install Systems |
+| D — Demand + staff readiness | training rewritten for the triangle (pending owner content review); **Demand campaign workflow not built**; no outreach | `e2e_sales_academy_test` 84/84 |
+| E — verified operation | full clean-export runs under Node 22 — see ACCEPTANCE | — |
+| F — public presentation | triangle homepage, /book, /demo, owner home rebuilt **locally**; not deployed | — |
 
-## Full clean-checkout runs
-Export of `60d5a45` (keep-awake runner): npm ci, build, lint, unit/schema all pass; aggregate run 1:
-29 PASS / 0 FAIL / 0 TIMEOUT (1,400 checks). Runs 2–3 and a run of the final commit: see ACCEPTANCE.
+## Not verified with any real external provider
+Twilio voice and SMS, external email delivery, Stripe test payments (Connect built; no keys locally), Cal.com, Apple
+Messages for Business / Apple Pay / Wallet, social channels, hosted worker.
 
-## Exact next task
-1. Isaac: owner actions 1–4 in `NOVA_OPERATIONAL_MVP_OWNER_ACTIONS.md` (repo visibility, wave-one crons,
-   staging project, database access for backup + patch).
-2. With staging credentials: apply the manifest to staging, run INSTALLATION §1–9, then real Twilio/Stripe/
-   Cal.com/Resend checks and the voice script with an owner-controlled number.
-
-## Resume
-```
-cd C:\Users\NVUBCrosbyUBMS07\nova-mvp-work
-npm ci
-node scripts/verify_local_all.mjs
-node scripts/verify_sales_team_e2e.mjs     # keep-awake held; SUSPEND lines mean the host slept
-```
-
-## Update 2026-10-15 evening
-- **wave-one crons DISABLED** 2026-10-16 02:25:53 UTC via the Vercel API (definitions kept; .agency still serves).
-- Runner keeps full stdout/stderr of every non-passing suite (`0e32a6d`).
-- Website (`58e9b83`): Wave One page rebuilt around the four pillars with honest availability; home scarcity popup
-  removed; "AI agency" / AI-phone-agent claims removed from Company and Solutions. Legal pages and /onboard untouched.
-- Final 22a6459 runs were not clean (forced sleep at critical battery; 0xC0000409 crashes — see ACCEPTANCE).
-  A clean-export run of the newest commit is queued to start automatically when the laptop is on AC power.
-- **Chrome tools are not available in this session** (claude-in-chrome disconnected mid-session). Staging setup in
-  Supabase/Vercel must be done from a session started with `claude --chrome`.
-- Pushed through `22a6459`; later commits are local until `git push`.
-
-## Update 2026-10-16 — website demo, search identity, client-owned deposits
-| Commit | Change | Local evidence |
-|---|---|---|
-| `d982f8a`, `22de835` | Five-minute website demo (`/demo`; entry from home hero + navbar): bounded public-site scan with one evidenced observation or an honest "nothing verified", then real Core service steps in an isolated DEMO workspace; saved summary; 48–72 h audit invitation | e2e_demo_test 38/38; e2e_demo_browser_test 15/15 (desktop + phone); submit → summary 1.2 s locally (made-up site that answers instantly) |
-| `ad1917e`, `22765c5` | Search identity: site-wide title/description/OG/Organization JSON-LD describe the operational product; per-page canonical (all pages used to declare "/"); noindex on report/service/dashboard/demo-session; sitemap adds /demo, /waves; CSP allows the environment's Supabase project (staging login would otherwise be blocked) | browser checks in e2e_demo_browser_test |
-| `e267ca0` | Client-owned deposits via Stripe Connect direct charges; account verified with Stripe; separate Connect webhook secret; events only from the account holding the money | e2e_ops_connected_deposit_test 17/17; core 69/69; commissions 82/82; security personas 90/90 |
-| `79dfb77` | demo_sessions added to the lockdown list | check_migration_lockdown PASS; e2e_schema_lockdown 48/48; clean install 17/17 |
-| `0e32a6d`, harness | Failure logs kept; Vite readiness before browser tests | — |
-
-Clean-export full runs: `5d6e17a` run 2 = **30/30 PASS, 1,431 checks** (first fully clean run since the standby fix);
-run 1 had one cold-start page timeout (fixed by the harness readiness change). Later commits: see ACCEPTANCE / latest run.
-Not done here: anything needing Chrome (staging project, Preview variables), Search Console, deploys, real providers.
-
-## Update 2026-10-16 (later) — local staging prepared; hosted staging blocked
-- Hosted Supabase staging is blocked (overdue Supabase invoice). Deployed /demo failure confirmed from Vercel logs:
-  `[demo] Supabase is not configured` (Preview has no database variables). Fixed handling in `b5faa92`.
-- Local staging prepared (`ac95793`, docs/LOCAL_STAGING.md) but **not run**: this computer has no WSL 2 / Docker.
-  Isaac's one action is in that guide. After it: `node scripts/local/staging.mjs up|migrate|provision|serve|worker`.
-- Website audit (built app, real Chromium): 20 public routes × phone + desktop — no horizontal overflow, no script
-  errors, no broken internal links or home-page anchors.
-- A clean-export full run of the newest commit is queued and starts on AC power.
-
-## Update 2026-10-17 — local staging RUNNING (real Supabase in Docker)
-- Docker 29.8.2 / WSL 2 installed by Isaac. `staging.mjs up|migrate|provision|serve|worker` all succeed:
-  32/32 migrations, 5 buckets, owner + candidate representative, demo workspace; app at http://localhost:5180.
-- Live browser acceptance `scripts/local/e2e_local_staging_test.mjs`: **31/31** (see commit d4d9fa9).
-- **0xC0000409 suite crashes — partly explained, NOT fixed.** One confirmed trigger (fixed in `fbb5b5f`): process.exit() with open
-  fetch connections aborts Node 24.15 on Windows (libuv assertion src/win/async.c:76; reproduced 40/40, 0/40 after the fix).
-  But clean runs of d4d9fa9 still crashed 3 times, one in the middle of e2e_ops_core_journey_test (after 23 checks), with no
-  assertion text captured. Remaining cause unknown; next diagnostic: run the aggregate under Node 22 LTS.
-- Not covered locally: Twilio, real email delivery, Stripe test payments (no test key), Cal.com.
+## Next implementation task
+Nova Demand campaign workflow on the existing campaign / CRM / prospect infrastructure (campaign with offer, audience,
+sources, approval, attribution and outcome states; research and preparation only — no outreach without approval).

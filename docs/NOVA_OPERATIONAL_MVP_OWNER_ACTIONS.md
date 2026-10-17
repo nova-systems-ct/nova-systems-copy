@@ -1,6 +1,19 @@
 # Nova Operational MVP — owner actions (one prioritized list)
 
-Nothing below has been done. Each item is a separate approval or configuration only Isaac can give.
+## Open decisions and actions — 2026-10-17 (batched; each unblocks a specific capability)
+1. **Make the GitHub repository private** (still public on 2026-10-17). GitHub → repository → Settings → Danger Zone → Change visibility.
+2. **Push the local commits:** `cd C:\Users\NVUBCrosbyUBMS07\nova-mvp-work` then `git push`.
+3. **Install Node 22 LTS** (`winget install -e --id OpenJS.NodeJS.LTS`) and use it for local work — Node 24.15 on Windows crashes under network load (diagnosed 2026-10-17).
+4. **Name Nova's escalation contact** (who gets "customer needs a person" alerts): Operations → Settings. Install Systems is blocked on this required item.
+5. **Review and approve the audit of Nova** (7 findings, draft): Dashboard → Run an audit → All audits → Nova Systems (own business) → Report.
+6. **Go-ahead for live tests on production** with an owner-controlled contact: one real inquiry through the live contact form, and one call to Nova's number. Both write to production; neither was done.
+7. **Phone:** confirm which number is Nova's Twilio number (`TWILIO_PHONE_NUMBER` exists in production; value not readable here) and whether (203) 706-0504 is that number. A real agent call also needs the deployed voice code, a migrated database, and the number's voice webhook pointed at it.
+8. **Apple Messages for Business:** choose an Apple-approved Messaging Service Provider and provide Nova's Apple Business Register access (privately). **Apple Wallet loyalty:** approve the earning/redemption rules before any pass is built.
+9. **Nova Demand:** approve the first campaign's service, offer, audience, channels, volume and limits before any outreach.
+10. **Logo:** identify the approved "UC" logo file; the repository only has the gold "N" mark.
+11. **nova-systems.agency:** redirect to nova-systems.app, or keep it as a separate listing.
+
+Older items below remain open unless marked done.
 
 ## Urgent (security and availability) — updated 2026-10-15
 0. ~~Pay the overdue Vercel invoice~~ — done; both domains answer 200 again (verified 2026-10-15).
