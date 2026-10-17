@@ -86,3 +86,12 @@ Not done here: anything needing Chrome (staging project, Preview variables), Sea
 - Website audit (built app, real Chromium): 20 public routes × phone + desktop — no horizontal overflow, no script
   errors, no broken internal links or home-page anchors.
 - A clean-export full run of the newest commit is queued and starts on AC power.
+
+## Update 2026-10-17 — local staging RUNNING (real Supabase in Docker)
+- Docker 29.8.2 / WSL 2 installed by Isaac. `staging.mjs up|migrate|provision|serve|worker` all succeed:
+  32/32 migrations, 5 buckets, owner + candidate representative, demo workspace; app at http://localhost:5180.
+- Live browser acceptance `scripts/local/e2e_local_staging_test.mjs`: **31/31** (see commit d4d9fa9).
+- **Root cause of the intermittent 0xC0000409 suite crashes found and fixed (`fbb5b5f`):** process.exit() with open
+  fetch connections aborts Node 24.15 on Windows (libuv assertion src/win/async.c:76); reproduced 40/40, fixed 0/40.
+  The earlier "machine instability" explanation is withdrawn for these crashes.
+- Not covered locally: Twilio, real email delivery, Stripe test payments (no test key), Cal.com.
