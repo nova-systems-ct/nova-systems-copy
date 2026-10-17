@@ -1872,7 +1872,7 @@ async function handleInstallations(req, res, caller) {
 
 // ===================================================================== Nova Audit workflow
 async function loadAuditCase(id, orgId) {
-  const r = await sbSelect(`audit_cases?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&limit=1`);
+  const r = await sbSelect(`audit_cases?id=eq.${encodeURIComponent(id)}&organization_id=eq.${encodeURIComponent(orgId)}&select=*,businesses(name,website)&limit=1`);
   const rows = r.ok ? await r.json() : [];
   return rows[0] || null;
 }

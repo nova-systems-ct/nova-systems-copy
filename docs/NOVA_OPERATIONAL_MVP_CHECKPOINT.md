@@ -91,7 +91,8 @@ Not done here: anything needing Chrome (staging project, Preview variables), Sea
 - Docker 29.8.2 / WSL 2 installed by Isaac. `staging.mjs up|migrate|provision|serve|worker` all succeed:
   32/32 migrations, 5 buckets, owner + candidate representative, demo workspace; app at http://localhost:5180.
 - Live browser acceptance `scripts/local/e2e_local_staging_test.mjs`: **31/31** (see commit d4d9fa9).
-- **Root cause of the intermittent 0xC0000409 suite crashes found and fixed (`fbb5b5f`):** process.exit() with open
-  fetch connections aborts Node 24.15 on Windows (libuv assertion src/win/async.c:76); reproduced 40/40, fixed 0/40.
-  The earlier "machine instability" explanation is withdrawn for these crashes.
+- **0xC0000409 suite crashes — partly explained, NOT fixed.** One confirmed trigger (fixed in `fbb5b5f`): process.exit() with open
+  fetch connections aborts Node 24.15 on Windows (libuv assertion src/win/async.c:76; reproduced 40/40, 0/40 after the fix).
+  But clean runs of d4d9fa9 still crashed 3 times, one in the middle of e2e_ops_core_journey_test (after 23 checks), with no
+  assertion text captured. Remaining cause unknown; next diagnostic: run the aggregate under Node 22 LTS.
 - Not covered locally: Twilio, real email delivery, Stripe test payments (no test key), Cal.com.

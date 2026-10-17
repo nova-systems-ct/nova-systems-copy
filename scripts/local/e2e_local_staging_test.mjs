@@ -47,7 +47,7 @@ try {
   const bizName = `LOCAL TEST Detailing ${crypto.randomBytes(2).toString('hex')}`;
   const created = await api(owner.access_token, 'ops', 'businesses', { body: { name: bizName, industry: 'Detailing (LOCAL TEST)', is_test: true } });
   check('the owner creates a client business that is saved in the real database', created.status === 200 && !!created.body?.business?.id, JSON.stringify(created.body).slice(0, 160));
-  await page.goto(`${APP}/dashboard/ops`); await page.reload();
+  await page.goto(`${APP}/dashboard/ops/businesses`); await page.reload();
   check('the saved business is listed after a page reload (persistent record)', await seen(page.getByText(bizName), 15000));
   await shot(page, '02-ops-business');
   // sign out, then try the dashboard again

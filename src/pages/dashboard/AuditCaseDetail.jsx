@@ -96,8 +96,8 @@ export default function AuditCaseDetail() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>{data.scope === '360' ? '360 Audit' : 'Digital Audit'}</p>
-          <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 800 }}>Case {data.id.slice(0, 8)}</h1>
+          <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>{data.scope === '360' ? 'Online + in-person audit' : 'Online audit'}</p>
+          <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 800 }}>{data.businesses?.name || `Case ${data.id.slice(0, 8)}`}</h1>{data.businesses?.website && <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>{data.businesses.website} · case {data.id.slice(0, 8)}</p>}
         </div>
         <select value={data.status} onChange={(e) => doAction('update-status', { status: e.target.value })} disabled={busy} style={{ ...inp, width: 'auto', appearance: 'none', cursor: 'pointer' }}>
           {STATUS_FLOW.map((s) => <option key={s} value={s} style={{ background: '#111' }}>{s.replace(/_/g, ' ')}</option>)}
