@@ -497,6 +497,12 @@ export async function applyOpsStripeEvent(event) {
   if (type === 'charge.refunded') {
     const refunded = obj.amount_refunded || 0;
     if (dep.status === 'paid' || dep.status === 'partially_refunded') await transition({ orgId, entity: 'deposit', table: 'ops_deposits', id: dep.id, from: dep.status, to: refunded >= dep.amount_cents ? 'refunded' : 'partially_refunded', actor, reason: 'refund recorded by Stripe', patch: { refunded_cents: refunded, refunded_at: nowIso() } });
+    // Loyalty: a full refund reverses the points that job earned; a partial refund is left for the owner to decide.
+    try {
+      const { reverseForJob } = await import('./loyalty.js');
+      if (refunded >= dep.amount_cents) await reverseForJob({ orgId, jobId: dep.job_id, reason: 'payment refunded' });
+      else if (await dbOne(`loyalty_ledger?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(dep.job_id)}&kind=eq.earn&select=id`)) await dbInsert('ops_incidents', { organization_id: orgId, check_key: `loyalty_partial_refund:${dep.id}`, severity: 'warning', title: 'Partial refund on a job that earned loyalty points — decide whether to adjust', detail: { job_id: dep.job_id, deposit_id: dep.id } }).catch(() => null);
+    } catch (e) { console.error('[loyalty] reversal failed', e.message); }
     return { handled: true, applied: true };
   }
   return { handled: true, applied: false, reason: `ignored ${type}` };
@@ -543,6 +549,8 @@ export async function completeJob({ orgId, jobId, actor, notes, outcome = 'compl
   const bk = await dbOne(`ops_bookings?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&status=eq.confirmed&select=id`);
   if (bk) await transition({ orgId, entity: 'booking', table: 'ops_bookings', id: bk.id, from: 'confirmed', to: outcome === 'completed' ? 'completed' : 'no_show', actor, reason: outcome });
   if (outcome === 'completed') {
+    // Loyalty: points for the completed job under the approved program (if any). A loyalty problem never blocks completion.
+    try { const { earnForJob } = await import('./loyalty.js'); await earnForJob({ orgId, job: j, actor }); } catch (e) { console.error('[loyalty] earn failed', e.message); await dbInsert('ops_incidents', { organization_id: orgId, check_key: `loyalty_earn:${job.id}`, severity: 'warning', title: 'Loyalty points could not be posted for a completed job', detail: { job_id: job.id, error: String(e.message).slice(0, 300) } }).catch(() => null); }
     const at = new Date(Date.now() + 2 * 3600_000).toISOString();
     for (const kind of ['review_request', 'referral_invite']) {
       const ins = await dbInsert('ops_followups', { organization_id: orgId, job_id: job.id, contact_id: job.contact_id, kind, scheduled_at: at });

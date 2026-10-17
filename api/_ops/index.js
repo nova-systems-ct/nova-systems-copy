@@ -397,6 +397,33 @@ export async function handleOps(req, res, op) {
       return send(res, 200, await dbGet(`wave1_conversations?organization_id=eq.${enc(s.orgId)}&select=id,channel,status,staff_takeover,engine_state,last_inbound_at,last_outbound_at,is_test,contact_id,crm_contacts(name,phone_e164,suppressed)&order=last_inbound_at.desc.nullslast&limit=100`));
     }
 
+    // Loyalty (Wallet rewards): owner-approved program and append-only ledger. Program and adjustments need
+    // ops.configure; redeeming a reward at the counter needs ops.manage; reading needs ops.view.
+    if (op === 'loyalty') {
+      const L = await import('./loyalty.js');
+      if (req.method === 'GET') {
+        const s = await inOrg(req, res, orgParam, 'ops.view'); if (!s) return;
+        const programs = await dbGet(`loyalty_programs?organization_id=eq.${enc(s.orgId)}&select=*&order=version.desc`);
+        const accountId = sanitize(q.account_id, 60);
+        if (accountId) {
+          const acc = await dbOne(`loyalty_accounts?id=eq.${enc(accountId)}&organization_id=eq.${enc(s.orgId)}&select=*,crm_contacts(name)`);
+          if (!acc) return send(res, 404, { error: 'Not found' });
+          const ledger = await dbGet(`loyalty_ledger?account_id=eq.${enc(acc.id)}&select=*&order=created_at.desc&limit=500`);
+          return send(res, 200, { account: acc, ledger, lots: L.computeLots(ledger).filter((l) => l.remaining > 0) });
+        }
+        const accounts = await dbGet(`loyalty_accounts?organization_id=eq.${enc(s.orgId)}&select=id,balance,pass_status,is_test,contact_id,crm_contacts(name),updated_at&order=updated_at.desc&limit=200`);
+        return send(res, 200, { programs, accounts, wallet: L.walletReadiness() });
+      }
+      const action = sanitize(b.action, 30);
+      const s = await inOrg(req, res, orgParam, action === 'redeem' ? 'ops.manage' : 'ops.configure'); if (!s) return;
+      if (action === 'create-program') return send(res, 200, { program: await L.createProgram({ orgId: s.orgId, name: b.name, rules: b.rules || {}, actor: s.caller }) });
+      if (action === 'approve-program') return send(res, 200, { program: await L.approveProgram({ orgId: s.orgId, programId: sanitize(b.program_id, 60), actor: s.caller }) });
+      if (['pause', 'resume', 'retire'].includes(action)) return send(res, 200, { program: await L.setProgramStatus({ orgId: s.orgId, programId: sanitize(b.program_id, 60), to: action }) });
+      if (action === 'redeem') return send(res, 200, await L.redeem({ orgId: s.orgId, accountId: sanitize(b.account_id, 60), requestId: b.request_id, actor: s.caller }));
+      if (action === 'adjust') return send(res, 200, { entry: await L.adjust({ orgId: s.orgId, accountId: sanitize(b.account_id, 60), points: Number(b.points), reason: sanitize(b.reason, 300), actor: s.caller }) });
+      return send(res, 400, { error: 'Unknown loyalty action' });
+    }
+
     if (op === 'campaigns' || op === 'campaign') {
       if (req.method === 'GET') {
         const s = await inOrg(req, res, orgParam, 'ops.view'); if (!s) return;

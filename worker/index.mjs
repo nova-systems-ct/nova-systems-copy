@@ -196,8 +196,10 @@ const handlers = {
     // Hierarchy handoffs: escalate unacknowledged and overdue work items to the next responsible person.
     const { sweepWorkItems } = await import('../api/_hierarchy/handoffs.js');
     const handoffs = await sweepWorkItems().catch((e) => ({ error: e.message }));
+    const { expireDue } = await import('../api/_ops/loyalty.js');
+    const loyalty = await expireDue().catch((e) => ({ error: e.message }));
     await scheduleNext(ctx, 'ops_sentry_sweep', Number(job.payload?.every_minutes) || 5);
-    return { holds_expired: expired, referrals_verified: verified, ...sentry.summary, handoffs };
+    return { holds_expired: expired, referrals_verified: verified, ...sentry.summary, handoffs, loyalty };
   },
   async ops_scoreboard_tick(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };

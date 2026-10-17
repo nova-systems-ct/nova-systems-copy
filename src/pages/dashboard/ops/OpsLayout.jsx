@@ -4,7 +4,7 @@ import { useOrg } from '../../../lib/OrgContext'
 import { api, useLoad, C, css, Card, Field, Loading, ErrorBox, Empty, Badge, TestBadge, PageHeader, useAction } from './ui'
 
 const TABS = [
-  ['', 'Overview'], ['inbox', 'Inbox'], ['requests', 'Requests & jobs'], ['campaigns', 'Revive campaigns'], ['demand', 'Demand'],
+  ['', 'Overview'], ['inbox', 'Inbox'], ['requests', 'Requests & jobs'], ['campaigns', 'Revive campaigns'], ['demand', 'Demand'], ['rewards', 'Rewards'],
   ['install', 'Install Systems'], ['test', 'Test center'], ['reports', 'Weekly reports'], ['monitoring', 'Monitoring'], ['settings', 'Settings'],
 ]
 
