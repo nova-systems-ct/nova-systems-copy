@@ -128,7 +128,7 @@ process.on('exit', () => { try { awake?.kill(); } catch { /* gone */ } });
 
 // Evidence: full stdout+stderr of every suite that does not PASS is kept (default %TEMP%/nova-e2e-logs/<run>/).
 const LOG_DIR = process.env.NOVA_E2E_LOG_DIR || path.join(os.tmpdir(), 'nova-e2e-logs', new Date().toISOString().replace(/[:.]/g, '-'));
-const keepLog = (name, r, attempt = '') => { try { fs.mkdirSync(LOG_DIR, { recursive: true }); const file = path.join(LOG_DIR, `${name}${attempt}.log`); fs.writeFileSync(file, `status=${r.status} exit=${r.code ?? 'none'} seconds=${r.seconds?.toFixed?.(1)}
+const keepLog = (name, r, attempt = '') => { try { fs.mkdirSync(LOG_DIR, { recursive: true }); const file = path.join(LOG_DIR, `${name}${attempt}.log`); fs.writeFileSync(file, `status=${r.status} exit=${r.code ?? 'none'} seconds=${r.seconds?.toFixed?.(1)} free_mem_mb=${Math.round(os.freemem() / 1048576)} of ${Math.round(os.totalmem() / 1048576)}
 --- stdout ---
 ${r.out || ''}
 --- stderr ---
