@@ -6,7 +6,8 @@ import { requireOrgAccess } from './_orgAccess.js';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, appBase, notify } from './_sales/core.js';
 import { sanitize } from './_sanitize.js';
 import { textPdf } from './_sales/pdf.js';
-import { contentHash, computeScenario, totalScenarios, checkTestEntry, interpretTest, validateClockPolicy, REQUIRED_REPORT_SECTIONS, validateFinding } from './_auditRules.js';
+import { contentHash, computeScenario, totalScenarios, checkTestEntry, interpretTest, validateClockPolicy, REQUIRED_REPORT_SECTIONS, validateFinding, PROPOSED_CLOCK_POLICY, buildInputChecklist } from './_auditRules.js';
+import { computeCaseClockStatus } from './_auditClock.js';
 import { newToken, sha256 } from './_ops/rules.js';
 
 export const REPORT_TITLE = 'Operational Findings & Revenue Opportunity Report';
@@ -26,7 +27,14 @@ export async function handleAuditExtra(req, res, op, caller) {
   try {
     if (op === 'intake') {
       const c = await caseFor(req, res, orgId, caseId); if (!c) return;
-      if (req.method === 'GET') return send(res, 200, { intake: c.intake, reviewer_user_id: c.reviewer_user_id, deadline_terms: c.deadline_terms, clock_policy: c.clock_policy, clock_policy_approved_at: c.clock_policy_approved_at, active_test_authorization: c.active_test_authorization, is_preview: c.is_preview });
+      if (req.method === 'GET') {
+        const [versions, blockers, extensions] = await Promise.all([
+          dbGet(`audit_clock_policy_versions?case_id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}&select=version,policy,created_by,created_at,approved_by,approved_at&order=version.desc`).catch(() => []),
+          dbGet(`audit_case_blockers?case_id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}&select=*&order=raised_at.desc`).catch(() => []),
+          dbGet(`audit_case_extensions?case_id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}&select=*&order=created_at.desc`).catch(() => []),
+        ]);
+        return send(res, 200, { intake: c.intake, reviewer_user_id: c.reviewer_user_id, deadline_terms: c.deadline_terms, clock_policy: c.clock_policy, clock_policy_approved_at: c.clock_policy_approved_at, clock_policy_version: c.clock_policy_version, proposed_clock_policy: PROPOSED_CLOCK_POLICY, policy_versions: versions, input_checklist: c.input_checklist || [], blockers, extensions, active_test_authorization: c.active_test_authorization, is_preview: c.is_preview, clock_started_at: c.start_condition_met_at });
+      }
       const patch = { updated_at: nowIso() };
       if (b.intake && typeof b.intake === 'object') {
         const i = b.intake; const keep = {};
@@ -38,15 +46,26 @@ export async function handleAuditExtra(req, res, op, caller) {
       if (b.clock_policy) {
         if (c.start_condition_met_at) return send(res, 409, { error: 'The clock already started; its policy can no longer change' });
         const errs = validateClockPolicy(b.clock_policy); if (errs.length) return send(res, 400, { error: errs.join('; ') });
-        patch.clock_policy = { start_event: sanitize(b.clock_policy.start_event, 300), hours_basis: b.clock_policy.hours_basis, target_hours: Number(b.clock_policy.target_hours), missing_input_rule: sanitize(b.clock_policy.missing_input_rule, 300), extension_notice: sanitize(b.clock_policy.extension_notice, 300) };
+        const p = b.clock_policy;
+        patch.clock_policy = { start_event: sanitize(p.start_event, 300), hours_basis: p.hours_basis, target_hours: Number(p.target_hours), ...(p.aim_hours != null ? { aim_hours: Number(p.aim_hours) } : {}), missing_input_rule: sanitize(p.missing_input_rule, 300), extension_notice: sanitize(p.extension_notice, 300), required_inputs: (p.required_inputs || []).map((i) => ({ key: i.key, label: sanitize(i.label, 120), responsible: i.responsible })) };
         patch.clock_policy_approved_at = null; patch.clock_policy_approved_by = null; // a changed policy needs approval again
         patch.target_hours = patch.clock_policy.target_hours; patch.clock_basis = patch.clock_policy.hours_basis === 'business_hours' ? 'business_hours' : 'elapsed';
+        patch.input_checklist = buildInputChecklist(patch.clock_policy, c.input_checklist);
+        // every change is a new, timestamped version; earlier versions stay as written
+        const last = await dbOne(`audit_clock_policy_versions?case_id=eq.${enc(c.id)}&select=version&order=version.desc`);
+        const ver = (last?.version || 0) + 1;
+        const ins = await dbInsert('audit_clock_policy_versions', { organization_id: orgId, case_id: c.id, version: ver, policy: patch.clock_policy, created_by: caller.id });
+        if (ins.conflict) return send(res, 409, { error: 'Someone else changed the policy at the same moment; reload and try again' });
+        patch.clock_policy_version = ver;
       }
       if (b.deadline_terms != null) patch.deadline_terms = sanitize(b.deadline_terms, 600) || null;
       if (b.approve_clock_policy === true) {
         if (!isOwner(caller)) return send(res, 403, { error: 'Only the owner can approve the clock policy and deadline terms' });
         const pol = patch.clock_policy || c.clock_policy; if (!pol) return send(res, 400, { error: 'Write the clock policy first' });
+        if (c.start_condition_met_at) return send(res, 409, { error: 'The clock already started under its approved policy' });
         patch.clock_policy_approved_at = nowIso(); patch.clock_policy_approved_by = caller.id;
+        const ver = patch.clock_policy_version || c.clock_policy_version;
+        if (ver) await dbPatch('audit_clock_policy_versions', `case_id=eq.${enc(c.id)}&version=eq.${ver}`, { approved_by: caller.id, approved_at: patch.clock_policy_approved_at });
       }
       if (b.active_test_authorization) {
         const a = b.active_test_authorization;
@@ -59,6 +78,68 @@ export async function handleAuditExtra(req, res, op, caller) {
       }
       const [row] = await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}`, patch);
       return send(res, 200, { ok: true, case: row });
+    }
+
+    // Delivery clock operations (§5). Blockers are recorded without moving the deadline; only an extension the client
+    // was told about and agreed to changes the due time, by exactly the agreed hours.
+    if (op === 'clock') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
+      const c = await caseFor(req, res, orgId, caseId); if (!c) return;
+      const action = sanitize(b.action, 30);
+      const clockNow = () => computeCaseClockStatus({ status: c.status, startConditionMetAt: c.start_condition_met_at, targetHours: c.target_hours, clockBasis: c.clock_basis, timezone: c.timezone, pausedAt: c.paused_at, totalPausedSeconds: c.total_paused_seconds, agreedExtensionHours: Number(c.agreed_extension_hours || 0) });
+      if (action === 'receive-input') {
+        const key = sanitize(b.key, 40); const list = c.input_checklist || [];
+        const item = list.find((i) => i.key === key); if (!item) return send(res, 404, { error: 'That input is not on this case\'s checklist' });
+        if (item.received_at) return send(res, 200, { ok: true, input_checklist: list, unchanged: true });
+        const next = list.map((i) => (i.key === key ? { ...i, received_at: nowIso(), received_by: caller.id, note: sanitize(b.note, 300) || null } : i));
+        const [row] = await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}`, { input_checklist: next, updated_at: nowIso() });
+        return send(res, 200, { ok: true, input_checklist: row.input_checklist, missing: next.filter((i) => !i.received_at) });
+      }
+      if (action === 'raise-blocker') {
+        if (!c.start_condition_met_at) return send(res, 409, { error: 'Before the clock starts, list missing inputs on the checklist instead' });
+        if (!['client', 'nova', 'third_party'].includes(b.responsible)) return send(res, 400, { error: 'Say who must clear the blocker: client, nova or third_party' });
+        const d = sanitize(b.description, 600); if (!d || d.length < 5) return send(res, 400, { error: 'Describe the blocker' });
+        const ins = await dbInsert('audit_case_blockers', { organization_id: orgId, case_id: c.id, description: d, responsible: b.responsible, raised_by: caller.id });
+        return send(res, 200, { ok: true, blocker: ins.row, clock: clockNow(), note: 'Recorded. The deadline has not changed; if it is now at risk, propose an extension and tell the client.' });
+      }
+      if (action === 'resolve-blocker') {
+        const [row] = await dbPatch('audit_case_blockers', `id=eq.${enc(sanitize(b.blocker_id, 60))}&case_id=eq.${enc(c.id)}&resolved_at=is.null`, { resolved_at: nowIso(), resolved_by: caller.id, resolution: sanitize(b.resolution, 600) || null });
+        return row ? send(res, 200, { ok: true, blocker: row }) : send(res, 404, { error: 'Open blocker not found on this case' });
+      }
+      if (action === 'propose-extension') {
+        const clock = clockNow();
+        if (!clock.dueAt || clock.bucket === 'completed') return send(res, 409, { error: 'Only a running audit with a deadline can be extended' });
+        const hours = Number(b.extra_hours); if (!(hours > 0 && hours <= 168)) return send(res, 400, { error: 'Extra time must be between 1 and 168 hours' });
+        const reason = sanitize(b.reason, 600); if (!reason || reason.length < 10) return send(res, 400, { error: 'Explain to the client why more time is needed (10+ characters)' });
+        const due = new Date(clock.dueAt);
+        const ins = await dbInsert('audit_case_extensions', { organization_id: orgId, case_id: c.id, due_before: due.toISOString(), extra_hours: hours, proposed_due_at: new Date(due.getTime() + hours * 3600_000).toISOString(), reason, blocker_id: sanitize(b.blocker_id, 60) || null, created_by: caller.id });
+        if (ins.conflict) return send(res, 409, { error: 'There is already an extension waiting for the client\'s answer' });
+        return send(res, 200, { ok: true, extension: ins.row, clock, note: 'Proposed only. The deadline is unchanged until the client agrees.' });
+      }
+      const ext = await dbOne(`audit_case_extensions?id=eq.${enc(sanitize(b.extension_id, 60))}&case_id=eq.${enc(c.id)}&select=*`);
+      if (!ext) return send(res, 404, { error: 'Extension not found on this case' });
+      if (action === 'record-notice') {
+        if (ext.status !== 'proposed') return send(res, 409, { error: `This extension is ${ext.status}` });
+        if (!['email', 'phone', 'in_person', 'message'].includes(b.channel)) return send(res, 400, { error: 'How was the client told: email, phone, in_person or message' });
+        const text = sanitize(b.notice_text, 1500); if (!text || text.length < 20) return send(res, 400, { error: 'Record what the client was told (20+ characters)' });
+        const [row] = await dbPatch('audit_case_extensions', `id=eq.${enc(ext.id)}&status=eq.proposed`, { status: 'client_notified', notice_channel: b.channel, notice_text: text, notified_at: nowIso(), notified_by: caller.id });
+        return send(res, 200, { ok: true, extension: row });
+      }
+      if (action === 'record-response') {
+        if (ext.status !== 'client_notified') return send(res, 409, { error: ext.status === 'proposed' ? 'Record how the client was told before recording their answer' : `This extension is ${ext.status}` });
+        const name = sanitize(b.responder_name, 120); if (!name || name.length < 2) return send(res, 400, { error: 'Who at the client answered?' });
+        const agreed = b.agreed === true;
+        const [row] = await dbPatch('audit_case_extensions', `id=eq.${enc(ext.id)}&status=eq.client_notified`, { status: agreed ? 'agreed' : 'declined', client_response_at: nowIso(), client_responder_name: name, response_evidence: sanitize(b.evidence, 600) || null });
+        if (!row) return send(res, 409, { error: 'The extension changed; reload' });
+        let cas = c;
+        if (agreed) [cas] = await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}`, { agreed_extension_hours: Number(c.agreed_extension_hours || 0) + Number(ext.extra_hours), updated_at: nowIso() });
+        return send(res, 200, { ok: true, extension: row, clock: computeCaseClockStatus({ status: cas.status, startConditionMetAt: cas.start_condition_met_at, targetHours: cas.target_hours, clockBasis: cas.clock_basis, timezone: cas.timezone, pausedAt: cas.paused_at, totalPausedSeconds: cas.total_paused_seconds, agreedExtensionHours: Number(cas.agreed_extension_hours || 0) }) });
+      }
+      if (action === 'withdraw-extension') {
+        const [row] = await dbPatch('audit_case_extensions', `id=eq.${enc(ext.id)}&status=in.(proposed,client_notified)`, { status: 'withdrawn' });
+        return row ? send(res, 200, { ok: true, extension: row }) : send(res, 409, { error: `This extension is ${ext.status}` });
+      }
+      return send(res, 400, { error: 'Unknown clock action' });
     }
 
     if (op === 'finding-details') {

@@ -145,7 +145,7 @@ export default function AuditCaseDetail() {
       </div>
 
       <AuditCss />
-      {tab === 'intake' && <IntakeTab org={currentOrg.id} caseId={id} isOwner={isOwner} />}
+      {tab === 'intake' && <IntakeTab org={currentOrg.id} caseId={id} isOwner={isOwner} clock={clock} onChanged={load} />}
       {tab === 'tests' && <TestsTab org={currentOrg.id} caseId={id} />}
       {tab === 'benchmarks' && <BenchmarksTab org={currentOrg.id} caseId={id} />}
       {tab === 'scenarios' && <ScenariosTab org={currentOrg.id} caseId={id} findings={findings} />}

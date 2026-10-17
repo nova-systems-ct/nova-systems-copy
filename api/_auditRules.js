@@ -160,6 +160,29 @@ export function validateClockPolicy(p) {
   const h = Number(p.target_hours); if (!Number.isInteger(h) || h < 48 || h > 72) errors.push('target must be a whole number of hours between 48 and 72');
   if (!p.missing_input_rule || String(p.missing_input_rule).length < 10) errors.push('say what happens when inputs are missing (e.g. clock paused until received)');
   if (!p.extension_notice || String(p.extension_notice).length < 10) errors.push('say how and when the client is told about an extension');
+  if (p.aim_hours != null && (!Number.isInteger(Number(p.aim_hours)) || Number(p.aim_hours) < 24 || Number(p.aim_hours) > h)) errors.push('the aim must be whole hours, at least 24 and not later than the target');
+  if (p.required_inputs != null) {
+    if (!Array.isArray(p.required_inputs) || p.required_inputs.length > 20) errors.push('required inputs must be a list of at most 20');
+    else for (const i of p.required_inputs) if (!i || !/^[a-z0-9_]{2,40}$/.test(String(i.key || '')) || String(i.label || '').trim().length < 3 || !['client', 'nova', 'third_party'].includes(i.responsible)) { errors.push('each required input needs a key, a label and who provides it (client, nova or third_party)'); break; }
+  }
   return errors;
+}
+// §5's suggested default — shown to the owner as a PROPOSAL; it has no effect until written to a case and approved.
+export const PROPOSED_CLOCK_POLICY = {
+  start_event: 'Scope agreed, every required input and access received, and the start confirmed with the client',
+  hours_basis: 'elapsed_hours', aim_hours: 48, target_hours: 72,
+  missing_input_rule: 'The clock does not start until every required input is received; each missing input is listed with who owes it',
+  extension_notice: 'Before an expected missed deadline Nova tells the client why and asks them to agree a revised delivery time; the deadline changes only after they agree',
+  required_inputs: [
+    { key: 'scope_agreed', label: 'Audit scope agreed in writing', responsible: 'client' },
+    { key: 'public_channels', label: 'Website, phone, email and listings to inspect', responsible: 'client' },
+    { key: 'record_access', label: 'Permission and access to the operational records in scope', responsible: 'client' },
+    { key: 'audit_contact', label: 'A named contact for questions during the audit', responsible: 'client' },
+    { key: 'start_confirmed', label: 'Start confirmed with the client', responsible: 'nova' },
+  ],
+};
+export function buildInputChecklist(policy, previous = []) {
+  const prev = new Map((previous || []).map((i) => [i.key, i]));
+  return (policy?.required_inputs || []).map((i) => ({ key: i.key, label: i.label, responsible: i.responsible, received_at: prev.get(i.key)?.received_at || null, received_by: prev.get(i.key)?.received_by || null, note: prev.get(i.key)?.note || null }));
 }
 export const FINDING_REPORT_FIELDS = ['customer_impact', 'financial_impact_status', 'limitations', 'nova_can_implement', 'owner_decision'];

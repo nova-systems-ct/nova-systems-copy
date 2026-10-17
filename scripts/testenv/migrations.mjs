@@ -7,6 +7,7 @@ export const BASE = [
   'supabase/hiring-workflow-migration-standalone.sql',
   'supabase/crm-order-audit-migration-standalone.sql',
   'supabase/audit-02-evidence-scenarios-delivery-migration-standalone.sql',
+  'supabase/audit-03-clock-policy-migration-standalone.sql',
   'supabase/approval-inbox-migration-standalone.sql',
   'supabase/durable-jobs-migration-standalone.sql',
 ];

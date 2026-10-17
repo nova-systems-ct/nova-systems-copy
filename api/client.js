@@ -1888,7 +1888,7 @@ async function handleAuditCases(req, res, caller) {
       if (!c) return res.status(404).json({ error: 'Case not found' });
       const clock = computeCaseClockStatus({
         status: c.status, startConditionMetAt: c.start_condition_met_at, targetHours: c.target_hours,
-        clockBasis: c.clock_basis, timezone: c.timezone, pausedAt: c.paused_at, totalPausedSeconds: c.total_paused_seconds,
+        clockBasis: c.clock_basis, timezone: c.timezone, pausedAt: c.paused_at, totalPausedSeconds: c.total_paused_seconds, agreedExtensionHours: Number(c.agreed_extension_hours || 0),
       });
       return res.status(200).json({ ...c, clock });
     }
@@ -1899,7 +1899,7 @@ async function handleAuditCases(req, res, caller) {
       ...c,
       clock: computeCaseClockStatus({
         status: c.status, startConditionMetAt: c.start_condition_met_at, targetHours: c.target_hours,
-        clockBasis: c.clock_basis, timezone: c.timezone, pausedAt: c.paused_at, totalPausedSeconds: c.total_paused_seconds,
+        clockBasis: c.clock_basis, timezone: c.timezone, pausedAt: c.paused_at, totalPausedSeconds: c.total_paused_seconds, agreedExtensionHours: Number(c.agreed_extension_hours || 0),
       }),
     }));
     return res.status(200).json(withClocks);
@@ -1948,6 +1948,8 @@ async function handleAuditCases(req, res, caller) {
   if (action === 'mark-ready') {
     if (existing.start_condition_met_at) return res.status(400).json({ error: 'This case has already started its clock' });
     if (!existing.clock_policy_approved_at) return res.status(409).json({ error: 'The owner must approve the clock policy (start event, hours basis, 48–72h target, missing inputs, extension notice) before the clock starts' });
+    const missingInputs = (existing.input_checklist || []).filter((i) => !i.received_at);
+    if (missingInputs.length) return res.status(409).json({ error: `The clock cannot start while required inputs are missing: ${missingInputs.map((i) => `${i.label} (from ${i.responsible === 'nova' ? 'Nova' : i.responsible === 'third_party' ? 'a third party' : 'the client'})`).join('; ')}`, missing_inputs: missingInputs });
     const startAt = new Date().toISOString();
     const patch = { status: 'researching', start_condition_met_at: startAt, updated_at: startAt };
     const r = await sbWrite(`audit_cases?id=eq.${encodeURIComponent(id)}`, 'PATCH', patch);
@@ -4367,7 +4369,7 @@ export default async function handler(req, res) {
       if (op === 'report-view' || op === 'report-view-pdf') { if (!rateLimit(req, res, 30, 60_000)) return; return handleReportView(req, res, op); }
       const caller = await requireStaff(req, res);
       if (!caller) return;
-      if (['intake', 'finding-details', 'test-plan', 'competitors', 'software', 'scenarios', 'compose', 'report-pdf', 'publish', 'revoke'].includes(op)) return handleAuditExtra(req, res, op, caller);
+      if (['intake', 'clock', 'finding-details', 'test-plan', 'competitors', 'software', 'scenarios', 'compose', 'report-pdf', 'publish', 'revoke'].includes(op)) return handleAuditExtra(req, res, op, caller);
       if (op === 'cases') return handleAuditCases(req, res, caller);
       if (op === 'evidence') return handleAuditEvidence(req, res, caller);
       if (op === 'findings') return handleAuditFindings(req, res, caller);

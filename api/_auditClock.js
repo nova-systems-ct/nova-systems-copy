@@ -59,7 +59,7 @@ function addBusinessHours(date, hours, timeZone) {
  * Computes the due date for a case, accounting for total time already spent paused.
  * clockBasis: 'elapsed' | 'business_hours'
  */
-export function computeDueAt({ startAt, targetHours, clockBasis, timezone, totalPausedMs = 0 }) {
+export function computeDueAt({ startAt, targetHours, clockBasis, timezone, totalPausedMs = 0, agreedExtensionHours = 0 }) {
   if (!startAt) return null;
   const start = new Date(startAt);
   const base = clockBasis === 'business_hours'
@@ -67,7 +67,9 @@ export function computeDueAt({ startAt, targetHours, clockBasis, timezone, total
     : new Date(start.getTime() + targetHours * MS_PER_HOUR);
   // Pauses extend the deadline by exactly the paused duration, on the 'elapsed' clock, regardless
   // of clock_basis — a pause is real wall-clock time nobody could have been working during it.
-  return new Date(base.getTime() + totalPausedMs);
+  // Extensions the client agreed to (audit_case_extensions) add their exact hours; a recorded
+  // blocker on its own never moves the deadline.
+  return new Date(base.getTime() + totalPausedMs + Number(agreedExtensionHours || 0) * MS_PER_HOUR);
 }
 
 /**
@@ -83,6 +85,7 @@ export function computeCaseClockStatus({
   timezone,
   pausedAt, // non-null if currently paused
   totalPausedSeconds = 0,
+  agreedExtensionHours = 0, // hours from client-agreed extensions only
   now = new Date(),
 }) {
   const nowDate = now instanceof Date ? now : new Date(now);
@@ -110,11 +113,12 @@ export function computeCaseClockStatus({
   }
 
   const dueAt = computeDueAt({
-    startAt: startConditionMetAt, targetHours, clockBasis, timezone, totalPausedMs: effectivePausedMs,
+    startAt: startConditionMetAt, targetHours, clockBasis, timezone, totalPausedMs: effectivePausedMs, agreedExtensionHours,
   });
+  const originalDueAt = computeDueAt({ startAt: startConditionMetAt, targetHours, clockBasis, timezone });
 
   if (pausedAt) {
-    return { bucket: 'paused', dueAt, remainingSeconds: Math.round((dueAt.getTime() - nowDate.getTime()) / 1000) };
+    return { bucket: 'paused', dueAt, originalDueAt, remainingSeconds: Math.round((dueAt.getTime() - nowDate.getTime()) / 1000) };
   }
 
   const remainingSeconds = Math.round((dueAt.getTime() - nowDate.getTime()) / 1000);
@@ -127,5 +131,5 @@ export function computeCaseClockStatus({
   else if (remainingSeconds <= atRiskThresholdSeconds) bucket = 'at_risk';
   else bucket = 'active';
 
-  return { bucket, dueAt, remainingSeconds };
+  return { bucket, dueAt, originalDueAt, remainingSeconds };
 }
