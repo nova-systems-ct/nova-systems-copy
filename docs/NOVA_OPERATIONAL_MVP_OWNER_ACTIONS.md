@@ -1,17 +1,22 @@
 # Nova Operational MVP — owner actions (one prioritized list)
 
-## Open decisions and actions — 2026-10-17 (batched; each unblocks a specific capability)
+## Open decisions and actions — 2026-10-17, end of day (batched; each unblocks a specific capability)
 1. **Make the GitHub repository private** (still public on 2026-10-17). GitHub → repository → Settings → Danger Zone → Change visibility.
-2. **Push the local commits:** `cd C:\Users\NVUBCrosbyUBMS07\nova-mvp-work` then `git push`.
-3. **Install Node 22 LTS** (`winget install -e --id OpenJS.NodeJS.LTS`) and use it for local work — Node 24.15 on Windows crashes under network load (diagnosed 2026-10-17).
+2. **Push the local commits** (23 ahead of origin at the end of 2026-10-17): `cd C:UsersNVUBCrosbyUBMS07
+ova-mvp-work` then `git push`.
+3. **Install Node 22 LTS** (`winget install -e --id OpenJS.NodeJS.LTS`) — Node 24.15 on Windows crashes under network load (diagnosed 2026-10-17).
 4. **Name Nova's escalation contact** (who gets "customer needs a person" alerts): Operations → Settings. Install Systems is blocked on this required item.
 5. **Review and approve the audit of Nova** (7 findings, draft): Dashboard → Run an audit → All audits → Nova Systems (own business) → Report.
-6. **Go-ahead for live tests on production** with an owner-controlled contact: one real inquiry through the live contact form, and one call to Nova's number. Both write to production; neither was done.
-7. **Phone:** confirm which number is Nova's Twilio number (`TWILIO_PHONE_NUMBER` exists in production; value not readable here) and whether (203) 706-0504 is that number. A real agent call also needs the deployed voice code, a migrated database, and the number's voice webhook pointed at it.
-8. **Apple Messages for Business:** choose an Apple-approved Messaging Service Provider and provide Nova's Apple Business Register access (privately). **Apple Wallet loyalty:** approve the earning/redemption rules before any pass is built.
-9. **Nova Demand:** approve the first campaign's service, offer, audience, channels, volume and limits before any outreach.
-10. **Logo:** identify the approved "UC" logo file; the repository only has the gold "N" mark.
-11. **nova-systems.agency:** redirect to nova-systems.app, or keep it as a separate listing.
+6. **Go-ahead for live tests on production** with an owner-controlled contact: one real inquiry through the live form, one call to Nova's number. Neither was done.
+7. **Phone:** confirm which number is Nova's Twilio number and whether (203) 706-0504 is it.
+8. **Nova Demand:** Operations → Demand → "Complimentary Nova Audit — Waterbury service businesses" (code WUETJW, 20 sourced prospects, phone + in person, limit 25) is a **draft**. Approve it (or change it) before anyone contacts a prospect; also confirm the "about five audits per week" capacity.
+9. **Nova Revive:** Operations → Revive campaigns → "Recover stalled requests" shows the stalled records the proposed rules find (idle 2–90 days, 1 message per person per 30 days). These rules are a proposal; approve a campaign only when you agree with the rules, audience and wording.
+10. **Rewards (Wallet loyalty):** Operations → Rewards. Nothing is earned until you enter and approve the points, threshold, reward, expiry, daily limit and terms. Cash / gift-card / store-credit rewards are refused (stored-value liability) unless you decide otherwise with legal advice.
+11. **Apple** (details: `docs/APPLE_MESSAGES_PAY_WALLET_SETUP.md`): enroll Nova Systems LLC in the **Apple Developer Program (paid annual fee — needs your approval; D-U-N-S required)**; create the Messages for Business account in Apple Business Register; choose the MSP (criteria in the doc); create the Pass Type ID certificate and Apple Pay Merchant ID. Put certificates in the host's secret store, never in chat.
+12. **Hierarchy routing:** in Command → Workforce, set each person's manager / escalation contact. Unacknowledged or overdue tasks escalate to that person (to you when none is set). Ordinary staff now see their tasks under **My work**.
+13. **Audit clock:** each audit case offers the proposed policy (aim 48 h, deliver within 72 calendar hours, five required inputs). It is only a proposal until you approve it on the case.
+14. **Logo:** identify the approved "UC" logo file; the repository only has the gold "N" mark.
+15. **nova-systems.agency:** redirect to nova-systems.app, or keep it as a separate listing.
 
 Older items below remain open unless marked done.
 
