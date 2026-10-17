@@ -112,8 +112,12 @@ async function provision() {
   let nova = (await c.query("select id from organizations where kind='nova_internal' order by created_at limit 1")).rows[0]?.id;
   if (!nova) nova = (await c.query("insert into organizations (name, slug, kind) values ('Nova Systems (LOCAL STAGING)','nova-local','nova_internal') returning id")).rows[0].id;
   const member = async (uid, role) => { if (!(await c.query('select 1 from organization_members where organization_id=$1 and staff_user_id=$2', [nova, uid])).rows.length) await c.query("insert into organization_members (organization_id, member_type, staff_user_id, role, status) values ($1,'staff',$2,$3,'active')", [nova, uid, role]); };
-  await member(ownerId, 'nova_super_admin'); await member(repId, 'nova_sales');
+  // The representative follows the hiring flow's state (api/_sales/hiring.js): candidate role + candidate rep record +
+  // an enrollment in every program. The owner activates them in the dashboard once training and documents are done.
+  await member(ownerId, 'nova_super_admin'); await member(repId, 'nova_sales_candidate');
+  await c.query("update organization_members set role='nova_sales_candidate' where organization_id=$1 and staff_user_id=$2 and role='nova_sales' and not exists (select 1 from sales_reps where user_id=$2 and status='active')", [nova, repId]);
   await c.query("insert into sales_reps (user_id, organization_id, display_name, status, manager_user_id) values ($1,$2,'Local Test Representative','candidate',$3) on conflict do nothing", [repId, nova, ownerId]);
+  await c.query("insert into academy_enrollments (staff_user_id, organization_id, program_id, status) select $1, $2, id, 'not_started' from academy_programs on conflict (staff_user_id, program_id) do nothing", [repId, nova]);
   fs.writeFileSync(ACCOUNTS_FILE, `# LOCAL STAGING test accounts — git-ignored; local stack only.\n${Object.entries(accounts).map(([k, v]) => `${k}=${v}`).join('\n')}\n`, { mode: 0o600 });
   await c.end();
   // Demo workspace through the supported owner-only API operation, signed in as the owner (real Supabase Auth).
