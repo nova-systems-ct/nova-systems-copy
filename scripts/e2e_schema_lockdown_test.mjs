@@ -65,7 +65,7 @@ async function main() {
 
   const passed = results.filter(Boolean).length;
   console.log(`\n${passed}/${results.length} passed, ${results.length - passed} failed`);
-  process.exit(passed === results.length ? 0 : 1);
+  process.exitCode = passed === results.length ? 0 : 1; setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref(); // natural exit; see the libuv note in e2e_demo_test.mjs
 }
 
-main().catch((err) => { console.error('SCRIPT ERROR:', err); process.exit(1); });
+main().catch((err) => { console.error('SCRIPT ERROR:', err); process.exitCode = 1; setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref(); });

@@ -34,3 +34,6 @@ dist-ssr
 .vercel
 base44/.app.jsonc
 .testenv/
+
+# Supabase CLI local state
+supabase/.temp/

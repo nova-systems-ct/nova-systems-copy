@@ -220,3 +220,4 @@ try {
 finally { await browser.close(); await H.stop(); await prov.stop(); }
 console.log(`\n${pass} passed, ${fail} failed — Nova Operations in a real browser (real frontend + handlers + worker + local PostgreSQL; Auth/Storage/Twilio/Stripe are local stand-ins). Screenshots: ${SHOTS}`);
 process.exitCode = fail ? 1 : 0;
+setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref(); // last resort only; natural exit preferred

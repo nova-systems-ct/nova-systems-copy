@@ -140,4 +140,8 @@ try {
 finally { await env.stop(); await prov.stop(); await new Promise((r) => calSrv.close(r)); }
 console.log(`\n${pass} passed, ${fail} failed — Nova Core calendar: reschedule, cancel, Cal.com path (local stand-in; not Cal.com itself)`);
 process.exitCode = fail ? 1 : 0;
-process.exit(process.exitCode ?? 0);
+// Let Node exit on its own once handles close. Calling process.exit() while fetch keep-alive connections are still
+// closing aborts Node 24 on Windows (libuv assertion in src/win/async.c, exit 0xC0000409) and can drop the printed
+// result — the cause of the intermittent 'no result line' crashes (reproduced 40/40, fixed 0/40 on 2026-10-17).
+// The unref'd timer is only a last resort if something keeps the process alive.
+setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref();

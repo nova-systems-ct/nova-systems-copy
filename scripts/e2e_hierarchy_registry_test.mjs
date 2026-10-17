@@ -190,4 +190,4 @@ console.log(`\n${pass} passed, ${fail} failed — Nova organizational hierarchy 
 // past its own env.stop() (the run hit verify_sales_team_e2e.mjs's 900s per-suite timeout and was
 // killed despite every check having already passed). Setting exitCode alone was not sufficient.
 process.exitCode = fail ? 1 : 0;
-process.exit(process.exitCode);
+setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref(); // natural exit; see the libuv note in e2e_demo_test.mjs

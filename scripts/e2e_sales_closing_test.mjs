@@ -334,4 +334,4 @@ console.log(`\n${pass} passed, ${fail} failed`);
 // stripeSrv.close() above not waiting for open keep-alive connections to drain). Same fix already
 // applied to the hierarchy e2e suites after the identical symptom there.
 process.exitCode = fail ? 1 : 0;
-process.exit(process.exitCode);
+setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref(); // natural exit; see the libuv note in e2e_demo_test.mjs

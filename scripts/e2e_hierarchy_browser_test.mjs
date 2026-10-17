@@ -214,4 +214,4 @@ finally { await browser.close(); await H.stop(); }
 console.log(`\n${pass} passed, ${fail} failed, ${skip} skipped (not built) — Nova Command live-browser acceptance (real UI + real handlers + real local PostgreSQL; auth/storage/email/payments are stand-ins)`);
 console.log(`Screenshots saved to: ${SHOTS}`);
 process.exitCode = fail ? 1 : 0;
-process.exit(process.exitCode);
+setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref(); // natural exit; see the libuv note in e2e_demo_test.mjs

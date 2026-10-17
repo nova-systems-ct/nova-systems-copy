@@ -221,4 +221,8 @@ console.log(`\n${pass} passed, ${fail} failed — hiring journey checks (real ha
 process.exitCode = fail ? 1 : 0;
 // Force-exit once results are printed: embedded-postgres child pipes on Windows can otherwise keep a finished
 // (or crashed) suite alive until the aggregate runner's timeout (seen 2026-10-13 in a clean-checkout run).
-process.exit(process.exitCode ?? 0);
+// Let Node exit on its own once handles close. Calling process.exit() while fetch keep-alive connections are still
+// closing aborts Node 24 on Windows (libuv assertion in src/win/async.c, exit 0xC0000409) and can drop the printed
+// result — the cause of the intermittent 'no result line' crashes (reproduced 40/40, fixed 0/40 on 2026-10-17).
+// The unref'd timer is only a last resort if something keeps the process alive.
+setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref();

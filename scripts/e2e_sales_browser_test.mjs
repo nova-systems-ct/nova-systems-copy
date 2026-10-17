@@ -283,3 +283,4 @@ try {
 finally { await browser.close(); await H.stop(); }
 console.log(`\n${pass} passed, ${fail} failed — live-browser checks (real UI + real handlers + real local PostgreSQL; auth/email/payments are stand-ins)`);
 process.exitCode = fail ? 1 : 0;
+setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref(); // last resort only; natural exit preferred
