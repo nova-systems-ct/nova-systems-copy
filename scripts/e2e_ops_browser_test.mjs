@@ -56,7 +56,10 @@ try {
   await page.getByLabel('Business name').fill('TEST Browser Detailing');
   await page.getByLabel('Industry').fill('Mobile detailing (TEST)');
   await page.getByRole('button', { name: 'Create business' }).click();
-  await page.getByText(/Created TEST Browser Detailing/).waitFor({ timeout: 10000 });
+  // the list refreshes after creation; the confirmation must survive that refresh (it used to be unmounted with the
+  // page while the list reloaded — seen as an intermittent failure here on 2026-10-17)
+  await page.getByRole('cell', { name: /TEST Browser Detailing/ }).waitFor({ timeout: 10000 });
+  check('after the list refreshes, the new business is listed and the confirmation is still shown', await page.getByText(/Created TEST Browser Detailing/).isVisible());
   const biz = (await one("select id from organizations where name='TEST Browser Detailing'")).id;
   check('the business is created through the real screen and is flagged TEST', !!(await one('select 1 from ops_business_settings where organization_id=$1 and is_test=true', [biz])));
   await shot(page, '01-businesses');

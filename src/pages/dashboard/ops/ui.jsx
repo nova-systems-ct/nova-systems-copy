@@ -38,14 +38,18 @@ export function api(op, { org, method = 'GET', body, query = {} } = {}) {
   })
 }
 
+// loading: nothing to show yet (first load, or the inputs changed, e.g. another business was chosen — old data is
+// dropped so one business's records never appear under another). reload(): refreshes in place (refreshing: true) and
+// keeps the screen mounted, so a confirmation shown after an action is not wiped by the refresh that follows it.
 export function useLoad(fn, deps) {
-  const [state, set] = useState({ loading: true, error: null, data: null })
-  const run = useCallback(async () => {
-    set((s) => ({ ...s, loading: true, error: null }))
-    try { set({ loading: false, error: null, data: await fn() }) } catch (e) { set({ loading: false, error: e, data: null }) }
+  const [state, set] = useState({ loading: true, refreshing: false, error: null, data: null })
+  const fetchIt = useCallback(async (keep) => {
+    set((s) => (keep && s.data ? { ...s, refreshing: true, error: null } : { loading: true, refreshing: false, error: null, data: null }))
+    try { set({ loading: false, refreshing: false, error: null, data: await fn() }) } catch (e) { set({ loading: false, refreshing: false, error: e, data: null }) }
   }, deps) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { run() }, [run])
-  return { ...state, reload: run }
+  useEffect(() => { fetchIt(false) }, [fetchIt])
+  const reload = useCallback(() => fetchIt(true), [fetchIt])
+  return { ...state, reload }
 }
 
 export const money = (c, cur = 'usd') => (c == null ? '—' : `${String(cur).toLowerCase() === 'usd' ? '$' : `${String(cur).toUpperCase()} `}${(c / 100).toFixed(2)}`)
