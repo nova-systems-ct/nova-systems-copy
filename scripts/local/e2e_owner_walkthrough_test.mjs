@@ -109,6 +109,25 @@ try {
   await shot(o, '06-requests');
   await o.goto(`${APP}/dashboard`);
   check('Outcomes on the owner home count the confirmed work', await seen(o.getByText(/ready for work/)));
+
+  // ------------------------------------------------------------ 3. Demand, Revive, Rewards and My work, from the menus
+  // Viewing and previewing only: approving the Demand campaign or a rewards program is the owner's decision.
+  await o.getByRole('link', { name: 'Operations' }).first().click();
+  await o.getByRole('link', { name: 'Demand', exact: true }).click();
+  check('Operations → Demand lists the prepared campaign as a draft awaiting approval', await seen(o.getByText('Complimentary Nova Audit — Waterbury service businesses')) && await seen(o.getByText(/^draft$/)));
+  await o.getByRole('button', { name: 'Open' }).first().click();
+  const demandText = await (await seen(o.getByText('Attribution link for replies:')) ? o.locator('body').innerText() : '');
+  check('the campaign shows its sourced prospects, the attribution code and the funnel from real records', /Prospects researched\s*20/.test(demandText) && /\/book\?c=[A-Z0-9]{6}/.test(demandText) && /Contacted\s*0/.test(demandText), demandText.slice(0, 300));
+  await shot(o, '07-demand');
+  await o.getByRole('link', { name: 'Revive campaigns' }).click();
+  check('Operations → Revive finds stalled requests in Nova\'s own records under proposed rules (preview only)', await seen(o.getByText('Recover stalled requests (from your own records)')) && await seen(o.getByTestId('revive-preview')));
+  await shot(o, '08-revive');
+  await o.getByRole('link', { name: 'Rewards' }).click();
+  check('Operations → Rewards shows no program until the owner sets one, and says Wallet passes are not available yet', await seen(o.getByText('No approved program')) && await seen(o.getByText(/Apple Wallet passes: not available yet/)));
+  await shot(o, '09-rewards');
+  await o.getByRole('link', { name: 'My work' }).first().click();
+  check('"My work" in the sidebar opens the person\'s own queue (tasks, results to receive, escalations)', await seen(o.getByRole('heading', { name: 'My work' })) && await seen(o.getByText(/Results to receive/)) && await seen(o.getByText(/Escalated to me/)));
+  await shot(o, '10-my-work');
   check('no page errors during the owner walkthrough', errors.length === 0, errors.slice(0, 2).join(' | '));
 } catch (e) { fail++; console.log('FAIL — run crashed:', e.stack || e); }
 finally { await browser.close(); await db.end(); }

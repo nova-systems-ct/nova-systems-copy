@@ -215,7 +215,7 @@ export default function DashboardLayout() {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, background: 'rgba(10,10,10,0.96)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="flex md:hidden" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, background: 'rgba(10,10,10,0.96)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '14px 16px', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>{orgName}</span>
         <button
           onClick={() => setOpen(o => !o)}
@@ -229,7 +229,7 @@ export default function DashboardLayout() {
 
       {/* Mobile drawer */}
       {open && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.6)' }} onClick={() => setOpen(false)}>
+        <div className="md:hidden" style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.6)' }} onClick={() => setOpen(false)}>
           <aside style={{ width: 240, height: '100%', background: NAVY, borderRight: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
             <Sidebar />
           </aside>
