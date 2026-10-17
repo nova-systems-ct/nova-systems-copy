@@ -193,8 +193,11 @@ const handlers = {
     const orgs = await (await fetch(`${ctx.url}/rest/v1/ops_business_settings?select=organization_id`, { headers: { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}` } })).json();
     let verified = 0; for (const o of orgs) verified += await verifyReferrals(o.organization_id);
     const sentry = await runSentry();
+    // Hierarchy handoffs: escalate unacknowledged and overdue work items to the next responsible person.
+    const { sweepWorkItems } = await import('../api/_hierarchy/handoffs.js');
+    const handoffs = await sweepWorkItems().catch((e) => ({ error: e.message }));
     await scheduleNext(ctx, 'ops_sentry_sweep', Number(job.payload?.every_minutes) || 5);
-    return { holds_expired: expired, referrals_verified: verified, ...sentry.summary };
+    return { holds_expired: expired, referrals_verified: verified, ...sentry.summary, handoffs };
   },
   async ops_scoreboard_tick(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };

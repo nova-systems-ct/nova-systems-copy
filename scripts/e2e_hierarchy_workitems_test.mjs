@@ -17,6 +17,7 @@ const WORK_SQL = fs.readFileSync(path.join(ROOT, 'supabase/hierarchy-03-work-and
 // activity-feed (added below) reads committee_meetings — a real dependency on part 4, not just this
 // suite's own scope.
 const MEETINGS_SQL = fs.readFileSync(path.join(ROOT, 'supabase/hierarchy-04-meetings-migration-standalone.sql'), 'utf8');
+const HANDOFFS_SQL = fs.readFileSync(path.join(ROOT, 'supabase/hierarchy-05-handoffs-migration-standalone.sql'), 'utf8');
 const LOCKDOWN_SQL = fs.readFileSync(path.join(ROOT, LOCKDOWN), 'utf8');
 
 let pass = 0, fail = 0;
@@ -39,6 +40,7 @@ try {
   await env.sql(GOVERNANCE_SQL);
   await env.sql(WORK_SQL);
   await env.sql(MEETINGS_SQL);
+  await env.sql(HANDOFFS_SQL);
   await env.sql(LOCKDOWN_SQL);
   for (let i = 0; i < 20; i++) {
     await env.reload();

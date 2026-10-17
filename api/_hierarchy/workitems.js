@@ -3,7 +3,7 @@
 // Packet generation, and operational memory. Same plumbing as registry.js/governance.js.
 import { sanitize } from '../_sanitize.js';
 import { rateLimit } from '../_rateLimit.js';
-import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, audit, bad, wrap, requirePerm } from '../_sales/core.js';
+import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, audit, bad, wrap, requirePerm, notify } from '../_sales/core.js';
 import { canTransitionWorkItem, isWorkerActuallyWorking, workItemReviewProblems, isSelfApproval, killSwitchBlocks, ventureTransitionAllowed, ventureOverrideProblems } from './rules.js';
 import { killSwitchStateFor } from './governance.js';
 import { checkAuthority } from './authority.js';
@@ -25,8 +25,21 @@ async function presenceFor(workerId) {
 export const handleWorkItems = wrap(async (req, res, op) => {
   const b = req.body || {};
   const need = (m) => { if (req.method !== m) { bad(res, 405, 'Method not allowed'); return false; } return true; };
-  const ownerOps = ['create-work-item', 'assign-work-item', 'start-work-item', 'block-work-item', 'add-evidence', 'add-output', 'submit-for-review', 'review-work-item', 'complete-work-item', 'cancel-work-item', 'fail-work-item', 'heartbeat', 'set-venture-stage', 'save-venture-data', 'generate-brief', 'save-memory'];
-  const caller = await requirePerm(req, res, ownerOps.includes(op) ? 'command.owner' : 'command.view'); if (!caller) return;
+  const ownerOps = ['create-work-item', 'assign-work-item', 'start-work-item', 'block-work-item', 'add-evidence', 'add-output', 'submit-for-review', 'review-work-item', 'complete-work-item', 'cancel-work-item', 'fail-work-item', 'heartbeat', 'set-venture-stage', 'save-venture-data', 'generate-brief', 'save-memory', 'acknowledge-work-item'];
+  // The person a work item is assigned to (a human/hybrid worker's own staff account) may act on THAT item — acknowledge,
+  // start, record evidence/output, block, submit for review — without owner rights. Review and completion stay with
+  // others (self-review is refused below). Anyone else needs command.owner as before.
+  const SELF_OPS = ['acknowledge-work-item', 'start-work-item', 'block-work-item', 'add-evidence', 'add-output', 'submit-for-review'];
+  let caller = null;
+  if (SELF_OPS.includes(op) && req.method === 'POST') {
+    const who = await requirePerm(req, res, null); if (!who) return;
+    const itemId = sanitize(b.id || b.work_item_id, 60);
+    const item = itemId && await dbOne(`work_items?id=eq.${enc(itemId)}&select=worker_id`);
+    const mine = item?.worker_id && await dbOne(`workers?id=eq.${enc(item.worker_id)}&staff_user_id=eq.${enc(who.id)}&worker_type=in.(human,hybrid)&select=id`);
+    if (mine && who.roles.length) caller = { ...who, actingAsAssignee: true };
+  }
+  if (!caller) caller = await requirePerm(req, res, ownerOps.includes(op) ? 'command.owner' : 'command.view');
+  if (!caller) return;
   if (!rateLimit(req, res, 120, 60_000)) return;
 
   // ================================================================== work items: reads
@@ -58,7 +71,10 @@ export const handleWorkItems = wrap(async (req, res, op) => {
     // api/_hierarchy/authority.js: this can only narrow what's allowed, never widen it).
     const authz = await checkAuthority({ actor: caller, action: 'create_internal_task' });
     if (!authz.allowed) return res.status(403).json({ error: authz.reason, authority_label: authz.label });
-    const ins = await dbInsert('work_items', { portfolio_entity_id: sanitize(b.portfolio_entity_id, 60) || null, org_unit_id: sanitize(b.org_unit_id, 60) || null, title, description: sanitize(b.description, 4000) || null, category: sanitize(b.category, 60) || 'general', due_at: b.due_at || null, created_by: caller.id });
+    const ackHours = b.ack_within_hours == null ? 4 : Number(b.ack_within_hours);
+    if (!Number.isInteger(ackHours) || ackHours < 1 || ackHours > 168) return bad(res, 422, 'ack_within_hours must be 1–168.');
+    if (b.due_at && isNaN(new Date(b.due_at))) return bad(res, 422, 'due_at must be a date.');
+    const ins = await dbInsert('work_items', { portfolio_entity_id: sanitize(b.portfolio_entity_id, 60) || null, org_unit_id: sanitize(b.org_unit_id, 60) || null, title, description: sanitize(b.description, 4000) || null, category: sanitize(b.category, 60) || 'general', due_at: b.due_at || null, created_by: caller.id, ack_within_hours: ackHours, result_to_user_id: sanitize(b.result_to_user_id, 60) || caller.id, result_action: sanitize(b.result_action, 500) || null });
     await dbInsert('work_item_events', { work_item_id: ins.row.id, from_status: null, to_status: 'draft', changed_by: caller.id, reason: 'Created' });
     await audit(caller, 'work_item', ins.row.id, 'created', {});
     return res.status(200).json({ ok: true, work_item: ins.row });
@@ -72,11 +88,22 @@ export const handleWorkItems = wrap(async (req, res, op) => {
     const killed = killSwitchBlocks(await killSwitchStateFor(worker)); if (killed.blocked) return bad(res, 423, `This worker is paused (kill switch engaged at the ${killed.scope} level) and cannot be assigned new work.`);
     const authz = await checkAuthority({ actor: caller, action: 'reassign_routine_task', workerId: worker.id });
     if (!authz.allowed) return res.status(403).json({ error: authz.reason, authority_label: authz.label });
-    const [row] = await dbPatch('work_items', `id=eq.${enc(wi.id)}&status=eq.${enc(wi.status)}`, { status: 'assigned', worker_id: worker.id, assigned_at: nowIso(), updated_at: nowIso() });
+    const ackDue = new Date(Date.now() + (wi.ack_within_hours || 4) * 3600_000).toISOString();
+    const [row] = await dbPatch('work_items', `id=eq.${enc(wi.id)}&status=eq.${enc(wi.status)}`, { status: 'assigned', worker_id: worker.id, assigned_at: nowIso(), ack_due_at: ackDue, acknowledged_at: null, acknowledged_by: null, updated_at: nowIso() });
     if (!row) return bad(res, 409, 'This work item just changed.');
-    await dbInsert('work_item_events', { work_item_id: wi.id, from_status: wi.status, to_status: 'assigned', changed_by: caller.id, reason: `Assigned to worker ${worker.id}` });
+    await dbInsert('work_item_events', { work_item_id: wi.id, from_status: wi.status, to_status: 'assigned', changed_by: caller.id, reason: `Assigned to worker ${worker.id}; acknowledge by ${ackDue}` });
     await audit(caller, 'work_item', wi.id, 'assigned', { worker_id: worker.id });
+    if (worker.staff_user_id) await notify({ userId: worker.staff_user_id, kind: 'work_item_assigned', subject: `New task: ${wi.title}`, body: `Please acknowledge by ${new Date(ackDue).toUTCString()}.${wi.due_at ? ` Due ${new Date(wi.due_at).toUTCString()}.` : ''}`, link: '/dashboard/my-work', channels: ['in_app'], idempotencyKey: `wi_assigned:${wi.id}:${row.assigned_at}` });
     return res.status(200).json({ ok: true, work_item: row });
+  }
+  if (op === 'acknowledge-work-item') {
+    if (!need('POST')) return;
+    const wi = await dbOne(`work_items?id=eq.${enc(sanitize(b.id, 60))}&select=*`); if (!wi) return bad(res, 404, 'Not found');
+    if (!['assigned', 'in_progress'].includes(wi.status)) return bad(res, 409, `A ${wi.status} work item cannot be acknowledged.`);
+    if (wi.acknowledged_at) return res.status(200).json({ ok: true, work_item: wi, unchanged: true });
+    const [row] = await dbPatch('work_items', `id=eq.${enc(wi.id)}&acknowledged_at=is.null`, { acknowledged_at: nowIso(), acknowledged_by: caller.id, updated_at: nowIso() });
+    await dbInsert('work_item_events', { work_item_id: wi.id, from_status: wi.status, to_status: wi.status, changed_by: caller.id, reason: `Acknowledged${row && wi.ack_due_at && new Date(row.acknowledged_at) > new Date(wi.ack_due_at) ? ' (after the acknowledgment deadline)' : ''}` });
+    return res.status(200).json({ ok: true, work_item: row || wi });
   }
   if (op === 'start-work-item') {
     if (!need('POST')) return;
@@ -173,10 +200,12 @@ export const handleWorkItems = wrap(async (req, res, op) => {
     if (!need('POST')) return;
     const wi = await dbOne(`work_items?id=eq.${enc(sanitize(b.id, 60))}&select=*`); if (!wi) return bad(res, 404, 'Not found');
     if (!canTransitionWorkItem(wi.status, 'completed')) return bad(res, 409, `Cannot complete a ${wi.status} work item.`);
-    const [row] = await dbPatch('work_items', `id=eq.${enc(wi.id)}&status=eq.${enc(wi.status)}`, { status: 'completed', completed_at: nowIso(), updated_at: nowIso() });
+    const [row] = await dbPatch('work_items', `id=eq.${enc(wi.id)}&status=eq.${enc(wi.status)}`, { status: 'completed', completed_at: nowIso(), result_handed_at: nowIso(), updated_at: nowIso() });
     if (!row) return bad(res, 409, 'This work item just changed.');
-    await dbInsert('work_item_events', { work_item_id: wi.id, from_status: wi.status, to_status: 'completed', changed_by: caller.id, reason: null });
+    const to = wi.result_to_user_id || wi.created_by;
+    await dbInsert('work_item_events', { work_item_id: wi.id, from_status: wi.status, to_status: 'completed', changed_by: caller.id, reason: `Result handed to ${to}${wi.result_action ? ` to ${wi.result_action}` : ''}` });
     await audit(caller, 'work_item', wi.id, 'completed', {});
+    await notify({ userId: to, kind: 'work_item_result', subject: `Result ready: ${wi.title}`, body: wi.result_action ? `Next: ${wi.result_action}. Confirm you received it.` : 'Confirm you received it.', link: '/dashboard/my-work', channels: ['in_app'], idempotencyKey: `wi_result:${wi.id}` });
     return res.status(200).json({ ok: true, work_item: row });
   }
   if (op === 'cancel-work-item') {

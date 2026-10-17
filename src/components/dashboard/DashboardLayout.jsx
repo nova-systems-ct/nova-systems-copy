@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard, BrainCircuit, TrendingUp, PlayCircle, Building2, ShieldCheck, Workflow,
-  LogOut, Menu, X, ChevronsUpDown, Check, Users,
+  LogOut, Menu, X, ChevronsUpDown, Check, Users, ListChecks,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuthGuard } from '../../hooks/useAuthGuard'
@@ -31,6 +31,7 @@ const ROLE_LABELS = {
 // <RequirePermission> so direct navigation can't bypass this.
 const NAV = [
   { to: '/dashboard',              label: 'Overview',     icon: LayoutDashboard, exact: true, permission: 'overview.view' },
+  { to: '/dashboard/my-work',      label: 'My work',      icon: ListChecks,      permission: null },
   { to: '/dashboard/ops',          label: 'Operations',   icon: Workflow,        match: ['/dashboard/ops'], permission: 'ops.view' },
   { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit,    match: ['/dashboard/intelligence', '/dashboard/intake-forms', '/dashboard/audit'], permission: 'intelligence.view' },
   { to: '/dashboard/growth',       label: 'Growth',        icon: TrendingUp,      match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/sales', '/dashboard/pilots', '/dashboard/pilot-console', '/dashboard/leads', '/dashboard/zion', '/dashboard/marketing'], permission: 'growth.view' },
@@ -131,7 +132,7 @@ export default function DashboardLayout() {
 
   const active = (item) =>
     item.exact ? loc.pathname === item.to : (item.match || [item.to]).some((p) => loc.pathname.startsWith(p))
-  const visibleNav = NAV.filter((item) => (Array.isArray(item.permission) ? item.permission.some(hasPermission) : hasPermission(item.permission)))
+  const visibleNav = NAV.filter((item) => !item.permission || (Array.isArray(item.permission) ? item.permission.some(hasPermission) : hasPermission(item.permission)))
   const orgName = currentOrg?.name || 'Nova Systems'
 
   function Sidebar() {

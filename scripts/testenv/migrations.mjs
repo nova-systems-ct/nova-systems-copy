@@ -16,6 +16,7 @@ export const HIERARCHY_PARTS = [
   'supabase/hierarchy-02-governance-migration-standalone.sql',
   'supabase/hierarchy-03-work-and-reporting-migration-standalone.sql',
   'supabase/hierarchy-04-meetings-migration-standalone.sql',
+  'supabase/hierarchy-05-handoffs-migration-standalone.sql',
 ];
 export const SALES_PARTS = [
   'supabase/sales-team-01-access-and-hiring-migration-standalone.sql',

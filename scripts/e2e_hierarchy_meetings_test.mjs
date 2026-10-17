@@ -17,6 +17,7 @@ const HIERARCHY_SQL = readSql('supabase/hierarchy-01-registry-migration-standalo
 const GOVERNANCE_SQL = readSql('supabase/hierarchy-02-governance-migration-standalone.sql');
 const WORK_SQL = readSql('supabase/hierarchy-03-work-and-reporting-migration-standalone.sql');
 const MEETINGS_SQL = readSql('supabase/hierarchy-04-meetings-migration-standalone.sql');
+const HANDOFFS_SQL = readSql('supabase/hierarchy-05-handoffs-migration-standalone.sql');
 const LOCKDOWN_SQL = readSql(LOCKDOWN);
 
 let pass = 0, fail = 0;
@@ -35,7 +36,7 @@ try {
   const owner = await env.createUser({ email: 'owner@nova.test', role: 'nova_super_admin', orgId: orgA, name: 'Isaac Owner' });
   const staffB = await env.createUser({ email: 'staff@acme.test', role: 'client_owner', orgId: orgB, name: 'Acme Staff' });
   const rep = await env.createUser({ email: 'rep@nova.test', role: 'nova_sales', orgId: orgA, name: 'Plain Rep' });
-  await env.sql(HIERARCHY_SQL); await env.sql(GOVERNANCE_SQL); await env.sql(WORK_SQL); await env.sql(MEETINGS_SQL); await env.sql(LOCKDOWN_SQL);
+  await env.sql(HIERARCHY_SQL); await env.sql(GOVERNANCE_SQL); await env.sql(WORK_SQL); await env.sql(MEETINGS_SQL); await env.sql(HANDOFFS_SQL); await env.sql(LOCKDOWN_SQL);
   for (let i = 0; i < 20; i++) {
     await env.reload();
     const probe = await env.rest(env.serviceKey, 'committee_meetings?limit=1');

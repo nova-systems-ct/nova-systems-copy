@@ -31,6 +31,7 @@
     "supabase/hierarchy-02-governance-migration-standalone.sql",
     "supabase/hierarchy-03-work-and-reporting-migration-standalone.sql",
     "supabase/hierarchy-04-meetings-migration-standalone.sql",
+    "supabase/hierarchy-05-handoffs-migration-standalone.sql",
     "supabase/ops-01-operational-mvp-migration-standalone.sql",
     "supabase/ops-02-install-systems-migration-standalone.sql",
     "supabase/ops-03-demand-campaigns-migration-standalone.sql",

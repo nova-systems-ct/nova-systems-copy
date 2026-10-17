@@ -137,6 +137,7 @@ const RepEarnings = lazy(() => import('./pages/rep/RepEarnings'));
 const RepTraining = lazy(() => import('./pages/rep/RepTraining'));
 const RepTrainingProgram = lazy(() => import('./pages/rep/RepTrainingProgram'));
 const RepDocuments = lazy(() => import('./pages/rep/RepDocuments'));
+const MyWork = lazy(() => import('./pages/MyWork'));
 const DashboardIndex = lazy(() => import('./components/dashboard/DashboardIndex'));
 const SalesTeamLayout = lazy(() => import('./pages/dashboard/salesTeam/SalesTeamLayout'));
 const STOverview = lazy(() => import('./pages/dashboard/salesTeam/Overview'));
@@ -221,11 +222,13 @@ function App() {
               <Route path="training" element={<RepTraining />} />
               <Route path="training/:id" element={<RepTrainingProgram />} />
               <Route path="documents" element={<RepDocuments />} />
+              <Route path="my-work" element={<MyWork />} />
             </Route>
 
             {/* CRM Dashboard — nested routes */}
             <Route path="/dashboard" element={<DashboardRoot />}>
               <Route index element={<DashboardIndex home={<DashboardHome />} />} />
+              <Route path="my-work" element={<MyWork />} />
               <Route path="sales-team" element={<SalesTeamLayout />}>
                 <Route path="overview" element={<STOverview />} />
                 <Route path="hiring" element={<RequirePermission permission="sales.hiring"><STHiring /></RequirePermission>} />

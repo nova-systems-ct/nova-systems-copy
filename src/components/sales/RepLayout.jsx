@@ -33,7 +33,7 @@ function Inner() {
   const role = currentMembership?.role
   const nav = [
     ...(isRep ? [['/rep', 'Home', true], ['/rep/leads', 'Leads'], ['/rep/toolkit', 'Toolkit'], ['/rep/earnings', 'My Earnings']] : [['/rep', 'Onboarding', true]]),
-    ['/rep/training', 'Training'], ['/rep/documents', 'Documents'],
+    ['/rep/training', 'Training'], ['/rep/documents', 'Documents'], ['/rep/my-work', 'My work'],
   ]
   const link = ({ isActive }) => ({ color: isActive ? GOLD : MUTED, textDecoration: 'none', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '8px 4px', borderBottom: `2px solid ${isActive ? GOLD : 'transparent'}`, whiteSpace: 'nowrap' })
   return (

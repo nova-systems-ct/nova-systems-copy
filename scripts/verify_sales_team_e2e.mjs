@@ -23,7 +23,7 @@ import path from 'node:path';
 const ALL = [
   'e2e_clean_install_test', 'e2e_production_patch_test', 'e2e_mvp_security_fix_test', 'e2e_org_membership_read_test', 'e2e_schema_lockdown_test',
   'e2e_security_personas_test',
-  'e2e_ops_core_journey_test', 'e2e_ops_calendar_test', 'e2e_ops_connected_deposit_test', 'e2e_ops_demand_test', 'e2e_demo_test', 'e2e_ops_harvest_test', 'e2e_ops_revive_test', 'e2e_ops_sentry_voice_test', 'e2e_audit_report_delivery_test', 'e2e_audit_clock_test',
+  'e2e_ops_core_journey_test', 'e2e_ops_calendar_test', 'e2e_ops_connected_deposit_test', 'e2e_ops_demand_test', 'e2e_demo_test', 'e2e_ops_harvest_test', 'e2e_ops_revive_test', 'e2e_ops_sentry_voice_test', 'e2e_audit_report_delivery_test', 'e2e_audit_clock_test', 'e2e_hierarchy_handoffs_test',
   'e2e_sales_db_test', 'e2e_sales_hiring_test', 'e2e_jobs_hiring_test', 'e2e_audit_engine_test', 'e2e_hierarchy_registry_test', 'e2e_hierarchy_governance_test', 'e2e_hierarchy_workitems_test', 'e2e_hierarchy_meetings_test', 'e2e_hierarchy_durable_worker_test', 'e2e_sales_academy_test', 'e2e_sales_documents_activation_test', 'e2e_sales_pipeline_catalog_test', 'e2e_sales_closing_test', 'e2e_sales_commissions_test', 'e2e_sales_notifications_dashboard_test', 'e2e_sales_journeys_test',
   'e2e_sales_browser_test', 'e2e_hierarchy_browser_test', 'e2e_ops_browser_test', 'e2e_demo_browser_test',
 ];
