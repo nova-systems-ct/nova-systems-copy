@@ -87,8 +87,13 @@ try {
   // after start: Bo's request is touched by staff, Cy books
   await env.sql("update ops_jobs set updated_at = now() + interval '1 second' where id=$1", [boJob]);
   await env.sql("update ops_jobs set state='confirmed', updated_at = now() + interval '1 second' where id=$1", [cyJob]);
-  await env.sql("update jobs set scheduled_at = now() where job_type='ops_campaign_send' and status='pending'"); // TEST: advance the clock
+  // TEST: advance the clock; Cy (who booked, so is stopped) is processed LAST — a campaign must still complete when its
+  // final recipient is stopped rather than sent (it used to stay 'running': completion was only checked after a send)
+  const cyRec = (await one('select id from ops_campaign_recipients where campaign_id=$1 and phone_e164=$2', [camp.id, P(33)])).id;
+  await env.sql("update jobs set scheduled_at = now() - interval '1 minute' where job_type='ops_campaign_send' and status='pending'");
+  await env.sql("update jobs set scheduled_at = now() where job_type='ops_campaign_send' and status='pending' and payload->>'recipient_id' = $1", [cyRec]);
   await runDue();
+  check('the campaign completes even when the last recipient processed was stopped, not sent', (await one('select status from ops_campaigns where id=$1', [camp.id])).status === 'completed');
   const recs = Object.fromEntries((await all('select phone_e164, send_status, stop_reason, sent_at from ops_campaign_recipients where campaign_id=$1', [camp.id])).map((x) => [x.phone_e164, x]));
   check('a record changed after the campaign started is not messaged', recs[P(32)].send_status === 'stopped' && recs[P(32)].stop_reason === 'recent_activity' && sentTo(P(32)).length === 0, JSON.stringify(recs[P(32)]));
   check('a person who booked after the campaign started is not messaged', recs[P(33)].send_status === 'stopped' && recs[P(33)].stop_reason === 'booked' && sentTo(P(33)).length === 0, JSON.stringify(recs[P(33)]));

@@ -56,22 +56,37 @@ export async function startTestEnv({ migrations = [], publicBuckets = ['papers']
   }
   await q(`insert into storage.buckets (id, name, public) values ${publicBuckets.map((b) => `('${b}','${b}',true)`).join(',') || "('x','x',false)"} on conflict do nothing`);
 
-  // PostgREST
-  const restPort = await freePort();
-  const conf = path.join(dataDir, 'postgrest.conf');
-  // log-level info: the connection and schema-cache phases are logged, so an intermittent slow start (seen 2026-10-17:
-  // "Starting PostgREST 16.4..." then silence for 120 s, with 3.4–5.3 GB RAM free) shows WHERE it stalls.
-  fs.writeFileSync(conf, [`db-uri = "postgres://authenticator:test@127.0.0.1:${pgPort}/postgres"`, 'db-schemas = "public"', 'db-anon-role = "anon"', `jwt-secret = "${JWT_SECRET}"`, `server-port = ${restPort}`, 'server-host = "127.0.0.1"', 'db-pool = 5', 'log-level = "info"'].join('\n'));
+  // PostgREST. Evidence 2026-10-17: the intermittent "timeout waiting for PostgREST" was PostgREST EXITING (code 3) about
+  // 60 ms after "Starting PostgREST 16.4..." — previously indistinguishable from a slow start. A start-up exit is now
+  // detected at once and retried on a fresh port (at most 3 attempts), and every exit is printed with its code and
+  // output. A slow start that is still running is NOT retried and keeps the same timeout.
   const libpq = path.join(ROOT, '.testenv', 'node_modules', '@embedded-postgres', 'windows-x64', 'native', 'bin');
-  const spawnedAt = Date.now();
-  const proc = spawn(pgExe, [conf], { env: { ...process.env, PATH: `${libpq}${path.delimiter}${process.env.PATH}` }, stdio: ['ignore', 'pipe', 'pipe'] });
-  let restLog = ''; const stamp = (d) => { restLog += String(d).split(/\r?\n/).filter(Boolean).map((l) => `[+${Date.now() - spawnedAt}ms] ${l}\n`).join(''); };
-  proc.stdout.on('data', stamp); proc.stderr.on('data', stamp);
-  let restExit = null; proc.on('exit', (code, signal) => { restExit = { code, signal, at_ms: Date.now() - spawnedAt }; });
-  await waitFor(async () => {
-    if (restExit) throw Object.assign(new Error(`PostgREST exited (code ${restExit.code}, signal ${restExit.signal}) after ${restExit.at_ms} ms`), { fatal: true });
-    const r = await fetch(`http://127.0.0.1:${restPort}/`); return r.status < 500;
-  }, 120000, 'PostgREST' /* cold first start on Windows has exceeded 60s (F-27) */).catch((e) => { throw new Error(`${e.message} (port ${restPort}, ${Date.now() - spawnedAt} ms after spawn, process ${restExit ? `exited: ${JSON.stringify(restExit)}` : `still running, pid ${proc.pid}`})\n${restLog.slice(-2000)}`); });
+  const conf = path.join(dataDir, 'postgrest.conf');
+  let restPort, proc, restLog = '', spawnedAt, restExit;
+  for (let attempt = 1; ; attempt++) {
+    restPort = await freePort();
+    // log-level info: the connection and schema-cache phases are logged with timings (normal start: ~180 ms).
+    fs.writeFileSync(conf, [`db-uri = "postgres://authenticator:test@127.0.0.1:${pgPort}/postgres"`, 'db-schemas = "public"', 'db-anon-role = "anon"', `jwt-secret = "${JWT_SECRET}"`, `server-port = ${restPort}`, 'server-host = "127.0.0.1"', 'db-pool = 5', 'log-level = "info"'].join('\n'));
+    spawnedAt = Date.now(); restExit = null; restLog = '';
+    const p = spawn(pgExe, [conf], { env: { ...process.env, PATH: `${libpq}${path.delimiter}${process.env.PATH}` }, stdio: ['ignore', 'pipe', 'pipe'] });
+    proc = p;
+    const stamp = (d) => { restLog += String(d).split(/\r?\n/).filter(Boolean).map((l) => `[+${Date.now() - spawnedAt}ms] ${l}\n`).join(''); };
+    p.stdout.on('data', stamp); p.stderr.on('data', stamp);
+    const closed = new Promise((r) => p.on('close', r));
+    p.on('exit', (code, signal) => { restExit = { code, signal, at_ms: Date.now() - spawnedAt }; });
+    try {
+      await waitFor(async () => {
+        if (restExit) throw Object.assign(new Error(`PostgREST exited (code ${restExit.code}, signal ${restExit.signal}) after ${restExit.at_ms} ms`), { fatal: true });
+        const r = await fetch(`http://127.0.0.1:${restPort}/`); return r.status < 500;
+      }, 120000, 'PostgREST' /* cold first start on Windows has exceeded 60s (F-27) */);
+      break;
+    } catch (e) {
+      if (restExit) await Promise.race([closed, new Promise((r) => setTimeout(r, 2000))]); // collect the full output
+      const detail = `${e.message} (attempt ${attempt}, port ${restPort}, ${Date.now() - spawnedAt} ms after spawn, process ${restExit ? `exited: ${JSON.stringify(restExit)}` : `still running, pid ${p.pid}`})\n${restLog.slice(-2000)}`;
+      if (!restExit || attempt >= 3) { try { p.kill(); } catch { /* ignore */ } throw new Error(detail); }
+      console.error(`[testenv] PostgREST start-up exit, retrying on a new port: ${detail}`);
+    }
+  }
   const restReadyMs = Date.now() - spawnedAt;
   if (restReadyMs > 15000) console.error(`[testenv] PostgREST took ${restReadyMs} ms to accept connections\n${restLog.slice(-1500)}`);
 

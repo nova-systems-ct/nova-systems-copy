@@ -129,12 +129,21 @@ export async function startCampaign({ orgId, campaignId, actor, enqueue, rand = 
   return { campaign: run, scheduled: cap, mode: sendMode() };
 }
 
+// A running campaign is complete once no recipient is still scheduled — checked after EVERY outcome (sent, stopped or
+// already handled), not only after a send: otherwise a campaign whose last recipient was stopped stays 'running'.
+async function completeIfDone(orgId, campaignId) {
+  if (!campaignId) return;
+  if (await dbOne(`ops_campaign_recipients?campaign_id=eq.${enc(campaignId)}&send_status=eq.scheduled&select=id`)) return;
+  const camp = await dbOne(`ops_campaigns?id=eq.${enc(campaignId)}&organization_id=eq.${enc(orgId)}&status=eq.running&select=id`);
+  if (camp) await transition({ orgId, entity: 'campaign', table: 'ops_campaigns', id: campaignId, from: 'running', to: 'completed', actor: { type: 'system' }, reason: 'all scheduled recipients processed' }).catch(() => null);
+}
+
 // Executed by the worker for one recipient. Every stop condition is re-read live.
 export async function sendCampaignMessage({ orgId, recipientId, now = new Date(), enqueue }) {
   const rec = await dbOne(`ops_campaign_recipients?id=eq.${enc(recipientId)}&organization_id=eq.${enc(orgId)}&select=*`);
-  if (!rec || rec.send_status !== 'scheduled') return { skipped: rec ? rec.send_status : 'not_found' };
+  if (!rec || rec.send_status !== 'scheduled') { if (rec) await completeIfDone(orgId, rec.campaign_id); return { skipped: rec ? rec.send_status : 'not_found' }; }
   const camp = await dbOne(`ops_campaigns?id=eq.${enc(rec.campaign_id)}&organization_id=eq.${enc(orgId)}&select=*`);
-  const stop = async (send_status, stop_reason) => { await dbPatch('ops_campaign_recipients', `id=eq.${enc(rec.id)}&send_status=eq.scheduled`, { send_status, stop_reason }); return { status: send_status, reason: stop_reason }; };
+  const stop = async (send_status, stop_reason) => { await dbPatch('ops_campaign_recipients', `id=eq.${enc(rec.id)}&send_status=eq.scheduled`, { send_status, stop_reason }); await completeIfDone(orgId, rec.campaign_id); return { status: send_status, reason: stop_reason }; };
   if (!camp || camp.status === 'cancelled') return stop('cancelled', 'campaign_cancelled');
   if (camp.status === 'paused') return { deferred: 'campaign_paused' }; // stays scheduled; resume re-enqueues
   if (camp.status !== 'running') return stop('stopped', `campaign_${camp.status}`);
@@ -185,8 +194,7 @@ export async function sendCampaignMessage({ orgId, recipientId, now = new Date()
   if (left_nova) await dbPatch('ops_campaigns', `id=eq.${enc(camp.id)}`, { sent_count: camp.sent_count + 1 });
   // A reply to a stalled-record follow-up continues that request: the conversation remembers which job and service.
   if (left_nova && source && convId) await dbPatch('wave1_conversations', `id=eq.${enc(convId)}&organization_id=eq.${enc(orgId)}&staff_takeover=not.is.true&or=(engine_state.is.null,engine_state.not.in.(escalated,human,awaiting_time,awaiting_completion))`, { engine_state: 'revive_followup', engine_context: { revive_job_id: source.id, revive_reason: rec.revive_reason, service_key: source.qualification?.service_key || source.price_snapshot?.service_key || null, revive_recipient_id: rec.id } });
-  const left = await dbOne(`ops_campaign_recipients?campaign_id=eq.${enc(camp.id)}&send_status=eq.scheduled&select=id`);
-  if (!left) await transition({ orgId, entity: 'campaign', table: 'ops_campaigns', id: camp.id, from: 'running', to: 'completed', actor: { type: 'system' }, reason: 'all scheduled recipients processed' }).catch(() => null);
+  await completeIfDone(orgId, camp.id);
   return { status: send_status, reason: r.reason || null };
 }
 
