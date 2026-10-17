@@ -32,6 +32,7 @@
     "supabase/hierarchy-04-meetings-migration-standalone.sql",
     "supabase/ops-01-operational-mvp-migration-standalone.sql",
     "supabase/ops-02-install-systems-migration-standalone.sql",
+    "supabase/ops-03-demand-campaigns-migration-standalone.sql",
     "supabase/demo-01-website-demo-migration-standalone.sql",
     "supabase/zz-public-schema-lockdown-standalone.sql"
   ]

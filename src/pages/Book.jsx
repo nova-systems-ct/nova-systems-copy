@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, Loader2 } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -17,6 +17,7 @@ const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${
 export default function Book() {
   useSEO({ title: "Request Your Nova Audit — Nova Systems", description: "Book a short call to scope your Nova Audit. Choose a time from Nova's calendar; the audit itself is delivered within 48–72 hours once scope, access and inputs are confirmed." });
   const navigate = useNavigate();
+  const [params] = useSearchParams(); const campaign = (params.get("c") || "").slice(0, 12); // Demand attribution code
   const [f, setF] = useState({ name: "", business: "", email: "", phone: "", message: "I'd like a Nova Audit consultation." });
   const [renderedAt] = useState(Date.now()); const submissionId = useMemo(newId, []);
   const [busy, setBusy] = useState(false); const [error, setError] = useState(null); const [done, setDone] = useState(null);
@@ -24,7 +25,7 @@ export default function Book() {
   const submit = async (e) => {
     e.preventDefault(); if (busy) return; setBusy(true); setError(null);
     try {
-      const r = await fetch("/api/client?resource=ops&op=web-inquiry&business=nova", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ business: "nova", continue_on_web: true, submission_id: submissionId, rendered_at: renderedAt, website_url_confirm: f.hp || "", fields: { name: f.name, email: f.email, phone: f.phone, message: `${f.message}${f.business ? `\nBusiness: ${f.business}` : ""}` } }) });
+      const r = await fetch("/api/client?resource=ops&op=web-inquiry&business=nova", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ business: "nova", continue_on_web: true, ...(campaign ? { campaign } : {}), submission_id: submissionId, rendered_at: renderedAt, website_url_confirm: f.hp || "", fields: { name: f.name, email: f.email, phone: f.phone, message: `${f.message}${f.business ? `\nBusiness: ${f.business}` : ""}` } }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || (j.reason === "phone_or_email_required" ? "Please enter your email." : j.reason === "name_required" ? "Please enter your name." : "We couldn't send your request. Please try again."));
       if (j.duplicate) { setDone("This request was already received."); return; }

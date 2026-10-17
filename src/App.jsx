@@ -57,6 +57,7 @@ const OpsReportDetail = lazy(() => import('./pages/dashboard/ops/OpsReports').th
 const OpsMonitoring = lazy(() => import('./pages/dashboard/ops/OpsMonitoring'));
 const OpsTestCenter = lazy(() => import('./pages/dashboard/ops/OpsTestCenter'));
 const OpsInstall = lazy(() => import('./pages/dashboard/ops/OpsInstall'));
+const OpsDemand = lazy(() => import('./pages/dashboard/ops/OpsDemand'));
 const OpsSettings = lazy(() => import('./pages/dashboard/ops/OpsSettings'));
 const SignSuccess = lazy(() => import('./pages/SignSuccess'));
 const Onboard = lazy(() => import('./pages/Onboard'));
@@ -253,6 +254,7 @@ function App() {
                 <Route path="reports/:id" element={<OpsReportDetail />} />
                 <Route path="monitoring" element={<OpsMonitoring />} />
                 <Route path="install" element={<OpsInstall />} />
+                <Route path="demand" element={<OpsDemand />} />
                 <Route path="test" element={<OpsTestCenter />} />
                 <Route path="businesses" element={null} />
                 <Route path="settings" element={<OpsSettings />} />

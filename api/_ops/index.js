@@ -74,6 +74,7 @@ export async function handleOps(req, res, op) {
       const conv = await dbOne(`wave1_conversations?id=eq.${enc(conversationId)}&organization_id=eq.${enc(oid)}&select=*`);
       const isTest = b.is_test === true || !!(await dbOne(`ops_business_settings?organization_id=eq.${enc(oid)}&is_test=eq.true&select=organization_id`));
       const w = await S.startWebInquiry({ orgId: oid, contact, conversation: conv, message, isTest });
+      if (b.campaign) { const { attributeInquiry } = await import('./demand.js'); await attributeInquiry({ orgId: oid, jobId: w.job.id, code: sanitize(b.campaign, 12) }).catch((e) => console.error('[demand] attribution failed', e.message)); }
       const link = `${appBase()}/service/${w.token}`;
       let emailStatus = 'not_requested';
       if (contact.email) {
@@ -132,6 +133,16 @@ export async function handleOps(req, res, op) {
       await dbInsert('ops_transitions', { organization_id: s.orgId, entity: 'settings', entity_id: s.orgId, to_state: 'member_added', actor_type: 'user', actor_id: s.caller.id, reason: `${role} ${email}` });
       // The account sets its password through the normal recovery flow (/reset-password). No email is sent from here.
       return send(res, 200, { ok: true, user_id: user.id, role, next_step: `Ask ${email} to open ${appBase()}/login and choose "Forgot password" to set a password. Nothing was emailed.` });
+    }
+
+    // Nova Demand: attributable acquisition campaigns (preparation and tracking; this API never sends outreach).
+    if (op === 'demand') {
+      const action = sanitize(req.method === 'GET' ? q.action : b.action, 30) || 'list';
+      const perm = ['list', 'detail'].includes(action) ? 'ops.view' : ['add-prospect', 'prospect-event'].includes(action) ? 'ops.manage' : 'ops.configure';
+      const s = await inOrg(req, res, orgParam, perm); if (!s) return;
+      const m = await dbOne(`organization_members?organization_id=eq.${enc(s.orgId)}&staff_user_id=eq.${enc(s.caller.id)}&status=eq.active&select=role`);
+      const D = await import('./demand.js');
+      return send(res, 200, await D.handleDemand(req, res, s, isNovaOwner(s.caller) || m?.role === 'client_owner'));
     }
 
     // Install Systems: the plan (manifest) derived from the audit and configuration, its staged run, and owner activation.
