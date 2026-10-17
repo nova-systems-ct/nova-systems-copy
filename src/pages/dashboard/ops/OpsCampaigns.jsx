@@ -31,9 +31,10 @@ export default function OpsCampaigns() {
   const onFile = async (f) => { if (!f) return; const t = await f.text(); setForm((s) => ({ ...s, csv: t })) }
   return (
     <>
-      <PageHeader title="Reactivation campaigns" sub="Re-contact past customers who gave permission. Importing a list never creates permission; unknown permission is blocked." />
+      <PageHeader title="Nova Revive" sub="Recover stalled requests and re-contact past customers who gave permission. Nothing is sent until the owner approves the exact rules, people and message." />
       <ErrorBox error={list.error} onRetry={list.reload} />
-      <div className="ops-two">
+      <StalledCampaign orgId={orgId} onCreated={(id) => nav(`/dashboard/ops/campaigns/${id}`)} />
+      <div className="ops-two" style={{ marginTop: 16 }}>
         <Card title="Campaigns">
           {list.loading ? <Loading /> : !list.data?.length ? <Empty>No campaigns.</Empty> : (
             <div className="ops-scroll"><table className="ops-table"><thead><tr><th>Name</th><th>Status</th><th>Sent</th><th>Created</th></tr></thead><tbody>
@@ -41,7 +42,7 @@ export default function OpsCampaigns() {
             </tbody></table></div>
           )}
         </Card>
-        <Card title="New campaign (draft)">
+        <Card title="Past-customer list (draft)">
           <form onSubmit={create}>
             <Field label="Name" id="cp-name"><input id="cp-name" className="ops-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>
             <Field label="Message" id="cp-msg" hint="Must identify the business ({{business_name}}) and include opt-out wording (STOP). No prices or promotional claims."><textarea id="cp-msg" className="ops-textarea" rows={4} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></Field>
@@ -58,6 +59,52 @@ export default function OpsCampaigns() {
   )
 }
 
+const REASONS = [['incomplete_inquiry', 'Inquiries that stopped before a service was chosen'], ['abandoned_quote', 'Quotes the customer never booked'], ['unfinished_booking', 'Bookings left before signing or paying'], ['missed_appointment', 'Missed appointments']]
+
+// Revive from the business's own records: the rules shown are proposals until the owner approves the campaign.
+function StalledCampaign({ orgId, onCreated }) {
+  const [rules, setRules] = useState({ reasons: REASONS.map(([k]) => k), min_age_days: 2, max_age_days: 90, attempt_limit: 1, attempt_window_days: 30 })
+  const [name, setName] = useState('Follow up on stalled requests')
+  const [message, setMessage] = useState('Hi {{first_name}}, this is {{business_name}} following up on {{service_name}}. Would you still like to book? Reply YES for open times, or STOP to opt out.')
+  const key = JSON.stringify(rules)
+  const preview = useLoad(() => api('campaigns', { org: orgId, query: { view: 'stalled-preview', rules: key } }), [orgId, key])
+  const act = useAction()
+  const num = (k) => (e) => setRules({ ...rules, [k]: Number(e.target.value) })
+  const create = async () => {
+    const r = await act.run(() => api('campaigns', { org: orgId, method: 'POST', body: { action: 'create', purpose: 'stalled_recovery', name, message, rules } }), (x) => `Found ${x.preview.total_rows} stalled record(s): ${x.preview.eligible} eligible. Review before approval.`)
+    if (r?.campaign) onCreated(r.campaign.id)
+  }
+  const pv = preview.data?.preview
+  return (
+    <Card title="Recover stalled requests (from your own records)">
+      <div className="ops-two">
+        <div>
+          <fieldset style={{ border: 0, padding: 0, margin: '0 0 12px' }}><legend style={{ fontSize: 12, color: C.dim, marginBottom: 6 }}>Which stalled records</legend>
+            {REASONS.map(([k, l]) => <label key={k} style={{ display: 'block', fontSize: 13, marginBottom: 4 }}><input type="checkbox" checked={rules.reasons.includes(k)} onChange={(e) => setRules({ ...rules, reasons: e.target.checked ? [...rules.reasons, k] : rules.reasons.filter((x) => x !== k) })} /> {l}</label>)}
+          </fieldset>
+          <Field label="Only records idle at least (days)" id="rv-min"><input id="rv-min" type="number" min={1} className="ops-input" value={rules.min_age_days} onChange={num('min_age_days')} /></Field>
+          <Field label="…and at most (days)" id="rv-max"><input id="rv-max" type="number" min={1} className="ops-input" value={rules.max_age_days} onChange={num('max_age_days')} /></Field>
+          <Field label="Messages per person, at most" id="rv-lim" hint="Counted across all campaigns in the window below."><input id="rv-lim" type="number" min={1} max={5} className="ops-input" value={rules.attempt_limit} onChange={num('attempt_limit')} /></Field>
+          <Field label="Window (days)" id="rv-win"><input id="rv-win" type="number" min={1} className="ops-input" value={rules.attempt_window_days} onChange={num('attempt_window_days')} /></Field>
+        </div>
+        <div>
+          <Field label="Campaign name" id="rv-name"><input id="rv-name" className="ops-input" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+          <Field label="Message" id="rv-msg" hint="{{service_name}} is the service they asked about. Must identify the business and include STOP. No prices, urgency or personal claims."><textarea id="rv-msg" className="ops-textarea" rows={4} value={message} onChange={(e) => setMessage(e.target.value)} /></Field>
+          {preview.loading ? <Loading /> : preview.error ? <Notice tone="bad">{preview.error.message}</Notice> : pv && (
+            <div style={{ fontSize: 13, marginBottom: 10 }} data-testid="revive-preview">
+              <strong>{pv.total_rows}</strong> stalled record(s) match; <strong>{pv.eligible}</strong> eligible.
+              {Object.entries(pv.by_reason).filter(([k]) => k !== 'eligible').map(([k, v]) => <div key={k} style={{ color: C.faint }}>{k.replace(/_/g, ' ')}: {v}</div>)}
+            </div>
+          )}
+          <button className="ops-btn primary" disabled={act.busy || !pv?.total_rows} onClick={create}>Save as draft for approval</button>
+          <p style={{ color: C.faint, fontSize: 12 }}>These settings are a proposal. Nothing is sent until the owner approves this exact campaign.</p>
+          {act.view}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export function OpsCampaignDetail() {
   const { orgId, business } = useOutletContext()
   const { id } = useParams()
@@ -66,7 +113,8 @@ export function OpsCampaignDetail() {
   const go = (action, body = {}, ok) => act.run(() => api('campaigns', { org: orgId, method: 'POST', body: { action, campaign_id: id, ...body } }), ok).then((r) => { d.reload(); return r })
   if (d.loading) return <Loading />
   if (d.error) return <ErrorBox error={d.error} onRetry={d.reload} />
-  const { campaign: c, recipients, preview } = d.data
+  const { campaign: c, recipients, preview, outcomes: o } = d.data
+  const money = (v) => `$${((v || 0) / 100).toFixed(2)}`
   return (
     <>
       <p style={{ margin: '0 0 8px' }}><Link to="/dashboard/ops/campaigns" style={{ color: C.gold, fontSize: 13 }}>← Campaigns</Link></p>
@@ -90,11 +138,20 @@ export function OpsCampaignDetail() {
           {c.status === 'paused' && business.can_configure && <button className="ops-btn" disabled={act.busy} onClick={() => go('resume', {}, 'Resumed.')}>Resume</button>}
           {['draft', 'approved', 'running', 'paused'].includes(c.status) && <button className="ops-btn danger" style={{ marginLeft: 8 }} disabled={act.busy} onClick={() => go('cancel', { reason: 'cancelled from dashboard' }, 'Cancelled; nothing further will be sent.')}>Cancel</button>}
           {c.approval_snapshot && <p style={{ color: C.faint, fontSize: 12, marginTop: 10 }}>Approved {when(c.approved_at)} for {c.approval_snapshot.eligible_count} recipients.</p>}
+          {c.rules && <p style={{ color: C.faint, fontSize: 12 }}>Rules{c.approval_snapshot?.rules ? ' (approved)' : ' (proposed)'}: {c.rules.reasons.map((r) => r.replace(/_/g, ' ')).join(', ')}; idle {c.rules.min_age_days}–{c.rules.max_age_days} days; at most {c.rules.attempt_limit} message(s) per person per {c.rules.attempt_window_days} days.</p>}
         </Card>
       </div>
+      {o && (
+        <Card title="Outcomes" style={{ marginTop: 16 }}>
+          <table className="ops-table"><tbody>
+            {[['Eligible', o.eligible], ['Sent (provider accepted)', o.sent], ['Dry run — not sent', o.dry_run_not_sent], ['Stopped before sending', o.stopped], ['Replied', o.replied], ['Back in qualification or booking', o.qualified], ['Booked', o.booked], ['Completed jobs', o.completed_jobs], ['Completed job value', money(o.completed_job_value_cents)], ['Deposits collected', money(o.deposits_collected_cents)], ['Refunds', money(o.refunds_cents)]].map(([k, v]) => <tr key={k}><td>{k}</td><td><strong>{v}</strong></td></tr>)}
+          </tbody></table>
+          <p style={{ color: C.faint, fontSize: 12 }}>{o.note}</p>
+        </Card>
+      )}
       <Card title="Recipients" style={{ marginTop: 16 }}>
-        <div className="ops-scroll"><table className="ops-table"><thead><tr><th>Name</th><th>Phone</th><th>Last visit</th><th>Eligibility</th><th>Send</th></tr></thead><tbody>
-          {recipients.map((r) => <tr key={r.id}><td>{r.display_name || '—'}</td><td>{r.phone_e164}</td><td>{r.last_service_date || '—'}</td><td><Badge value={r.eligibility} label={r.eligibility === 'eligible' ? 'eligible' : String(r.blocked_reason).replace(/_/g, ' ')} /></td><td><Badge value={r.send_status} label={r.send_status === 'dry_run' ? 'dry run — not sent' : null} />{r.stop_reason && <div style={{ fontSize: 11, color: C.faint }}>{r.stop_reason.replace(/_/g, ' ')}</div>}</td></tr>)}
+        <div className="ops-scroll"><table className="ops-table"><thead><tr><th>Name</th><th>Phone</th><th>{c.purpose === 'stalled_recovery' ? 'Stalled since' : 'Last visit'}</th><th>Eligibility</th><th>Send</th></tr></thead><tbody>
+          {recipients.map((r) => <tr key={r.id}><td>{r.display_name || '—'}{r.revive_reason && <div style={{ fontSize: 11, color: C.faint }}>{r.revive_reason.replace(/_/g, ' ')}</div>}</td><td>{r.phone_e164}</td><td>{r.last_service_date || '—'}</td><td><Badge value={r.eligibility} label={r.eligibility === 'eligible' ? 'eligible' : String(r.blocked_reason).replace(/_/g, ' ')} /></td><td><Badge value={r.send_status} label={r.send_status === 'dry_run' ? 'dry run — not sent' : null} />{r.stop_reason && <div style={{ fontSize: 11, color: C.faint }}>{r.stop_reason.replace(/_/g, ' ')}</div>}</td></tr>)}
         </tbody></table></div>
       </Card>
     </>

@@ -8,14 +8,15 @@ import { sendSms, sendMode, orgSettings } from './messaging.js';
 import { transition, ERR, businessContext } from './service.js';
 
 const PLACEHOLDERS = ['first_name', 'business_name'];
-export function validateCampaignCopy(text) {
+export function validateCampaignCopy(text, { allowService = false } = {}) {
   const t = String(text || '');
   if (t.length < 20 || t.length > 480) return 'Message must be 20–480 characters';
   if (!/\bSTOP\b/.test(t)) return 'Message must tell recipients how to opt out (include "Reply STOP to opt out")';
   if (!/\{\{\s*business_name\s*\}\}/.test(t)) return 'Message must identify the business ({{business_name}})';
-  const unknown = [...t.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/g)].map((m) => m[1]).filter((k) => !PLACEHOLDERS.includes(k));
+  const unknown = [...t.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/g)].map((m) => m[1]).filter((k) => !PLACEHOLDERS.includes(k) && !(allowService && k === 'service_name'));
   if (unknown.length) return `Unknown placeholder: ${unknown.join(', ')}`;
   if (/(guarantee|free money|act now|limited time|winner|\$\d)/i.test(t)) return 'Remove promotional claims or prices from reactivation copy; prices come only from approved rules';
+  if (/\b(personally|I remember|just for you|only \d+ (left|spots?))\b/i.test(t)) return 'Remove personal or urgency claims the business cannot stand behind';
   return null;
 }
 const render = (t, v) => t.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (_, k) => v[k] ?? '');
@@ -39,6 +40,61 @@ export async function createCampaign({ orgId, name, purpose, message, rows, batc
   await dbInsert('ops_transitions', { organization_id: orgId, entity: 'campaign', entity_id: camp.id, from_state: null, to_state: 'draft', actor_type: 'user', actor_id: actor.id, reason: 'imported for review' });
   return { campaign: camp, preview: summarize(classified) };
 }
+// Nova Revive from the business's own records: find stalled requests under the proposed rules, classify each person
+// once, and save a DRAFT campaign. Nothing is sent; the owner approves the rules, audience and copy together.
+export async function findStalled({ orgId, rules, now = new Date() }) {
+  const jobs = await dbGet(`ops_jobs?organization_id=eq.${enc(orgId)}&is_test=eq.false&or=(state.in.(new,qualifying,quoted,booking,awaiting_agreement,awaiting_deposit),fulfillment_status.eq.no_show)&select=id,contact_id,state,fulfillment_status,updated_at,is_test,qualification,price_snapshot&order=updated_at.desc&limit=5000`);
+  const ids = [...new Set(jobs.map((j) => j.contact_id))];
+  const contactsById = new Map();
+  for (let i = 0; i < ids.length; i += 100) {
+    for (const c of await dbGet(`crm_contacts?organization_id=eq.${enc(orgId)}&id=in.(${ids.slice(i, i + 100).map(enc).join(',')})&select=id,name,phone_e164,sms_consent,sms_consent_source,sms_consent_at,suppressed,do_not_contact,merged_into_id,is_test`)) contactsById.set(c.id, c);
+  }
+  const since = new Date(now.getTime() - rules.attempt_window_days * 86400_000).toISOString();
+  const attemptsByContact = new Map();
+  for (const r of await dbGet(`ops_campaign_recipients?organization_id=eq.${enc(orgId)}&sent_at=gte.${enc(since)}&contact_id=not.is.null&select=contact_id`)) attemptsByContact.set(r.contact_id, (attemptsByContact.get(r.contact_id) || 0) + 1);
+  const bookedSince = new Map();
+  for (const j of await dbGet(`ops_jobs?organization_id=eq.${enc(orgId)}&state=eq.confirmed&fulfillment_status=neq.no_show&select=contact_id,created_at`)) if (!bookedSince.get(j.contact_id) || j.created_at > bookedSince.get(j.contact_id)) bookedSince.set(j.contact_id, j.created_at);
+  return R.classifyStalled(jobs, { rules, now, contactsById, attemptsByContact, bookedSince });
+}
+
+export async function createStalledCampaign({ orgId, name, message, rules, batchSize = 25, minGap = 30, maxGap = 90, startAt = null, budget = null, actor, now = new Date() }) {
+  const err = validateCampaignCopy(message, { allowService: true }); if (err) throw ERR(400, err);
+  const n = R.normalizeReviveRules(rules); if (n.error) throw ERR(400, n.error);
+  const classified = await findStalled({ orgId, rules: n.rules, now });
+  if (!classified.length) throw ERR(409, 'No stalled records match these rules');
+  const ins = await dbInsert('ops_campaigns', { organization_id: orgId, name: String(name || 'Revive stalled requests').slice(0, 120), purpose: 'stalled_recovery', message_template: message, rules: n.rules, campaign_owner: actor.id, batch_size: batchSize, min_gap_seconds: minGap, max_gap_seconds: maxGap, start_at: startAt, message_budget: budget, created_by: actor.id });
+  const camp = ins.row;
+  const recs = classified.map((c) => ({ organization_id: orgId, campaign_id: camp.id, contact_id: c.contact_id, phone_e164: c.phone_e164, display_name: c.display_name, last_service_date: c.last_service_date, eligibility: c.eligibility, blocked_reason: c.blocked_reason, source_job_id: c.source_job_id, revive_reason: c.revive_reason, source_state: c.source_state }));
+  for (let i = 0; i < recs.length; i += 500) await dbInsert('ops_campaign_recipients', recs.slice(i, i + 500));
+  await dbInsert('ops_transitions', { organization_id: orgId, entity: 'campaign', entity_id: camp.id, from_state: null, to_state: 'draft', actor_type: 'user', actor_id: actor.id, reason: 'stalled records found for review', evidence: { rules: n.rules } });
+  return { campaign: camp, preview: summarize(classified) };
+}
+
+// What a campaign produced, from real records. Recovered work is reported separately from new-customer acquisition and
+// dry-run messages are never counted as sent.
+export async function campaignOutcomes({ orgId, campaignId }) {
+  const recs = await dbGet(`ops_campaign_recipients?campaign_id=eq.${enc(campaignId)}&organization_id=eq.${enc(orgId)}&select=id,contact_id,eligibility,send_status,stop_reason,sent_at`);
+  const sent = recs.filter((r) => r.sent_at && ['provider_accepted', 'delivered'].includes(r.send_status));
+  const dry = recs.filter((r) => r.send_status === 'dry_run');
+  const reached = [...sent, ...dry];
+  let replied = 0, qualified = 0, booked = 0, completed = 0, valueCents = 0, depositsCents = 0, refundsCents = 0;
+  for (const r of reached) {
+    const conv = await dbOne(`wave1_conversations?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(r.contact_id)}&channel=eq.sms&last_inbound_at=gte.${enc(r.sent_at)}&select=id`);
+    if (conv || r.stop_reason === 'replied') replied++;
+    const jobs = await dbGet(`ops_jobs?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(r.contact_id)}&updated_at=gte.${enc(r.sent_at)}&select=id,state,fulfillment_status,total_cents`);
+    if (jobs.some((j) => ['quoted', 'booking', 'awaiting_agreement', 'awaiting_deposit', 'confirmed'].includes(j.state))) qualified++;
+    if (jobs.some((j) => j.state === 'confirmed')) booked++;
+    for (const j of jobs.filter((x) => x.fulfillment_status === 'completed')) { completed++; valueCents += j.total_cents || 0; }
+    for (const j of jobs) for (const d of await dbGet(`ops_deposits?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(j.id)}&select=amount_cents,status,refunded_cents`)) { if (['paid', 'partially_refunded', 'refunded'].includes(d.status)) depositsCents += d.amount_cents; refundsCents += d.refunded_cents || 0; }
+  }
+  return {
+    eligible: recs.filter((r) => r.eligibility === 'eligible').length, sent: sent.length, dry_run_not_sent: dry.length,
+    stopped: recs.filter((r) => ['stopped', 'blocked_at_send', 'cancelled'].includes(r.send_status)).length,
+    replied, qualified, booked, completed_jobs: completed, completed_job_value_cents: valueCents, deposits_collected_cents: depositsCents, refunds_cents: refundsCents,
+    note: 'Recovered opportunities from existing records, counted separately from new-customer acquisition (Demand). Dry-run messages were not sent. Job value is not profit.',
+  };
+}
+
 export function summarize(classified) {
   const by = {}; for (const c of classified) { const k = c.eligibility === 'eligible' ? 'eligible' : c.blocked_reason; by[k] = (by[k] || 0) + 1; }
   return { total_rows: classified.length, eligible: by.eligible || 0, blocked: classified.length - (by.eligible || 0), by_reason: by };
@@ -50,7 +106,7 @@ export async function approveCampaign({ orgId, campaignId, actor, attestation })
   if (!attestation || String(attestation).trim().length < 20) throw ERR(400, 'Confirm in writing that these recipients gave permission to be contacted for this purpose (20+ characters)');
   const eligible = await dbGet(`ops_campaign_recipients?campaign_id=eq.${enc(camp.id)}&organization_id=eq.${enc(orgId)}&eligibility=eq.eligible&select=id`);
   if (!eligible.length) throw ERR(409, 'No eligible recipients — nothing can be approved');
-  const snapshot = { eligible_count: eligible.length, copy_sha256: R.sha256(camp.message_template), schedule: { batch_size: camp.batch_size, min_gap_seconds: camp.min_gap_seconds, max_gap_seconds: camp.max_gap_seconds, start_at: camp.start_at }, budget: camp.message_budget, attestation: String(attestation).slice(0, 500), approved_by: actor.id };
+  const snapshot = { eligible_count: eligible.length, copy_sha256: R.sha256(camp.message_template), schedule: { batch_size: camp.batch_size, min_gap_seconds: camp.min_gap_seconds, max_gap_seconds: camp.max_gap_seconds, start_at: camp.start_at }, budget: camp.message_budget, attestation: String(attestation).slice(0, 500), approved_by: actor.id, ...(camp.rules ? { rules: camp.rules } : {}) };
   return transition({ orgId, entity: 'campaign', table: 'ops_campaigns', id: camp.id, from: 'draft', to: 'approved', actor, reason: 'owner approved audience, copy, schedule and budget', evidence: snapshot, patch: { approval_snapshot: snapshot, approved_by: actor.id, approved_at: nowIso() } });
 }
 
@@ -90,11 +146,26 @@ export async function sendCampaignMessage({ orgId, recipientId, now = new Date()
   const conv = await dbOne(`wave1_conversations?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&channel=eq.sms&select=*`);
   if (conv?.last_inbound_at && new Date(conv.last_inbound_at) > new Date(started)) return stop('stopped', 'replied');
   if (await dbOne(`ops_jobs?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&state=eq.confirmed&created_at=gte.${enc(started)}&select=id`)) return stop('stopped', 'booked');
-  if (await dbOne(`ops_jobs?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&state=in.(new,qualifying,owner_quote_required,quoted,booking,awaiting_agreement,awaiting_deposit,escalated)&select=id`)) return stop('stopped', 'active_request');
+  // A stalled-record recipient is eligible only while that record is still stalled and untouched since the campaign began.
+  let source = null;
+  if (rec.source_job_id) {
+    source = await dbOne(`ops_jobs?id=eq.${enc(rec.source_job_id)}&organization_id=eq.${enc(orgId)}&select=*`);
+    if (!source) return stop('stopped', 'record_removed');
+    if (source.state === 'confirmed' && source.fulfillment_status !== 'no_show') return stop('stopped', 'booked');
+    if (!R.stalledReason(source)) return stop('stopped', 'no_longer_stalled');
+    if (new Date(source.updated_at) > new Date(started)) return stop('stopped', 'recent_activity');
+  }
+  if (await dbOne(`ops_jobs?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&state=in.(new,qualifying,owner_quote_required,quoted,booking,awaiting_agreement,awaiting_deposit,escalated)${source ? `&id=neq.${enc(source.id)}` : ''}&select=id`)) return stop('stopped', 'active_request');
+  const rules = camp.approval_snapshot?.rules;
+  if (rules) {
+    const since = new Date(now.getTime() - rules.attempt_window_days * 86400_000).toISOString();
+    const prior = await dbGet(`ops_campaign_recipients?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&sent_at=gte.${enc(since)}&id=neq.${enc(rec.id)}&select=id`);
+    if (prior.length >= rules.attempt_limit) return stop('stopped', 'attempt_limit');
+  }
   const c = await businessContext(orgId);
   const convId = conv?.id || (await dbInsert('wave1_conversations', { organization_id: orgId, contact_id: contact.id, channel: 'sms' }, { onConflict: 'organization_id,contact_id,channel' })).row?.id
     || (await dbOne(`wave1_conversations?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(contact.id)}&channel=eq.sms&select=id`))?.id;
-  const body = render(camp.message_template, { first_name: (rec.display_name || '').split(' ')[0] || 'there', business_name: c.display_name });
+  const body = render(camp.message_template, { first_name: (rec.display_name || '').split(' ')[0] || 'there', business_name: c.display_name, service_name: source?.price_snapshot?.service_name || 'your request' });
   const r = await sendSms({ orgId, conversationId: convId, contactId: contact.id, body, purpose: 'campaign', idempotencyKey: `campaign:${rec.id}`, isTest: !!contact.is_test, now });
   if (r.status === 'blocked' && ['min_gap', 'frequency_limit'].includes(r.reason) && enqueue) {
     const at = new Date(now.getTime() + (r.reason === 'min_gap' ? 11 * 60_000 : 24 * 3600_000)).toISOString();
@@ -109,8 +180,11 @@ export async function sendCampaignMessage({ orgId, recipientId, now = new Date()
   }
   const map = { provider_accepted: 'provider_accepted', dry_run: 'dry_run', failed: 'failed', duplicate: 'provider_accepted' };
   const send_status = map[r.status] || 'blocked_at_send';
-  await dbPatch('ops_campaign_recipients', `id=eq.${enc(rec.id)}&send_status=eq.scheduled`, { send_status, stop_reason: send_status === 'blocked_at_send' ? r.reason : null, message_id: r.message?.id || null });
-  if (['provider_accepted', 'dry_run'].includes(send_status)) await dbPatch('ops_campaigns', `id=eq.${enc(camp.id)}`, { sent_count: camp.sent_count + 1 });
+  const left_nova = ['provider_accepted', 'dry_run'].includes(send_status);
+  await dbPatch('ops_campaign_recipients', `id=eq.${enc(rec.id)}&send_status=eq.scheduled`, { send_status, stop_reason: send_status === 'blocked_at_send' ? r.reason : null, message_id: r.message?.id || null, ...(left_nova ? { sent_at: now.toISOString() } : {}) });
+  if (left_nova) await dbPatch('ops_campaigns', `id=eq.${enc(camp.id)}`, { sent_count: camp.sent_count + 1 });
+  // A reply to a stalled-record follow-up continues that request: the conversation remembers which job and service.
+  if (left_nova && source && convId) await dbPatch('wave1_conversations', `id=eq.${enc(convId)}&organization_id=eq.${enc(orgId)}&staff_takeover=not.is.true&or=(engine_state.is.null,engine_state.not.in.(escalated,human,awaiting_time,awaiting_completion))`, { engine_state: 'revive_followup', engine_context: { revive_job_id: source.id, revive_reason: rec.revive_reason, service_key: source.qualification?.service_key || source.price_snapshot?.service_key || null, revive_recipient_id: rec.id } });
   const left = await dbOne(`ops_campaign_recipients?campaign_id=eq.${enc(camp.id)}&send_status=eq.scheduled&select=id`);
   if (!left) await transition({ orgId, entity: 'campaign', table: 'ops_campaigns', id: camp.id, from: 'running', to: 'completed', actor: { type: 'system' }, reason: 'all scheduled recipients processed' }).catch(() => null);
   return { status: send_status, reason: r.reason || null };

@@ -156,7 +156,10 @@ export async function handleInboundTurn({ orgId, conversationId, messageId, now 
   const c = await businessContext(orgId);
   if (c.wave.paused) return { skipped: 'organization_paused' };
   const services = await approvedServices(orgId);
-  let job = await openJobForConversation({ orgId, contact, conversation: conv, channel: conv.channel === 'form' ? 'form' : 'sms', isTest: !!c.ops.is_test });
+  const rv = conv.engine_state === 'revive_followup' ? (conv.engine_context || {}) : null;
+  let job = rv?.revive_job_id ? await resumeRevivedJob({ orgId, conv, rv }) : null;
+  if (!job) job = await openJobForConversation({ orgId, contact, conversation: conv, channel: conv.channel === 'form' ? 'form' : 'sms', isTest: !!c.ops.is_test });
+  if (rv?.revive_job_id && job.id !== rv.revive_job_id) await dbInsert('ops_transitions', { organization_id: orgId, entity: 'job', entity_id: job.id, from_state: job.state, to_state: job.state, actor_type: 'system', reason: `new request after a Revive follow-up (${rv.revive_reason})`, evidence: { previous_job_id: rv.revive_job_id, recipient_id: rv.revive_recipient_id || null } });
   const busy = await busyIntervals(orgId);
   const slotCache = {};
   const slotsFor = (key) => {
@@ -175,6 +178,8 @@ export async function handleInboundTurn({ orgId, conversationId, messageId, now 
     if (a.type === 'escalate') {
       if (job.state !== 'escalated' && R.canTransition('job', job.state, 'escalated')) job = await transition({ orgId, entity: 'job', table: 'ops_jobs', id: job.id, field: 'state', from: job.state, to: 'escalated', actor, reason: a.reason, patch: { escalation_reason: a.reason } });
       await notifyEscalation({ orgId, job, reason: a.reason, c });
+    } else if (a.type === 'revive_declined') {
+      if (R.canTransition('job', job.state, 'lost')) job = await transition({ orgId, entity: 'job', table: 'ops_jobs', id: job.id, field: 'state', from: job.state, to: 'lost', actor, reason: 'customer declined the Revive follow-up', patch: { lost_reason: 'declined_followup' } });
     } else if (a.type === 'set_service') {
       try { ({ job } = await quoteJob({ orgId, job, serviceKey: a.service_key, actor })); } catch (e) { if (e.status !== 409) throw e; }
     } else if (a.type === 'owner_quote') {
@@ -206,6 +211,19 @@ export async function handleInboundTurn({ orgId, conversationId, messageId, now 
   let send = null;
   if (reply) send = await sendSms({ orgId, conversationId: conv.id, contactId: contact.id, body: reply, purpose, idempotencyKey: `turn:${messageId}`, triggerAt: msg.created_at, isTest: !!job.is_test, now });
   return { job_id: job.id, state: job.state, engine_state: nextState, reply_status: send?.status || 'no_reply', reply_reason: send?.reason || null };
+}
+
+// A reply to a Revive follow-up about a still-open request continues THAT request (with its service and history) on
+// the conversation the customer answered from, instead of opening a second, context-free request.
+async function resumeRevivedJob({ orgId, conv, rv }) {
+  const onConv = await dbOne(`ops_jobs?organization_id=eq.${enc(orgId)}&conversation_id=eq.${enc(conv.id)}&state=in.(new,qualifying,owner_quote_required,quoted,booking,awaiting_agreement,awaiting_deposit,escalated)&select=*`);
+  if (onConv) return onConv;
+  const j = await one('ops_jobs', orgId, rv.revive_job_id);
+  if (!j || !['new', 'qualifying', 'quoted', 'booking', 'awaiting_agreement', 'awaiting_deposit'].includes(j.state)) return null;
+  const [moved] = await dbPatch('ops_jobs', `id=eq.${enc(j.id)}&organization_id=eq.${enc(orgId)}&state=eq.${enc(j.state)}`, { conversation_id: conv.id, updated_at: nowIso() });
+  if (!moved) return null;
+  await dbInsert('ops_transitions', { organization_id: orgId, entity: 'job', entity_id: j.id, from_state: j.state, to_state: j.state, actor_type: 'system', reason: 'customer replied to a Revive follow-up; continuing the same request', evidence: { previous_conversation_id: j.conversation_id, conversation_id: conv.id, recipient_id: rv.revive_recipient_id || null } });
+  return moved;
 }
 
 async function notifyEscalation({ orgId, job, reason, c }) {

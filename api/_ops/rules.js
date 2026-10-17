@@ -188,6 +188,16 @@ export function decide({ state, context = {}, text, services, slots = [], slotsF
     }
     return chooseService({ ctx, match, services, slots, slotsFor, biz, timeZone });
   }
+  if (state === 'revive_followup') {
+    // A reply to a Revive follow-up continues the original request with its context.
+    if (/^\s*(no|nope|not now|not interested|no thanks?|no thank you)\b/i.test(text)) return { reply: `Understood. ${biz} won't follow up about this again. Reply anytime if you change your mind.`, nextState: 'new', context: {}, actions: [{ type: 'revive_declined' }] };
+    if (ctx.revive_reason === 'unfinished_booking') return { reply: `Thanks. A person from ${biz} will help you finish your booking here.`, nextState: 'escalated', context: ctx, actions: [{ type: 'escalate', reason: 'revive_reply_unfinished_booking' }] };
+    const direct = matchService(text, services);
+    if (direct) return chooseService({ ctx, match: direct, services, slots, slotsFor, biz, timeZone });
+    if (services.some((s) => s.service_key === ctx.service_key)) return chooseService({ ctx, match: { service_key: ctx.service_key, method: 'revive_context', confidence: 1 }, services, slots, slotsFor, biz, timeZone });
+    ctx.attempts = 0;
+    return { reply: `Thanks for getting back to ${biz}. Which service do you need?\n${menu}\nReply with a number, or HUMAN to reach a person.`, nextState: 'awaiting_service', context: ctx, actions: [] };
+  }
   if (state === 'awaiting_time') {
     const choice = matchSlotChoice(text, ctx.slot_options || []);
     if (!choice) {
@@ -390,6 +400,64 @@ export function classifyImport(rows, { contactsByPhone = new Map(), now = new Da
     return { ...base, contact_id: c.id, eligibility: 'eligible', blocked_reason: null };
   });
 }
+// =============================================================================================
+// Nova Revive: stalled opportunities found in the business's own records. A job is "stalled" by what it is waiting on;
+// age is measured from its last change. Eligibility repeats the import rules (consent, suppression) and adds an age
+// window, a per-person attempt limit across campaigns, and "has booked since". Proposed defaults are proposals: the
+// owner approves the exact rules with the audience and copy.
+// =============================================================================================
+export const REVIVE_REASONS = ['incomplete_inquiry', 'abandoned_quote', 'unfinished_booking', 'missed_appointment'];
+export const REVIVE_PROPOSED_RULES = { reasons: [...REVIVE_REASONS], min_age_days: 2, max_age_days: 90, attempt_limit: 1, attempt_window_days: 30 };
+export function normalizeReviveRules(input = {}) {
+  const r = { ...REVIVE_PROPOSED_RULES, ...(input || {}) };
+  const reasons = [...new Set(Array.isArray(r.reasons) ? r.reasons : [])].filter((x) => REVIVE_REASONS.includes(x));
+  if (!reasons.length) return { error: 'Choose at least one kind of stalled record' };
+  const n = (k) => Number(r[k]);
+  if (!Number.isInteger(n('min_age_days')) || n('min_age_days') < 1 || n('min_age_days') > 365) return { error: 'Minimum age must be 1–365 days' };
+  if (!Number.isInteger(n('max_age_days')) || n('max_age_days') < n('min_age_days') || n('max_age_days') > 730) return { error: 'Maximum age must be at least the minimum and at most 730 days' };
+  if (!Number.isInteger(n('attempt_limit')) || n('attempt_limit') < 1 || n('attempt_limit') > 5) return { error: 'Attempt limit must be 1–5 messages per person' };
+  if (!Number.isInteger(n('attempt_window_days')) || n('attempt_window_days') < 1 || n('attempt_window_days') > 365) return { error: 'Attempt window must be 1–365 days' };
+  return { rules: { reasons, min_age_days: n('min_age_days'), max_age_days: n('max_age_days'), attempt_limit: n('attempt_limit'), attempt_window_days: n('attempt_window_days') } };
+}
+export function stalledReason(job) {
+  if (!job) return null;
+  if (job.fulfillment_status === 'no_show') return 'missed_appointment';
+  if (['new', 'qualifying'].includes(job.state)) return 'incomplete_inquiry';
+  if (job.state === 'quoted') return 'abandoned_quote';
+  if (['booking', 'awaiting_agreement', 'awaiting_deposit'].includes(job.state)) return 'unfinished_booking';
+  return null;
+}
+// jobs: [{id, contact_id, state, fulfillment_status, updated_at, is_test}]; contactsById: Map; attemptsByContact: Map
+// contact_id → messages sent inside the window; bookedSince: Map contact_id → latest confirmed job created_at.
+// Returns one row per person (their most recent stalled record); records younger than the minimum age are not candidates.
+export function classifyStalled(jobs, { rules, now = new Date(), contactsById = new Map(), attemptsByContact = new Map(), bookedSince = new Map() }) {
+  const day = 86400_000; const seenContact = new Set(); const seenPhone = new Set(); const out = [];
+  for (const j of [...jobs].sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))) {
+    const reason = stalledReason(j);
+    if (!reason || !rules.reasons.includes(reason) || j.is_test) continue;
+    if (seenContact.has(j.contact_id)) continue;
+    const age = (now - new Date(j.updated_at)) / day;
+    if (age < rules.min_age_days) continue;
+    seenContact.add(j.contact_id);
+    const c = contactsById.get(j.contact_id);
+    if (c?.is_test || c?.merged_into_id) continue;
+    const base = { contact_id: j.contact_id, source_job_id: j.id, revive_reason: reason, source_state: j.state, display_name: c?.name || null, phone_e164: c?.phone_e164 || null, last_service_date: String(j.updated_at).slice(0, 10) };
+    const block = (blocked_reason) => out.push({ ...base, eligibility: 'blocked', blocked_reason });
+    if (!c) { block('no_contact'); continue; }
+    if (!c.phone_e164) { block('invalid_phone'); continue; }
+    if (seenPhone.has(c.phone_e164)) continue;
+    seenPhone.add(c.phone_e164);
+    if (age > rules.max_age_days) block('outside_age_window');
+    else if (c.suppressed) block('opted_out');
+    else if (c.do_not_contact) block('do_not_contact');
+    else if (!c.sms_consent || !c.sms_consent_source || !c.sms_consent_at) block('no_recorded_consent');
+    else if ((attemptsByContact.get(c.id) || 0) >= rules.attempt_limit) block('attempt_limit_reached');
+    else if (bookedSince.get(c.id) && new Date(bookedSince.get(c.id)) > new Date(j.updated_at)) block('booked_since');
+    else out.push({ ...base, eligibility: 'eligible', blocked_reason: null });
+  }
+  return out;
+}
+
 // Randomized spacing in [min,max] seconds, batches of `batchSize` separated by an extra `batchPauseSeconds`.
 export function scheduleSends(count, { startAt, batchSize = 25, minGap = 30, maxGap = 90, batchPauseSeconds = 600, rand = Math.random }) {
   const out = []; let t = new Date(startAt).getTime();

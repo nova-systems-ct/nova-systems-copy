@@ -403,13 +403,21 @@ export async function handleOps(req, res, op) {
         if (op === 'campaign') {
           const camp = await dbOne(`ops_campaigns?id=eq.${enc(sanitize(q.id, 60))}&organization_id=eq.${enc(s.orgId)}&select=*`);
           if (!camp) return send(res, 404, { error: 'Not found' });
-          const recs = await dbGet(`ops_campaign_recipients?campaign_id=eq.${enc(camp.id)}&organization_id=eq.${enc(s.orgId)}&select=id,display_name,phone_e164,last_service_date,eligibility,blocked_reason,send_status,stop_reason,scheduled_at&order=created_at.asc&limit=5000`);
-          return send(res, 200, { campaign: camp, recipients: recs.map((r) => ({ ...r, phone_e164: r.phone_e164 ? `…${r.phone_e164.slice(-4)}` : null })), preview: H.summarize(recs.map((r) => ({ eligibility: r.eligibility, blocked_reason: r.blocked_reason }))) });
+          const recs = await dbGet(`ops_campaign_recipients?campaign_id=eq.${enc(camp.id)}&organization_id=eq.${enc(s.orgId)}&select=id,display_name,phone_e164,last_service_date,eligibility,blocked_reason,send_status,stop_reason,scheduled_at,revive_reason,source_job_id,sent_at&order=created_at.asc&limit=5000`);
+          return send(res, 200, { campaign: camp, recipients: recs.map((r) => ({ ...r, phone_e164: r.phone_e164 ? `…${r.phone_e164.slice(-4)}` : null })), preview: H.summarize(recs.map((r) => ({ eligibility: r.eligibility, blocked_reason: r.blocked_reason }))), outcomes: await H.campaignOutcomes({ orgId: s.orgId, campaignId: camp.id }) });
+        }
+        // Nova Revive: what the proposed rules would find in this business's own records (counts only; nothing saved).
+        if (q.view === 'stalled-preview') {
+          let asked = {}; try { asked = q.rules ? JSON.parse(String(q.rules).slice(0, 2000)) : {}; } catch { return send(res, 400, { error: 'rules must be JSON' }); }
+          const n = R.normalizeReviveRules(asked);
+          if (n.error) return send(res, 400, { error: n.error });
+          return send(res, 200, { rules: n.rules, proposed: R.REVIVE_PROPOSED_RULES, preview: H.summarize(await H.findStalled({ orgId: s.orgId, rules: n.rules })) });
         }
         return send(res, 200, await dbGet(`ops_campaigns?organization_id=eq.${enc(s.orgId)}&select=id,name,purpose,status,sent_count,message_budget,approved_at,created_at&order=created_at.desc`));
       }
       const action = sanitize(b.action, 20);
       const s = await inOrg(req, res, orgParam, ['approve', 'start', 'resume'].includes(action) ? 'ops.configure' : 'ops.manage'); if (!s) return;
+      if (action === 'create' && b.purpose === 'stalled_recovery') return send(res, 200, await H.createStalledCampaign({ orgId: s.orgId, name: b.name, message: String(b.message || ''), rules: b.rules, batchSize: Number(b.batch_size) || 25, minGap: Number(b.min_gap_seconds) || 30, maxGap: Number(b.max_gap_seconds) || 90, startAt: b.start_at || null, budget: b.message_budget == null || b.message_budget === '' ? null : Number(b.message_budget), actor: s.caller }));
       if (action === 'create') return send(res, 200, await H.createCampaign({ orgId: s.orgId, name: b.name, purpose: ['past_customer_reactivation', 'dormant_quote_followup'].includes(b.purpose) ? b.purpose : 'past_customer_reactivation', message: String(b.message || ''), rows: b.rows, batchSize: Number(b.batch_size) || 25, minGap: Number(b.min_gap_seconds) || 30, maxGap: Number(b.max_gap_seconds) || 90, startAt: b.start_at || null, budget: b.message_budget == null || b.message_budget === '' ? null : Number(b.message_budget), actor: s.caller }));
       const id = sanitize(b.campaign_id, 60);
       if (action === 'approve') return send(res, 200, { campaign: await H.approveCampaign({ orgId: s.orgId, campaignId: id, actor: s.caller, attestation: b.attestation }) });
