@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ClipboardCheck, Plus, X, Loader2, Clock, AlertTriangle, CheckCircle2, PauseCircle } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 import { useOrg } from '../../lib/OrgContext'
@@ -31,7 +31,8 @@ export default function AuditCases() {
   const [businesses, setBusinesses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [createOpen, setCreateOpen] = useState(false)
+  const [searchParams] = useSearchParams()
+  const [createOpen, setCreateOpen] = useState(searchParams.get('new') === '1')
   const [form, setForm] = useState({ business_id: '', scope: 'digital', target_hours: 72 })
   const [saving, setSaving] = useState(false)
 
@@ -116,7 +117,7 @@ export default function AuditCases() {
               <button key={c.id} onClick={() => navigate(`/dashboard/audit/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', textAlign: 'left', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, cursor: 'pointer', width: '100%', fontFamily: 'inherit' }}>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <p style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>{biz?.name || 'Unknown business'}</p>
-                  <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 3 }}>{c.scope === '360' ? '360 Audit' : 'Digital Audit'} · {c.status.replace(/_/g, ' ')}</p>
+                  <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 3 }}>{c.scope === '360' ? 'Online + in-person audit' : 'Online audit'} · {c.status.replace(/_/g, ' ')}</p>
                 </div>
                 {c.clock?.dueAt && (
                   <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>
@@ -150,8 +151,8 @@ export default function AuditCases() {
               <div>
                 <label style={lbl}>Scope</label>
                 <select value={form.scope} onChange={(e) => setForm((f) => ({ ...f, scope: e.target.value, target_hours: e.target.value === '360' ? 240 : 72 }))} style={{ ...inp, appearance: 'none', cursor: 'pointer' }}>
-                  <option value="digital" style={{ background: '#111' }}>Digital (remote)</option>
-                  <option value="360" style={{ background: '#111' }}>360 (digital + on-site)</option>
+                  <option value="digital" style={{ background: '#111' }}>Online audit (remote)</option>
+                  <option value="360" style={{ background: '#111' }}>Online + in-person audit (on-site visit)</option>
                 </select>
               </div>
               <div>

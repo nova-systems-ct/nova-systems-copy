@@ -1,11 +1,11 @@
-import { NavLink, Outlet, Link } from 'react-router-dom'
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom'
 import { useState } from 'react'
 import { useOrg } from '../../../lib/OrgContext'
 import { api, useLoad, C, css, Card, Field, Loading, ErrorBox, Empty, Badge, TestBadge, PageHeader, useAction } from './ui'
 
 const TABS = [
   ['', 'Overview'], ['inbox', 'Inbox'], ['requests', 'Requests & jobs'], ['campaigns', 'Campaigns'],
-  ['reports', 'Weekly reports'], ['monitoring', 'Monitoring'], ['settings', 'Settings'],
+  ['test', 'Test center'], ['reports', 'Weekly reports'], ['monitoring', 'Monitoring'], ['settings', 'Settings'],
 ]
 
 export function useBusiness() {
@@ -18,6 +18,11 @@ export default function OpsLayout() {
   const biz = useLoad(() => api('businesses'), [])
   const mine = biz.data?.businesses?.find((b) => b.id === orgId)
   const isNova = org?.kind === 'nova_internal'
+  const { pathname } = useLocation()
+  // Nova runs on Nova: once Nova's own organization is set up as a business (operations settings exist), it gets the same
+  // tabs as any business; the list of client businesses moves to its own tab.
+  const novaInstalled = isNova && !!mine?.settings
+  const showList = isNova && (!novaInstalled || pathname.startsWith('/dashboard/ops/businesses'))
   return (
     <div className="ops-wrap">
       <style>{css}</style>
@@ -25,11 +30,9 @@ export default function OpsLayout() {
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.18em', textTransform: 'uppercase', color: C.gold }}>Nova Operations</span>
         {mine?.settings?.is_test && <TestBadge />}
       </div>
-      {isNova ? <Businesses list={biz} /> : (
+      {isNova && biz.loading ? <Loading /> : showList ? <>{novaInstalled && <Tabs isNova />}<Businesses list={biz} /></> : (
         <>
-          <nav className="ops-tabs" aria-label="Operations sections">
-            {TABS.map(([to, label]) => <NavLink key={to} end={to === ''} to={`/dashboard/ops${to ? `/${to}` : ''}`} className={({ isActive }) => `ops-tab${isActive ? ' active' : ''}`}>{label}</NavLink>)}
-          </nav>
+          <Tabs isNova={isNova} />
           {biz.loading ? <Loading /> : !mine ? <ErrorBox error={{ status: 403, message: 'You do not have Operations access for this organization. Choose another business from the organization menu.' }} /> : <Outlet context={{ orgId, business: mine }} />}
         </>
       )}
@@ -37,7 +40,15 @@ export default function OpsLayout() {
   )
 }
 
-// Nova's own organization is not a client business: list the businesses Nova operates and add new ones.
+function Tabs({ isNova }) {
+  return (
+    <nav className="ops-tabs" aria-label="Operations sections">
+      {[...TABS, ...(isNova ? [['businesses', 'Client businesses']] : [])].map(([to, label]) => <NavLink key={to} end={to === ''} to={`/dashboard/ops${to ? `/${to}` : ''}`} className={({ isActive }) => `ops-tab${isActive ? ' active' : ''}`}>{label}</NavLink>)}
+    </nav>
+  )
+}
+
+// The businesses Nova operates for clients, and adding new ones.
 function Businesses({ list }) {
   const { reloadOrgs } = useBusiness()
   const [name, setName] = useState(''); const [industry, setIndustry] = useState(''); const [isTest, setIsTest] = useState(true)

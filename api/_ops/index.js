@@ -53,6 +53,36 @@ export async function handleOps(req, res, op) {
       }
       return xmlOut(res, op === 'voice-turn' ? await V.handleVoiceAiTurn(args, process.env) : await V.handleVoiceAiStatus(args, process.env));
     }
+    // ------------------------------------------------------------------ public: web inquiry form (Nova's own, or a business's by form token)
+    if (op === 'web-inquiry') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
+      if (!rateLimit(req, res, 10, 10 * 60_000)) return;
+      const { handleFormIntake } = await import('../_wave1Handlers.js');
+      const { createPostgrestRepo } = await import('../_wave1Repo.js');
+      const repo = createPostgrestRepo({ url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_ROLE_KEY });
+      let formToken = sanitize(q.form || b.form, 100);
+      if (!formToken && (q.business === 'nova' || b.business === 'nova')) {
+        const nova = await dbOne('organizations?kind=eq.nova_internal&select=id&order=created_at.asc&limit=1');
+        formToken = nova ? (await dbOne(`wave1_org_settings?organization_id=eq.${enc(nova.id)}&select=form_token`))?.form_token : null;
+        if (!formToken) return send(res, 503, { error: "Online booking isn't set up yet. Email hello@nova-systems.app and we will reply." });
+      }
+      const r = await handleFormIntake({ token: formToken, body: b, ip: String(req.headers['x-forwarded-for'] || '').split(',')[0] }, repo);
+      if (r.status !== 200 || r.body?.duplicate || !r.internal) { const { internal: _i, ...pub } = r.body || {}; return send(res, r.status, pub); }
+      const { orgId: oid, contactId, conversationId, message, hasPhone } = r.internal;
+      if (hasPhone && r.internal.continuesBySms) return send(res, 200, { ok: true, channel: 'sms', note: 'Thanks — we will continue by text.' });
+      const contact = await dbOne(`crm_contacts?id=eq.${enc(contactId)}&organization_id=eq.${enc(oid)}&select=*`);
+      const conv = await dbOne(`wave1_conversations?id=eq.${enc(conversationId)}&organization_id=eq.${enc(oid)}&select=*`);
+      const isTest = b.is_test === true || !!(await dbOne(`ops_business_settings?organization_id=eq.${enc(oid)}&is_test=eq.true&select=organization_id`));
+      const w = await S.startWebInquiry({ orgId: oid, contact, conversation: conv, message, isTest });
+      const link = `${appBase()}/service/${w.token}`;
+      let emailStatus = 'not_requested';
+      if (contact.email) {
+        const { notify } = await import('../_sales/core.js');
+        const ids = await notify({ email: contact.email, kind: 'customer_booking_link', subject: 'Your request — next step', body: 'Your request was received. Use the private link we sent to choose a time. [link not stored]', sendBody: `Your request was received. Choose a time and review the details here (private link):\n\n${link}\n\nIf you did not send this request, ignore this email.`, channels: ['email'], idempotencyKey: `web-inquiry:${w.job.id}` });
+        emailStatus = ids.length ? ((await dbOne(`sales_notifications?id=eq.${enc(ids[0])}&select=status`))?.status || 'failed') : 'duplicate';
+      }
+      return send(res, 200, { ok: true, outcome: w.outcome, next_url: `/service/${w.token}`, email_status: emailStatus });
+    }
     // ------------------------------------------------------------------ public: customer link (token-scoped)
     if (op.startsWith('customer-')) {
       if (!rateLimit(req, res, 30, 60_000)) return;
@@ -60,6 +90,8 @@ export async function handleOps(req, res, op) {
       if (op === 'customer-view' && req.method === 'GET') return send(res, 200, await S.customerView(token));
       if (op === 'customer-sign' && req.method === 'POST') return send(res, 200, await S.customerSign({ token, signerName: b.signer_name, consent: b.consent === true, contentSha256: sanitize(b.content_sha256, 80), ip: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress, userAgent: req.headers['user-agent'] }));
       if (op === 'customer-deposit' && req.method === 'POST') return send(res, 200, await S.customerDepositCheckout(token));
+      if (op === 'customer-choose-service' && req.method === 'POST') { await S.customerChooseService({ token, serviceKey: sanitize(b.service_key, 40) }); return send(res, 200, await S.customerView(token)); }
+      if (op === 'customer-hold' && req.method === 'POST') { const r = await S.customerHold({ token, start: sanitize(b.start, 40) }); return send(res, 200, { ...r, view: await S.customerView(token) }); }
       if (op === 'customer-agreement-pdf' && req.method === 'GET') return send(res, 200, await S.customerAgreementPdf(token));
       return send(res, 400, { error: 'Unknown customer action' });
     }
@@ -434,6 +466,9 @@ export async function readiness(orgId) {
     item('stripe_webhook', 'Payment confirmation webhook', !!env.STRIPE_WEBHOOK_SECRET && !!env.STRIPE_SECRET_KEY, env.STRIPE_WEBHOOK_SECRET ? 'configured' : 'missing STRIPE_WEBHOOK_SECRET'),
     item('sms', 'Text messaging', sendMode() === 'live' && wave?.provider_registration === 'approved' && !!wave?.sms_number_ref ? true : false, `${sendMode()}; registration ${wave?.provider_registration || 'unknown'}; number ${wave?.sms_number_ref ? 'assigned' : 'none'}`),
     item('voice', 'AI voice receptionist', voice?.status === 'active' && !!voice?.disclosure_script && sendMode() === 'live' ? true : false, voice ? `${voice.status}${voice.disclosure_script ? '' : '; no disclosure script'}` : 'not configured'),
+    item('twilio', 'Phone provider (Twilio) credentials', !!(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN), env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN ? 'present in this environment' : 'not set in this environment (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN)'),
+    item('webhooks', 'Public address for calls and texts', String(env.WAVE1_PUBLIC_BASE || '').startsWith('https://') && !/localhost|127\.0\.0\.1/.test(env.WAVE1_PUBLIC_BASE || ''), env.WAVE1_PUBLIC_BASE ? env.WAVE1_PUBLIC_BASE : 'not set (WAVE1_PUBLIC_BASE) — the phone provider cannot reach this system'),
+    item('phone_number', 'Business phone number', !!wave?.sms_number_ref, wave?.sms_number_ref || 'none assigned'),
     item('escalation', 'Human escalation contact', (wave?.escalation_contacts || []).length > 0, (wave?.escalation_contacts || []).length ? 'set' : 'none'),
     item('worker', 'Background worker', !!workerLive, hb ? `last seen ${hb.last_seen_at}` : 'never seen'),
     item('reviews', 'Review link', !!ops?.review_url, ops?.review_url ? 'set' : 'none'),

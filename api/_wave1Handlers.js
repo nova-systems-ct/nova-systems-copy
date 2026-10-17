@@ -193,13 +193,16 @@ export async function handleFormIntake({ token, body, ip }, repo) {
     await repo.updateContact(orgId, contact.id, { sms_consent: true, sms_consent_source: 'web_form_checkbox', sms_consent_at: now });
   }
   // With a phone number the request continues by text, so it lives in the SMS conversation (one thread, one engine state).
-  const conv = await repo.upsertConversation(orgId, contact.id, v.contact.phone_e164 ? 'sms' : 'form');
+  const conv = await repo.upsertConversation(orgId, contact.id, v.contact.phone_e164 && body?.continue_on_web !== true ? 'sms' : 'form');
   const formMsg = await repo.insertMessage(orgId, { conversation_id: conv.id, direction: 'inbound', body: String(body?.fields?.message || '').slice(0, 2000), status: 'received', provider: 'web_form', provider_sid: submissionId ? `${orgId}:${submissionId}` : null });
-  if (formMsg && v.contact.phone_e164 && repo.opsEnabled && await repo.opsEnabled(orgId)) {
+  // continue_on_web: the visitor is on the business's own page and continues there (no parallel text conversation).
+  const onWeb = body?.continue_on_web === true;
+  if (formMsg && v.contact.phone_e164 && !onWeb && repo.opsEnabled && await repo.opsEnabled(orgId)) {
     await repo.updateConversation(orgId, conv.id, { customer_initiated_at: now, last_inbound_at: now });
     await repo.enqueueJob({ job_type: 'ops_conversation_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: formMsg.id }, idempotency_key: `ops_turn:form:${formMsg.id}` });
   }
-  return { status: 200, body: { ok: true } };
+  const continuesBySms = !!(formMsg && v.contact.phone_e164 && !onWeb && repo.opsEnabled && await repo.opsEnabled(orgId));
+  return { status: 200, body: { ok: true }, internal: { orgId, contactId: contact.id, conversationId: conv.id, message: String(body?.fields?.message || '').slice(0, 2000), hasPhone: !!v.contact.phone_e164, continuesBySms } };
 }
 
 // ---------------------------------------------------------------- worker: send the one follow-up

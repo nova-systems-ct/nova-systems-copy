@@ -128,6 +128,23 @@ async function provision() {
   const call = makeCaller((await import('../../api/client.js')).default);
   const r = await call({ resource: 'demo', op: 'setup', method: 'POST', body: {}, token: tok.access_token });
   console.log(r.status === 200 && r.body.ready ? '✓ demo workspace ready' : `✗ demo workspace: ${r.status} ${JSON.stringify(r.body).slice(0, 160)}`);
+  // Nova as its own first installation (LOCAL): the same owner actions the dashboard performs — hours, a form token,
+  // an approved complimentary consultation service, and an approved booking agreement. Re-runnable.
+  const ops = (op, body, method = 'POST') => call({ resource: 'ops', op, method, body: { organization_id: nova, ...body }, token: tok.access_token });
+  const hours = Object.fromEntries(['mon', 'tue', 'wed', 'thu', 'fri'].map((d) => [d, [{ start: '09:00', end: '17:00' }]]));
+  const st = await ops('settings', { timezone: 'America/New_York', business_hours: hours, display_name: 'Nova Systems', industry: 'Business operations', hold_minutes: 30, lead_time_hours: 2, booking_horizon_days: 21 });
+  const w = await call({ resource: 'wave1', op: 'settings', method: 'POST', query: { organization_id: nova }, body: { organization_id: nova, timezone: 'America/New_York', business_hours: hours, ...(await (async () => { const s = (await pgClient(env)); const has = (await s.query('select form_token from wave1_org_settings where organization_id=$1', [nova])).rows[0]?.form_token; await s.end(); return has ? {} : { rotate_form_token: true }; })()) }, token: tok.access_token });
+  const prices = await call({ resource: 'ops', op: 'prices', method: 'GET', query: { organization_id: nova }, token: tok.access_token });
+  if (!(prices.body || []).some((p) => p.service_key === 'audit_consultation' && p.status === 'approved')) {
+    const pr = await ops('prices', { action: 'create', service_key: 'audit_consultation', name: 'Nova Audit scoping call (complimentary)', description: 'A 30-minute call to scope your Nova Audit.', duration_minutes: 30, price_cents: 0, deposit_cents: 0 });
+    if (pr.body?.row?.id) await ops('prices', { action: 'approve', id: pr.body.row.id });
+  }
+  const tpls = await call({ resource: 'ops', op: 'templates', method: 'GET', query: { organization_id: nova }, token: tok.access_token });
+  if (!(tpls.body || []).some((t) => t.template_key === 'service_agreement' && t.status === 'approved')) {
+    const tp = await ops('templates', { action: 'create', template_key: 'service_agreement', title: 'Nova Audit scoping call — booking confirmation', body: 'Booking between {{business_name}} and {{customer_name}}.\n\nService: {{service_name}}. Price: {{price}}.\n\nAppointment: {{appointment}}.\n\nThe call scopes your Nova Audit. Nothing is purchased by booking it.' });
+    if (tp.body?.row?.id) await ops('templates', { action: 'approve', id: tp.body.row.id, acknowledge_not_legal_advice: true });
+  }
+  console.log(st.status === 200 && w.status === 200 ? '✓ Nova configured as its own first installation (form, hours, consultation service, booking agreement)' : `✗ Nova installation: settings ${st.status} ${JSON.stringify(st.body).slice(0, 120)} / wave1 ${w.status} ${JSON.stringify(w.body).slice(0, 120)}`);
   console.log(`✓ test owner and representative ready; credentials in ${path.basename(ACCOUNTS_FILE)} (not printed)`);
 }
 

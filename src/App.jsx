@@ -55,12 +55,14 @@ const OpsCampaignDetail = lazy(() => import('./pages/dashboard/ops/OpsCampaigns'
 const OpsReports = lazy(() => import('./pages/dashboard/ops/OpsReports'));
 const OpsReportDetail = lazy(() => import('./pages/dashboard/ops/OpsReports').then((m) => ({ default: m.OpsReportDetail })));
 const OpsMonitoring = lazy(() => import('./pages/dashboard/ops/OpsMonitoring'));
+const OpsTestCenter = lazy(() => import('./pages/dashboard/ops/OpsTestCenter'));
 const OpsSettings = lazy(() => import('./pages/dashboard/ops/OpsSettings'));
 const SignSuccess = lazy(() => import('./pages/SignSuccess'));
 const Onboard = lazy(() => import('./pages/Onboard'));
 const OnboardSuccess = lazy(() => import('./pages/OnboardSuccess'));
 const Waves = lazy(() => import('./pages/Waves'));
 const Demo = lazy(() => import('./pages/Demo'));
+const Book = lazy(() => import('./pages/Book'));
 const WavesForm = lazy(() => import('./pages/WavesForm'));
 // CRM Dashboard
 const DashboardRoot = lazy(() => import('./components/dashboard/DashboardRoot'));
@@ -165,7 +167,7 @@ function App() {
             <Route path="/company" element={<Company />} />
             {/* Retired in favor of /welcome (Part 1 Phase 1) — this route stays so every
                 existing "Request a Nova Audit" link/bookmark site-wide keeps working. */}
-            <Route path="/request-audit" element={<Navigate to="/welcome" replace />} />
+            <Route path="/request-audit" element={<Navigate to="/book" replace />} />
             <Route path="/login" element={<Login />} />
             <Route path="/client-login" element={<ClientLogin />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
@@ -195,6 +197,7 @@ function App() {
             <Route path="/onboard/success" element={<OnboardSuccess />} />
             <Route path="/waves" element={<Waves />} />
             <Route path="/demo" element={<Demo />} />
+            <Route path="/book" element={<Book />} />
             <Route path="/waves/form" element={<WavesForm />} />
 
             {/* Sales Team platform — public */}
@@ -248,6 +251,8 @@ function App() {
                 <Route path="reports" element={<OpsReports />} />
                 <Route path="reports/:id" element={<OpsReportDetail />} />
                 <Route path="monitoring" element={<OpsMonitoring />} />
+                <Route path="test" element={<OpsTestCenter />} />
+                <Route path="businesses" element={null} />
                 <Route path="settings" element={<OpsSettings />} />
               </Route>
               <Route path="command" element={<RequirePermission permission="command.view"><Command /></RequirePermission>} />

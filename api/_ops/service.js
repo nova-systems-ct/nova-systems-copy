@@ -117,7 +117,7 @@ export async function holdSlot({ orgId, job, slot, actor }) {
 }
 
 // Agreement from the APPROVED template only; customer link carries a random token (only its hash is stored).
-export async function sendAgreement({ orgId, job, booking, actor, templateKey = 'service_agreement' }) {
+export async function sendAgreement({ orgId, job, booking, actor, templateKey = 'service_agreement', keepToken = false }) {
   const tpl = await dbOne(`ops_agreement_templates?organization_id=eq.${enc(orgId)}&template_key=eq.${enc(templateKey)}&status=eq.approved&select=*`);
   if (!tpl) return { ok: false, reason: 'no_approved_agreement_template' };
   const c = await businessContext(orgId);
@@ -135,9 +135,10 @@ export async function sendAgreement({ orgId, job, booking, actor, templateKey = 
   const ins = await dbInsert('ops_agreements', { organization_id: orgId, job_id: job.id, template_id: tpl.id, template_version: tpl.version, title: tpl.title, body_rendered: r.text, content_sha256: r.sha256, expires_at: new Date(Date.now() + 72 * 3600_000).toISOString(), esign_consent_text: R.ESIGN_CONSENT, supersedes_id: prior?.id || null });
   if (ins.conflict) throw ERR(409, 'An agreement for this job already exists');
   await dbInsert('ops_transitions', { organization_id: orgId, entity: 'agreement', entity_id: ins.row.id, from_state: null, to_state: 'sent', actor_type: actor?.type || 'system', actor_id: actor?.id ? String(actor.id) : null, reason: `template ${tpl.template_key} v${tpl.version}`, evidence: { content_sha256: r.sha256, legal_review: tpl.legal_review }, version: String(tpl.version) });
-  const t = R.newToken();
-  const j = await transition({ orgId, entity: 'job', table: 'ops_jobs', id: job.id, field: 'state', from: job.state, to: 'awaiting_agreement', actor, reason: 'agreement sent', patch: { customer_token_hash: t.hash, customer_token_expires_at: new Date(Date.now() + 14 * 86400_000).toISOString() } });
-  return { ok: true, agreement: ins.row, job: j, link: `${appBase()}/service/${t.token}` };
+  const keep = keepToken && job.customer_token_hash;
+  const t = keep ? null : R.newToken();
+  const j = await transition({ orgId, entity: 'job', table: 'ops_jobs', id: job.id, field: 'state', from: job.state, to: 'awaiting_agreement', actor, reason: 'agreement sent', patch: keep ? {} : { customer_token_hash: t.hash, customer_token_expires_at: new Date(Date.now() + 14 * 86400_000).toISOString() } });
+  return { ok: true, agreement: ins.row, job: j, link: keep ? null : `${appBase()}/service/${t.token}` };
 }
 
 // ---------------------------------------------------------------------------------------------- conversation turn (worker)
@@ -277,6 +278,57 @@ export async function cancelProviderBooking({ orgId, booking, reason }) {
   return { provider: 'calcom', status: 'cancel_failed', kind: r.kind };
 }
 
+// ---------------------------------------------------------------------------------------------- web inquiry
+// A web-form inquiry continues on the web: the worker screens the message, qualifies it against the approved services,
+// quotes only an approved price, and gives the customer a secure page to choose a real open time and sign. Anything it
+// should not handle alone (emergency, complaint, a request for a person) goes to a person instead.
+export async function startWebInquiry({ orgId, contact, conversation, message, isTest = false }) {
+  const actor = { type: 'system', id: 'web-inquiry-worker' };
+  let job = await openJobForConversation({ orgId, contact, conversation, channel: 'form', isTest });
+  const t = R.newToken();
+  [job] = await dbPatch('ops_jobs', `id=eq.${enc(job.id)}&organization_id=eq.${enc(orgId)}`, { customer_token_hash: t.hash, customer_token_expires_at: new Date(Date.now() + 14 * 86400_000).toISOString(), updated_at: nowIso() });
+  const flag = R.screenText(message);
+  if (flag) {
+    job = await transition({ orgId, entity: 'job', table: 'ops_jobs', id: job.id, field: 'state', from: job.state, to: 'escalated', actor, reason: `needs a person: ${flag}`, patch: { escalation_reason: flag } });
+    await notifyEscalation({ orgId, job, reason: flag, c: await businessContext(orgId) });
+    return { job, token: t.token, outcome: 'escalated', reason: flag };
+  }
+  const services = await approvedServices(orgId);
+  const m = R.matchService(message, services);
+  if (m && !services.find((s) => s.service_key === m.service_key)?.quote_required) {
+    const q = await quoteJob({ orgId, job, serviceKey: m.service_key, actor });
+    return { job: q.job, token: t.token, outcome: 'quoted', service_key: m.service_key };
+  }
+  return { job, token: t.token, outcome: 'needs_service_choice' };
+}
+
+export async function customerChooseService({ token, serviceKey }) {
+  const job = await jobByToken(token); if (!job) throw ERR(404, 'This link is invalid or has expired.');
+  if (!['new', 'qualifying'].includes(job.state)) throw ERR(409, 'A service is already chosen for this request.');
+  const svc = (await approvedServices(job.organization_id)).find((s) => s.service_key === serviceKey);
+  if (!svc) throw ERR(400, 'Choose one of the listed services.');
+  if (svc.quote_required) throw ERR(409, 'This service is priced by quote. The business will contact you with a quote.');
+  return quoteJob({ orgId: job.organization_id, job, serviceKey, actor: { type: 'customer' } });
+}
+
+// The customer picks one of the offered times: hold it (database-protected against double booking), then prepare the
+// agreement from the approved template on the same link.
+export async function customerHold({ token, start }) {
+  const job = await jobByToken(token); if (!job) throw ERR(404, 'This link is invalid or has expired.');
+  const orgId = job.organization_id;
+  if (!['quoted', 'booking'].includes(job.state)) throw ERR(409, job.state === 'awaiting_agreement' ? 'A time is already held. Review and sign the agreement below.' : 'This request cannot be booked online right now.');
+  const startMs = new Date(start).getTime(); if (!Number.isFinite(startMs) || startMs <= Date.now()) throw ERR(400, 'Choose one of the listed times.');
+  const offered = await availability(orgId, job.price_snapshot?.service_key, { limit: 12 });
+  if (!offered.ok || !offered.slots.some((s) => new Date(s.start).getTime() === startMs)) throw ERR(409, 'That time is no longer available. Choose another time.');
+  const actor = { type: 'customer' };
+  const r = await holdSlot({ orgId, job, slot: { start: new Date(startMs).toISOString() }, actor });
+  if (!r.ok) throw ERR(409, 'That time was just taken. Choose another time.');
+  const fresh = await one('ops_jobs', orgId, job.id);
+  const ag = await sendAgreement({ orgId, job: fresh, booking: r.booking, actor, keepToken: true });
+  if (!ag.ok) throw ERR(409, `The time is held, but the agreement could not be prepared (${String(ag.reason).replace(/_/g, ' ')}). The business will contact you.`);
+  return { held: { start_at: r.booking.start_at, hold_expires_at: r.booking.hold_expires_at }, agreement_id: ag.agreement.id };
+}
+
 // ---------------------------------------------------------------------------------------------- customer link
 export async function jobByToken(token) {
   if (!token || String(token).length < 20) return null;
@@ -302,6 +354,9 @@ export async function customerView(token) {
     booking: booking ? { start_at: booking.start_at, status: holdExpired ? 'expired' : booking.status, hold_expires_at: booking.hold_expires_at } : null,
     agreement: agreement ? { id: agreement.id, title: agreement.title, text: agreement.body_rendered, content_sha256: agreement.content_sha256, status: agreement.status, expires_at: agreement.expires_at, consent_text: agreement.esign_consent_text, signer_name: agreement.signer_name, signed_at: agreement.signed_at } : null,
     deposit: deposit ? { status: deposit.status, amount_cents: deposit.amount_cents, currency: deposit.currency, test_mode: !deposit.livemode, paid_at: deposit.paid_at } : null,
+    next: ['new', 'qualifying'].includes(job.state) ? 'choose_service' : job.state === 'quoted' || (job.state === 'booking' && (!booking || holdExpired)) ? 'choose_time' : job.state === 'escalated' ? 'person_will_contact' : null,
+    services: ['new', 'qualifying'].includes(job.state) ? (await approvedServices(orgId)).map((s) => ({ service_key: s.service_key, name: s.name, description: s.description, price_cents: s.quote_required ? null : s.price_cents, deposit_cents: s.deposit_cents, duration_minutes: s.duration_minutes, quote_required: s.quote_required, currency: s.currency })) : undefined,
+    slots: job.state === 'quoted' || (job.state === 'booking' && (!booking || holdExpired)) ? ((await availability(orgId, job.price_snapshot?.service_key, { limit: 8 })).slots || []).map((s) => s.start) : undefined,
     payments: { available: (account?.mode === 'nova_test_platform' || (account?.mode === 'client_connected_account' && R.isStripeAccountId(account?.stripe_account_ref))) && String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_test'), mode: account?.mode || 'not_configured', funds_recipient: account?.funds_recipient || null },
   };
 }

@@ -152,7 +152,7 @@ export default function HeroSection() {
 
           <div className="flex flex-wrap items-center gap-4 mt-10">
             <Link
-              to="/welcome"
+              to="/book"
               className="inline-flex items-center gap-3 font-bold uppercase tracking-widest transition-opacity hover:opacity-85"
               style={{
                 background: GOLD_GRADIENT,
@@ -162,7 +162,7 @@ export default function HeroSection() {
                 padding: "18px 32px",
               }}
             >
-              START YOUR BUSINESS DIAGNOSTIC <ChevronRight className="w-4 h-4" />
+              REQUEST YOUR AUDIT <ChevronRight className="w-4 h-4" />
             </Link>
             <Link
               to="/demo"

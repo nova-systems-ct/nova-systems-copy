@@ -22,6 +22,8 @@ export default function ServiceLink() {
     catch (x) { setMsg({ tone: 'bad', text: x.message }) } finally { setBusy(false) }
   }
   const pay = async () => { setBusy(true); setMsg(null); try { const r = await call('customer-deposit', { method: 'POST', token }); window.location.assign(r.url) } catch (x) { setMsg({ tone: 'bad', text: x.message }); setBusy(false) } }
+  const choose = async (key) => { setBusy(true); setMsg(null); try { setD(await call('customer-choose-service', { method: 'POST', token, body: { service_key: key } })) } catch (x) { setMsg({ tone: 'bad', text: x.message }) } finally { setBusy(false) } }
+  const pick = async (start) => { setBusy(true); setMsg(null); try { const r = await call('customer-hold', { method: 'POST', token, body: { start } }); setD(r.view); setMsg({ tone: 'ok', text: 'Time held for you. Review and sign the agreement below to confirm it.' }) } catch (x) { setMsg({ tone: 'bad', text: x.message }); load() } finally { setBusy(false) } }
   const download = async () => { try { const r = await call('customer-agreement-pdf', { token }); window.open(r.url, '_blank', 'noopener') } catch (x) { setMsg({ tone: 'bad', text: x.message }) } }
   const box = { background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, padding: 18, marginBottom: 16 }
   const btn = (primary) => ({ borderRadius: 8, padding: '11px 18px', fontWeight: 700, fontSize: 14, cursor: 'pointer', border: `1px solid ${C.gold}`, background: primary ? C.gold : 'transparent', color: primary ? C.bg : C.gold, fontFamily: 'inherit' })
@@ -37,9 +39,29 @@ export default function ServiceLink() {
             <h1 style={{ fontSize: 24, margin: '8px 0 16px' }}>{d.request.service_name || 'Your request'}</h1>
             {msg && <div role="status" style={{ ...box, borderColor: msg.tone === 'bad' ? `${C.red}66` : msg.tone === 'ok' ? `${C.green}66` : C.line }}>{msg.text}</div>}
             <section style={box} aria-label="Summary">
-              <div>Total: <strong>{money(d.request.total_cents, d.request.currency)}</strong>{d.request.deposit_cents ? <> · Deposit: <strong>{money(d.request.deposit_cents, d.request.currency)}</strong> (applied to the total)</> : null}</div>
+              <div>Total: <strong>{d.request.total_cents === 0 ? 'Complimentary' : money(d.request.total_cents, d.request.currency)}</strong>{d.request.deposit_cents ? <> · Deposit: <strong>{money(d.request.deposit_cents, d.request.currency)}</strong> (applied to the total)</> : null}</div>
               {d.booking && <div style={{ marginTop: 8 }}>Time: <strong>{when(d.booking.start_at, d.timezone)}</strong> — {d.booking.status === 'held' ? <span style={{ color: C.amber }}>held for you until {when(d.booking.hold_expires_at, d.timezone)}</span> : d.booking.status === 'confirmed' ? <span style={{ color: C.green }}>confirmed</span> : <span style={{ color: C.red }}>{d.booking.status} — reply to the business to choose a new time</span>}</div>}
             </section>
+            {d.next === 'person_will_contact' && <section style={box} aria-label="Next step"><p style={{ margin: 0 }}>Thanks — a person from {d.business} will contact you about this request. Nothing has been booked automatically.</p></section>}
+            {d.next === 'choose_service' && (
+              <section style={box} aria-label="Choose a service">
+                <h2 style={{ fontSize: 16, marginTop: 0 }}>What would you like to book?</h2>
+                {!d.services?.length ? <p style={{ color: C.dim, margin: 0 }}>Online booking isn't available for this business yet. The business will contact you.</p> : d.services.map((sv) => (
+                  <button key={sv.service_key} type="button" disabled={busy || sv.quote_required} onClick={() => choose(sv.service_key)} style={{ ...btn(false), display: 'block', width: '100%', textAlign: 'left', marginBottom: 8, opacity: sv.quote_required ? 0.6 : 1 }}>
+                    {sv.name} — {sv.quote_required ? 'priced by quote (the business will contact you)' : money(sv.price_cents, sv.currency)}{sv.duration_minutes ? ` · ${sv.duration_minutes} min` : ''}
+                  </button>
+                ))}
+              </section>
+            )}
+            {d.next === 'choose_time' && (
+              <section style={box} aria-label="Choose a time">
+                <h2 style={{ fontSize: 16, marginTop: 0 }}>Choose a time</h2>
+                {!d.slots?.length ? <p style={{ color: C.dim, margin: 0 }}>No open times are available online right now. The business will contact you.</p> : (
+                  <div style={{ display: 'grid', gap: 8 }}>{d.slots.map((st) => <button key={st} type="button" disabled={busy} onClick={() => pick(st)} style={btn(false)}>{when(st, d.timezone)}</button>)}</div>
+                )}
+                <p style={{ fontSize: 12, color: C.dim, marginBottom: 0 }}>Times come from the business's calendar and are checked again when you choose one.</p>
+              </section>
+            )}
             {d.agreement && (
               <section style={box} aria-label="Agreement">
                 <h2 style={{ fontSize: 16, marginTop: 0 }}>{d.agreement.title}</h2>
@@ -68,7 +90,7 @@ export default function ServiceLink() {
                 ) : <p style={{ margin: 0 }}>Online deposits are not available for this business yet. The business will contact you about payment.</p>}
               </section>
             )}
-            {d.request.state === 'confirmed' && <p style={{ color: C.green }}>Your booking is confirmed. You can reply to the business's text with any questions.</p>}
+            {d.request.state === 'confirmed' && <p role="status" style={{ color: C.green }}>Your booking is confirmed{d.booking?.start_at ? ` for ${when(d.booking.start_at, d.timezone)}` : ''}. Keep this page's link to see it again.</p>}
           </>
         )}
       </div>

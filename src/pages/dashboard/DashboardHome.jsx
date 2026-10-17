@@ -1,3 +1,4 @@
+import ProductHome from '../../components/dashboard/ProductHome'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Target, DollarSign, FileText, Receipt, HandCoins, Search, Newspaper, LayoutGrid, ClipboardCheck, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
@@ -144,9 +145,7 @@ export default function DashboardHome() {
           <h1 style={{ color: '#fff', fontSize: 34, fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 6 }}>{greeting()}.</h1>
           <p style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14 }}>{fmtDate()}</p>
         </div>
-        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '48px 32px', textAlign: 'center' }}>
-          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 14 }}>No data connected for {currentOrg.name} yet.</p>
-        </div>
+        <ProductHome />
       </div>
     )
   }
@@ -155,17 +154,15 @@ export default function DashboardHome() {
     <div style={{ padding: '48px 52px 80px', maxWidth: 1200 }}>
 
       {/* Header */}
-      <div style={{ marginBottom: 48 }}>
-        <h1 style={{ color: '#fff', fontSize: 34, fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 6 }}>
-          {greeting()}.
-        </h1>
-        <p style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14 }}>{fmtDate()}</p>
-      </div>
+      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13, marginBottom: 18 }}>{greeting()} · {fmtDate()}</p>
+      <ProductHome />
+      <details style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 18 }}>
+        <summary style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.55)', fontSize: 13, fontWeight: 700, marginBottom: 18 }}>Business administration — invoices, commissions, leads, content</summary>
 
       {dataError && (
         <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: '16px 20px', marginBottom: 24 }}>
           <p style={{ color: '#f87171', fontSize: 13 }}>
-            Some data couldn't load — this usually means the Stage 5 database migration hasn't been run yet. Showing what's available.
+            Some older records aren't available in this view. Showing what's available.
           </p>
         </div>
       )}
@@ -302,6 +299,7 @@ export default function DashboardHome() {
           ))}
         </div>
       </div>
+      </details>
     </div>
   )
 }
