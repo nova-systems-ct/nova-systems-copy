@@ -38,7 +38,7 @@ export default function ProductHome() {
         <div style={card}>
           <Head Icon={Workflow} title="Agents and connected channels" />
           {r.loading ? <p style={{ color: DIM, fontSize: 13, margin: 0 }}>Checking…</p> : <p style={{ color: DIM, fontSize: 13, margin: 0 }}>{channels.length - blocked.length} of {channels.length} ready.{blocked.length ? <> Next: <span style={{ color: '#FAFAFA' }}>{blocked.slice(0, 3).map((i) => i.label).join(', ')}</span>.</> : ' Everything required is connected.'}</p>}
-          <div style={{ marginTop: 'auto' }}><Link to="/dashboard/ops/test#setup" style={btn}>Set up channels <ArrowRight size={14} /></Link></div>
+          <div style={{ marginTop: 'auto' }}><Link to="/dashboard/ops/install" style={btn}>Install Systems <ArrowRight size={14} /></Link></div>
         </div>
         <div style={card}>
           <Head Icon={PhoneCall} title="Test a call" />

@@ -124,6 +124,8 @@ DECLARE
     'ops_followups',
     'ops_health_checks',
     'ops_incidents',
+    'ops_install_manifests',
+    'ops_install_steps',
     'ops_jobs',
     'ops_payment_accounts',
     'ops_price_rules',

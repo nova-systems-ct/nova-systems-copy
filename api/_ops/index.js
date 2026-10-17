@@ -134,6 +134,22 @@ export async function handleOps(req, res, op) {
       return send(res, 200, { ok: true, user_id: user.id, role, next_step: `Ask ${email} to open ${appBase()}/login and choose "Forgot password" to set a password. Nothing was emailed.` });
     }
 
+    // Install Systems: the plan (manifest) derived from the audit and configuration, its staged run, and owner activation.
+    if (op === 'install') {
+      const action = sanitize(req.method === 'GET' ? q.action : b.action, 20) || 'view';
+      const s = await inOrg(req, res, orgParam, action === 'view' ? 'ops.view' : 'ops.configure'); if (!s) return;
+      const I = await import('./install.js');
+      if (action === 'view') { const [current, preview] = await Promise.all([I.latestManifest(s.orgId), I.buildManifest(s.orgId)]); return send(res, 200, { current, changed_since: !!current && current.manifest_sha256 !== preview.sha, preview: current ? null : preview.manifest }); }
+      if (action === 'prepare') return send(res, 200, await I.prepareManifest(s.orgId, s.actor));
+      if (action === 'run') return send(res, 200, await I.runInstall(s.orgId, sanitize(b.manifest_id, 60), s.actor, readiness));
+      if (action === 'activate') {
+        const m = await dbOne(`organization_members?organization_id=eq.${enc(s.orgId)}&staff_user_id=eq.${enc(s.caller.id)}&status=eq.active&select=role`);
+        if (!isNovaOwner(s.caller) && m?.role !== 'client_owner') return send(res, 403, { error: 'Only the business owner can activate an installation.' });
+        return send(res, 200, await I.activate(s.orgId, sanitize(b.manifest_id, 60), s.actor));
+      }
+      return send(res, 400, { error: 'Unknown install action' });
+    }
+
     if (op === 'overview' || op === 'readiness') {
       const s = await inOrg(req, res, orgParam, 'ops.view'); if (!s) return;
       return send(res, 200, await readiness(s.orgId));

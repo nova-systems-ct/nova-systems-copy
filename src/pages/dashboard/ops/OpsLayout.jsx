@@ -5,7 +5,7 @@ import { api, useLoad, C, css, Card, Field, Loading, ErrorBox, Empty, Badge, Tes
 
 const TABS = [
   ['', 'Overview'], ['inbox', 'Inbox'], ['requests', 'Requests & jobs'], ['campaigns', 'Campaigns'],
-  ['test', 'Test center'], ['reports', 'Weekly reports'], ['monitoring', 'Monitoring'], ['settings', 'Settings'],
+  ['install', 'Install Systems'], ['test', 'Test center'], ['reports', 'Weekly reports'], ['monitoring', 'Monitoring'], ['settings', 'Settings'],
 ]
 
 export function useBusiness() {

@@ -64,7 +64,7 @@ try {
   await o.getByLabel('Email').fill(acct.OWNER_EMAIL); await o.getByLabel('Password').fill(acct.OWNER_PASSWORD);
   await o.getByRole('button', { name: /SIGN IN/ }).click();
   await o.waitForURL(/\/dashboard/, { timeout: 20000 });
-  check('the owner lands on the product: "Run your business on Nova" with the five actions', await seen(o.getByRole('heading', { name: 'Run your business on Nova' })) && await seen(o.getByRole('link', { name: /Start an audit/ })) && await seen(o.getByRole('link', { name: /Set up channels/ })) && await seen(o.getByRole('link', { name: /Open call test/ })) && await seen(o.getByRole('link', { name: /Send a test inquiry/ })) && await seen(o.getByRole('link', { name: /^Requests/ })));
+  check('the owner lands on the product: "Run your business on Nova" with the five actions', await seen(o.getByRole('heading', { name: 'Run your business on Nova' })) && await seen(o.getByRole('link', { name: /Start an audit/ })) && await seen(o.getByRole('link', { name: /^Install Systems/ })) && await seen(o.getByRole('link', { name: /Open call test/ })) && await seen(o.getByRole('link', { name: /Send a test inquiry/ })) && await seen(o.getByRole('link', { name: /^Requests/ })));
   check('the misleading "migration hasn\'t been run" banner is gone from the owner home', !(await o.getByText(/Stage 5 database migration/).count()));
   await shot(o, '03-owner-home');
 
@@ -72,7 +72,24 @@ try {
   check('"Start an audit" opens the new-audit form with online and in-person options', await seen(o.getByText(/Online \+ in-person audit/)) || await seen(o.locator('option', { hasText: 'Online + in-person audit' })));
   await shot(o, '04-start-audit');
 
-  await o.goto(`${APP}/dashboard`); await o.getByRole('link', { name: /Set up channels/ }).click();
+  await o.goto(`${APP}/dashboard/ops/test`);
+  await o.goto(`${APP}/dashboard`); await o.getByRole('link', { name: /^Install Systems/ }).click();
+  await seen(o.getByRole('button', { name: 'Install Systems' }));
+  await o.getByRole('button', { name: 'Install Systems' }).click();
+  // Wait for this run's own result message, then reload so the page shows the plan the run produced (not the previous one).
+  await seen(o.getByText(/Installed\. Every required component is done|Installed what was possible|Some steps failed/), 60000);
+  await o.reload(); await seen(o.getByRole('button', { name: 'Install Systems' }));
+  const planDone = await seen(o.getByText(/Installation plan v\d+ · (installed|partial|activated)/), 30000);
+  const installText = await o.locator('body').innerText();
+  check('"Install Systems" prepares a plan from the audit, runs it in stages, and shows each result', planDone && /From the audit/.test(installText) && /Controlled test: inquiry to quote/.test(installText) && /TEST inquiry saved, qualified and quoted/.test(installText), installText.slice(0, 200));
+  check('the plan is prepared from the real audit of Nova (7 findings), not a test fixture', installText.includes('latest audit of Nova Systems (own business)') && (installText.match(/Fix: /g) || []).length >= 7, (installText.match(/latest audit of [^.]*/) || [''])[0]);
+  check('blocked components show the exact next action (e.g. escalation contact, phone channel)', /Next: /.test(installText));
+  await shot(o, '05a-install-systems');
+  await o.getByRole('button', { name: 'Install Systems' }).click(); await o.waitForTimeout(4000);
+  const plans = (await db.query("select count(*)::int n from ops_install_manifests m join organizations g on g.id=m.organization_id where g.kind='nova_internal' and m.status <> 'superseded'")).rows[0].n;
+  const testJobs = (await db.query("select count(*)::int n, count(*) filter (where j.state='cancelled')::int c from ops_jobs j join crm_contacts c on c.id=j.contact_id join organizations g on g.id=j.organization_id where g.kind='nova_internal' and c.source='install_test'")).rows[0];
+  check('running it again does not create a second plan, and each controlled test request is cancelled after the check', plans === 1 && testJobs.n >= 1 && testJobs.n === testJobs.c, JSON.stringify({ plans, testJobs }));
+  await o.goto(`${APP}/dashboard/ops/test`);
   check('"Set up channels" shows every channel with its status and the exact blocker', await seen(o.getByText('Agents and connected channels')) && await seen(o.getByText('Phone provider (Twilio) credentials')));
   await o.getByRole('link', { name: 'Test center' }).first().click().catch(() => {});
   await o.goto(`${APP}/dashboard`); await o.getByRole('link', { name: /Open call test/ }).click();
