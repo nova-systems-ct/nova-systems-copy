@@ -5,6 +5,8 @@ checks, 0 failures — local disposable database with provider stand-ins). Nothi
 says where to go and what to do. Never paste keys or passwords into chat: enter them directly in Vercel / Supabase /
 the worker host.
 
+Every API key and variable, with where to get it and how to test it: `docs/NOVA_INTEGRATION_INVENTORY.md`.
+
 **Legend** — *Local-tested*: passed automated tests on this computer with stand-ins for providers.
 *Live-verified*: proven with the real provider. Today **nothing is live-verified**.
 
