@@ -38,7 +38,10 @@ and `fail_logs_N\` (every failed suite's full output, with free memory and Postg
 | 9, pass 1 (2026-10-17 18:53–19:09), `final9\` | `341746b` | 36/37 suites, 1564 checks, no start-up timeout, no suspend. Failure: `e2e_ops_browser_test` — a confirmation wiped by a list refresh; real UI bug, fixed in `f64059d` |
 | 9, pass 2 (19:09–19:25), `final9\` | `341746b` | 34/37 suites, 1514 checks. Failures: `e2e_ops_browser_test` (same bug); `e2e_ops_harvest_test` — a campaign stayed "running" when its last recipient was stopped; real bug, fixed in `502da6e`; `e2e_sales_browser_test` — **PostgREST exited with code 3, 63 ms after start**, the first direct evidence of what the old "120 s timeouts" were; start-up exits are now retried with the evidence printed (`502da6e`) |
 | 10, `final10\` | `93908c5` | **stopped by Claude** soon after it began: that commit predates both fixes, so it could not be the final verification |
-| **11 — final verification**, `final11\` | `502da6e` + docs-only commits (exact commit in `commit.txt` when it starts) | **queued 2026-10-18 12:04; waiting for AC power** (laptop on battery). npm ci, build, lint, `verify_local_all`, then the full aggregate twice. **No result yet.** |
+| **11 — final verification**, `final11\` | **`ce5bafa`** (= `502da6e` + docs only) | Started 2026-10-18 12:21 on AC power; npm ci, build, lint, `verify_local_all` all exit 0. **Pass 1 (12:23–12:37): 38/38 suites, 1617 checks, 0 fail, 0 timeout, 0 suspend. Pass 2 (12:37–12:51): 38/38, 1617 checks, 0 fail, 0 timeout, 0 suspend.** Limit: the runner keeps full output only for failing suites, so these logs cannot show whether a passing suite needed a PostgREST start-up retry. |
+
+**Development milestone closed on `ce5bafa` (2026-10-18).** Next phase: activation and real-world testing —
+`docs/NOVA_ACTIVATION_CHECKLIST.md`. Everything above is *local-tested*; nothing is *live-verified* with a real provider.
 
 Checks run individually on the fixed code (local disposable database): revive 25/25 (its new completion check fails
 without the fix), harvest 20/20, ops browser 32/32 (fails without the refresh fix), loyalty 22/22, audit clock 22/22,
