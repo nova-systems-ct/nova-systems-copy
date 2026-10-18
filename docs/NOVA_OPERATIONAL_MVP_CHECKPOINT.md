@@ -26,22 +26,26 @@ Sentry and Scale underneath). Owner to-do list: `docs/NOVA_OPERATIONAL_MVP_OWNER
 | E — verified operation | clean-export full runs under Node 22: see below | — |
 | F — public presentation | triangle homepage, /book, /demo, owner home rebuilt **locally**; desktop dashboard no longer covered by the mobile bar; not deployed | — |
 
-## Full-suite runs (clean export, Node 22)
-- Run 9 pass 1 on `341746b`: 36/37 suites, 1564 checks, 16 min, no PostgREST start-up timeout, no suspend. The one failure
-  (`e2e_ops_browser_test`: a confirmation wiped by the list refresh) was a real UI bug, fixed in `f64059d` and now
-  checked explicitly (fails without the fix, passes with it).
-- **Final verification queued 2026-10-17 19:20** (not yet a result): a detached process waits for run 9 pass 2 (old
-  commit `341746b`) to finish, then exports the then-current HEAD (expected `6f0fca9` or this docs commit) and runs
-  `npm ci`, build, lint, `verify_local_all`, and the full aggregate twice under Node 22. The run waits for AC power
-  before starting and is paused if the computer sleeps. Logs (scratchpad of this Claude session):
-  `…\scratchpad\final10\` — `chain.log` (start/end and commit), `commit.txt`, `steps.log`, `aggregate_1.log`,
-  `aggregate_2.log`, `fail_logs_N\` (each failed suite's full output, with free memory and PostgREST timings).
-  Full path: `C:\Users\NVUBCR~1\AppData\Local\Temp\claude\C--Users-NVUBCrosbyUBMS07\0b6faf8f-e3e8-4db7-8a2f-959b933b9147\scratchpad\final10\`.
-  Run 9 logs: same folder, `final9\`.
-- All suites run against **local disposable PostgreSQL + PostgREST** (or local Supabase in Docker for the staging
-  suites) with stand-ins for Auth/Storage/email/Twilio/Stripe. They are not real-provider tests.
-- Earlier intermittent PostgREST start-up timeouts: memory pressure ruled out (3.4–5.3 GB free at failure). PostgREST now
-  logs its connection and schema-cache phases with timings, and a dead process fails immediately.
+## Full-suite runs (clean export, Node 22) — what actually ran
+All of these run against **local disposable PostgreSQL + PostgREST** with stand-ins for Auth, Storage, email, Twilio and
+Stripe; the two local-staging suites run against **local Supabase in Docker**. None of this is a real-provider test.
+Log folder (scratchpad of this Claude session): `C:\Users\NVUBCR~1\AppData\Local\Temp\claude\C--Users-NVUBCrosbyUBMS07\0b6faf8f-e3e8-4db7-8a2f-959b933b9147\scratchpad\`
+— each run has `chain.log` (when started, which commit), `commit.txt`, `steps.log`, `aggregate_1.log`, `aggregate_2.log`
+and `fail_logs_N\` (every failed suite's full output, with free memory and PostgREST timings).
+
+| Run | Commit | Result |
+|---|---|---|
+| 9, pass 1 (2026-10-17 18:53–19:09), `final9\` | `341746b` | 36/37 suites, 1564 checks, no start-up timeout, no suspend. Failure: `e2e_ops_browser_test` — a confirmation wiped by a list refresh; real UI bug, fixed in `f64059d` |
+| 9, pass 2 (19:09–19:25), `final9\` | `341746b` | 34/37 suites, 1514 checks. Failures: `e2e_ops_browser_test` (same bug); `e2e_ops_harvest_test` — a campaign stayed "running" when its last recipient was stopped; real bug, fixed in `502da6e`; `e2e_sales_browser_test` — **PostgREST exited with code 3, 63 ms after start**, the first direct evidence of what the old "120 s timeouts" were; start-up exits are now retried with the evidence printed (`502da6e`) |
+| 10, `final10\` | `93908c5` | **stopped by Claude** soon after it began: that commit predates both fixes, so it could not be the final verification |
+| **11 — final verification**, `final11\` | `502da6e` + docs-only commits (exact commit in `commit.txt` when it starts) | **queued 2026-10-18 12:04; waiting for AC power** (laptop on battery). npm ci, build, lint, `verify_local_all`, then the full aggregate twice. **No result yet.** |
+
+Checks run individually on the fixed code (local disposable database): revive 25/25 (its new completion check fails
+without the fix), harvest 20/20, ops browser 32/32 (fails without the refresh fix), loyalty 22/22, audit clock 22/22,
+hierarchy handoffs 21/21, audit engine 30/30, audit delivery 40/40, core journey 69/69, Connect deposits 17/17, Sentry
+36/36, clean install 17/17, academy 84/84, hierarchy work items 69/69, meetings 25/25, durable worker 15/15, governance
+45/45. Local Supabase in Docker: staging suite 31/31; owner walkthrough 24/24 (Demand, Revive, Rewards and My work
+through the menus). The loyalty suite has not yet been through a full clean-export run (run 11 includes it).
 
 ## Not verified with any real external provider
 Twilio voice and SMS, external email delivery, Stripe test payments (Connect built; no keys locally), Cal.com,

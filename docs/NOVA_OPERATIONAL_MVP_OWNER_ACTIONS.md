@@ -1,8 +1,9 @@
 # Nova Operational MVP — owner actions (one prioritized list)
 
 ## Open decisions and actions — 2026-10-17, end of day (batched; each unblocks a specific capability)
+0. **Plug the laptop in and keep it awake** so the queued final verification (run 11, commit `502da6e`) can start and finish: it waits for AC power and pauses while the computer sleeps. Results: `docs/NOVA_OPERATIONAL_MVP_CHECKPOINT.md` → Full-suite runs.
 1. **Make the GitHub repository private** (still public on 2026-10-17). GitHub → repository → Settings → Danger Zone → Change visibility.
-2. **Push the local commits** (23 ahead of origin at the end of 2026-10-17): `cd C:UsersNVUBCrosbyUBMS07
+2. **Push the local commits** (about 28 ahead of origin on 2026-10-18; check with `git status -sb`): `cd C:UsersNVUBCrosbyUBMS07
 ova-mvp-work` then `git push`.
 3. **Install Node 22 LTS** (`winget install -e --id OpenJS.NodeJS.LTS`) — Node 24.15 on Windows crashes under network load (diagnosed 2026-10-17).
 4. **Name Nova's escalation contact** (who gets "customer needs a person" alerts): Operations → Settings. Install Systems is blocked on this required item.
