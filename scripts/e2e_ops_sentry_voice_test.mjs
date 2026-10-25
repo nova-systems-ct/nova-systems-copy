@@ -121,7 +121,10 @@ try {
   check('anger or a request for a person escalates to the human transfer', /<Dial/.test(r.body));
 
   // ================================================================ Sunday scheduler (business time zone, DST)
-  const sunday = R.nextSundayEvening(new Date(), 'America/New_York');
+  // A fixed Sunday (Oct 11 2026, 18:00 EDT). Deriving it from the real clock made the test fail on Sunday evenings:
+  // "next Sunday" then fell in the same week as the fixed DST check below (Nov 1), which it pre-generated and blocked.
+  const sunday = new Date('2026-10-11T22:00:00Z');
+  check('(fixture) the chosen Sunday is a Sunday 18:00 in New York', R.nextSundayEvening(new Date(sunday.getTime() - 3600_000), 'America/New_York').getTime() === sunday.getTime());
   let out = await scoreboardTick({ now: new Date(sunday.getTime() + 30 * 60_000) });
   const mine = out.find((o) => o.orgId === biz);
   check('at Sunday 18:30 local the week\'s report is generated once', !!mine?.report_id, JSON.stringify(out));
@@ -135,7 +138,8 @@ try {
   out = await scoreboardTick({ now: dstEnd });
   const dstRep = await one('select * from ops_weekly_reports where organization_id=$1 and week_end=$2', [biz, '2026-11-01T23:00:00Z']);
   check('the DST-change week ends Sunday 18:00 EST (23:00Z) and starts 18:00 EDT the week before (22:00Z)', dstRep && new Date(dstRep.week_start).toISOString() === '2026-10-25T22:00:00.000Z', JSON.stringify(out));
-  check('with consent the weekly SMS goes out with a sign-in link to the full report', dstRep.notification_status === 'provider_accepted' && /\/dashboard\/ops\/reports\//.test(sentTo('+12035550130').pop()?.body || ''), dstRep.notification_status);
+  const weeklyMsg = await one("select status, blocked_reason, created_at from wave1_messages where organization_id=$1 and purpose='weekly_report' order by created_at desc limit 1", [biz]);
+  check('with consent the weekly SMS goes out with a sign-in link to the full report', dstRep.notification_status === 'provider_accepted' && /\/dashboard\/ops\/reports\//.test(sentTo('+12035550130').pop()?.body || ''), `${dstRep.notification_status} (${dstRep.notification_detail}) ${JSON.stringify(weeklyMsg)} settings: ${r.status} ${JSON.stringify(r.body).slice(0, 160)}`);
 } catch (e) { fail++; console.log('FAIL — test crashed:', e.stack || e); }
 finally { await env.stop(); await prov.stop(); }
 console.log(`\n${pass} passed, ${fail} failed — Nova Sentry, AI voice receptionist and weekly scheduler (real handlers + worker + local PostgreSQL; providers are local stand-ins: "simulated provider")`);
