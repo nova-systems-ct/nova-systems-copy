@@ -4369,7 +4369,7 @@ export default async function handler(req, res) {
       if (op === 'report-view' || op === 'report-view-pdf') { if (!rateLimit(req, res, 30, 60_000)) return; return handleReportView(req, res, op); }
       const caller = await requireStaff(req, res);
       if (!caller) return;
-      if (['intake', 'clock', 'finding-details', 'test-plan', 'competitors', 'software', 'scenarios', 'compose', 'report-pdf', 'publish', 'revoke'].includes(op)) return handleAuditExtra(req, res, op, caller);
+      if (['intake', 'clock', 'evidence-photo', 'finding-details', 'test-plan', 'competitors', 'software', 'scenarios', 'compose', 'report-pdf', 'publish', 'revoke'].includes(op)) return handleAuditExtra(req, res, op, caller);
       if (op === 'cases') return handleAuditCases(req, res, caller);
       if (op === 'evidence') return handleAuditEvidence(req, res, caller);
       if (op === 'findings') return handleAuditFindings(req, res, caller);

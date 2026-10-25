@@ -3,7 +3,8 @@
 // Staff ops require intelligence.view on the case's organization (re-checked per object). Public ops are scoped by a
 // random delivery token whose hash is stored; they expose only the approved, unchanged report.
 import { requireOrgAccess } from './_orgAccess.js';
-import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, appBase, notify } from './_sales/core.js';
+import crypto from 'node:crypto';
+import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, appBase, notify, storagePut, storageSign } from './_sales/core.js';
 import { sanitize } from './_sanitize.js';
 import { textPdf } from './_sales/pdf.js';
 import { contentHash, computeScenario, totalScenarios, checkTestEntry, interpretTest, validateClockPolicy, REQUIRED_REPORT_SECTIONS, validateFinding, PROPOSED_CLOCK_POLICY, buildInputChecklist } from './_auditRules.js';
@@ -140,6 +141,29 @@ export async function handleAuditExtra(req, res, op, caller) {
         return row ? send(res, 200, { ok: true, extension: row }) : send(res, 409, { error: `This extension is ${ext.status}` });
       }
       return send(res, 400, { error: 'Unknown clock action' });
+    }
+
+    // Photo evidence from an in-person audit. Stored privately (bucket ops-private, path audit/<case>/<id>); the browser
+    // only ever receives a 5-minute signed link. The upload must really be an image (checked by its first bytes).
+    if (op === 'evidence-photo') {
+      const c = await caseFor(req, res, orgId, caseId); if (!c) return;
+      if (req.method === 'GET') {
+        const e = await dbOne(`audit_evidence?id=eq.${enc(sanitize(q.evidence_id, 60))}&case_id=eq.${enc(c.id)}&select=snapshot_path`);
+        if (!e?.snapshot_path) return send(res, 404, { error: 'No photo for this evidence' });
+        return send(res, 200, { url: await storageSign('ops-private', e.snapshot_path, 300), expires_in_seconds: 300 });
+      }
+      const raw = String(b.image_base64 || '').replace(/^data:[^,]+,/, '');
+      const buf = Buffer.from(raw, 'base64');
+      if (!buf.length) return send(res, 400, { error: 'No photo received' });
+      if (buf.length > 3_500_000) return send(res, 413, { error: 'Photo is too large (over 3.5 MB after resizing)' });
+      const kind = buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff ? ['jpg', 'image/jpeg'] : buf.readUInt32BE(0) === 0x89504e47 ? ['png', 'image/png'] : buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP' ? ['webp', 'image/webp'] : null;
+      if (!kind) return send(res, 415, { error: 'Only JPEG, PNG or WebP photos are accepted' });
+      const observation = sanitize(b.observation, 3000); const source = sanitize(b.source, 300);
+      if (!observation || !source) return send(res, 400, { error: 'Describe what the photo shows and where it was taken' });
+      const path = `audit/${c.id}/${crypto.randomUUID()}.${kind[0]}`;
+      await storagePut('ops-private', path, buf, kind[1]);
+      const ins = await dbInsert('audit_evidence', { case_id: c.id, source, method: sanitize(b.method, 200) || 'in_person:photo', observation, snapshot_path: path, author: caller.email || String(caller.id), confidence: ['high', 'medium', 'low'].includes(b.confidence) ? b.confidence : null, privacy_level: 'internal' });
+      return send(res, 200, { ok: true, evidence: ins.row });
     }
 
     if (op === 'finding-details') {

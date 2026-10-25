@@ -100,6 +100,7 @@ const Sales = lazy(() => import('./pages/dashboard/Sales'));
 const Pilots = lazy(() => import('./pages/dashboard/Pilots'));
 const PilotConsole = lazy(() => import('./pages/dashboard/PilotConsole'));
 const AuditCases = lazy(() => import('./pages/dashboard/AuditCases'));
+const AuditCapture = lazy(() => import('./pages/dashboard/audit/AuditCapture'));
 const AuditCaseDetail = lazy(() => import('./pages/dashboard/AuditCaseDetail'));
 const ZionStudio = lazy(() => import('./pages/dashboard/ZionStudio'));
 const ApprovalInbox = lazy(() => import('./pages/dashboard/ApprovalInbox'));
@@ -306,6 +307,7 @@ function App() {
               <Route path="pilot-console" element={<RequirePermission permission="growth.view"><PilotConsole /></RequirePermission>} />
               <Route path="audit" element={<RequirePermission permission="intelligence.view"><AuditCases /></RequirePermission>} />
               <Route path="audit/:id" element={<RequirePermission permission="intelligence.view"><AuditCaseDetail /></RequirePermission>} />
+              <Route path="audit/:id/capture" element={<RequirePermission permission="intelligence.view"><AuditCapture /></RequirePermission>} />
               <Route path="zion" element={<RequirePermission permission="growth.view"><ZionStudio /></RequirePermission>} />
               <Route path="approvals" element={<RequirePermission permission="admin.view"><ApprovalInbox /></RequirePermission>} />
               <Route path="installations" element={<RequirePermission permission="admin.view"><Installations /></RequirePermission>} />
