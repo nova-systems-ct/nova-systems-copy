@@ -137,6 +137,39 @@ try {
   await o.getByRole('link', { name: 'My work' }).first().click();
   check('"My work" in the sidebar opens the person\'s own queue (tasks, results to receive, escalations)', await seen(o.getByRole('heading', { name: 'My work' })) && await seen(o.getByText(/Results to receive/)) && await seen(o.getByText(/Escalated to me/)));
   await shot(o, '10-my-work');
+
+  // ------------------------------------------------------------ 4. audit → approved client report → emailed link → client view
+  // A LOCAL TEST audit (Nova's own report is the owner's to approve, so it is not approved here). Built through the real
+  // audit API, delivered through the controlled email path, opened from the copy in the local test inbox.
+  const tokenRes = await (await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { apikey: env.VITE_SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: acct.OWNER_EMAIL, password: acct.OWNER_PASSWORD }) })).json();
+  const api = async (op, body, method = 'POST', query = {}) => { const r = await fetch(`${APP}/api/client?${new URLSearchParams({ resource: 'audit', op, ...query })}`, { method, headers: { Authorization: `Bearer ${tokenRes.access_token}`, 'Content-Type': 'application/json' }, body: method === 'GET' ? undefined : JSON.stringify(body) }); return { status: r.status, body: await r.json().catch(() => null) }; };
+  const novaOrg = (await db.query("select id from organizations where kind='nova_internal' limit 1")).rows[0].id;
+  const jBiz = (await db.query("insert into businesses (organization_id, name, website, city, state) values ($1,$2,'https://journey.example.test','Waterbury','CT') returning id", [novaOrg, `LOCAL TEST Journey Audit ${Date.now().toString(36)}`])).rows[0].id;
+  const O = (body) => ({ organization_id: novaOrg, ...body });
+  const jc = (await api('cases', O({ action: 'create', business_id: jBiz, scope: 'digital' }))).body.case.id;
+  const je = (await api('evidence', O({ case_id: jc, source: 'https://journey.example.test/ (TEST fixture page)', observation: 'TEST: the page lists a phone number but no way to choose a time.', confidence: 'high' }))).body.evidence.id;
+  const jf = (await api('findings', O({ case_id: jc, title: 'TEST: no way to book a time online', detail: 'TEST: the page lists a phone number but no way to choose a time.', statement_type: 'observed_fact', confidence: 'high', priority: 'high', recommended_action: 'Add the /book path with real availability', evidence_ids: [je] }))).body.finding.id;
+  await api('finding-details', O({ case_id: jc, finding_id: jf, financial_impact_status: 'unknown', customer_impact: 'TEST: a ready customer cannot book outside business hours.', limitations: 'TEST fixture: one public page only.', nova_can_implement: 'yes', owner_decision: 'TEST: approve adding the booking path.' }));
+  await api('findings', O({ case_id: jc, action: 'review', id: jf, review_status: 'reviewed' }));
+  await api('recommendations', O({ case_id: jc, finding_id: jf, mechanism: 'Add the /book path with real availability', effort_range: 'per approved scope', priority_rank: 1 }));
+  const jr = (await api('compose', O({ case_id: jc, executive_summary: 'TEST journey report: one evidence-backed finding about online booking; no financial figure is claimed.' }))).body.report;
+  const ap = await api('reports', O({ case_id: jc, action: 'approve', id: jr.id }));
+  const reportEmail = `journey-client+${Date.now()}@nova-local.test`;
+  const pub = await api('publish', O({ report_id: jr.id, email_to: reportEmail }));
+  check('a TEST audit is composed, approved (content-hashed) and published with an email to the client', ap.status === 200 && !!ap.body.report.approved_content_sha256 && pub.status === 200 && pub.body.notification_status === 'dry_run', JSON.stringify([ap.status, pub.status, pub.body?.notification_status]));
+  await new Promise((r) => setTimeout(r, 1500));
+  const msgs = await fetch(`${env.LOCAL_MAIL_URL}/api/v1/search?query=${encodeURIComponent(`to:"${reportEmail}"`)}`).then((r) => r.json()).catch(() => ({ messages: [] }));
+  const mid = msgs.messages?.[0]?.ID;
+  const text = mid ? (await fetch(`${env.LOCAL_MAIL_URL}/api/v1/message/${mid}`).then((r) => r.json())).Text : '';
+  const link = (text.match(/https?:\/\/\S+\/report\/[A-Za-z0-9_-]+/) || [])[0];
+  check('the report-link email is recorded as dry run and a copy with the secure link is in the local test inbox (not sent to anyone)', !!link && /LOCAL TEST — not sent/.test(msgs.messages?.[0]?.Subject || ''), (msgs.messages || []).map((m) => m.Subject).join(' | '));
+  const cl = await (await browser.newContext({ viewport: { width: 1024, height: 1366 }, isMobile: true, hasTouch: true, acceptDownloads: true })).newPage();
+  if (link) await cl.goto(link.replace(/^https?:\/\/[^/]+/, APP));
+  check('the client opens the emailed link on a tablet and sees "Your Nova Audit" with the approved finding', await seen(cl.getByText('Your Nova Audit')) && await seen(cl.getByText('TEST: no way to book a time online')) && await seen(cl.getByText('Estimate requires business inputs')));
+  const dl = cl.waitForEvent('download', { timeout: 15000 }).catch(() => null);
+  await cl.getByRole('button', { name: 'Download PDF' }).click().catch(() => {});
+  check('the client downloads the PDF of that exact approved version', !!(await dl));
+  await shot(cl, '11-client-report-tablet');
   check('no page errors during the owner walkthrough', errors.length === 0, errors.slice(0, 2).join(' | '));
 } catch (e) { fail++; console.log('FAIL — run crashed:', e.stack || e); }
 finally { await browser.close(); await db.end(); }

@@ -86,21 +86,25 @@ const NEW = [
   { title: 'Email from nova-systems.app is not fully set up for sending', priority: 'high', ev: [eDns],
     detail: `Only part of the sending setup is published: the Resend signing key is present, but the bounce (MX) and SPF records for send.nova-systems.app are missing, the root domain has no SPF record and there is no DMARC policy (DNS ${dnsAt}).`,
     impact: 'Confirmation emails, audit report links and follow-ups from Nova may be rejected or filtered as spam; until the domain verifies, Nova keeps every email as a dry run.',
+    decision: 'Approve adding the DNS records at the domain registrar, then approve turning on live email.',
     fix: 'Add the two records Resend shows for send.nova-systems.app, an SPF record that includes Google Workspace and Resend, and a DMARC policy (start with p=none); confirm "Verified" in Resend.',
     verify: 'Resend shows the domain verified; a test confirmation to an owner address arrives in the inbox (not spam) with SPF and DKIM pass in its headers.' },
   { title: 'Two separate inquiry forms; the audit request asks 28 questions', priority: 'medium', ev: [eForms],
     detail: `/request-audit and /welcome use a ${ra.forms?.[0]?.fields}-field form; /contact uses a different ${ct.forms?.[0]?.fields}-field form. Neither leads to a time to book.`,
     impact: 'A prospect who is ready to talk must complete a long form and then wait; the effect on completions cannot be measured without form analytics or submission records.',
+    decision: 'Approve replacing the long forms with the short booking form.',
     fix: 'Replace both with the short /book form (name, business, email) that continues straight to choosing a time; ask the remaining intake questions after the booking.',
     verify: 'Count form starts, completions and bookings for 30 days after the change against the submission records before it.' },
   { title: 'No one is named for escalations and no workers are registered for handoffs', priority: 'medium', ev: [eWork],
     detail: `In Nova's own workspace the escalation contact is ${esc ? 'not named' : 'named'} and ${home.roster ? home.roster.length : 0} workers are registered in the hierarchy, so an unsupported request or an overdue task has no named person to go to.`,
     impact: 'Requests the workers cannot handle wait without an owner; overdue internal tasks escalate only to the owner account.',
+    decision: 'Name the escalation contact and decide which people and agents to register, with their managers.',
     fix: 'Name the escalation contact (Operations → Settings) and register the people and agents who handle work (Workers → Workforce) with their managers.',
     verify: 'A TEST request the workers cannot handle reaches the named person; an unacknowledged TEST task escalates to the right manager.' },
   { title: 'Hosting carries settings and a second project left from the previous build', priority: 'low', ev: [eHost],
     detail: `${leftovers.join(', ')} are set in production but no current code reads them; the old Wave One site still runs as a separate hosting project for nova-systems.agency.`,
     impact: 'Unused secrets widen what could leak without adding any function; a second live project keeps outdated positioning public and adds maintenance.',
+    decision: 'Approve removing the unused settings and redirecting or retiring nova-systems.agency.',
     fix: 'After the new build is live: remove the unused variables and redirect nova-systems.agency to nova-systems.app (or retire that project).',
     verify: 'The production variable list matches what the code reads; nova-systems.agency returns a redirect to nova-systems.app.' },
 ];
@@ -108,7 +112,7 @@ const created = [];
 for (const n of NEW) {
   if (byTitle[n.title]) { console.log('exists:', n.title); continue; }
   const f = must(await A('findings', { case_id: caseId, title: n.title, detail: n.detail, statement_type: 'observed_fact', confidence: 'high', priority: n.priority, recommended_action: n.fix, evidence_ids: n.ev }), `create ${n.title}`).finding;
-  must(await A('finding-details', { case_id: caseId, finding_id: f.id, period_start: '2026-10-25', period_end: '2026-10-25', customer_impact: n.impact, financial_impact_status: 'unknown', limitations: 'Public evidence, DNS and Nova\'s own system records only; no inquiry outcomes or delivery logs were reviewed.', nova_can_implement: 'yes', priority: n.priority }), `details ${n.title}`);
+  must(await A('finding-details', { case_id: caseId, finding_id: f.id, period_start: '2026-10-25', period_end: '2026-10-25', customer_impact: n.impact, financial_impact_status: 'unknown', limitations: 'Public evidence, DNS and Nova\'s own system records only; no inquiry outcomes or delivery logs were reviewed.', nova_can_implement: 'yes', owner_decision: n.decision, priority: n.priority }), `details ${n.title}`);
   must(await A('recommendations', { case_id: caseId, finding_id: f.id, mechanism: n.fix, effort_range: 'per approved scope', cost_range: 'per approved scope', dependencies: 'Owner approval', uncertainty: 'Financial impact unknown without records', verification_plan: n.verify, priority_rank: 7 + created.length + 1 }), `rec ${n.title}`);
   must(await A('findings', { case_id: caseId, action: 'review', id: f.id, review_status: 'reviewed' }), `review ${n.title}`);
   created.push(n.title);
