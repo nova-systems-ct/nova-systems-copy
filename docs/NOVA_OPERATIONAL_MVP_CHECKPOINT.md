@@ -1,8 +1,59 @@
-# Nova — authoritative checkpoint (2026-10-17, end of day)
+# Nova — authoritative checkpoint (updated 2026-10-25)
 
 One current record. Earlier notes live in git history (`git log -p -- docs/NOVA_OPERATIONAL_MVP_CHECKPOINT.md`).
-Product authority: the owner's master execution prompt of 2026-10-17 (Triangle of Nova: Audit, Agents, Demand; Revive,
-Sentry and Scale underneath). Owner to-do list: `docs/NOVA_OPERATIONAL_MVP_OWNER_ACTIONS.md` (top section).
+Product authority: the owner's master execution prompt of 2026-10-17, refined by the "inside out" brief of 2026-10-25.
+Owner to-do list: `docs/NOVA_OPERATIONAL_MVP_OWNER_ACTIONS.md` (top section). Keys and costs:
+`docs/NOVA_INTEGRATION_INVENTORY.md`. Activation steps: `docs/NOVA_ACTIVATION_CHECKLIST.md`.
+
+## Status observed 2026-10-25 (from the running system, not from earlier reports)
+- Branch `mvp/operational`; work committed through this checkpoint; ~31 commits not on GitHub. No `AGENTS.md` exists
+  (project instructions are in `CLAUDE.md`).
+- **Final verification run 11 finished** on `ce5bafa`: both passes 38/38 suites, 1617 checks, 0 failures/timeouts/suspends.
+  Its runner keeps output only for failing suites, so start-up retries in passing suites cannot be ruled out. Every
+  regression check run 2026-10-25 recorded **0 PostgREST retries**.
+- **Local Supabase (Docker) is running** (up 6 days; `supabase_vector`, a log shipper, restart-loops — no effect found).
+  All **38/38 migrations applied, none changed since applied**. Owner and representative **sign in** (HTTP 200) and reach
+  the API. Local worker running, heartbeat current; the queue ran only ~6 h of sweeps in 6 days because the laptop slept.
+- **Production nova-systems.app is the old build** (none of the current routes/wording in its bundle; Last-Modified
+  2026-10-16). nova-systems.agency still serves "Nova Wave One". Nothing from this branch is deployed.
+- **Hosted testing is blocked by:** no hosted staging database (Supabase invoice / plan — owner), Preview environment has
+  no variables, Vercel CLI on this computer is logged out (`vercel login`), email domain not fully verified in Resend
+  (DKIM published; `send.nova-systems.app` MX + SPF missing).
+
+## Readiness (2026-10-25)
+Environments: **disposable** = throwaway PostgreSQL + PostgREST with stand-ins; **local Supabase** = real Supabase in
+Docker on this laptop; **sandbox/live** = real provider. No capability is verified on a real provider yet.
+
+| Capability | Implemented | Configuration missing | Last verified environment | Current failure / gap | Next action |
+|---|---|---|---|---|---|
+| Audit (case, scope, intake, clock, evidence, findings, scenarios, report, PDF, secure link) | yes | live email for the client link | local Supabase 2026-10-25 (walkthrough 27/27); disposable (engine 30, delivery 40, clock 22) | Nova's audit (Oct 17): 7 reviewed findings, 9 evidence records, **no clock policy approved**, priorities blank, report v1 **draft**; evidence is 8 days old | Isaac decides the clock policy and reviews the report; re-check evidence before approval |
+| CRM / leads | yes | — | disposable (sales suites) + local Supabase | none found | — |
+| Booking (Nova calendar) | yes | Cal.com optional | local Supabase 2026-10-25 | none found | — |
+| Agreements / e-sign | yes | attorney review of the template | local Supabase | template is business-approved only | attorney review before real customers |
+| Email | yes, gated (`SALES_EMAIL_MODE`) | Resend domain verification; `SALES_EMAIL_MODE=live` on a hosted environment | local Supabase: dry-run + copy in the local test inbox (new 2026-10-25) | never sent through Resend | DNS records + approval |
+| Booking confirmation | yes (SMS; **email added 2026-10-25** for web-form customers) | as email | local Supabase 2026-10-25 | — | — |
+| Voice (AI receptionist) | yes (Twilio speech + Polly) | Twilio number + webhook, active voice config with approved disclosure, hosted deployment | disposable (stand-in Twilio) | **no real inbound call possible** | Twilio + hosting |
+| SMS / missed-call text | yes | A2P 10DLC, `WAVE1_SEND_ENABLED`, worker host, hosted deployment | disposable (stand-in) | no real text sent | Twilio registration |
+| Revive | yes | SMS | disposable (revive 25, harvest 20) | — | after SMS |
+| Demand | yes; campaign WUETJW **draft** (20 sourced prospects) | owner approval | local Supabase | not approved; nobody contacted | Isaac approves or edits |
+| Monitoring (Sentry) | yes | `OPS_ALERT_EMAIL` | local Supabase (live heartbeat) | alert by SMS not implemented | — |
+| Training (Academy) | yes, 10 programs | owner content review | disposable (academy 84) | — | — |
+| Certification | yes, server-graded + manager review | — | disposable | — | — |
+| Payments (Stripe Connect deposits) | yes | Stripe **test** keys, Connect, webhooks | disposable (stand-in Stripe) | never run against Stripe test mode | not needed for Nova on Nova |
+| Demo (/demo) | yes | hosted database | disposable (demo 39) | deployed Preview cannot reach a database | hosted staging |
+| Client setup (Install Systems) | yes, 14 components | escalation contact, email, phone/SMS, Revive, Demand | local Supabase 2026-10-25 | Nova: 8 done, 5 blocked, 1 not needed | owner items |
+| Apple Messages / Pay / Wallet | rewards ledger only | Apple Developer account, MSP, certificates | disposable (loyalty 22) | not integrated | `docs/APPLE_MESSAGES_PAY_WALLET_SETUP.md` |
+| Social channels | sign-in link only | developer apps | — | not implemented | later |
+
+## Changes 2026-10-25
+- Web-form bookings now get a **confirmation email** (previously only SMS confirmations existed).
+- Local staging: dry-run emails are also copied into the local test inbox (http://127.0.0.1:54324); records stay `dry_run`.
+- Install Systems keeps the finished audit when a newer audit has no findings, and says so.
+- **Audits** is a top-level dashboard item; the audit list is ~30× faster (4.5 s → ~0.2 s server time); test fixtures
+  hidden by default; rows show finding count and start date; no more "0 cases" while loading.
+- Checks (first attempt, 0 retries): walkthrough 27/27 and staging 31/31 on local Supabase; core journey 69, Connect
+  deposits 17, calendar 19, demo 39, notifications 40, closing 97, hiring 76, audit delivery 40, audit engine 30, audit
+  clock 22 + unit 13, ops browser 32, hierarchy browser 22 (+2 not built), sales browser 49.
 
 ## Source and environments
 | Item | State |
