@@ -1,5 +1,21 @@
 # Nova Operational MVP — owner actions (one prioritized list)
 
+## Next milestone — added 2026-10-25 (do these first)
+A. **Close the local Supabase exposure on your Wi-Fi (administrator PowerShell, one time):** Docker publishes Studio,
+   the database and the API on every network interface and its firewall rule allows Public networks. Run the three
+   commands in `docs/LOCAL_STAGING.md` → "iPad / phone on the same Wi-Fi" (mark your home Wi-Fi Private, block ports
+   54321–54327 from the network, allow 5180 on Private only). Undo commands are in the same section.
+B. **Plug the laptop in** so release verification run 12 can start (it waits for AC power).
+C. **Audit delivery clock:** Audits → Nova Systems (own business), started Oct 17 → Intake & clock. Version 1 of the
+   proposed policy is saved, **not approved**: start = scope agreed + all inputs + start confirmed; calendar hours; aim
+   48 h, deliver within 72 h; 5 required inputs; extensions only after the client agrees. Decide whether staff may
+   **pause** the clock (the current feature pushes the deadline by the paused time) or only client-agreed extensions.
+   Then press **Approve policy**.
+D. **Nova's audit report v3 (draft):** review the 11 findings and their draft priorities (3 high, 5 medium, 3 low);
+   change any you disagree with; then **Approve** — v3 passes every approval check. Nothing is sent to anyone.
+E. **On the iPad:** with `serve --lan` running, open the printed address, sign in, Add to Home Screen; then check the
+   camera/file upload, on-screen keyboard, portrait/landscape and Wi-Fi-off behaviour (only you can do these).
+
 ## Open decisions and actions — 2026-10-17, end of day (batched; each unblocks a specific capability)
 0. **Follow `docs/NOVA_ACTIVATION_CHECKLIST.md` in order** — the ordered, step-by-step activation plan (accounts, keys, hosting, journey tests). Final verification run 11 passed both passes 38/38 on `ce5bafa` (local tests only).
 1. **Make the GitHub repository private** (still public on 2026-10-17). GitHub → repository → Settings → Danger Zone → Change visibility.

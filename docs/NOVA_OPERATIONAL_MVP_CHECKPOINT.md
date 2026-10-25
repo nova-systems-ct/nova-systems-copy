@@ -45,6 +45,33 @@ Docker on this laptop; **sandbox/live** = real provider. No capability is verifi
 | Apple Messages / Pay / Wallet | rewards ledger only | Apple Developer account, MSP, certificates | disposable (loyalty 22) | not integrated | `docs/APPLE_MESSAGES_PAY_WALLET_SETUP.md` |
 | Social channels | sign-in link only | developer apps | — | not implemented | later |
 
+## Changes 2026-10-25, second session (design, iPad, audit refresh)
+- **Design (approved black/gold/white references):** sidebar with the approved logo and a task-based menu (back office
+  under "More"); owner dashboard rebuilt on a new `ops/home` endpoint — every figure from the business's own records,
+  test records counted apart, booked value separate from money collected (shown as not measured: no live payments),
+  priorities from real open items, recorded worker activity incl. hierarchy task events, worker roster (empty: none
+  registered), audit queue, 30-day inquiry chart, integrations in plain words; sign-in page; client report page
+  ("Your Nova Audit": tabs, real counts, "Estimate requires business inputs" when no scenario exists).
+- **iPad over Wi-Fi:** `node scripts/local/staging.mjs serve --lan` — only the app is reachable; it forwards just
+  sign-in and row-level-security reads; service-role keys and Supabase admin are refused (verified through
+  10.0.0.82). **Found:** Docker publishes local Supabase (Studio, database, API, mail) on all interfaces and the
+  Docker firewall rule allows Public networks — closing it needs an administrator (owner action). Home Screen icon and
+  secure-context fallbacks added. Guide: `docs/LOCAL_STAGING.md`.
+- **Nova's audit refreshed** with evidence captured 2026-10-25 (`docs/evidence/nova-live-audit-2026-10-25.json`): all
+  9 public pages unchanged since 2026-10-17; 4 new evidence-backed findings (email DNS not set up for sending — no SPF,
+  no DMARC, send.* records missing; two long inquiry forms; no escalation contact / no registered workers; hosting
+  leftovers). **11 reviewed findings (3 high, 5 medium, 3 low), financial impact unknown on all, report v3 DRAFT —
+  passes every approval check, not approved. Clock policy v1 saved, NOT approved.** A first refresh run wrote to a
+  TEST fixture by mistake; those writes were removed and the script now selects Nova's case by name or refuses.
+- **Full journey test** on local Supabase (walkthrough 34/34, commit `d33fc30`): homepage → /book → time → signed
+  agreement → confirmation email (local inbox copy, recorded as dry run) → owner dashboard and Requests → audit →
+  Install Systems → TEST audit approved and published → client opens the emailed link on a tablet → PDF.
+  Other checks on this code: audit delivery 40, engine 30, clock 22, ops browser 32 (incl. report page), sales browser
+  49, hierarchy browser 22 (+2 not built), demo browser 20, local staging 31.
+- **Release verification run 12** (clean export, Node 22, two passes): queued 2026-10-25 18:33, **waiting for AC power
+  — no result yet**. Logs: scratchpad `final12\`.
+- Local inbox copies are **not** email delivery: no email has been sent through Resend from any environment.
+
 ## Changes 2026-10-25
 - Web-form bookings now get a **confirmation email** (previously only SMS confirmations existed).
 - Local staging: dry-run emails are also copied into the local test inbox (http://127.0.0.1:54324); records stay `dry_run`.
