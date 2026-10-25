@@ -1,0 +1,478 @@
+{
+  "collected_at": "2026-10-25T22:08:20.110Z",
+  "site": "https://nova-systems.app",
+  "method": "Real Chromium browser, public pages only; no forms submitted",
+  "pages": [
+    {
+      "path": "/",
+      "requested_at": "2026-10-25T22:08:20.339Z",
+      "final_url": "https://nova-systems.app/",
+      "http_status": 200,
+      "error": null,
+      "title": "Nova Systems — AI and Technology Infrastructure for Connecticut Businesses",
+      "h1": "Your Business Is Losing Opportunities You Can't See.",
+      "phones": [
+        "2037060504"
+      ],
+      "emails": [
+        "hello@nova-systems.app"
+      ],
+      "tel": [],
+      "forms": [],
+      "ctas": [
+        {
+          "text": "BOOK AN AUDIT",
+          "href": "/request-audit"
+        },
+        {
+          "text": "START YOUR BUSINESS DIAGNOSTIC",
+          "href": "/welcome"
+        },
+        {
+          "text": "Revenue Audits\n\nFind hidden leaks in your leads, calls, syst",
+          "href": "/request-audit"
+        },
+        {
+          "text": "AI Automations\n\nAutomate follow-ups, booking, lead nurturing",
+          "href": "/solutions"
+        },
+        {
+          "text": "Wave One\n\nNova's communication system for calls, messages, a",
+          "href": "/waves"
+        },
+        {
+          "text": "START YOUR NOVA AUDIT",
+          "href": "/request-audit"
+        },
+        {
+          "text": "START YOUR NOVA AUDIT",
+          "href": "/request-audit"
+        },
+        {
+          "text": "SEE HOW THE AUDIT WORKS",
+          "href": "/#process"
+        },
+        {
+          "text": "GET STARTED",
+          "href": "/welcome"
+        },
+        {
+          "text": "GET STARTED",
+          "href": "/welcome"
+        },
+        {
+          "text": "GET STARTED",
+          "href": "/welcome"
+        },
+        {
+          "text": "GET STARTED",
+          "href": "/welcome"
+        }
+      ],
+      "notFound": false,
+      "description": "Nova Systems builds websites, AI phone systems, social media, branding, and full business infrastructure for Connecticut businesses. Based in Waterbury CT. English and Español."
+    },
+    {
+      "path": "/contact",
+      "requested_at": "2026-10-25T22:08:23.160Z",
+      "final_url": "https://nova-systems.app/contact",
+      "http_status": 200,
+      "error": null,
+      "title": "Contact — Nova Systems",
+      "h1": "Let's talk about your business.",
+      "phones": [
+        "2037060504"
+      ],
+      "emails": [
+        "hello@nova-systems.app"
+      ],
+      "tel": [
+        "2037060504"
+      ],
+      "forms": [
+        {
+          "fields": 7,
+          "submit": "SEND MESSAGE"
+        }
+      ],
+      "ctas": [
+        {
+          "text": "BOOK AN AUDIT",
+          "href": "/request-audit"
+        },
+        {
+          "text": "Start Your Business Diagnostic",
+          "href": "/welcome"
+        },
+        {
+          "text": "Business Diagnostic",
+          "href": "/business-diagnostic"
+        },
+        {
+          "text": "Book a Meeting",
+          "href": "/welcome"
+        },
+        {
+          "text": "Contact Us",
+          "href": "/contact"
+        }
+      ],
+      "notFound": false,
+      "description": "Reach Nova Systems by email or phone, or send a message directly. Based in Waterbury, Connecticut."
+    },
+    {
+      "path": "/request-audit",
+      "requested_at": "2026-10-25T22:08:25.422Z",
+      "final_url": "https://nova-systems.app/welcome",
+      "http_status": 200,
+      "error": null,
+      "title": "Get Started — Nova Systems",
+      "h1": "Tell Us About Your Business",
+      "phones": [
+        "2037060504"
+      ],
+      "emails": [
+        "hello@nova-systems.app"
+      ],
+      "tel": [],
+      "forms": [
+        {
+          "fields": 28,
+          "submit": "START MY NOVA REVIEW"
+        }
+      ],
+      "ctas": [
+        {
+          "text": "BOOK AN AUDIT",
+          "href": "/request-audit"
+        },
+        {
+          "text": "Business Diagnostic",
+          "href": "/business-diagnostic"
+        },
+        {
+          "text": "Book a Meeting",
+          "href": "/welcome"
+        },
+        {
+          "text": "Contact Us",
+          "href": "/contact"
+        }
+      ],
+      "notFound": false,
+      "description": "Tell Nova who you are and what you need. Isaac reviews every request personally."
+    },
+    {
+      "path": "/welcome",
+      "requested_at": "2026-10-25T22:08:27.672Z",
+      "final_url": "https://nova-systems.app/welcome",
+      "http_status": 200,
+      "error": null,
+      "title": "Get Started — Nova Systems",
+      "h1": "Tell Us About Your Business",
+      "phones": [
+        "2037060504"
+      ],
+      "emails": [
+        "hello@nova-systems.app"
+      ],
+      "tel": [],
+      "forms": [
+        {
+          "fields": 28,
+          "submit": "START MY NOVA REVIEW"
+        }
+      ],
+      "ctas": [
+        {
+          "text": "BOOK AN AUDIT",
+          "href": "/request-audit"
+        },
+        {
+          "text": "Business Diagnostic",
+          "href": "/business-diagnostic"
+        },
+        {
+          "text": "Book a Meeting",
+          "href": "/welcome"
+        },
+        {
+          "text": "Contact Us",
+          "href": "/contact"
+        }
+      ],
+      "notFound": false,
+      "description": "Tell Nova who you are and what you need. Isaac reviews every request personally."
+    },
+    {
+      "path": "/book",
+      "requested_at": "2026-10-25T22:08:29.922Z",
+      "final_url": "https://nova-systems.app/book",
+      "http_status": 200,
+      "error": null,
+      "title": "Nova Systems — AI and Technology Infrastructure for Connecticut Businesses",
+      "h1": "Page Not Found",
+      "phones": [],
+      "emails": [],
+      "tel": [],
+      "forms": [],
+      "ctas": [],
+      "notFound": true,
+      "description": "Nova Systems builds websites, AI phone systems, social media, branding, and full business infrastructure for Connecticut businesses. Based in Waterbury, CT. English and Español."
+    },
+    {
+      "path": "/demo",
+      "requested_at": "2026-10-25T22:08:32.050Z",
+      "final_url": "https://nova-systems.app/demo",
+      "http_status": 200,
+      "error": null,
+      "title": "Nova Systems — AI and Technology Infrastructure for Connecticut Businesses",
+      "h1": "Page Not Found",
+      "phones": [],
+      "emails": [],
+      "tel": [],
+      "forms": [],
+      "ctas": [],
+      "notFound": true,
+      "description": "Nova Systems builds websites, AI phone systems, social media, branding, and full business infrastructure for Connecticut businesses. Based in Waterbury, CT. English and Español."
+    },
+    {
+      "path": "/pricing",
+      "requested_at": "2026-10-25T22:08:34.173Z",
+      "final_url": "https://nova-systems.app/pricing",
+      "http_status": 200,
+      "error": null,
+      "title": "Pricing — Nova Systems Connecticut",
+      "h1": "Diagnosis First.\nPricing Second.",
+      "phones": [
+        "2037060504"
+      ],
+      "emails": [
+        "hello@nova-systems.app"
+      ],
+      "tel": [],
+      "forms": [],
+      "ctas": [
+        {
+          "text": "BOOK AN AUDIT",
+          "href": "/request-audit"
+        },
+        {
+          "text": "START YOUR DIAGNOSTIC",
+          "href": "/welcome"
+        },
+        {
+          "text": "BOOK A CONSULTATION",
+          "href": "/welcome"
+        },
+        {
+          "text": "BOOK A CONSULTATION",
+          "href": "/welcome"
+        },
+        {
+          "text": "Business Diagnostic",
+          "href": "/business-diagnostic"
+        },
+        {
+          "text": "Book a Meeting",
+          "href": "/welcome"
+        },
+        {
+          "text": "Contact Us",
+          "href": "/contact"
+        }
+      ],
+      "notFound": false,
+      "description": "Diagnosis-first, scope-based pricing for Connecticut businesses. Nova Systems investigates before recommending — Waterbury, CT's business intelligence and execution partner."
+    },
+    {
+      "path": "/solutions",
+      "requested_at": "2026-10-25T22:08:36.464Z",
+      "final_url": "https://nova-systems.app/solutions",
+      "http_status": 200,
+      "error": null,
+      "title": "Business Technology Solutions in Connecticut — Nova Systems",
+      "h1": "Tailored Technical Solutions\nfor Every Business.",
+      "phones": [
+        "2037060504"
+      ],
+      "emails": [
+        "hello@nova-systems.app"
+      ],
+      "tel": [],
+      "forms": [],
+      "ctas": [
+        {
+          "text": "BOOK AN AUDIT",
+          "href": "/request-audit"
+        },
+        {
+          "text": "SCHEDULE A STRATEGY MEETING",
+          "href": "/welcome"
+        },
+        {
+          "text": "Business Diagnostic",
+          "href": "/business-diagnostic"
+        },
+        {
+          "text": "Book a Meeting",
+          "href": "/welcome"
+        },
+        {
+          "text": "Contact Us",
+          "href": "/contact"
+        }
+      ],
+      "notFound": false,
+      "description": "Web development, AI automation, and branding solutions for Connecticut businesses. Nova Systems builds custom websites, AI phone agents, CRM systems, and full brand identity — Waterbury to Fairfield County."
+    },
+    {
+      "path": "/waves",
+      "requested_at": "2026-10-25T22:08:38.807Z",
+      "final_url": "https://nova-systems.app/waves",
+      "http_status": 200,
+      "error": null,
+      "title": "Wave One — The AI Revenue Engine for Connecticut Businesses | Nova Systems",
+      "h1": "The AI Revenue Engine for\nConnecticut Businesses.",
+      "phones": [
+        "2037060504"
+      ],
+      "emails": [
+        "hello@nova-systems.app"
+      ],
+      "tel": [],
+      "forms": [],
+      "ctas": [
+        {
+          "text": "Business Diagnostic",
+          "href": "/business-diagnostic"
+        },
+        {
+          "text": "Book a Meeting",
+          "href": "/welcome"
+        },
+        {
+          "text": "Contact Us",
+          "href": "/contact"
+        }
+      ],
+      "notFound": false,
+      "description": "Wave One is now open. Six AI engines, one partner, one check. Limited enrollment for Connecticut businesses ready to stop losing revenue to missed calls, slow follow-up, and dead leads."
+    }
+  ],
+  "links": [
+    {
+      "path": "/",
+      "checked_at": "2026-10-25T22:08:41.300Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/solutions",
+      "checked_at": "2026-10-25T22:08:42.113Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/portfolio",
+      "checked_at": "2026-10-25T22:08:42.925Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/pricing",
+      "checked_at": "2026-10-25T22:08:43.752Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/company",
+      "checked_at": "2026-10-25T22:08:44.580Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/login",
+      "checked_at": "2026-10-25T22:08:45.432Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/request-audit",
+      "checked_at": "2026-10-25T22:08:46.256Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/welcome",
+      "checked_at": "2026-10-25T22:08:47.086Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/waves",
+      "checked_at": "2026-10-25T22:08:47.921Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/business-diagnostic",
+      "checked_at": "2026-10-25T22:08:48.746Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/insights",
+      "checked_at": "2026-10-25T22:08:49.582Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/careers",
+      "checked_at": "2026-10-25T22:08:50.403Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/contact",
+      "checked_at": "2026-10-25T22:08:51.246Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/client-login",
+      "checked_at": "2026-10-25T22:08:52.075Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/privacy",
+      "checked_at": "2026-10-25T22:08:52.892Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/terms",
+      "checked_at": "2026-10-25T22:08:53.715Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/cookies",
+      "checked_at": "2026-10-25T22:08:54.576Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/accessibility",
+      "checked_at": "2026-10-25T22:08:55.413Z",
+      "shows_not_found": false
+    },
+    {
+      "path": "/waves/form",
+      "checked_at": "2026-10-25T22:08:56.237Z",
+      "shows_not_found": false
+    }
+  ],
+  "other_sites": [
+    {
+      "url": "https://nova-systems.agency/",
+      "checked_at": "2026-10-25T22:08:57.041Z",
+      "title": "Nova Wave One",
+      "description": null,
+      "canonical": null
+    }
+  ],
+  "hosting": {
+    "checked_at": "2026-10-25T22:08:59.629Z",
+    "project": "nova-systems-copy",
+    "production_deployment": {
+      "created": null
+    },
+    "production_variable_names": [],
+    "crons": 0
+  }
+}

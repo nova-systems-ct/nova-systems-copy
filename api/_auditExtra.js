@@ -155,6 +155,14 @@ export async function handleAuditExtra(req, res, op, caller) {
         patch.financial_impact_status = b.financial_impact_status;
       }
       if ('nova_can_implement' in b) { if (!['yes', 'partial', 'no', 'unknown'].includes(b.nova_can_implement)) return send(res, 400, { error: 'nova_can_implement: yes, partial, no or unknown' }); patch.nova_can_implement = b.nova_can_implement; }
+      if ('priority' in b) { if (![null, 'high', 'medium', 'low'].includes(b.priority)) return send(res, 400, { error: 'priority: high, medium, low or null' }); patch.priority = b.priority; }
+      // Re-checking a finding later: link newly captured evidence. Every id must belong to THIS case.
+      if (Array.isArray(b.add_evidence_ids) && b.add_evidence_ids.length) {
+        const ids = [...new Set(b.add_evidence_ids.map((x) => sanitize(x, 60)).filter(Boolean))];
+        const own = await dbGet(`audit_evidence?case_id=eq.${enc(c.id)}&id=in.(${ids.map(enc).join(',')})&select=id`);
+        if (own.length !== ids.length) return send(res, 400, { error: 'One or more evidence ids do not belong to this case' });
+        for (const evidenceId of ids) await dbInsert('audit_finding_evidence', { finding_id: f.id, evidence_id: evidenceId }).catch(() => null);
+      }
       if (f.review_status === 'reviewed') patch.review_status = 'draft'; // changed after review → needs review again
       const [row] = await dbPatch('audit_findings', `id=eq.${enc(f.id)}&case_id=eq.${enc(c.id)}`, patch);
       return send(res, 200, { ok: true, finding: row, review_reset: f.review_status === 'reviewed' });
