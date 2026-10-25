@@ -56,6 +56,9 @@ try {
   check("the inquiry, the confirmed booking and the signed agreement are saved in Nova's records", rec?.state === 'confirmed' && rec.source_channel === 'form' && rec.booking === 'confirmed' && rec.agreement === 'signed', JSON.stringify(rec));
   const mail = (await db.query("select status from sales_notifications where kind='customer_booking_link' and email=$1", [email])).rows[0];
   check('the visitor is sent their private link by email through the controlled path (dry run here: recorded, not sent)', mail?.status === 'dry_run', JSON.stringify(mail));
+  const conf = (await db.query("select status, provider_message_id from sales_notifications where kind='customer_booking_confirmed' and email=$1", [email])).rows;
+  const inbox = await fetch(`${env.LOCAL_MAIL_URL}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`).then((r) => r.json()).catch(() => ({ messages: [] }));
+  check('after booking, the visitor gets exactly one confirmation email (recorded as dry run; a copy is readable in the local test inbox)', conf.length === 1 && conf[0].status === 'dry_run' && /^local-inbox:/.test(conf[0].provider_message_id || '') && (inbox.messages || []).some((m) => /Confirmed: /.test(m.Subject)), JSON.stringify([conf, (inbox.messages || []).map((m) => m.Subject)]));
 
   // ------------------------------------------------------------ 2. the owner, from the dashboard
   const o = await (await browser.newContext({ viewport: { width: 1366, height: 900 } })).newPage();
@@ -83,6 +86,8 @@ try {
   const installText = await o.locator('body').innerText();
   check('"Install Systems" prepares a plan from the audit, runs it in stages, and shows each result', planDone && /From the audit/.test(installText) && /Controlled test: inquiry to quote/.test(installText) && /TEST inquiry saved, qualified and quoted/.test(installText), installText.slice(0, 200));
   check('the plan is prepared from the real audit of Nova (7 findings), not a test fixture', installText.includes('latest audit of Nova Systems (own business)') && (installText.match(/Fix: /g) || []).length >= 7, (installText.match(/latest audit of [^.]*/) || [''])[0]);
+  const newerEmpty = (await db.query("select count(*)::int n from audit_cases a join businesses b on b.id=a.business_id join organizations o on o.id=a.organization_id where o.kind='nova_internal' and b.name !~ '^(LOCAL TEST|TEST|DEMO)' and not exists (select 1 from audit_findings f where f.case_id=a.id) and a.created_at > (select max(a2.created_at) from audit_cases a2 where a2.organization_id=a.organization_id and exists (select 1 from audit_findings f2 where f2.case_id=a2.id))")).rows[0].n;
+  if (newerEmpty) check('a newer audit that has no findings yet is reported on the plan instead of replacing the finished audit', /has no findings yet, so this plan still uses the earlier one/.test(installText));
   check('blocked components show the exact next action (e.g. escalation contact, phone channel)', /Next: /.test(installText));
   await shot(o, '05a-install-systems');
   await o.getByRole('button', { name: 'Install Systems' }).click(); await o.waitForTimeout(4000);

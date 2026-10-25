@@ -33,11 +33,16 @@ function components({ prices, depositNeeded }) {
 
 async function auditLink(orgId) {
   // The latest audit of a real business: records named with the TEST / LOCAL TEST / DEMO convention are test fixtures.
-  const cases = await dbGet(`audit_cases?organization_id=eq.${enc(orgId)}&select=id,created_at,businesses(name)&order=created_at.desc&limit=25`);
-  const c = cases.find((x) => !/^(LOCAL TEST|TEST|DEMO)(\W|$)/.test(x.businesses?.name || '')) || null;
+  // The plan is built from the most recent real audit that HAS findings: a newer audit that was only just opened must not
+  // silently replace a finished one; it is reported instead.
+  const cases = (await dbGet(`audit_cases?organization_id=eq.${enc(orgId)}&select=id,created_at,status,businesses(name),audit_findings(count)&order=created_at.desc&limit=25`))
+    .filter((x) => !/^(LOCAL TEST|TEST|DEMO)(\W|$)/.test(x.businesses?.name || ''));
+  const count = (x) => x.audit_findings?.[0]?.count || 0;
+  const c = cases.find((x) => count(x) > 0) || cases[0] || null;
   if (!c) return null;
+  const newer = cases.filter((x) => new Date(x.created_at) > new Date(c.created_at) && count(x) === 0).map((x) => ({ case_id: x.id, business: x.businesses?.name || null, created_at: x.created_at, status: x.status }));
   const [findings, recs] = await Promise.all([dbGet(`audit_findings?case_id=eq.${enc(c.id)}&select=id,title&order=created_at.asc`), dbGet(`audit_recommendations?case_id=eq.${enc(c.id)}&select=id,finding_id,mechanism,priority_rank&order=priority_rank.asc.nullslast`)]);
-  return { case_id: c.id, business: c.businesses?.name || null, findings: findings.map((f) => ({ id: f.id, title: f.title, fix: recs.find((r) => r.finding_id === f.id)?.mechanism || null })) };
+  return { case_id: c.id, business: c.businesses?.name || null, created_at: c.created_at, findings: findings.map((f) => ({ id: f.id, title: f.title, fix: recs.find((r) => r.finding_id === f.id)?.mechanism || null })), newer_without_findings: newer };
 }
 
 export async function buildManifest(orgId) {

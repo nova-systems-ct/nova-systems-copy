@@ -48,6 +48,7 @@ export default function OpsInstall() {
           {audit && (
             <Card title="From the audit" style={{ marginTop: 16 }}>
               <p style={{ marginTop: 0, color: C.dim, fontSize: 13 }}>This plan was prepared from the latest audit{audit.business ? ` of ${audit.business}` : ''}. <Link to={`/dashboard/audit/${audit.case_id}`} style={{ color: C.gold }}>Open the audit</Link></p>
+              {(audit.newer_without_findings || []).map((n) => <Notice key={n.case_id} tone="warn">A newer audit{n.business ? ` of ${n.business}` : ''} was started {when(n.created_at)} and has no findings yet, so this plan still uses the earlier one. <Link to={`/dashboard/audit/${n.case_id}`} style={{ color: C.gold }}>Open the newer audit</Link></Notice>)}
               <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>{audit.findings.map((f) => <li key={f.id} style={{ marginBottom: 6 }}><strong>{f.title}</strong>{f.fix && <div style={{ color: C.dim }}>Fix: {f.fix}</div>}</li>)}</ol>
             </Card>
           )}

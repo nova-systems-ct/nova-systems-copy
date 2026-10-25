@@ -537,6 +537,18 @@ export async function confirmJob({ orgId, job, actor, reason }) {
     const bk = await dbOne(`ops_bookings?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&select=start_at,status&order=created_at.desc`);
     if (bk?.status === 'confirmed') await sendSms({ orgId, conversationId: job.conversation_id, contactId: job.contact_id, body: `Confirmed: ${job.price_snapshot?.service_name || 'your appointment'} on ${R.formatSlot(bk.start_at, c.wave.timezone)}. Reply here with any questions.`, purpose: 'booking_confirmation', idempotencyKey: `confirm:${job.id}`, isTest: !!job.is_test });
   }
+  // Customers who did not book by text (web form) get the confirmation by email, through the same gated email path
+  // (recorded as dry-run until live email is approved). Once per job.
+  if (job.contact_id) {
+    const conv = job.conversation_id ? await one('wave1_conversations', orgId, job.conversation_id, 'channel') : null;
+    const who = await one('crm_contacts', orgId, job.contact_id, 'name,email');
+    const bk = await dbOne(`ops_bookings?organization_id=eq.${enc(orgId)}&job_id=eq.${enc(job.id)}&status=eq.confirmed&select=start_at`);
+    if (bk && who?.email && conv?.channel !== 'sms') {
+      const when = R.formatSlot(bk.start_at, c.wave.timezone);
+      const { notify } = await import('../_sales/core.js');
+      await notify({ email: who.email, kind: 'customer_booking_confirmed', subject: `Confirmed: ${job.price_snapshot?.service_name || 'your appointment'} with ${c.display_name} — ${when}`, body: `Hi ${(who.name || '').split(' ')[0] || 'there'},\n\nYour ${job.price_snapshot?.service_name || 'appointment'} with ${c.display_name} is confirmed for ${when}.${job.total_cents ? '' : ' There is no charge.'}\n\nYour signed agreement is on the page you used to book.\n\n${c.display_name}`, channels: ['email'], idempotencyKey: `booking_confirmed:${job.id}` }).catch((e) => console.error('[ops] confirmation email failed', e.message));
+    }
+  }
   return j;
 }
 

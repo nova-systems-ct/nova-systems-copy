@@ -175,9 +175,25 @@ async function sendEmailNow({ to, subject, text, idempotencyKey }) {
 // reusable secret (sign-in, invitation or proposal link). The stored row keeps a redacted body, so
 // no usable authentication link sits in the database (audit F-36); such rows are never auto-retried.
 export const SECRET_LINK_KINDS = ['apply_link', 'invitation', 'proposal_sent', 'audit_report_link', 'customer_booking_link'];
+// LOCAL STAGING ONLY: a dry-run email is also dropped into the local test inbox (Mailpit) when LOCAL_MAIL_URL points at
+// this computer, so the owner can read exactly what a customer would receive. The row stays 'dry_run' — nothing reached
+// a real person — and records the local copy's id. Hosted environments never set LOCAL_MAIL_URL.
+async function copyToLocalInbox({ to, subject, text }) {
+  const base = String(env().LOCAL_MAIL_URL || '');
+  if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/.test(base)) return null;
+  try {
+    const r = await fetch(`${base.replace(/\/$/, '')}/api/v1/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ From: { Email: 'noreply@nova-systems.app', Name: 'Nova Systems (LOCAL TEST)' }, To: [{ Email: to }], Subject: `[LOCAL TEST — not sent] ${subject}`, Text: text }) });
+    const j = await r.json().catch(() => ({}));
+    return r.ok && j.ID ? `local-inbox:${j.ID}` : null;
+  } catch { return null; }
+}
 export async function deliverEmailRow(row, sendBody = null) {
   const pol = emailPolicy(row.email);
-  if (!pol.send) { await dbPatch('sales_notifications', `id=eq.${enc(row.id)}`, { status: pol.status, last_error: pol.reason, attempts: (row.attempts || 0) + 1 }); return pol.status; }
+  if (!pol.send) {
+    const local = pol.status === 'dry_run' && row.email ? await copyToLocalInbox({ to: row.email, subject: row.subject, text: sendBody || row.body }) : null;
+    await dbPatch('sales_notifications', `id=eq.${enc(row.id)}`, { status: pol.status, last_error: local ? `${pol.reason}; copy placed in the local test inbox only` : pol.reason, attempts: (row.attempts || 0) + 1, ...(local ? { provider_message_id: local } : {}) });
+    return pol.status;
+  }
   if (SECRET_LINK_KINDS.includes(row.kind) && !sendBody) { await dbPatch('sales_notifications', `id=eq.${enc(row.id)}`, { status: 'failed', last_error: 'link not retained; send a new one', attempts: (row.attempts || 0) + 1 }); return 'failed'; }
   const r = await sendEmailNow({ to: row.email, subject: row.subject, text: sendBody || row.body, idempotencyKey: row.idempotency_key || row.id });
   await dbPatch('sales_notifications', `id=eq.${enc(row.id)}`, r.ok ? { status: 'sent', sent_at: nowIso(), provider_message_id: r.id, last_error: null, attempts: (row.attempts || 0) + 1 } : { status: 'failed', last_error: r.error, attempts: (row.attempts || 0) + 1 });
