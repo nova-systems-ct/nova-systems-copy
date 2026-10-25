@@ -28,6 +28,7 @@ export default function AuditCases() {
   const navigate = useNavigate()
   const { currentOrg } = useOrg()
   const [cases, setCases] = useState([])
+  const [showTest, setShowTest] = useState(false)
   const [businesses, setBusinesses] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -76,17 +77,22 @@ export default function AuditCases() {
   }
 
   if (!currentOrg) return null
+  // Records named with the TEST / LOCAL TEST / DEMO convention are fixtures; they are hidden unless asked for, so a
+  // real client's audit is never buried under test data.
+  const isTest = (c) => /^(LOCAL TEST|TEST|DEMO)(\W|$)/.test(businesses.find((b) => b.id === c.business_id)?.name || '')
+  const testCount = cases.filter(isTest).length
+  const shown = showTest ? cases : cases.filter((c) => !isTest(c))
 
   return (
     <div style={{ padding: '40px 48px 80px', maxWidth: 1200 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28, gap: 16, flexWrap: 'wrap' }}>
         <div>
-          <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>Intelligence</p>
-          <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Audit Cases</h1>
-          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13, marginTop: 6 }}>{cases.length} case{cases.length !== 1 ? 's' : ''} in {currentOrg.name}</p>
+          <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>Nova Audit</p>
+          <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Audits</h1>
+          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13, marginTop: 6 }}>{loading ? 'Loading audits…' : `${shown.length} audit${shown.length !== 1 ? 's' : ''} in ${currentOrg.name}`}{!loading && testCount > 0 && <button onClick={() => setShowTest((v) => !v)} style={{ marginLeft: 10, background: 'none', border: 0, color: GOLD, fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>{showTest ? 'Hide' : 'Show'} test audits ({testCount})</button>}</p>
         </div>
-        <button onClick={() => setCreateOpen(true)} disabled={businesses.length === 0} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '11px 18px', background: businesses.length ? G : '#161410', border: 'none', borderRadius: 8, color: businesses.length ? '#0a0800' : 'rgba(255,255,255,0.25)', fontSize: 12, fontWeight: 700, cursor: businesses.length ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
-          <Plus style={{ width: 14, height: 14 }} /> New Case
+        <button onClick={() => setCreateOpen(true)} disabled={businesses.length === 0} title={loading ? 'Loading…' : businesses.length === 0 ? 'Add the business first (Companies), then start its audit' : 'Start a new audit'} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '11px 18px', background: businesses.length ? G : '#161410', border: 'none', borderRadius: 8, color: businesses.length ? '#0a0800' : 'rgba(255,255,255,0.25)', fontSize: 12, fontWeight: 700, cursor: businesses.length ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
+          <Plus style={{ width: 14, height: 14 }} /> New audit
         </button>
       </div>
       {businesses.length === 0 && !loading && (
@@ -102,14 +108,14 @@ export default function AuditCases() {
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '80px 0' }}><Loader2 style={{ width: 28, height: 28, animation: 'spin 1s linear infinite', color: GOLD, margin: '0 auto' }} /></div>
-      ) : cases.length === 0 && !error ? (
+      ) : shown.length === 0 && !error ? (
         <div style={{ textAlign: 'center', padding: '80px 40px', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12 }}>
           <ClipboardCheck style={{ width: 36, height: 36, color: 'rgba(255,255,255,0.1)', margin: '0 auto 16px' }} />
           <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>No audit cases yet.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {cases.map((c) => {
+          {shown.map((c) => {
             const biz = businesses.find((b) => b.id === c.business_id)
             const cfg = BUCKET_CFG[c.clock?.bucket] || BUCKET_CFG.queue
             const Icon = cfg.icon
@@ -117,7 +123,7 @@ export default function AuditCases() {
               <button key={c.id} onClick={() => navigate(`/dashboard/audit/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', textAlign: 'left', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, cursor: 'pointer', width: '100%', fontFamily: 'inherit' }}>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <p style={{ color: '#fff', fontSize: 14, fontWeight: 700 }}>{biz?.name || 'Unknown business'}</p>
-                  <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 3 }}>{c.scope === '360' ? 'Online + in-person audit' : 'Online audit'} · {c.status.replace(/_/g, ' ')}</p>
+                  <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 3 }}>{c.scope === '360' ? 'Online + in-person audit' : 'Online audit'} · {c.status.replace(/_/g, ' ')} · {c.audit_findings?.[0]?.count ?? 0} finding{(c.audit_findings?.[0]?.count ?? 0) === 1 ? '' : 's'} · started {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
                 </div>
                 {c.clock?.dueAt && (
                   <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>

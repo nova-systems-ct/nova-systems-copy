@@ -1892,7 +1892,7 @@ async function handleAuditCases(req, res, caller) {
       });
       return res.status(200).json({ ...c, clock });
     }
-    const r = await sbSelect(`audit_cases?organization_id=eq.${encodeURIComponent(orgId)}&order=updated_at.desc`);
+    const r = await sbSelect(`audit_cases?organization_id=eq.${encodeURIComponent(orgId)}&select=*,audit_findings(count)&order=updated_at.desc`);
     if (!r.ok) { console.error('[client:audit cases] error:', await r.text()); return res.status(500).json({ error: 'Failed to load cases' }); }
     const cases = await r.json();
     const withClocks = cases.map((c) => ({
