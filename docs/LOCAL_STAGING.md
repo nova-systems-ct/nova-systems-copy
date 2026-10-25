@@ -50,3 +50,41 @@ Not configured by default. To test Stripe test mode locally, add `STRIPE_SECRET_
 `.env.local-staging` yourself and forward webhooks with the Stripe CLI
 (`stripe listen --forward-to localhost:5180/api/stripe`, which prints a `whsec_…` to add as `STRIPE_WEBHOOK_SECRET`).
 Live keys are refused by the code.
+
+## iPad / phone on the same Wi-Fi (in-person audits and demos) — added 2026-10-25
+`localhost` on the iPad means the iPad. To reach the laptop, start the app in Wi-Fi mode:
+
+```
+node scripts/local/staging.mjs serve --lan
+```
+It prints the address to type on the iPad, e.g. `http://10.0.0.82:5180` (the laptop's Wi-Fi address can change).
+
+**What the iPad can reach — verified 2026-10-25 through the Wi-Fi address:** only the Nova app. The Nova API answers
+401 without sign-in; sign-in works (200); the app forwards only Supabase sign-in (`/auth/v1`) and row-level-security
+reads (`/rest/v1`); requests carrying the service-role key are refused (403); Supabase administration
+(`/auth/v1/admin`) is refused (403); Studio, the database and the mail inbox are not served on this port. The API itself
+stays on the laptop. No service-role key is ever sent to the browser.
+
+**Close the existing exposure first (administrator, one time).** Docker publishes local Supabase on every network
+interface (Studio 54323, database 54322, API 54321, mail 54324, analytics 54327) and the "Docker Desktop Backend"
+firewall rule allows inbound traffic on **Public** networks — this Wi-Fi is classed Public. The Supabase CLI has no
+option to bind to localhost only. In **PowerShell → Run as administrator**:
+```
+Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private
+New-NetFirewallRule -DisplayName "Nova local Supabase - block network access" -Direction Inbound -Protocol TCP -LocalPort 54321-54327 -Action Block -Profile Any
+New-NetFirewallRule -DisplayName "Nova local staging - iPad on private Wi-Fi" -Direction Inbound -Protocol TCP -LocalPort 5180 -Action Allow -Profile Private
+```
+The block rule does not affect the laptop's own access (Windows does not filter loopback). Only mark a network Private
+if it is your own (home/office), never public Wi-Fi. Undo with
+`Remove-NetFirewallRule -DisplayName "Nova local Supabase - block network access"` (and the same for the 5180 rule).
+
+**On the iPad:** Safari → the printed address → sign in → Share → **Add to Home Screen** (opens full screen with the
+Nova mark). Safari shows "Not Secure" because this is plain `http` on your own network; passwords travel unencrypted
+over the Wi-Fi, so use it only on a network you trust, with the local test accounts.
+
+**Limits (honest):** no offline mode — if the Wi-Fi drops, unsaved typing in an open form stays on screen but cannot be
+saved until the connection returns; nothing is queued. The laptop must stay awake with `serve --lan` running. Links in
+local-inbox emails point at the Wi-Fi address while `--lan` is used.
+
+**Checks only you can do on the device:** photo/file upload from the camera, the on-screen keyboard covering fields,
+portrait and landscape, touch targets, Home Screen launch, and what happens when you switch Wi-Fi off mid-form.

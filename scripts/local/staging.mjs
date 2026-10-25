@@ -6,6 +6,7 @@
 //   node scripts/local/staging.mjs migrate     # apply supabase/migration-manifest.json in order (idempotent)
 //   node scripts/local/staging.mjs provision   # test owner + representative + Nova org + demo workspace
 //   node scripts/local/staging.mjs serve       # app on http://localhost:5180 (Vite + the real api/*.js handlers)
+//   node scripts/local/staging.mjs serve --lan # same, also reachable from an iPad on this Wi-Fi (sign-in required; Supabase stays private) — docs/LOCAL_STAGING.md
 //   node scripts/local/staging.mjs worker      # background worker against the local stack
 //   node scripts/local/staging.mjs down        # stop containers (data volume is kept)
 //
@@ -14,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -163,11 +165,47 @@ async function serve() {
       await mod.default(req, out);
     } catch (e) { console.error('[local api]', e.message); if (!res.headersSent) { res.statusCode = 500; res.end('{"error":"local api error"}'); } }
   });
-  await new Promise((r) => api.listen(API_PORT, '127.0.0.1', r));
+  await new Promise((r) => api.listen(API_PORT, '127.0.0.1', r)); // the API itself is never on the network
+  const lan = process.argv.includes('--lan');
+  const lanIps = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal && !/^(169\.254|172\.(1[6-9]|2\d|3[01]))\./.test(i.address)).map((i) => i.address);
+  if (lan) {
+    // iPad / phone testing over the local Wi-Fi: the browser talks only to this app; it never needs Supabase's own port.
+    process.env.VITE_SUPABASE_URL = 'same-origin';
+    if (lanIps[0]) process.env.APP_BASE_URL = `http://${lanIps[0]}:${APP_PORT}`; // links in (local inbox) emails open on the iPad
+  }
   const { createServer } = await import('vite');
-  const vite = await createServer({ configFile: path.join(ROOT, 'vite.config.js'), server: { port: APP_PORT, strictPort: true, proxy: { '/api': `http://127.0.0.1:${API_PORT}` } } });
+  const vite = await createServer({
+    configFile: path.join(ROOT, 'vite.config.js'),
+    plugins: lan ? [supabaseGuard(env)] : [],
+    server: { host: lan ? '0.0.0.0' : 'localhost', port: APP_PORT, strictPort: true, proxy: { '/api': `http://127.0.0.1:${API_PORT}` } },
+  });
   await vite.listen();
-  console.log(`✓ Nova local staging: http://localhost:${APP_PORT}  (API on ${API_PORT}; Supabase Studio: http://127.0.0.1:54323)`);
+  console.log(`✓ Nova local staging: http://localhost:${APP_PORT}  (API on ${API_PORT}, this computer only; Supabase Studio: http://127.0.0.1:54323)`);
+  if (lan) console.log(`✓ On the same Wi-Fi (iPad): ${lanIps.map((ip) => `http://${ip}:${APP_PORT}`).join('  ') || 'no Wi-Fi address found'} — sign-in required; Supabase, Studio, the database and the mail inbox are NOT served here`);
+}
+
+// LAN mode only. Forwards exactly what the browser uses — sign-in (/auth/v1) and row-level-security reads (/rest/v1) —
+// to local Supabase, and refuses everything else: admin endpoints, and any request carrying a key other than the
+// public anon key or a signed-in user's token (so a leaked service-role key cannot be used through this port).
+function supabaseGuard(env) {
+  const target = new URL(env.SUPABASE_URL);
+  return {
+    name: 'nova-lan-supabase-guard',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const p = String(req.url || '').split('?')[0];
+        if (!/^\/(auth|rest)\/v1\//.test(p)) return next();
+        const deny = (why) => { res.statusCode = 403; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: why })); };
+        if (/^\/auth\/v1\/admin(\/|$)/.test(p)) return deny('Supabase administration is not available over the network');
+        if (jwtRole(req.headers.apikey) !== 'anon') return deny('Only the public browser key is accepted here');
+        const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+        if (bearer && !['anon', 'authenticated'].includes(jwtRole(bearer))) return deny('Only a signed-in user token is accepted here');
+        const fwd = http.request({ host: target.hostname, port: target.port, method: req.method, path: req.url, headers: { ...req.headers, host: target.host } }, (r) => { res.writeHead(r.statusCode || 502, r.headers); r.pipe(res); });
+        fwd.on('error', () => { if (!res.headersSent) { res.statusCode = 502; res.end('{"error":"local Supabase is not reachable"}'); } });
+        req.pipe(fwd);
+      });
+    },
+  };
 }
 
 function worker() {

@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+// 'same-origin' is used only by local staging's Wi-Fi mode (`staging.mjs serve --lan`): sign-in and reads go through the
+// app's own address, which forwards just those paths, so a tablet never needs to reach Supabase itself.
+const configuredUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseUrl = configuredUrl === 'same-origin' && typeof window !== 'undefined' ? window.location.origin : configuredUrl
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // Read the auth redirect type BEFORE supabase-js consumes and clears the URL (detectSessionInUrl runs during

@@ -101,7 +101,8 @@ export default function JobApplicationForm({ job }) {
     setError("");
     setLoading(true);
 
-    const appId = crypto.randomUUID();
+    // crypto.randomUUID needs a secure context (missing on plain-http Wi-Fi testing): fall back to a random v4-shaped id.
+    const appId = globalThis.crypto?.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => { const r = Math.floor(Math.random() * 16); return (ch === 'x' ? r : (r & 3) | 8).toString(16) });
 
     let portfolio_file_base64 = "";
     let portfolio_file_name = "";

@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { api, useLoad, useAction, C, Card, Field, Loading, ErrorBox, Empty, Badge, PageHeader, Notice, when } from './ui'
 
+// crypto.randomUUID needs a secure context (missing on plain-http Wi-Fi testing); the fallback is unique enough per tap.
+const newId = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+
 // Rewards (loyalty ledger behind Apple Wallet passes). The owner sets the economics; nothing has a default value.
 export default function OpsRewards() {
   const { orgId, business } = useOutletContext()
@@ -82,7 +85,7 @@ function Account({ orgId, id, live, go, busy, canConfigure }) {
   const reload = (p) => p.then((r) => { d.reload(); return r })
   return (
     <Card title={`${account.crm_contacts?.name || 'Customer'} · ${account.balance} points`} style={{ marginTop: 16 }}>
-      <button className="ops-btn primary" disabled={busy || !enough} onClick={() => reload(go({ action: 'redeem', account_id: account.id, request_id: `ui-${crypto.randomUUID()}` }, (x) => `Redeemed: ${x.reward}.`))}>Redeem {live?.rules?.reward_description || 'reward'}</button>
+      <button className="ops-btn primary" disabled={busy || !enough} onClick={() => reload(go({ action: 'redeem', account_id: account.id, request_id: `ui-${newId()}` }, (x) => `Redeemed: ${x.reward}.`))}>Redeem {live?.rules?.reward_description || 'reward'}</button>
       {!enough && <span style={{ fontSize: 12, color: C.faint, marginLeft: 8 }}>{live?.status === 'approved' ? `Needs ${live.rules.reward_threshold} points.` : 'No approved program.'}</span>}
       <table className="ops-table" style={{ marginTop: 10 }}><thead><tr><th>When</th><th>What</th><th>Points</th><th>Balance</th></tr></thead><tbody>
         {ledger.map((e) => <tr key={e.id}><td style={{ color: C.dim }}>{when(e.created_at)}</td><td><Badge value={e.kind === 'earn' ? 'ready' : e.kind === 'redeem' ? 'approved' : 'partial'} label={e.kind} /> {e.reason}</td><td>{e.points > 0 ? `+${e.points}` : e.points}</td><td>{e.balance_after}</td></tr>)}
