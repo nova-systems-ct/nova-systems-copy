@@ -67,7 +67,10 @@ try {
   await o.getByLabel('Email').fill(acct.OWNER_EMAIL); await o.getByLabel('Password').fill(acct.OWNER_PASSWORD);
   await o.getByRole('button', { name: /SIGN IN/ }).click();
   await o.waitForURL(/\/dashboard/, { timeout: 20000 });
-  check('the owner lands on the product: "Run your business on Nova" with the five actions', await seen(o.getByRole('heading', { name: 'Run your business on Nova' })) && await seen(o.getByRole('link', { name: /Start an audit/ })) && await seen(o.getByRole('link', { name: /^Install Systems/ })) && await seen(o.getByRole('link', { name: /Open call test/ })) && await seen(o.getByRole('link', { name: /Send a test inquiry/ })) && await seen(o.getByRole('link', { name: /^Requests/ })));
+  check('the owner lands on the dashboard: greeting, the four measured tiles, priorities, activity, audit queue and integrations', await seen(o.getByRole('heading', { level: 1, name: /^Good (morning|afternoon|evening)/ })) && await seen(o.getByText(/Inquiries · 30 days/)) && await seen(o.getByText(/Money collected · 30 days/)) && await seen(o.getByRole('heading', { name: /Today’s priorities/ })) && await seen(o.getByRole('heading', { name: /Recorded activity/ })) && await seen(o.getByRole('heading', { name: /Audit queue/ })) && await seen(o.getByRole('heading', { name: /Integrations/ })));
+  check('the dashboard shows money collected as not measured (no live payments) and email as recorded, not sent', await seen(o.getByText(/No live payments recorded/)) && await seen(o.getByText('Recorded, not sent')));
+  check('the owner home keeps one-click actions: start an audit, Install Systems, call test, test inquiry, requests', await seen(o.getByRole('link', { name: /Start an audit/ })) && await seen(o.getByRole('link', { name: /^Install Systems/ })) && await seen(o.getByRole('link', { name: /Open call test/ })) && await seen(o.getByRole('link', { name: /Send a test inquiry/ })) && await seen(o.getByRole('link', { name: /^Requests/ })));
+  check('the sidebar shows the approved logo and task-based menu (Audits, Requests, Revive, Demand)', await seen(o.getByRole('img', { name: 'Nova Systems' })) && await seen(o.getByRole('navigation', { name: 'Nova HQ' }).getByRole('link', { name: 'Audits' })) && await seen(o.getByRole('navigation', { name: 'Nova HQ' }).getByRole('link', { name: 'Requests' })) && await seen(o.getByRole('navigation', { name: 'Nova HQ' }).getByRole('link', { name: 'Revive' })));
   check('the misleading "migration hasn\'t been run" banner is gone from the owner home', !(await o.getByText(/Stage 5 database migration/).count()));
   await shot(o, '03-owner-home');
 
@@ -114,12 +117,12 @@ try {
   check('the test request appears in Requests, marked TEST', await seen(o.getByText(/TEST Inquiry \(owner test\)/)));
   await shot(o, '06-requests');
   await o.goto(`${APP}/dashboard`);
-  check('Outcomes on the owner home count the confirmed work', await seen(o.getByText(/ready for work/)));
+  check('the owner home counts the confirmed test bookings apart from real ones', await seen(o.getByText(/test bookings not counted/)));
 
   // ------------------------------------------------------------ 3. Demand, Revive, Rewards and My work, from the menus
   // Viewing and previewing only: approving the Demand campaign or a rewards program is the owner's decision.
   await o.getByRole('link', { name: 'Operations' }).first().click();
-  await o.getByRole('link', { name: 'Demand', exact: true }).click();
+  await o.getByRole('navigation', { name: 'Operations sections' }).getByRole('link', { name: 'Demand', exact: true }).click();
   check('Operations → Demand lists the prepared campaign as a draft awaiting approval', await seen(o.getByText('Complimentary Nova Audit — Waterbury service businesses')) && await seen(o.getByText(/^draft$/)));
   await o.getByRole('button', { name: 'Open' }).first().click();
   const demandText = await (await seen(o.getByText('Attribution link for replies:')) ? o.locator('body').innerText() : '');

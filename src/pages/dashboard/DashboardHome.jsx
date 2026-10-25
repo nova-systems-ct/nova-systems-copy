@@ -30,17 +30,6 @@ const STAGE_COLORS = {
 
 const ACTIVITY_ICONS = { lead: Target, intake: ClipboardCheck, contract: FileText, invoice: Receipt }
 
-function greeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
-  return 'Good evening'
-}
-
-function fmtDate() {
-  return new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-}
-
 function MetricCard({ icon: Icon, label, value, sub, onClick }) {
   const [hov, setHov] = useState(false)
   return (
@@ -140,21 +129,14 @@ export default function DashboardHome() {
   // it must never render under a different organization.
   if (currentOrg && currentOrg.kind !== 'nova_internal') {
     return (
-      <div style={{ padding: '48px 52px 80px', maxWidth: 1200 }}>
-        <div style={{ marginBottom: 48 }}>
-          <h1 style={{ color: '#fff', fontSize: 34, fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 6 }}>{greeting()}.</h1>
-          <p style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14 }}>{fmtDate()}</p>
-        </div>
+      <div style={{ padding: 'clamp(20px,4vw,44px) clamp(16px,3.5vw,48px) 80px', maxWidth: 1320 }}>
         <ProductHome />
       </div>
     )
   }
 
   return (
-    <div style={{ padding: '48px 52px 80px', maxWidth: 1200 }}>
-
-      {/* Header */}
-      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13, marginBottom: 18 }}>{greeting()} · {fmtDate()}</p>
+    <div style={{ padding: 'clamp(20px,4vw,44px) clamp(16px,3.5vw,48px) 80px', maxWidth: 1320 }}>
       <ProductHome />
       <details style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 18 }}>
         <summary style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.55)', fontSize: 13, fontWeight: 700, marginBottom: 18 }}>Business administration — invoices, commissions, leads, content</summary>

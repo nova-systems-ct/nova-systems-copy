@@ -41,7 +41,8 @@ try {
   await page.waitForURL(/\/dashboard/, { timeout: 20000 }).catch(() => {});
   check('the owner signs in and reaches the dashboard', /\/dashboard/.test(page.url()), page.url());
   await page.waitForTimeout(1500); await shot(page, '01-owner-dashboard');
-  const ownerNav = await page.locator('nav, aside').first().innerText().catch(() => '');
+  await page.locator('nav[aria-label="Nova HQ"] summary', { hasText: 'More' }).first().click().catch(() => {}); // back-office areas sit under "More"
+  const ownerNav = await page.locator('nav[aria-label="Nova HQ"]').first().innerText().catch(() => '');
   check('the owner sees owner-level sections (Operations, Sales Team, Admin)', /Operations/.test(ownerNav) && /Sales Team/.test(ownerNav) && /Admin/.test(ownerNav), ownerNav.slice(0, 200));
   // persistent record: create a client business through the owner's API session, then find it in the screen after reload
   const bizName = `LOCAL TEST Detailing ${crypto.randomBytes(2).toString('hex')}`;

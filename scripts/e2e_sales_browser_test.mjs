@@ -86,6 +86,8 @@ try {
     const { ctx, page } = await newPage();
     await login(page, owner);
     check('B1 the owner signs in with a real session and lands in Nova HQ', page.url().includes('/dashboard'));
+    // back-office areas sit under the sidebar's "More" group (2026-10-25 menu)
+    await page.locator('nav[aria-label="Nova HQ"] summary', { hasText: 'More' }).first().click().catch(() => {});
     check('B1b "Sales Team" appears in the HQ navigation for the owner', await page.locator('a', { hasText: 'Sales Team' }).first().waitFor({ state: 'visible', timeout: 15000 }).then(() => true, () => false));
     await page.goto(`${base}/dashboard/sales-team/hiring`);
     await page.getByText('Jane Applicant').first().waitFor({ timeout: 15000 });

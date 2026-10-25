@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard, BrainCircuit, TrendingUp, PlayCircle, Building2, ShieldCheck, Workflow,
   LogOut, Menu, X, ChevronsUpDown, Check, Users, ListChecks, ClipboardCheck,
+  Inbox, RotateCcw, BarChart3, Network, GraduationCap, ChevronDown,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuthGuard } from '../../hooks/useAuthGuard'
@@ -29,17 +30,26 @@ const ROLE_LABELS = {
 // renders if the caller's current-organization role grants that permission (real RLS-backed data,
 // not a hardcoded role check). Hiding the link is UX only; the route itself is also wrapped in
 // <RequirePermission> so direct navigation can't bypass this.
+// 2026-10-25: task-based menu first (what the owner does every day), back-office areas under "More". Every route is
+// unchanged; an item shows only when the caller's role grants its permission, and the routes keep their own guards.
 const NAV = [
-  { to: '/dashboard',              label: 'Overview',     icon: LayoutDashboard, exact: true, permission: 'overview.view' },
-  { to: '/dashboard/my-work',      label: 'My work',      icon: ListChecks,      permission: null },
-  { to: '/dashboard/audit',        label: 'Audits',       icon: ClipboardCheck,  match: ['/dashboard/audit'], permission: 'intelligence.view' },
-  { to: '/dashboard/ops',          label: 'Operations',   icon: Workflow,        match: ['/dashboard/ops'], permission: 'ops.view' },
-  { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit,    match: ['/dashboard/intelligence', '/dashboard/intake-forms'], permission: 'intelligence.view' },
-  { to: '/dashboard/growth',       label: 'Growth',        icon: TrendingUp,      match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/sales', '/dashboard/pilots', '/dashboard/pilot-console', '/dashboard/leads', '/dashboard/zion', '/dashboard/marketing'], permission: 'growth.view' },
-  { to: '/dashboard/execution',    label: 'Execution',     icon: PlayCircle,      match: ['/dashboard/execution', '/dashboard/tasks'], permission: 'execution.view' },
-  { to: '/dashboard/companies',    label: 'Companies',     icon: Building2,       match: ['/dashboard/companies', '/dashboard/crystal'], permission: 'companies.view' },
-  { to: '/dashboard/sales-team',    label: 'Sales Team',    icon: Users,           match: ['/dashboard/sales-team'], permission: ['sales.manage', 'sales.finance', 'sales.hiring'] },
-  { to: '/dashboard/admin',        label: 'Admin',         icon: ShieldCheck,     match: ['/dashboard/admin', '/dashboard/jobs', '/dashboard/invoices', '/dashboard/contracts', '/dashboard/nova-vault', '/dashboard/documents', '/dashboard/approvals', '/dashboard/installations'], permission: 'admin.view' },
+  { to: '/dashboard',                     label: 'Overview',   icon: LayoutDashboard, exact: true, permission: 'overview.view' },
+  { to: '/dashboard/my-work',             label: 'My work',    icon: ListChecks,      permission: null },
+  { to: '/dashboard/audit',               label: 'Audits',     icon: ClipboardCheck,  match: ['/dashboard/audit'], permission: 'intelligence.view' },
+  { to: '/dashboard/ops/requests',        label: 'Requests',   icon: Inbox,           match: ['/dashboard/ops/requests', '/dashboard/ops/inbox'], permission: 'ops.view' },
+  { to: '/dashboard/ops/campaigns',       label: 'Revive',     icon: RotateCcw,       match: ['/dashboard/ops/campaigns'], permission: 'ops.view' },
+  { to: '/dashboard/ops/demand',          label: 'Demand',     icon: BarChart3,       match: ['/dashboard/ops/demand'], permission: 'ops.view' },
+  { to: '/dashboard/command/workforce',   label: 'Workers',    icon: Network,         match: ['/dashboard/command'], permission: 'command.view' },
+  { to: '/dashboard/ops',                 label: 'Operations', icon: Workflow,        match: ['/dashboard/ops'], permission: 'ops.view' },
+  { to: '/dashboard/sales-team/academy',  label: 'Training',   icon: GraduationCap,   match: ['/dashboard/sales-team/academy'], permission: 'sales.manage' },
+]
+const MORE = [
+  { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit, match: ['/dashboard/intelligence', '/dashboard/intake-forms'], permission: 'intelligence.view' },
+  { to: '/dashboard/growth',       label: 'Growth',       icon: TrendingUp,   match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/sales', '/dashboard/pilots', '/dashboard/pilot-console', '/dashboard/leads', '/dashboard/zion', '/dashboard/marketing'], permission: 'growth.view' },
+  { to: '/dashboard/execution',    label: 'Execution',    icon: PlayCircle,   match: ['/dashboard/execution', '/dashboard/tasks'], permission: 'execution.view' },
+  { to: '/dashboard/companies',    label: 'Companies',    icon: Building2,    match: ['/dashboard/companies', '/dashboard/crystal'], permission: 'companies.view' },
+  { to: '/dashboard/sales-team',   label: 'Sales Team',   icon: Users,        match: ['/dashboard/sales-team'], permission: ['sales.manage', 'sales.finance', 'sales.hiring'] },
+  { to: '/dashboard/admin',        label: 'Admin',        icon: ShieldCheck,  match: ['/dashboard/admin', '/dashboard/jobs', '/dashboard/invoices', '/dashboard/contracts', '/dashboard/nova-vault', '/dashboard/documents', '/dashboard/approvals', '/dashboard/installations'], permission: 'admin.view' },
 ]
 
 function OrgSwitcher() {
@@ -131,56 +141,66 @@ export default function DashboardLayout() {
     )
   }
 
-  const active = (item) =>
-    item.exact ? loc.pathname === item.to : (item.match || [item.to]).some((p) => loc.pathname.startsWith(p))
-  const visibleNav = NAV.filter((item) => !item.permission || (Array.isArray(item.permission) ? item.permission.some(hasPermission) : hasPermission(item.permission)))
+  const allowed = (item) => !item.permission || (Array.isArray(item.permission) ? item.permission.some(hasPermission) : hasPermission(item.permission))
+  const visibleNav = NAV.filter(allowed)
+  const visibleMore = MORE.filter(allowed)
+  const score = (item) => (item.exact ? (loc.pathname === item.to ? 1000 : -1) : Math.max(-1, ...(item.match || [item.to]).filter((p) => loc.pathname.startsWith(p)).map((p) => p.length)))
+  const best = [...visibleNav, ...visibleMore].reduce((acc, item) => (score(item) > (acc ? score(acc) : -1) ? item : acc), null)
+  const active = (item) => !!best && best.to === item.to && score(item) >= 0
   const orgName = currentOrg?.name || 'Nova Systems'
+
+  function NavItem({ item, small = false }) {
+    const on = active(item)
+    const Icon = item.icon
+    return (
+      <Link
+        to={item.to}
+        onClick={() => setOpen(false)}
+        aria-current={on ? 'page' : undefined}
+        className="nova-nav-item"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: small ? '8px 14px' : '10px 14px', borderRadius: 10, marginBottom: 4,
+          textDecoration: 'none', border: `1px solid ${on ? 'rgba(201,168,76,0.55)' : 'transparent'}`,
+          background: on ? 'rgba(201,168,76,0.10)' : 'transparent', color: on ? '#FAFAFA' : 'rgba(250,250,250,0.66)',
+          fontSize: small ? 13 : 14, fontWeight: on ? 600 : 500, transition: 'background .15s, color .15s, border-color .15s',
+        }}
+      >
+        <Icon style={{ width: small ? 15 : 17, height: small ? 15 : 17, flexShrink: 0, color: on ? GOLD : 'rgba(250,250,250,0.55)' }} />
+        {item.label}
+      </Link>
+    )
+  }
 
   function Sidebar() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
 
         {/* Logo + org switcher */}
-        <div style={{ padding: '28px 22px 22px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
-              <rect x="1" y="1" width="30" height="30" rx="4" stroke={GOLD} strokeWidth="1.5" fill="none" />
-              <text x="16" y="23" textAnchor="middle" fontFamily="'Arial Black',Arial,sans-serif" fontWeight="900" fontSize="18" fill={GOLD}>N</text>
-            </svg>
-            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Nova HQ</span>
-          </div>
+        <div style={{ padding: '26px 20px 18px', flexShrink: 0 }}>
+          <Link to="/dashboard" aria-label="Nova Systems — overview" style={{ display: 'block', marginBottom: 18 }}>
+            {/* the approved mark; its black background blends into the panel */}
+            <img src="/logo.png" alt="Nova Systems" width="104" height="104" style={{ display: 'block', width: 104, height: 104, mixBlendMode: 'lighten', marginLeft: -12 }} />
+          </Link>
           <OrgSwitcher />
         </div>
 
         {/* Nav */}
-        <nav aria-label="Nova HQ" style={{ flex: 1, padding: '6px 10px', overflowY: 'auto' }}>
-          {visibleNav.map(item => {
-            const on = active(item)
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={() => setOpen(false)}
-                aria-current={on ? 'page' : undefined}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 9,
-                  padding: '9px 12px', borderRadius: 7,
-                  marginBottom: 1, textDecoration: 'none',
-                  background: on ? `${GOLD}10` : 'transparent',
-                  color: on ? '#fff' : 'rgba(255,255,255,0.35)',
-                  fontSize: 13, fontWeight: on ? 500 : 400,
-                  transition: 'all 0.12s',
-                }}
-                onMouseEnter={e => { if (!on) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)' } }}
-                onMouseLeave={e => { if (!on) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)' } }}
-              >
-                <Icon style={{ width: 14, height: 14, flexShrink: 0, color: on ? GOLD : 'inherit' }} />
-                {item.label}
-              </Link>
-            )
-          })}
+        <nav aria-label="Nova HQ" style={{ flex: 1, padding: '4px 12px', overflowY: 'auto' }}>
+          {visibleNav.map((item) => <NavItem key={item.to} item={item} />)}
+          {visibleMore.length > 0 && (
+            <details open={visibleMore.some(active)} style={{ marginTop: 10 }}>
+              <summary style={{ listStyle: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', color: 'rgba(250,250,250,0.45)', fontSize: 11, fontWeight: 600, letterSpacing: '.18em', textTransform: 'uppercase' }}>
+                More <ChevronDown style={{ width: 13, height: 13 }} />
+              </summary>
+              {visibleMore.map((item) => <NavItem key={item.to} item={item} small />)}
+            </details>
+          )}
         </nav>
+
+        <div style={{ padding: '0 22px 10px', flexShrink: 0 }} aria-hidden="true">
+          <div style={{ width: 56, height: 1, background: GOLD, opacity: 0.6, margin: '6px 0 12px' }} />
+          <p style={{ margin: 0, color: 'rgba(250,250,250,0.42)', fontSize: 10, letterSpacing: '.32em', lineHeight: 1.9, textTransform: 'uppercase' }}>People<br />Systems<br />Growth</p>
+        </div>
 
         {/* User / Logout */}
         <div style={{ padding: '14px 10px 22px', flexShrink: 0 }}>
@@ -211,7 +231,7 @@ export default function DashboardLayout() {
     <div style={{ display: 'flex', minHeight: '100vh', background: NAVY, fontFamily: "'Inter',system-ui,sans-serif", color: '#fff' }}>
 
       {/* Desktop sidebar */}
-      <aside style={{ width: 210, flexShrink: 0, background: 'rgba(255,255,255,0.02)', borderRight: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="hidden md:flex">
+      <aside style={{ width: 232, flexShrink: 0, background: '#0A0A0A', borderRight: '1px solid rgba(201,168,76,0.16)', position: 'sticky', top: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="hidden md:flex">
         <Sidebar />
       </aside>
 

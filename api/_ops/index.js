@@ -161,6 +161,12 @@ export async function handleOps(req, res, op) {
       return send(res, 400, { error: 'Unknown install action' });
     }
 
+    // Owner home: everything the first screen shows, from the business's own records (api/_ops/home.js).
+    if (op === 'home') {
+      const s = await inOrg(req, res, orgParam, 'ops.view'); if (!s) return;
+      const { ownerHome } = await import('./home.js');
+      return send(res, 200, await ownerHome(s.orgId, { callerId: s.caller.id }));
+    }
     if (op === 'overview' || op === 'readiness') {
       const s = await inOrg(req, res, orgParam, 'ops.view'); if (!s) return;
       return send(res, 200, await readiness(s.orgId));
