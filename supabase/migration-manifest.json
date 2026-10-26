@@ -41,6 +41,7 @@
     "supabase/ops-06-ai-spend-guard-migration-standalone.sql",
     "supabase/ops-07-contract-drafts-delivery-migration-standalone.sql",
     "supabase/ops-08-audit-workspace-migration-standalone.sql",
+    "supabase/ops-09-worker-capabilities-migration-standalone.sql",
     "supabase/zz-public-schema-lockdown-standalone.sql"
   ]
 }

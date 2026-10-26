@@ -283,8 +283,22 @@ export async function heartbeat(ctx, { stopped = false, force = false } = {}) {
   } catch (e) { console.error('[worker] heartbeat failed:', e.message); }
 }
 
+// Paused registered workers (api/_workerCapabilities.js): their job types are not claimed, so the jobs wait in the queue
+// untouched and run after the owner resumes the worker. Checked every 15 s; on a read failure the last answer is kept.
+let held = { at: 0, types: [] };
+async function claimableTypes(ctx) {
+  if (ctx.mode !== 'postgres') return null;
+  if (Date.now() - held.at > 15_000) {
+    try {
+      const r = await fetch(`${ctx.url}/rest/v1/workers?capability_key=not.is.null&select=capability_key,status`, { headers: { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}` } });
+      if (r.ok) { const { heldJobTypes } = await import('../api/_workerCapabilities.js'); const types = heldJobTypes(await r.json()); if (types.join() !== held.types.join() && types.length) console.log(`[worker] holding paused job types: ${types.join(', ')}`); held = { at: Date.now(), types }; }
+    } catch { /* keep the previous answer */ }
+  }
+  return held.types.length ? Object.keys(handlers).filter((t) => !held.types.includes(t)) : null;
+}
+
 async function processOneJob(store, ctx) {
-  const job = await store.claimNext({ workerId: WORKER_ID, leaseSeconds: 60 });
+  const job = await store.claimNext({ workerId: WORKER_ID, leaseSeconds: 60, jobTypes: await claimableTypes(ctx) });
   if (!job) return false;
   console.log(`[worker] claimed job ${job.id} (${job.job_type}), attempt ${job.attempts}/${job.max_attempts}`);
   const handler = handlers[job.job_type];

@@ -198,6 +198,8 @@ export async function handleAuditWorkspace(req, res, op, caller) {
     // ---------------------------------------------------------------- review: website + email DNS → evidence + proposed findings
     if (op === 'review') {
       if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
+      const reviewer = await dbOne("workers?capability_key=eq.audit_review&status=neq.inactive&select=status");
+      if (reviewer && reviewer.status !== 'active' && reviewer.status !== 'restricted') return send(res, 409, { error: 'The Audit evidence worker is paused. Resume it on the Workers page to run the review.', paused: true });
       const biz = c.business_id ? await dbOne(`businesses?id=eq.${enc(c.business_id)}&select=website,confirmed_website`) : null;
       const website = c.intake?.website || biz?.confirmed_website || biz?.website;
       if (!website) return send(res, 409, { error: 'Add the business website in Business details first. Without one, record in-person or owner-provided evidence instead.', need: 'website' });

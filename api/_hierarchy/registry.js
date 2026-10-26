@@ -6,6 +6,7 @@ import { rateLimit } from '../_rateLimit.js';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, audit, bad, wrap, requirePerm, displayNameOf } from '../_sales/core.js';
 import { canTransitionWorker, assignmentProblems, normalizeCeoTwinPolicy, ceoTwinReadiness, isSelfApproval, selfApprovalPolicy } from './rules.js';
 import { fingerprintPolicy, checkSelfApprovalReauth, isActiveOwner } from './governance.js';
+import { CAPABILITIES, capabilityByKey, readinessFor, PAUSED_STATES } from '../_workerCapabilities.js';
 
 async function policy(key) {
   const [approved, pending] = await Promise.all([dbOne(`sales_config?key=eq.${enc(key)}&status=eq.approved&select=*`), dbOne(`sales_config?key=eq.${enc(key)}&status=in.(draft,pending_approval)&order=version.desc&select=*`)]);
@@ -16,7 +17,7 @@ async function policy(key) {
 export const handleHierarchy = wrap(async (req, res, op) => {
   const b = req.body || {};
   const need = (m) => { if (req.method !== m) { bad(res, 405, 'Method not allowed'); return false; } return true; };
-  const ownerOps = ['create-portfolio-entity', 'set-portfolio-status', 'create-org-unit', 'create-position', 'create-worker', 'set-worker-status', 'assign-executive', 'save-ceo-twin-policy', 'approve-ceo-twin-policy', 'save-authority-matrix', 'approve-authority-matrix'];
+  const ownerOps = ['create-portfolio-entity', 'set-portfolio-status', 'create-org-unit', 'create-position', 'create-worker', 'register-capability', 'set-worker-status', 'assign-executive', 'save-ceo-twin-policy', 'approve-ceo-twin-policy', 'save-authority-matrix', 'approve-authority-matrix'];
   const caller = await requirePerm(req, res, ownerOps.includes(op) ? 'command.owner' : 'command.view'); if (!caller) return;
   if (!rateLimit(req, res, 90, 60_000)) return;
 
@@ -32,6 +33,28 @@ export const handleHierarchy = wrap(async (req, res, op) => {
     const rows = await dbGet('workers?order=created_at.asc&select=*,positions(title,authority_level,position_type),org_units(name)');
     const out = []; for (const w of rows) out.push({ ...w, email: w.staff_user_id ? (await displayNameOf(w.staff_user_id)) : null });
     return res.status(200).json(out);
+  }
+  // Executable capabilities: what each worker really does, its readiness, and recorded activity from the job queue.
+  if (op === 'capabilities') {
+    const nova = await dbOne("organizations?kind=eq.nova_internal&select=id&order=created_at.asc");
+    const since = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const [workers, settings, rules, camps, beat, jobs] = await Promise.all([
+      dbGet('workers?capability_key=not.is.null&select=id,display_name,status,capability_key,created_at,updated_at'),
+      nova ? dbOne(`wave1_org_settings?organization_id=eq.${enc(nova.id)}&select=business_hours,escalation_contacts`) : null,
+      nova ? dbGet(`ops_price_rules?organization_id=eq.${enc(nova.id)}&status=eq.approved&select=id&limit=1`) : [],
+      dbGet("demand_campaigns?status=eq.approved&select=id").catch(() => []),
+      dbOne('worker_runtime_heartbeats?select=last_seen_at&order=last_seen_at.desc').catch(() => null),
+      dbGet(`jobs?created_at=gte.${enc(since)}&select=job_type,status,completed_at,created_at&order=created_at.desc&limit=5000`).catch(() => []),
+    ]);
+    const facts = { hasServices: !!(settings?.business_hours && rules.length), hasEscalation: !!(settings?.escalation_contacts || []).length, approvedCampaigns: camps.length, heartbeatFresh: !!beat && Date.now() - new Date(beat.last_seen_at).getTime() < 10 * 60_000 };
+    const out = CAPABILITIES.map((c) => {
+      const w = workers.find((x) => x.capability_key === c.key && x.status !== 'inactive') || null;
+      const mine = jobs.filter((j) => c.job_types.includes(j.job_type));
+      const last = mine.find((j) => j.completed_at);
+      return { ...c, readiness: readinessFor(c.key, { facts }), worker: w, paused: !!w && PAUSED_STATES.has(w.status),
+        activity: { completed_7d: mine.filter((j) => j.status === 'completed').length, failed_7d: mine.filter((j) => ['failed', 'dead'].includes(j.status)).length, waiting: mine.filter((j) => j.status === 'pending').length, last_completed_at: last?.completed_at || null } };
+    });
+    return res.status(200).json({ capabilities: out, heartbeat_at: beat?.last_seen_at || null });
   }
   if (op === 'worker') {
     const w = await dbOne(`workers?id=eq.${enc(sanitize(req.query?.id, 60))}&select=*,positions(title,authority_level,position_type,is_reserved),org_units(name)`); if (!w) return bad(res, 404, 'Worker not found');
@@ -96,6 +119,17 @@ export const handleHierarchy = wrap(async (req, res, op) => {
     });
     if (!ins.row) return bad(res, 409, 'That person already has an active worker record, or another conflict occurred.');
     await audit(caller, 'worker', ins.row.id, 'created', { worker_type: type }); return res.status(200).json({ ok: true, worker: ins.row });
+  }
+  if (op === 'register-capability') {
+    if (!need('POST')) return;
+    const cap = capabilityByKey(sanitize(b.capability_key, 60)); if (!cap) return bad(res, 422, 'Only a tested capability from the list can be registered.');
+    const existing = await dbOne(`workers?capability_key=eq.${enc(cap.key)}&status=neq.inactive&select=id,status`);
+    if (existing) return res.status(200).json({ ok: true, worker: existing, already_registered: true });
+    const ins = await dbInsert('workers', { worker_type: 'service_account', display_name: cap.name, status: 'active', capability_key: cap.key, mission: cap.does.slice(0, 1000), responsibilities: `Runs: ${cap.job_types.join(', ') || cap.on_demand}. Code: ${cap.code}`.slice(0, 2000), approved_tools: cap.job_types, created_by: caller.id });
+    if (!ins.row) return bad(res, 409, 'This capability was just registered by someone else. Reload.');
+    await dbInsert('worker_status_events', { worker_id: ins.row.id, from_status: null, to_status: 'active', changed_by: caller.id, reason: `Registered from tested capability ${cap.key}` });
+    await audit(caller, 'worker', ins.row.id, 'registered_capability', { capability: cap.key });
+    return res.status(200).json({ ok: true, worker: ins.row });
   }
   if (op === 'set-worker-status') {
     if (!need('POST')) return;
