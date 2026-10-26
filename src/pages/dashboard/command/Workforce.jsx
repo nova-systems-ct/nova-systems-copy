@@ -20,8 +20,17 @@ export default function Workforce() {
   const isOwner = currentMembership?.role === 'nova_super_admin'
   const [data, setData] = useState(null); const [people, setPeople] = useState([]); const [err, setErr] = useState('')
   const [busy, setBusy] = useState(''); const [msg, setMsg] = useState(null); const [pauseFor, setPauseFor] = useState(null); const [reason, setReason] = useState('')
+  const [presence, setPresence] = useState({})
+  // People and capabilities load independently, so one failing never hides the other.
   const load = useCallback(async () => {
-    try { const [c, w] = await Promise.all([call('capabilities'), call('workers')]); setData(c); setPeople(w.filter((x) => !x.capability_key)); setErr('') } catch (e) { setErr(e.message) }
+    const [c, w] = await Promise.allSettled([call('capabilities'), call('workers')])
+    if (c.status === 'fulfilled') { setData(c.value); setErr('') } else setErr(c.reason.message)
+    if (w.status === 'fulfilled') {
+      const list = w.value.filter((x) => !x.capability_key); setPeople(list)
+      // Truthful presence: "Working" only when a real recent heartbeat is tied to an in-progress work item (server-checked).
+      const entries = await Promise.all(list.map(async (p) => { const r = await authedFetch(`/api/client?resource=workitems&op=worker-presence&worker_id=${encodeURIComponent(p.id)}`); return [p.id, r.ok ? await r.json() : null] }))
+      setPresence(Object.fromEntries(entries))
+    }
   }, [])
   useEffect(() => { load() }, [load])
 
@@ -43,6 +52,18 @@ export default function Workforce() {
       {err && <Notice tone="bad">Workers could not be loaded: {err} <button className="ops-btn" onClick={load}>Try again</button></Notice>}
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       {!data && !err && <p role="status" style={{ color: C.faint }}>Loading workers…</p>}
+      {people.length > 0 && (
+        <Card title={`People · ${people.length}`} style={{ marginBottom: 16 }}>
+          {people.map((p) => { const pr = presence[p.id]; return (
+            <div key={p.id} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '8px 0', borderBottom: `1px solid ${C.line}` }}>
+              <strong style={{ fontSize: 14 }}>{p.display_name}</strong>
+              <span style={{ fontSize: 12, color: C.faint }}>{p.worker_type}{p.positions?.title ? ` · ${p.positions.title}` : ''}</span>
+              <Badge value={(STATUS[p.status] || STATUS.draft)[0]} label={(STATUS[p.status] || STATUS.draft)[1]} />
+              <span style={{ fontSize: 13, color: pr?.working ? C.green : C.dim }}>{pr?.working ? `Working${pr.work_item_title ? ` on ${pr.work_item_title}` : ''}` : 'Not working'}</span>
+            </div>
+          ) })}
+        </Card>
+      )}
 
       {data && (
         <>

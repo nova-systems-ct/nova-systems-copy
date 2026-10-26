@@ -40,8 +40,9 @@ export const handleHierarchy = wrap(async (req, res, op) => {
     const since = new Date(Date.now() - 7 * 86400_000).toISOString();
     const [workers, settings, rules, camps, beat, jobs] = await Promise.all([
       dbGet('workers?capability_key=not.is.null&select=id,display_name,status,capability_key,created_at,updated_at'),
-      nova ? dbOne(`wave1_org_settings?organization_id=eq.${enc(nova.id)}&select=business_hours,escalation_contacts`) : null,
-      nova ? dbGet(`ops_price_rules?organization_id=eq.${enc(nova.id)}&status=eq.approved&select=id&limit=1`) : [],
+      // optional facts: an installation without the operations tables still lists every capability (readiness shows blocked)
+      nova ? dbOne(`wave1_org_settings?organization_id=eq.${enc(nova.id)}&select=business_hours,escalation_contacts`).catch(() => null) : null,
+      nova ? dbGet(`ops_price_rules?organization_id=eq.${enc(nova.id)}&status=eq.approved&select=id&limit=1`).catch(() => []) : [],
       dbGet("demand_campaigns?status=eq.approved&select=id").catch(() => []),
       dbOne('worker_runtime_heartbeats?select=last_seen_at&order=last_seen_at.desc').catch(() => null),
       dbGet(`jobs?created_at=gte.${enc(since)}&select=job_type,status,completed_at,created_at&order=created_at.desc&limit=5000`).catch(() => []),
