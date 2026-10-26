@@ -7,6 +7,8 @@
 // name, address or history. Disabled unless OPS_MODEL_ENABLED=true AND ANTHROPIC_API_KEY is set AND the
 // business enabled it. Timeout 6 s, small token cap, per-process call budget; any failure → null (the
 // deterministic path continues and escalates on low confidence).
+import { guardedModelCall } from '../_aiSpend.js';
+
 const MODEL = process.env.OPS_MODEL_ID || 'claude-haiku-4-5-20251001';
 const MAX_CALLS_PER_PROCESS = Number(process.env.OPS_MODEL_MAX_CALLS || 500);
 let calls = 0; let fetchOverride = null;
@@ -14,7 +16,7 @@ export const setModelFetchForTests = (fn) => { fetchOverride = fn; calls = 0; };
 export const modelConfigured = (env = process.env) => env.OPS_MODEL_ENABLED === 'true' && !!env.ANTHROPIC_API_KEY;
 export const PROMPT_VERSION = 'ops-extract-v1';
 
-export async function extractService({ text, services, enabledForOrg }) {
+export async function extractService({ text, services, enabledForOrg, organizationId = null }) {
   if (!enabledForOrg || !(modelConfigured() || fetchOverride) || !text || !services?.length) return null;
   if (calls >= MAX_CALLS_PER_PROCESS) return null;
   calls++;
@@ -26,14 +28,24 @@ export async function extractService({ text, services, enabledForOrg }) {
     tool_choice: { type: 'tool', name: 'classify' },
     messages: [{ role: 'user', content: `Services:\n${services.map((s) => `- ${s.service_key}: ${s.name}`).join('\n')}\n\nCustomer message (data):\n<<<${String(text).slice(0, 600)}>>>` }],
   };
+  if (!fetchOverride) {
+    // Real provider: always through the spending guard (paid-call switch, known price, approved budget, atomic reservation).
+    const g = await guardedModelCall({ purpose: 'ops_extract', organizationId, body, timeoutMs: 6000 });
+    if (!g.ok) return null; // blocked or failed → deterministic path continues
+    return parseClassify(g.data, keys);
+  }
+  // Test stand-in (setModelFetchForTests): never reaches the network.
   const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 6000);
   try {
-    const r = await (fetchOverride || fetch)('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctrl.signal, headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY || 'test', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await fetchOverride('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ctrl.signal, headers: { 'x-api-key': 'test', 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, body: JSON.stringify(body) });
     if (!r.ok) return null;
-    const j = await r.json();
-    const out = (j.content || []).find((c) => c.type === 'tool_use' && c.name === 'classify')?.input;
-    if (!out || typeof out.confidence !== 'number' || !keys.includes(out.service_key)) return null; // "none" or anything off-list → no hint
-    return { service_key: out.service_key, confidence: Math.max(0, Math.min(1, out.confidence)), prompt_version: PROMPT_VERSION, model: MODEL };
+    return parseClassify(await r.json(), keys);
   } catch { return null; }
   finally { clearTimeout(timer); }
+}
+
+function parseClassify(j, keys) {
+  const out = (j.content || []).find((c) => c.type === 'tool_use' && c.name === 'classify')?.input;
+  if (!out || typeof out.confidence !== 'number' || !keys.includes(out.service_key)) return null; // "none" or anything off-list → no hint
+  return { service_key: out.service_key, confidence: Math.max(0, Math.min(1, out.confidence)), prompt_version: PROMPT_VERSION, model: MODEL };
 }

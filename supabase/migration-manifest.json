@@ -38,6 +38,7 @@
     "supabase/ops-04-revive-rules-migration-standalone.sql",
     "supabase/ops-05-loyalty-ledger-migration-standalone.sql",
     "supabase/demo-01-website-demo-migration-standalone.sql",
+    "supabase/ops-06-ai-spend-guard-migration-standalone.sql",
     "supabase/zz-public-schema-lockdown-standalone.sql"
   ]
 }

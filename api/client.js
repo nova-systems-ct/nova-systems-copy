@@ -1,3 +1,4 @@
+import { guardedModelCall } from './_aiSpend.js';
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
@@ -1114,9 +1115,6 @@ async function handleDocuments(req, res) {
   if (req.body?.action === 'mark-sent') return handleDocumentMarkSent(req, res);
   if (!rateLimit(req, res, 10, 60_000)) return;
 
-  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-  if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
-
   const b = req.body || {};
   const entity_name = sanitize(b.entity_name, 200);
   const industry    = sanitize(b.industry, 100);
@@ -1144,15 +1142,8 @@ async function handleDocuments(req, res) {
   ].filter(Boolean).join('\n');
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-5',
+    const guarded = await guardedModelCall({ purpose: 'document_draft', body: {
+        model: process.env.NOVA_DOC_MODEL || 'claude-sonnet-5',
         max_tokens: 2000,
         system: [
           'You are a professional business document writer for Nova Systems, a Connecticut-based operational infrastructure company.',
@@ -1162,10 +1153,12 @@ async function handleDocuments(req, res) {
           'Be specific and business-ready. Do not include placeholder text — write real content based on the context provided.',
         ].join(' '),
         messages: [{ role: 'user', content: userPrompt }],
-      }),
-    });
-
-    const data = await response.json();
+      }, timeoutMs: 60_000 });
+    if (!guarded.ok) {
+      // Blocked by the spending guard (or the provider failed): nothing was generated, and the reason is actionable.
+      return res.status(guarded.blocked ? 503 : 502).json({ error: guarded.message, reason: guarded.reason, blocked: !!guarded.blocked });
+    }
+    const data = guarded.data;
 
     if (data.error) {
       console.error('[client:documents] Anthropic error:', data.error);

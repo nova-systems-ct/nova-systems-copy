@@ -168,7 +168,7 @@ export async function handleInboundTurn({ orgId, conversationId, messageId, now 
   };
   let modelHint = null;
   if (conv.engine_state === 'awaiting_service' && c.ops.ai_extraction_enabled && !R.matchService(msg.body, services)) {
-    modelHint = await extractService({ text: msg.body, services, enabledForOrg: true });
+    modelHint = await extractService({ text: msg.body, services, enabledForOrg: true, organizationId: orgId });
     if (modelHint) await dbInsert('ops_transitions', { organization_id: orgId, entity: 'job', entity_id: job.id, from_state: job.state, to_state: job.state, actor_type: 'model', reason: 'service extraction suggestion', evidence: modelHint, version: modelHint.prompt_version });
   }
   const d = R.decide({ state: conv.engine_state, context: conv.engine_context || {}, text: msg.body, services, slotsFor, business: { display_name: c.display_name }, timeZone: c.wave.timezone, modelHint });
