@@ -114,6 +114,7 @@ try {
   const b2 = await bookOnCustomerPage(cust, 'TEST Owner Walkthrough');
   check(`the test inquiry reaches a confirmed booking on the customer page (${b2.slot})`, b2.confirmed);
   await o.goto(`${APP}/dashboard/ops/requests`);
+  await o.getByRole('button', { name: /Show test requests/ }).click(); // test requests are hidden by default since 2026-10-26
   check('the test request appears in Requests, marked TEST', await seen(o.getByText(/TEST Inquiry \(owner test\)/)));
   await shot(o, '06-requests');
   await o.goto(`${APP}/dashboard`);

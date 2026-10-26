@@ -186,10 +186,11 @@ try {
   await shot(rp, '10-client-report-mobile');
   await page.evaluate((id) => { for (const k of Object.keys(localStorage)) if (/org/i.test(k)) localStorage.setItem(k, id) }, nova); // audits are Nova's own cases: switch the dashboard back to Nova Systems
   await page.goto(`${base}/dashboard/audit/${ac}`);
-  await page.getByRole('button', { name: /Intake & clock/ }).click();
+  await page.getByRole('tab', { name: 'Clock & policy' }).click(); // 2026-10-26: audit sections reorganized
   await page.getByText(/Clock policy/).waitFor({ timeout: 15000 });
   check('the audit case page shows intake, clock policy and test permission sections', await page.getByText(/Permission for active tests/).isVisible());
-  await page.getByRole('button', { name: /Scenarios/ }).click();
+  await page.getByRole('tab', { name: 'More tools' }).click();
+  await page.getByRole('button', { name: 'Financial scenarios' }).click();
   await page.getByText(/A scenario is not a measured loss/).waitFor({ timeout: 10000 });
   check('the scenarios tab states that a scenario is not a measured loss', true);
   await shot(page, '11-audit-scenarios');

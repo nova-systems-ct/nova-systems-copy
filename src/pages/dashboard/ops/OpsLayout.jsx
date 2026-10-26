@@ -40,10 +40,21 @@ export default function OpsLayout() {
   )
 }
 
+// 2026-10-26: the twelve sections are grouped by purpose instead of one sprawling row. Same links and routes.
+const GROUPS = [['Customers', ['', 'inbox', 'requests']], ['Growth', ['campaigns', 'demand', 'rewards']], ['Set up', ['install', 'settings', 'test', 'businesses']], ['Health', ['reports', 'monitoring']]]
 function Tabs({ isNova }) {
+  const all = [...TABS, ...(isNova ? [['businesses', 'Client businesses']] : [])]
   return (
-    <nav className="ops-tabs" aria-label="Operations sections">
-      {[...TABS, ...(isNova ? [['businesses', 'Client businesses']] : [])].map(([to, label]) => <NavLink key={to} end={to === ''} to={`/dashboard/ops${to ? `/${to}` : ''}`} className={({ isActive }) => `ops-tab${isActive ? ' active' : ''}`}>{label}</NavLink>)}
+    <nav aria-label="Operations sections" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 22px', borderBottom: '1px solid rgba(250,250,250,0.10)', paddingBottom: 10, marginBottom: 20 }}>
+      {GROUPS.map(([g, keys]) => {
+        const items = all.filter(([to]) => keys.includes(to)); if (!items.length) return null
+        return (
+          <div key={g} style={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 10, letterSpacing: '.14em', textTransform: 'uppercase', color: 'rgba(250,250,250,0.40)', marginRight: 6 }}>{g}</span>
+            {items.map(([to, label]) => <NavLink key={to} end={to === ''} to={`/dashboard/ops${to ? `/${to}` : ''}`} className={({ isActive }) => `ops-tab${isActive ? ' active' : ''}`} style={{ padding: '8px 10px' }}>{label}</NavLink>)}
+          </div>
+        )
+      })}
     </nav>
   )
 }
