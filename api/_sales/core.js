@@ -187,6 +187,18 @@ async function copyToLocalInbox({ to, subject, text }) {
     return r.ok && j.ID ? `local-inbox:${j.ID}` : null;
   } catch { return null; }
 }
+// One gated email outside the notification queue (e.g. a contract signing link). Same policy as queued mail:
+// dry_run unless SALES_EMAIL_MODE=live, allowlist enforced, local-inbox copy in local staging. Never throws.
+// Returns { status: 'sent'|'dry_run'|'blocked'|'failed', reason?, provider_message_id?, local_copy }.
+export async function sendGatedEmail({ to, subject, text, idempotencyKey }) {
+  const pol = emailPolicy(to);
+  if (!pol.send) {
+    const local = pol.status === 'dry_run' ? await copyToLocalInbox({ to, subject, text }) : null;
+    return { status: pol.status, reason: pol.reason, provider_message_id: local, local_copy: !!local };
+  }
+  const r = await sendEmailNow({ to, subject, text, idempotencyKey });
+  return r.ok ? { status: 'sent', provider_message_id: r.id, local_copy: false } : { status: 'failed', reason: r.error, local_copy: false };
+}
 export async function deliverEmailRow(row, sendBody = null) {
   const pol = emailPolicy(row.email);
   if (!pol.send) {
