@@ -75,7 +75,7 @@ try {
   await shot(o, '03-owner-home');
 
   await o.getByRole('link', { name: /Start an audit/ }).click();
-  check('"Start an audit" opens the new-audit form with online and in-person options', await seen(o.getByText(/Online \+ in-person audit/)) || await seen(o.locator('option', { hasText: 'Online + in-person audit' })));
+  check('"Start an audit" opens the new-audit form with online and in-person options', await seen(o.getByRole('button', { name: 'Online and in person' })) && await seen(o.getByLabel('Business name (required)')));
   await shot(o, '04-start-audit');
 
   await o.goto(`${APP}/dashboard/ops/test`);
@@ -123,7 +123,9 @@ try {
   // Viewing and previewing only: approving the Demand campaign or a rewards program is the owner's decision.
   await o.getByRole('link', { name: 'Operations' }).first().click();
   await o.getByRole('navigation', { name: 'Operations sections' }).getByRole('link', { name: 'Demand', exact: true }).click();
-  check('Operations → Demand lists the prepared campaign as a draft awaiting approval', await seen(o.getByText('Complimentary Nova Audit — Waterbury service businesses')) && await seen(o.getByText(/^draft$/)));
+  // The owner approved this campaign on 2026-10-25 (his decision); the screen must show its recorded status, whatever it is.
+  const campaignStatus = (await db.query("select status from demand_campaigns where name='Complimentary Nova Audit — Waterbury service businesses'")).rows[0]?.status;
+  check(`Operations → Demand lists the prepared campaign with its recorded status (${campaignStatus})`, await seen(o.getByText('Complimentary Nova Audit — Waterbury service businesses')) && await seen(o.getByText(new RegExp(`^${campaignStatus}$`))));
   await o.getByRole('button', { name: 'Open' }).first().click();
   const demandText = await (await seen(o.getByText('Attribution link for replies:')) ? o.locator('body').innerText() : '');
   check('the campaign shows its sourced prospects, the attribution code and the funnel from real records', /Prospects researched\s*20/.test(demandText) && /\/book\?c=[A-Z0-9]{6}/.test(demandText) && /Contacted\s*0/.test(demandText), demandText.slice(0, 300));

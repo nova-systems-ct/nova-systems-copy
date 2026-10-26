@@ -84,7 +84,15 @@ export default function AuditCapture() {
     setBusy(false)
   }
   const pick = async (file) => { if (!file) return; try { setPhoto(await shrink(file)) } catch { setMsg({ tone: 'bad', text: 'That photo could not be read.' }) } }
-  const viewPhoto = async (e) => { try { const r = await call('evidence-photo', { org, query: { case_id: id, evidence_id: e.id } }); window.open(r.url, '_blank', 'noopener') } catch (x) { setMsg({ tone: 'bad', text: x.message }) } }
+  // Streamed through the app (the iPad on the local Wi-Fi route cannot reach Supabase storage URLs).
+  const viewPhoto = async (e) => {
+    const w = window.open('', '_blank')
+    try {
+      const r = await authedFetch(`/api/client?${new URLSearchParams({ resource: 'audit', op: 'evidence-photo', organization_id: org, case_id: id, evidence_id: e.id, stream: '1' })}`)
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `The server answered ${r.status}.`) }
+      const url = URL.createObjectURL(await r.blob()); if (w) w.location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (x) { w?.close(); setMsg({ tone: 'bad', text: `Photo not opened: ${x.message}` }) }
+  }
 
   if (err) return <div style={{ padding: 24, color: '#F07167' }} role="alert">{err}</div>
   if (!audit) return <div style={{ padding: 24, color: DIM }}>Loading the audit…</div>
