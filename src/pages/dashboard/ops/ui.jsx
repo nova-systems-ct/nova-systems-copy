@@ -24,6 +24,7 @@ export const css = `
 .ops-btn.danger { color: #F07167; border-color: rgba(240,113,103,0.5); }
 .ops-btn:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 820px) { .ops-two, .ops-side { grid-template-columns: minmax(0, 1fr); } .ops-wrap { padding: 16px; } }
+@media (pointer: coarse) { .ops-btn, .ops-input, .ops-select { min-height: 44px; } .ops-tab { min-height: 44px; display: inline-flex; align-items: center; } }
 `
 
 export function api(op, { org, method = 'GET', body, query = {} } = {}) {

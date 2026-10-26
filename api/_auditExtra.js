@@ -4,7 +4,7 @@
 // random delivery token whose hash is stored; they expose only the approved, unchanged report.
 import { requireOrgAccess } from './_orgAccess.js';
 import crypto from 'node:crypto';
-import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, appBase, notify, storagePut, storageSign } from './_sales/core.js';
+import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, appBase, notify, storagePut, storageSign, storageGet } from './_sales/core.js';
 import { sanitize } from './_sanitize.js';
 import { textPdf } from './_sales/pdf.js';
 import { contentHash, computeScenario, totalScenarios, checkTestEntry, interpretTest, validateClockPolicy, REQUIRED_REPORT_SECTIONS, validateFinding, PROPOSED_CLOCK_POLICY, buildInputChecklist } from './_auditRules.js';
@@ -150,6 +150,7 @@ export async function handleAuditExtra(req, res, op, caller) {
       if (req.method === 'GET') {
         const e = await dbOne(`audit_evidence?id=eq.${enc(sanitize(q.evidence_id, 60))}&case_id=eq.${enc(c.id)}&select=snapshot_path`);
         if (!e?.snapshot_path) return send(res, 404, { error: 'No photo for this evidence' });
+        if (q.stream === '1') { const f = await storageGet('ops-private', e.snapshot_path); res.setHeader('Content-Type', f.mime); res.setHeader('Cache-Control', 'no-store'); return res.status(200).send(f.buffer); }
         return send(res, 200, { url: await storageSign('ops-private', e.snapshot_path, 300), expires_in_seconds: 300 });
       }
       const raw = String(b.image_base64 || '').replace(/^data:[^,]+,/, '');

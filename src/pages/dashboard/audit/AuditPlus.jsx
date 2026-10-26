@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { authedFetch } from '../../../lib/apiAuth'
 import { C, css, Card, Field, Loading, ErrorBox, Empty, Badge, useLoad, useAction, Notice, money, when } from '../ops/ui'
+import { fetchPdf } from '../../../lib/auditPdf'
 
 const call = (op, { org, caseId, method = 'GET', body, query = {} }) => {
   const qs = new URLSearchParams({ resource: 'audit', op, ...(method === 'GET' ? { organization_id: org, case_id: caseId, ...query } : {}) })
@@ -299,7 +300,8 @@ export function FindingDetailsTab({ org, caseId, findings, onSaved }) {
 export function DeliveryTab({ org, caseId, reports, onSaved }) {
   const act = useAction(); const [summary, setSummary] = useState(''); const [limits, setLimits] = useState(''); const [next, setNext] = useState(''); const [link, setLink] = useState(null); const [emailTo, setEmailTo] = useState('')
   const approved = (reports || []).filter((r) => r.status === 'approved')
-  const download = async (id) => { const r = await act.run(() => call('report-pdf', { org, caseId, query: { report_id: id } }), 'PDF ready.'); if (r?.pdf_base64) { const a = document.createElement('a'); a.href = `data:application/pdf;base64,${r.pdf_base64}`; a.download = r.filename; a.click() } }
+  // Uses the PDF stored in the Vault for this exact version (generated on first use), streamed through the app.
+  const download = async (id) => { const r = await act.run(() => call('pdf', { org, caseId, method: 'POST', body: { report_id: id } }), (x) => `${x.reused ? 'Saved' : 'Generated and saved'} in the Vault: ${x.document.file_name}`); if (r?.document) await fetchPdf({ org, caseId, documentId: r.document.id, fileName: r.document.file_name }).catch(() => {}) }
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {act.view}

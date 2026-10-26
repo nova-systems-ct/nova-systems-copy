@@ -52,6 +52,8 @@ export function validateReportForApproval(content, findings) {
   }
   const text = canonicalize(c);
   for (const re of PROHIBITED) if (re.test(text)) problems.push(`report text contains a claim Nova does not make (${re.source})`);
+  // A version drafted while findings were still proposed must not be approved as-is: it would print "proposed".
+  if (Array.isArray(c.findings)) for (const f of c.findings) if (f && f.review_status && f.review_status !== 'reviewed') problems.push(`this version was drafted before "${String(f.title || '').slice(0, 60)}" was reviewed; draft a new version and approve that`);
   if (!findings.length) problems.push('the case has no findings');
   for (const f of findings) {
     const label = `finding "${String(f.title || f.id).slice(0, 60)}"`;

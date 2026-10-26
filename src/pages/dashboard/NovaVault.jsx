@@ -91,36 +91,38 @@ export default function NovaVault() {
   // short-lived signed URL at the moment it's actually needed, via the admin-only `resign`
   // action. This is a real authorization check performed at access time, not a long-lived bearer
   // link that only ever proved authorization once, back when it was first created.
+  // 2026-10-26: files are streamed through the app (resource=vault&op=download) and shown from a local object URL, so
+  // they open on an iPad that can reach only the app (never a Supabase storage URL). Access is checked per request.
   const getFreshUrl = async (doc) => {
     setResigningId(doc.id)
     try {
-      const r = await authedFetch('/api/client?resource=vault&op=resign', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: doc.id, storage_path: doc.storage_path }),
-      })
-      const data = await r.json()
-      if (!r.ok || !data.file_url) throw new Error(data.error || 'Could not generate a link')
-      return data.file_url
+      const r = await authedFetch(`/api/client?resource=vault&op=download&id=${encodeURIComponent(doc.id)}`)
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || `The server answered ${r.status}.`) }
+      return URL.createObjectURL(await r.blob())
     } finally {
       setResigningId(null)
     }
   }
 
+  const [fileError, setFileError] = useState('')
   const handleDownload = async (doc) => {
+    setFileError('')
     try {
       const url = await getFreshUrl(doc)
-      window.open(url, '_blank', 'noreferrer')
+      const a = document.createElement('a'); a.href = url; a.download = doc.file_name || 'file'; document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (e) {
-      alert('Could not open file: ' + e.message)
+      setFileError(`Could not download ${doc.file_name}: ${e.message}`)
     }
   }
 
   const handlePreview = async (doc) => {
+    setFileError('')
     try {
       const url = await getFreshUrl(doc)
       setPreview({ ...doc, freshUrl: url })
     } catch (e) {
-      alert('Could not open file: ' + e.message)
+      setFileError(`Could not open ${doc.file_name}: ${e.message}`)
     }
   }
 
@@ -164,7 +166,7 @@ export default function NovaVault() {
   }
 
   return (
-    <div style={{ padding: '40px 48px 80px', maxWidth: 1300 }}>
+    <div style={{ padding: 'clamp(20px, 4vw, 40px) clamp(16px, 4vw, 48px) 80px', maxWidth: 1300 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 32, gap: 16, flexWrap: 'wrap' }}>
         <div>
           <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -176,6 +178,8 @@ export default function NovaVault() {
           <Upload style={{ width: 14, height: 14 }} /> Upload
         </button>
       </div>
+
+      {fileError && <div role="alert" style={{ border: '1px solid rgba(240,113,103,0.4)', background: 'rgba(240,113,103,0.08)', color: '#FAFAFA', borderRadius: 8, padding: 12, fontSize: 13, marginBottom: 16 }}>{fileError}</div>}
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 12, marginBottom: 32 }}>
@@ -223,24 +227,19 @@ export default function NovaVault() {
             </div>
           ) : (
             <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, overflow: 'hidden' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 1fr 1fr 100px', padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                {['File', 'Client', 'Type', 'Date', 'Status', ''].map(h => (
-                  <span key={h} style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)' }}>{h}</span>
-                ))}
-              </div>
               {filtered.map(doc => {
                 const sc = STATUS_COLORS[doc.status] || STATUS_COLORS.Active
                 return (
-                  <div key={doc.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 1fr 1fr 100px', padding: '14px 20px', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.file_name}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{doc.client_name || '—'}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>{doc.type}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>{doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</span>
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: sc.bg, color: sc.color, width: 'fit-content', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{doc.status}</span>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <IconBtn icon={Eye} onClick={() => handlePreview(doc)} disabled={resigningId === doc.id} />
-                      <IconBtn icon={Download} onClick={() => handleDownload(doc)} disabled={resigningId === doc.id} />
-                      <IconBtn icon={Trash2} onClick={() => handleDelete(doc)} red />
+                  <div key={doc.id} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px', padding: '14px 18px', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                      <p style={{ color: '#FAFAFA', fontSize: 14, fontWeight: 500, margin: 0, overflowWrap: 'anywhere' }}>{doc.file_name}</p>
+                      <p style={{ color: 'rgba(250,250,250,0.55)', fontSize: 12, margin: '3px 0 0' }}>{[doc.client_name, doc.type, doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null, doc.file_size ? `${Math.round(doc.file_size / 1024)} KB` : null].filter(Boolean).join(' · ')}</p>
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 20, background: sc.bg, color: sc.color, width: 'fit-content', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{doc.status}</span>
+                    <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                      <IconBtn icon={Eye} label={`Open ${doc.file_name}`} onClick={() => handlePreview(doc)} disabled={resigningId === doc.id} />
+                      <IconBtn icon={Download} label={`Download ${doc.file_name}`} onClick={() => handleDownload(doc)} disabled={resigningId === doc.id} />
+                      <IconBtn icon={Trash2} label={`Delete ${doc.file_name}`} onClick={() => handleDelete(doc)} red />
                     </div>
                   </div>
                 )
@@ -308,11 +307,11 @@ function StatCard({ icon: Icon, label, value }) {
   )
 }
 
-function IconBtn({ icon: Icon, onClick, red, disabled }) {
+function IconBtn({ icon: Icon, onClick, red, disabled, label }) {
   return (
-    <button onClick={onClick} disabled={disabled} type="button"
-      style={{ width: 28, height: 28, borderRadius: 6, background: red ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', border: `1px solid ${red ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.1)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1, color: red ? '#f87171' : 'rgba(255,255,255,0.5)', textDecoration: 'none' }}>
-      <Icon style={{ width: 12, height: 12 }} />
+    <button onClick={onClick} disabled={disabled} type="button" aria-label={label} title={label}
+      style={{ width: 40, height: 40, borderRadius: 6, background: red ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', border: `1px solid ${red ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.1)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1, color: red ? '#f87171' : 'rgba(255,255,255,0.5)', textDecoration: 'none' }}>
+      <Icon style={{ width: 15, height: 15 }} />
     </button>
   )
 }

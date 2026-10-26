@@ -140,6 +140,14 @@ export async function storagePut(bucket, path, buffer, mime) {
   if (!r.ok) throw Object.assign(new Error(`storage upload failed (${r.status})`), { status: 502, detail: await r.text().catch(() => '') });
   return path;
 }
+// Read a private object with the service role, for streaming through the API (used where only the app is reachable,
+// e.g. an iPad on the local Wi-Fi route, and so no Supabase storage URL is ever handed to a browser).
+export async function storageGet(bucket, path) {
+  const { url, key } = cfg();
+  const r = await fetch(`${url}/storage/v1/object/${bucket}/${path.split('/').map(enc).join('/')}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+  if (!r.ok) throw Object.assign(new Error(`storage read failed (${r.status})`), { status: r.status === 404 ? 404 : 502 });
+  return { buffer: Buffer.from(await r.arrayBuffer()), mime: r.headers.get('content-type') || 'application/octet-stream' };
+}
 export async function storageSign(bucket, path, seconds = 300) {
   const { url, key } = cfg();
   const r = await fetch(`${url}/storage/v1/object/sign/${bucket}/${path.split('/').map(enc).join('/')}`, { method: 'POST', headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: seconds }) });

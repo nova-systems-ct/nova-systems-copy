@@ -1,4 +1,6 @@
 import { guardedModelCall } from './_aiSpend.js';
+import { storageGet } from './_sales/core.js';
+import { handleAuditWorkspace, WORKSPACE_OPS } from './_auditWorkspace.js';
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
@@ -506,6 +508,27 @@ async function handleVaultUpload(req, res) {
 // does. Not yet wired into NovaVault.jsx's UI (flagged in docs/PRODUCT_BUILD_STATE.md as a
 // deliberate, bounded scope cut, not a silent gap) — the server-side capability exists so that
 // follow-up is a small frontend change, not another backend one.
+// Streams a Vault file through the API (no Supabase storage URL reaches the browser), so it also opens where only the
+// app is reachable, such as an iPad on the local Wi-Fi route. Only the storage path recorded on the row is read.
+async function handleVaultDownload(req, res) {
+  if (!rateLimit(req, res, 60, 60_000)) return;
+  const id = sanitize(req.query?.id, 100);
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  const rowRes = await sbSelect(`vault_documents?id=eq.${encodeURIComponent(id)}&select=storage_path,file_name,mime_type&limit=1`);
+  const row = rowRes.ok ? (await rowRes.json())[0] : null;
+  if (!row?.storage_path) return res.status(404).json({ error: 'Document not found' });
+  try {
+    const { buffer, mime } = await storageGet('nova-vault', row.storage_path);
+    res.setHeader('Content-Type', row.mime_type || mime || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `${req.query?.inline === '1' ? 'inline' : 'attachment'}; filename="${String(row.file_name || 'file').replace(/[^\w.\- ]/g, '_')}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).send(buffer);
+  } catch (err) {
+    console.error('[client:vault download]', err.message);
+    return res.status(err.status === 404 ? 404 : 502).json({ error: err.status === 404 ? 'The file is missing from storage.' : 'The Vault did not return the file. Try again.' });
+  }
+}
+
 async function handleVaultResign(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 30, 60_000)) return;
@@ -4286,6 +4309,7 @@ export default async function handler(req, res) {
       if (op === 'upload') return handleVaultUpload(req, res);
       if (op === 'delete') return handleVaultDelete(req, res);
       if (op === 'resign') return handleVaultResign(req, res);
+      if (op === 'download') return handleVaultDownload(req, res);
       return res.status(400).json({ error: `Unknown vault op: ${op}` });
 
     case 'portfolio':
@@ -4362,6 +4386,7 @@ export default async function handler(req, res) {
       if (op === 'report-view' || op === 'report-view-pdf') { if (!rateLimit(req, res, 30, 60_000)) return; return handleReportView(req, res, op); }
       const caller = await requireStaff(req, res);
       if (!caller) return;
+      if (WORKSPACE_OPS.includes(op)) return handleAuditWorkspace(req, res, op, caller);
       if (['intake', 'clock', 'evidence-photo', 'finding-details', 'test-plan', 'competitors', 'software', 'scenarios', 'compose', 'report-pdf', 'publish', 'revoke'].includes(op)) return handleAuditExtra(req, res, op, caller);
       if (op === 'cases') return handleAuditCases(req, res, caller);
       if (op === 'evidence') return handleAuditEvidence(req, res, caller);
