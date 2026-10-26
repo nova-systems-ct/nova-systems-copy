@@ -214,6 +214,30 @@ function worker() {
   child.on('exit', (code) => process.exit(code ?? 0));
 }
 
-const run = { check, up, env: writeEnv, migrate, provision, serve, worker, down: () => supabase(['stop']) }[cmd];
-if (!run) die('usage: node scripts/local/staging.mjs check|up|env|migrate|provision|serve|worker|down');
+// Rotate the LOCAL test-account passwords (e.g. after they were exposed in a photo). New random passwords are set through
+// the local Auth admin API, every existing session of those accounts is ended, and the git-ignored accounts file is
+// rewritten. Nothing is printed. Refuses anything that is not the local stack.
+async function rotatePasswords() {
+  const env = readEnv();
+  if (!/^http:\/\/127\.0\.0\.1:/.test(env.SUPABASE_URL || '')) die('refusing: not the local stack');
+  if (!fs.existsSync(ACCOUNTS_FILE)) die(`${path.basename(ACCOUNTS_FILE)} not found; run provision first`);
+  const accounts = Object.fromEntries(fs.readFileSync(ACCOUNTS_FILE, 'utf8').split(/\r?\n/).filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
+  const c = await pgClient(env); let n = 0;
+  for (const key of Object.keys(accounts).filter((k) => k.endsWith('_EMAIL'))) {
+    const email = accounts[key]; if (!/@nova-local\.test$/.test(email)) continue; // local test accounts only
+    const id = (await c.query('select id from auth.users where email=$1', [email])).rows[0]?.id; if (!id) continue;
+    const password = `Nv-${crypto.randomBytes(15).toString('base64url')}`;
+    const r = await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users/${id}`, { method: 'PUT', headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) });
+    if (!r.ok) { await c.end(); die(`password change refused for ${key} (${r.status}); nothing else changed for it`); }
+    await c.query('delete from auth.refresh_tokens where user_id::text=$1::text', [id]).catch(() => {});
+    await c.query('delete from auth.sessions where user_id=$1', [id]).catch(() => {});
+    accounts[key.replace(/_EMAIL$/, '_PASSWORD')] = password; n++;
+  }
+  await c.end();
+  fs.writeFileSync(ACCOUNTS_FILE, `# LOCAL STAGING test accounts — git-ignored; local stack only. Rotated ${new Date().toISOString()}.\n${Object.entries(accounts).map(([k, v]) => `${k}=${v}`).join('\n')}\n`, { mode: 0o600 });
+  console.log(`✓ rotated ${n} local test password(s); sessions ended; new values written to ${path.basename(ACCOUNTS_FILE)} (not printed)`);
+}
+
+const run = { check, up, env: writeEnv, migrate, provision, serve, worker, 'rotate-passwords': rotatePasswords, down: () => supabase(['stop']) }[cmd];
+if (!run) die('usage: node scripts/local/staging.mjs check|up|env|migrate|provision|serve|worker|rotate-passwords|down');
 await run();
