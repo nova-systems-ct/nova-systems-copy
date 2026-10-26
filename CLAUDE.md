@@ -1,5 +1,14 @@
 # Nova Systems — Project Instructions
 
+## Start here (repair brief of 2026-10-25)
+Nova is an audit-first business-systems company: Nova Audit, then Agents, Revive and Demand, installed through an
+audit-driven installer. Every session reads, in order: [`docs/NOVA_PRODUCT.md`](docs/NOVA_PRODUCT.md) (goals and
+execution order), [`docs/NOVA_DESIGN.md`](docs/NOVA_DESIGN.md) (black/gold/white, no navy), and the current
+checkpoint [`docs/NOVA_OPERATIONAL_MVP_CHECKPOINT.md`](docs/NOVA_OPERATIONAL_MVP_CHECKPOINT.md) (what is actually
+built and verified). Project skills are in `.claude/skills/`, listed with sources in
+[`docs/SKILLS_MANIFEST.md`](docs/SKILLS_MANIFEST.md). Load a skill only for the step that needs it; marketing skills
+only in the marketing phase.
+
 **Canonical product specification**: [`NOVA_PRODUCT_ONLY_MASTER_EXECUTION_PROMPT.md`](NOVA_PRODUCT_ONLY_MASTER_EXECUTION_PROMPT.md)
 (24 sections, Isaac Nova, 2026-09-23). This is the authoritative source for product scope — read it
 directly rather than relying on a conversation summary, which is lossy across context compaction.

@@ -45,6 +45,19 @@ Docker on this laptop; **sandbox/live** = real provider. No capability is verifi
 | Apple Messages / Pay / Wallet | rewards ledger only | Apple Developer account, MSP, certificates | disposable (loyalty 22) | not integrated | `docs/APPLE_MESSAGES_PAY_WALLET_SETUP.md` |
 | Social channels | sign-in link only | developer apps | — | not implemented | later |
 
+## Session 2026-10-26: repair brief milestones 1–2 (skills) and durable brief
+- Preflight: branch `mvp/operational`, HEAD `58b2fa7`, clean tree before this session. Claude Code bills to the
+  claude.ai **Pro** subscription; no `ANTHROPIC_API_KEY` in the launch environment. Docker and local Supabase running.
+- **Skills installed and discovery verified** in a fresh project session: 10 engineering/design skills and 8 marketing
+  skills in `.claude/skills/`. Sources, commits, licenses and deviations: `docs/SKILLS_MANIFEST.md`. Impeccable's
+  per-edit hooks deliberately not installed. Roast Room prepared in its own folder, not run; its app calls the
+  Anthropic API with an API key (separate billing).
+- Durable brief added: `docs/NOVA_PRODUCT.md`, `docs/NOVA_DESIGN.md`, "Start here" section in `CLAUDE.md`.
+- **Not started yet (next, in order):** milestone 3 spending guard in code + defect list linking each owner symptom
+  to route/steps/cause; milestone 4 contract composer "local api error", audit persistence, clock controls,
+  report/PDF/Vault. Local test credentials still need rotation (they were photographed).
+- Release verification run 12's outcome was not re-checked in this session.
+
 ## Changes 2026-10-25, second session (design, iPad, audit refresh)
 - **Design (approved black/gold/white references):** sidebar with the approved logo and a task-based menu (back office
   under "More"); owner dashboard rebuilt on a new `ops/home` endpoint — every figure from the business's own records,
