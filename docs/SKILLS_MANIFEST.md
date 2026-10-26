@@ -45,3 +45,12 @@ Checked 2026-10-26 with Claude Code 2.1.310 (VS Code extension binary), signed i
   Resume action: open a new Claude Code session with `nova-mvp-work` as the workspace folder.
 
 Skill use per milestone is recorded in the checkpoint.
+
+## Skill use by milestone (2026-10-26, milestones 3–9)
+The session that did this work was started in the home folder, so the project skills could not be invoked with the Skill
+tool ("Unknown skill"), and their SKILL.md files were not read. No skill guidance is claimed for this work. The working
+practices the brief asks for were followed directly: each owner symptom was reproduced before a fix (contract 500 reproduced
+as the owner; audit duplicates found in data; Workers/Training/Requests screenshotted), a regression test was added per
+confirmed bug, and results were checked against saved database state, not just responses. Run the next session from the
+`nova-mvp-work` folder so `frontend-design`, `impeccable` and `web-design-guidelines` can be used for the design review
+that is still owed.

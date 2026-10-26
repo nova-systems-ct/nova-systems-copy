@@ -1,11 +1,37 @@
 # Nova Operational MVP — owner actions (one prioritized list)
 
+## Do these first — 2026-10-26 (repair session; everything below was verified locally only)
+1. **Local test passwords were rotated** (they had been photographed). The new values are in the git-ignored file
+   `.env.local-staging-accounts` in the repo folder. Sign in again on the laptop and the iPad with the new password.
+   To rotate again: `node scripts/local/staging.mjs rotate-passwords`.
+2. **Your name on the home screen:** the local owner account is named "Local Test Owner", so the greeting showed
+   "Local". The greeting now hides test names; use "Add your name to this account" under the greeting to set yours.
+3. **Two contracts you entered on Oct 25 were saved** although the screen said "local api error"
+   (isaac.nova@ctstate.edu, hag@icloud.com, both Growth Package, awaiting signature). Nothing was emailed. Keep, or ask
+   for them to be voided.
+4. **Three empty duplicate audits of Nova** (Oct 17 "Nova systems", Oct 19, Oct 25) hold no data. Open each and press
+   **Archive** if you agree (nothing is deleted). The real one (Oct 17, report v3) stays.
+5. **Demand campaign WUETJW shows "approved"** by your owner account on Oct 25 23:17. Nothing has been sent (no
+   recipients scheduled; every message since then is dry-run). If that approval was not intended, pause it in
+   Operations → Demand.
+6. **Workers:** none are registered. On the Workers page, register the workers you want running (each card says what
+   it does and what blocks it). Pausing one holds its queued work until you resume it.
+7. **AI spending:** paid AI calls are now off unless `NOVA_AI_PAID_CALLS=enabled`, a price is configured in
+   `NOVA_AI_PRICES`, and you approve a budget row in `ai_spend_limits` (per purpose: `document_draft`, `ops_extract`).
+   Decide whether you want either feature on at all; Nova's audit, booking and reports work without AI.
+8. **Physical iPad checks only you can do** (Playwright WebKit at iPad size passed; it is not a real iPad): over your
+   phone hotspot run `node scripts/local/staging.mjs serve --lan`, open the printed address on the iPad, then
+   New audit → five details → Run website and email review → Draft the report → Generate PDF → Open. Check the PDF
+   opens, the camera works in In-person capture, and the keyboard does not cover fields. A hotspot is usually a
+   "Public" network in Windows: the firewall steps in item A below still apply.
+9. **Approve the audit delivery clock policy** when you are ready (Audit → Clock & policy). It never starts by itself.
+
 ## Next milestone — added 2026-10-25 (do these first)
 A. **Close the local Supabase exposure on your Wi-Fi (administrator PowerShell, one time):** Docker publishes Studio,
    the database and the API on every network interface and its firewall rule allows Public networks. Run the three
    commands in `docs/LOCAL_STAGING.md` → "iPad / phone on the same Wi-Fi" (mark your home Wi-Fi Private, block ports
    54321–54327 from the network, allow 5180 on Private only). Undo commands are in the same section.
-B. **Plug the laptop in** so release verification run 12 can start (it waits for AC power).
+B. ~~Plug the laptop in for run 12~~ — run 12 finished (37/38; the one failure was a date-dependent test fixed in 7301ff8). Run 13 is recorded in the checkpoint.
 C. **Audit delivery clock:** Audits → Nova Systems (own business), started Oct 17 → Intake & clock. Version 1 of the
    proposed policy is saved, **not approved**: start = scope agreed + all inputs + start confirmed; calendar hours; aim
    48 h, deliver within 72 h; 5 required inputs; extensions only after the client agrees. Decide whether staff may

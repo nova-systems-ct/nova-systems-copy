@@ -90,3 +90,20 @@ Every API key and variable, with where to get it and how to test it: `docs/NOVA_
 20. For each pilot: Operations → Client businesses → Add a business (untick TEST) → its owner sets services, prices,
     agreement, escalation contact → Install Systems → T1–T5 with that business's own test contact.
 21. Approve the Demand campaign and assign prospect lists to representatives (Academy certification first).
+
+## Additions for hosted staging and production — 2026-10-26 (prepared, nothing purchased or deployed)
+Everything below is ready in the code; each line is an owner action on a paid or external service.
+- **Migrations to apply** (in `supabase/migration-manifest.json` order, after the existing ones): `ops-06-ai-spend-guard`,
+  `ops-07-contract-drafts-delivery`, `ops-08-audit-workspace`, `ops-09-worker-capabilities`, then re-run
+  `zz-public-schema-lockdown` (idempotent). All are additive.
+- **Storage:** private bucket `nova-vault` must exist (audit PDFs go to `audit-reports/<org>/<case>/`); `ops-private`
+  for evidence photos. No public buckets are needed for these features.
+- **Environment variables (names only):** `SALES_EMAIL_MODE` (`dry_run` until Resend is verified), `SALES_EMAIL_ALLOWLIST`
+  (recommended during staging), `RESEND_API_KEY`, `APP_BASE_URL`; optional AI: `NOVA_AI_PAID_CALLS`, `NOVA_AI_PRICES`,
+  `NOVA_DOC_MODEL`, `ANTHROPIC_API_KEY` (leave unset to keep AI off). Contract emails now obey `SALES_EMAIL_MODE`.
+- **Function count:** no new top-level `api/*.js` files were added (still 12/12); new operations ride on `api/client.js`.
+- **Server needs outbound internet** for the audit review (public web pages and DNS); no paid service is used.
+- **Worker host:** the background worker (`worker/index.mjs`) must run somewhere always-on for follow-ups, monitoring and
+  reporting; until then those run only while the laptop is awake.
+- **Hosted verification to run after deploy:** `scripts/local/e2e_audit_journey_test.mjs`, `e2e_contract_composer_test.mjs`
+  and `e2e_workers_test.mjs` are written for local staging; point them at staging only with a staging test-account file.

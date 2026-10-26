@@ -45,6 +45,29 @@ Docker on this laptop; **sandbox/live** = real provider. No capability is verifi
 | Apple Messages / Pay / Wallet | rewards ledger only | Apple Developer account, MSP, certificates | disposable (loyalty 22) | not integrated | `docs/APPLE_MESSAGES_PAY_WALLET_SETUP.md` |
 | Social channels | sign-in link only | developer apps | — | not implemented | later |
 
+## Session 2026-10-26 (continued): repair brief milestones 3–9 — LOCAL verification only
+Defect-by-defect detail: `docs/NOVA_DEFECT_LIST.md`. Owner to-do: top of `docs/NOVA_OPERATIONAL_MVP_OWNER_ACTIONS.md`.
+
+**Local (local Supabase in Docker on this laptop, app on :5180, real background worker):**
+| Area | What changed | Evidence (all local) |
+|---|---|---|
+| AI spending guard | `api/_aiSpend.js` + migration ops-06: paid calls off by default; unknown price or missing approved budget blocks before dispatch; atomic reservation, one retry, idempotent, reported usage settled. Both Anthropic call sites use it. No paid key exists in local env files. | `e2e_ai_spend_guard_test` 13/13 |
+| Contract composer | Root cause of "local api error": undefined variables after insert. Drafts, idempotent send, gated email, delivery status, PDF download streamed. | `e2e_contract_composer_test` 17/17 |
+| Audit workspace | Five-detail start (no duplicates), website + public email DNS review (no AI) → sourced evidence + proposed findings, draft report, branded black/white/gold PDF stored in the Vault, streamed download, clock card, archive. | `e2e_audit_workspace_test` 31/31 (API), `e2e_audit_journey_test` 28/28 (WebKit, iPad size) |
+| Workers | Code-backed capabilities only; register/pause/resume; pause holds queued jobs. | `e2e_workers_test` 17/17 with the real worker |
+| Training | Menu now opens the programs; lesson progress persists. | `e2e_owner_training_test` 7/7 |
+| Home, Requests, Operations, Companies, Vault, sidebar | Account-name greeting, deep links, test data hidden by default, grouped Operations, Crystal labelled, layout fixes. | walkthrough 34/34, ops browser 32/32, capture 12/12, route sweep 60/60 (20 routes × iPad portrait/landscape/phone) |
+| Local passwords | Rotated (exposed in photos); sessions ended; nothing printed. | old passwords → 400, new → 200 |
+
+**Hosted:** nothing deployed, nothing purchased, no message sent, no production data touched. Hosted staging still blocked
+by the items in the activation checklist (Supabase plan/staging project, Vercel login, Resend DNS). Hosted requirements for
+this session's work: `docs/NOVA_ACTIVATION_CHECKLIST.md`, "Additions … 2026-10-26".
+
+**Not done / limits:** no real iPad tested (WebKit at iPad size is not a device); the signed-contract PDF download has no
+local signed contract to exercise; purpose review of Intelligence, Growth, Execution, Sales Team and Admin pages beyond
+"renders cleanly"; installer (Install Systems) not changed this session; skills could not be invoked in this session
+(started outside the repo) — see `docs/SKILLS_MANIFEST.md`.
+
 ## Session 2026-10-26: repair brief milestones 1–2 (skills) and durable brief
 - Preflight: branch `mvp/operational`, HEAD `58b2fa7`, clean tree before this session. Claude Code bills to the
   claude.ai **Pro** subscription; no `ANTHROPIC_API_KEY` in the launch environment. Docker and local Supabase running.
@@ -53,10 +76,7 @@ Docker on this laptop; **sandbox/live** = real provider. No capability is verifi
   per-edit hooks deliberately not installed. Roast Room prepared in its own folder, not run; its app calls the
   Anthropic API with an API key (separate billing).
 - Durable brief added: `docs/NOVA_PRODUCT.md`, `docs/NOVA_DESIGN.md`, "Start here" section in `CLAUDE.md`.
-- **Not started yet (next, in order):** milestone 3 spending guard in code + defect list linking each owner symptom
-  to route/steps/cause; milestone 4 contract composer "local api error", audit persistence, clock controls,
-  report/PDF/Vault. Local test credentials still need rotation (they were photographed).
-- Release verification run 12's outcome was not re-checked in this session.
+- Milestones 3–9: see the section above.
 
 ## Changes 2026-10-25, second session (design, iPad, audit refresh)
 - **Design (approved black/gold/white references):** sidebar with the approved logo and a task-based menu (back office
