@@ -41,11 +41,13 @@ const NAV = [
   { to: '/dashboard/ops/demand',          label: 'Demand',     icon: BarChart3,       match: ['/dashboard/ops/demand'], permission: 'ops.view' },
   { to: '/dashboard/command/workforce',   label: 'Workers',    icon: Network,         match: ['/dashboard/command'], permission: 'command.view' },
   { to: '/dashboard/ops',                 label: 'Operations', icon: Workflow,        match: ['/dashboard/ops'], permission: 'ops.view' },
-  { to: '/dashboard/sales-team/academy',  label: 'Training',   icon: GraduationCap,   match: ['/dashboard/sales-team/academy'], permission: 'sales.manage' },
+  // 2026-10-26: Training opens the programs themselves (owners and reps can take and preview them); review/approval is
+  // linked from there. It used to open the reviewer queue, so the owner could not enter a course.
+  { to: '/dashboard/academy',            label: 'Training',   icon: GraduationCap,   match: ['/dashboard/academy', '/dashboard/sales-team/academy'], permission: 'academy.view' },
 ]
 const MORE = [
   { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit, match: ['/dashboard/intelligence', '/dashboard/intake-forms'], permission: 'intelligence.view' },
-  { to: '/dashboard/growth',       label: 'Growth',       icon: TrendingUp,   match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/sales', '/dashboard/pilots', '/dashboard/pilot-console', '/dashboard/leads', '/dashboard/zion', '/dashboard/marketing'], permission: 'growth.view' },
+  { to: '/dashboard/growth',       label: 'Growth',       icon: TrendingUp,   match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/crm', '/dashboard/sales', '/dashboard/pilots', '/dashboard/pilot-console', '/dashboard/leads', '/dashboard/zion', '/dashboard/marketing'], permission: 'growth.view' },
   { to: '/dashboard/execution',    label: 'Execution',    icon: PlayCircle,   match: ['/dashboard/execution', '/dashboard/tasks'], permission: 'execution.view' },
   { to: '/dashboard/companies',    label: 'Companies',    icon: Building2,    match: ['/dashboard/companies', '/dashboard/crystal'], permission: 'companies.view' },
   { to: '/dashboard/sales-team',   label: 'Sales Team',   icon: Users,        match: ['/dashboard/sales-team'], permission: ['sales.manage', 'sales.finance', 'sales.hiring'] },
