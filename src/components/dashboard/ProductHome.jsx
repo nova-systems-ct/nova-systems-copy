@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { supabase } from '../../lib/supabaseClient'
 import { ArrowRight, Inbox, CalendarCheck, CircleDollarSign, AlertTriangle, ListChecks, Activity, Network, ClipboardCheck, Plug, LineChart } from 'lucide-react'
 import { useOrg } from '../../lib/OrgContext'
 import { api, useLoad } from '../../pages/dashboard/ops/ui'
@@ -65,6 +67,26 @@ function Spark({ series }) {
   )
 }
 
+function NameSetter({ user, onSaved }) {
+  const [open, setOpen] = useState(false); const [v, setV] = useState(''); const [state, setState] = useState('')
+  if (!user) return null
+  const save = async () => {
+    setState('saving')
+    const { data, error } = await supabase.auth.updateUser({ data: { full_name: v.trim() } })
+    if (error) { setState(`Not saved: ${error.message}`); return }
+    onSaved(data.user?.user_metadata?.full_name || v.trim()); setOpen(false); setState('')
+  }
+  if (!open) return <button type="button" className="nh-link" onClick={() => setOpen(true)} style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', fontSize: 13, marginBottom: 8 }}>Add your name to this account</button>
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+      <label htmlFor="owner-name" style={{ fontSize: 13, color: DIM }}>Your name</label>
+      <input id="owner-name" value={v} onChange={(e) => setV(e.target.value)} autoComplete="name" style={{ minHeight: 40, padding: '0 12px', borderRadius: 8, border: `1px solid ${LINE}`, background: '#0A0A0A', color: '#FAFAFA', fontSize: 14 }} />
+      <button type="button" className="nh-btn" disabled={v.trim().length < 2 || state === 'saving'} onClick={save} style={{ minHeight: 40 }}>{state === 'saving' ? 'Saving…' : 'Save'}</button>
+      {state && state !== 'saving' && <span role="alert" style={{ color: '#F07167', fontSize: 13 }}>{state}</span>}
+    </div>
+  )
+}
+
 export default function ProductHome() {
   const { currentOrg, user } = useOrg()
   const org = currentOrg?.id
@@ -72,7 +94,12 @@ export default function ProductHome() {
   const d = r.data
   const hour = new Date().getHours()
   const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-  const first = (user?.user_metadata?.full_name || '').trim().split(' ')[0]
+  // The greeting uses the signed-in account's own name (Supabase Auth profile), never a hard-coded person. A missing name
+  // or a placeholder test-account name ("Local Test …") is not shown; the owner can set their name right here.
+  const [savedName, setSavedName] = useState(null)
+  const fullName = (savedName ?? user?.user_metadata?.full_name ?? '').trim()
+  const placeholder = !fullName || /^(local test|test)/i.test(fullName)
+  const first = placeholder ? '' : fullName.split(' ')[0]
   const m = d?.metrics
   return (
     <section className="nh" aria-labelledby="owner-home" style={{ marginBottom: 32 }}>
@@ -80,9 +107,10 @@ export default function ProductHome() {
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', borderBottom: `1px solid ${LINE}`, paddingBottom: 22, marginBottom: 22 }}>
         <div>
           <p className="nh-eyebrow">Owner dashboard · {currentOrg?.name}</p>
-          <h1 id="owner-home" className="nh-hero" style={{ fontSize: 46, fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1.05, margin: '12px 0 10px' }}>
+          <h1 id="owner-home" className="nh-hero" style={{ fontSize: 'clamp(28px, 4.2vw, 38px)', fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1.1, margin: '12px 0 10px' }}>
             {greet}{first ? <>, <span style={{ color: GOLD }}>{first}.</span></> : '.'}
           </h1>
+          {placeholder && <NameSetter user={user} onSaved={setSavedName} />}
           <p style={{ margin: 0, color: DIM, fontSize: 12, letterSpacing: '.38em', textTransform: 'uppercase' }}>Audit · Systemize · Scale</p>
         </div>
         <Link to="/dashboard/audit?new=1" className="nh-btn">Start an audit <ArrowRight size={16} /></Link>
