@@ -59,6 +59,13 @@ Defect-by-defect detail: `docs/NOVA_DEFECT_LIST.md`. Owner to-do: top of `docs/N
 | Home, Requests, Operations, Companies, Vault, sidebar | Account-name greeting, deep links, test data hidden by default, grouped Operations, Crystal labelled, layout fixes. | walkthrough 34/34, ops browser 32/32, capture 12/12, route sweep 60/60 (20 routes × iPad portrait/landscape/phone) |
 | Local passwords | Rotated (exposed in photos); sessions ended; nothing printed. | old passwords → 400, new → 200 |
 
+**Release verification run 13** (clean export of `96e586e`, Node 24, on battery 42%→16%, one pass): `npm ci`, build, lint,
+`verify_local_all` all exit 0; end-to-end aggregate **37/38 suites, 1602 checks**, 0 timeouts, 0 suspends. The failure,
+`e2e_hierarchy_browser_test`, was a real regression from this session's Workers rewrite (human workers hidden when the
+capabilities request failed); fixed in `41b60e2` and that suite re-run alone: 22 passed, 2 skipped (not built). A second full
+pass was not run (battery). Run 12 (`5aad805`) had finished 37/38 on a date-dependent test already fixed by `7301ff8`.
+Logs: this session's scratchpad `final13\`.
+
 **Hosted:** nothing deployed, nothing purchased, no message sent, no production data touched. Hosted staging still blocked
 by the items in the activation checklist (Supabase plan/staging project, Vercel login, Resend DNS). Hosted requirements for
 this session's work: `docs/NOVA_ACTIVATION_CHECKLIST.md`, "Additions … 2026-10-26".
