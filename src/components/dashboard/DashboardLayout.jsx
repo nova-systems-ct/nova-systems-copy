@@ -187,7 +187,7 @@ export default function DashboardLayout() {
         </div>
 
         {/* Nav */}
-        <nav aria-label="Nova HQ" style={{ flex: 1, padding: '4px 12px', overflowY: 'auto' }}>
+        <nav aria-label="Nova HQ" style={{ flex: 1, minHeight: 0, padding: '4px 12px', overflowY: 'auto' }}>
           {visibleNav.map((item) => <NavItem key={item.to} item={item} />)}
           {visibleMore.length > 0 && (
             <details open={visibleMore.some(active)} style={{ marginTop: 10 }}>

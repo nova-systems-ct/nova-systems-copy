@@ -1,4 +1,5 @@
 import { Building2, Sparkles } from 'lucide-react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOrg } from '../../lib/OrgContext'
 
@@ -20,9 +21,15 @@ const KIND_LABELS = { nova_internal: 'Nova Internal', client: 'Client' }
 export default function Companies() {
   const { organizations, currentOrgId, setCurrentOrg } = useOrg()
   const navigate = useNavigate()
+  // 2026-10-26: workspaces named with the test convention (LOCAL TEST / TEST / DEMO) are hidden by default so real
+  // companies are not buried; nothing is deleted. The current workspace always shows.
+  const [showTest, setShowTest] = useState(false)
+  const isTest = (o) => /^(LOCAL TEST|TEST|DEMO)(\W|$)/.test(o.name || '')
+  const testCount = organizations.filter((o) => isTest(o) && o.id !== currentOrgId).length
+  const shownOrgs = organizations.filter((o) => showTest || !isTest(o) || o.id === currentOrgId)
 
   return (
-    <div style={{ padding: '48px 52px 80px', maxWidth: 1200 }}>
+    <div style={{ padding: 'clamp(20px, 4vw, 48px) clamp(16px, 4vw, 52px) 80px', maxWidth: 1200 }}>
       <div style={{ marginBottom: 40 }}>
         <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 8 }}>Companies</p>
         <h1 style={{ color: '#fff', fontSize: 30, fontWeight: 800, letterSpacing: '-0.02em', marginBottom: 10 }}>Organizations</h1>
@@ -33,7 +40,7 @@ export default function Companies() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 14 }}>
-        {organizations.map((org) => {
+        {shownOrgs.map((org) => {
           const isCurrent = org.id === currentOrgId
           return (
             <button
@@ -60,6 +67,11 @@ export default function Companies() {
           )
         })}
       </div>
+      {testCount > 0 && (
+        <button type="button" onClick={() => setShowTest((v) => !v)} aria-pressed={showTest} style={{ marginTop: 14, minHeight: 40, padding: '0 14px', borderRadius: 8, border: '1px solid rgba(201,168,76,0.5)', background: 'transparent', color: GOLD, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          {showTest ? 'Hide' : 'Show'} test workspaces ({testCount})
+        </button>
+      )}
 
       {organizations.length <= 1 && (
         <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12, marginTop: 24 }}>
@@ -78,7 +90,7 @@ export default function Companies() {
           </div>
           <div>
             <p style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>Crystal</p>
-            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>Provisional name · physical-service operations</p>
+            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 2, lineHeight: 1.5 }}>Planned placeholder from your 2026-09-23 brief (“Crystal/Company 002”, provisional name). Not a client and not a real company record; nothing runs here until you name and approve it.</p>
           </div>
         </button>
       </div>
