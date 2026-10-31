@@ -52,7 +52,28 @@ async function check() {
   try { execFileSync('docker', ['info', '--format', '{{.ServerVersion}}'], { stdio: ['ignore', 'pipe', 'pipe'] }); console.log('✓ Docker is running'); }
   catch { ok = false; console.log('✗ Docker is not installed or not running (needs WSL 2 + Docker Desktop; see docs/LOCAL_STAGING.md)'); }
   try { console.log(`✓ Supabase CLI ${supabase(['--version'], { capture: true }).trim()}`); } catch { ok = false; console.log('✗ Supabase CLI could not run through npx'); }
+  networkExposure();
   if (!ok) process.exit(1);
+}
+
+// Read-only. Docker publishes local Supabase on every interface (the CLI cannot bind it to localhost, and Docker Desktop
+// ignores a default bind address here), so the only protection is a Windows firewall block rule, which needs an
+// administrator. Reports whether that rule exists; never changes anything.
+function networkExposure() {
+  let ports = [];
+  try { ports = execFileSync('docker', ['ps', '--filter', 'name=nova-local', '--format', '{{.Ports}}'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).match(/0\.0\.0\.0:(\d+)/g) || []; } catch { return null; }
+  const open = [...new Set(ports.map((p) => p.split(':')[1]))].sort();
+  if (!open.length) { console.log('✓ Local Supabase publishes no port on the network'); return { exposed: false }; }
+  let rule = false, profile = 'unknown';
+  if (process.platform === 'win32') {
+    try {
+      const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$r = Get-NetFirewallRule -DisplayName 'Nova local Supabase - block network access' -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -eq 'True' -and $_.Action -eq 'Block' }; $p = if ($r) { ($r | Get-NetFirewallPortFilter).LocalPort -join ',' } else { '' }; $n = (Get-NetConnectionProfile -InterfaceAlias 'Wi-Fi' -ErrorAction SilentlyContinue).NetworkCategory; \"$p|$n\""], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      const [p, n] = out.split('|'); profile = n || 'unknown'; rule = /44320-44329/.test(p);
+    } catch { /* unreadable: reported as not confirmed */ }
+  }
+  if (rule) console.log(`✓ Local Supabase ports ${open.join(', ')} are published, and the Nova firewall block rule covers 44320-44329 (Wi-Fi: ${profile})`);
+  else console.log(`! Local Supabase ports ${open.join(', ')} are reachable from this Wi-Fi (${profile}): no Nova firewall block rule. An administrator must run the commands in docs/LOCAL_STAGING.md ("Close the existing exposure").`);
+  return { exposed: !rule, open, profile };
 }
 
 async function up() {
@@ -182,6 +203,7 @@ async function serve() {
   await vite.listen();
   console.log(`✓ Nova local staging: http://localhost:${APP_PORT}  (API on ${API_PORT}, this computer only; Supabase Studio: http://127.0.0.1:44323)`);
   if (lan) console.log(`✓ On the same Wi-Fi (iPad): ${lanIps.map((ip) => `http://${ip}:${APP_PORT}`).join('  ') || 'no Wi-Fi address found'} — sign-in required; Supabase, Studio, the database and the mail inbox are NOT served here`);
+  if (lan) networkExposure();
 }
 
 // LAN mode only. Forwards exactly what the browser uses — sign-in (/auth/v1) and row-level-security reads (/rest/v1) —

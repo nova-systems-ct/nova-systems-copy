@@ -76,6 +76,12 @@ Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private
 New-NetFirewallRule -DisplayName "Nova local Supabase - block network access" -Direction Inbound -Protocol TCP -LocalPort 44320-44329 -Action Block -Profile Any
 New-NetFirewallRule -DisplayName "Nova local staging - iPad on private Wi-Fi" -Direction Inbound -Protocol TCP -LocalPort 5180 -Action Allow -Profile Private
 ```
+Checked 2026-10-31 without administrator rights: no Nova rule exists, Wi-Fi is classed Public, and ports 44321-44324 and
+44327 are published on 0.0.0.0. Setting Docker's default bind address (`"ip": "127.0.0.1"` in `~/.docker/daemon.json`)
+does **not** take effect with this Docker Desktop (a test container still bound 0.0.0.0 after a full stop/start), so it
+was reverted; the firewall rule is the fix. After running the commands, `node scripts/local/staging.mjs check` (and
+`serve --lan`) prints "the Nova firewall block rule covers 44320-44329"; until then they print a warning. To confirm by
+hand: `Get-NetFirewallRule -DisplayName "Nova*" | Get-NetFirewallPortFilter | Select-Object LocalPort`.
 The block rule does not affect the laptop's own access (Windows does not filter loopback). Only mark a network Private
 if it is your own (home/office), never public Wi-Fi. Undo with
 `Remove-NetFirewallRule -DisplayName "Nova local Supabase - block network access"` (and the same for the 5180 rule).
