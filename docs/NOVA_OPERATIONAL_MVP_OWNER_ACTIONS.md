@@ -1,5 +1,20 @@
 # Nova Operational MVP — owner actions (one prioritized list)
 
+## New — 2026-10-31, second brief
+1. **Administrator, PowerShell (Run as administrator)** — close the local database exposure (verified with -WhatIf):
+   `Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private` (only on your own network), then
+   `New-NetFirewallRule -DisplayName "Nova local Supabase - block network access" -Direction Inbound -Protocol TCP -LocalPort 44320-44329 -Action Block -Profile Any`,
+   and for the iPad on your own Wi-Fi `New-NetFirewallRule -DisplayName "Nova local staging - iPad on private Wi-Fi" -Direction Inbound -Protocol TCP -LocalPort 5180 -Action Allow -Profile Private`.
+   Then `node scripts/local/staging.mjs check` should say the rule covers 44320-44329.
+2. **Executive desk (Workers page)**: set your playbook (escalation hours, automatic approval limit, monthly budget, CMO
+   test budget — all unset now, so every expense comes to you) and enter a current balance if you want the CFO to check
+   funds. No bank is connected.
+3. **Decide the website rule**: `CLAUDE.md` says do not modify the public marketing site; the 2026-10-30 brief asks to
+   reposition it. Nothing was changed. Say which applies.
+4. **Harvey**: choose the model provider (Claude or Codex 0.159.3 in Linux) and a dedicated account, not your personal
+   login (`docs/HARVEY_INTEGRATION_DECISION.md`).
+5. **Hosted iPad**: hosted staging database (Supabase plan), `vercel login`, Preview variables and a worker host.
+
 ## New — 2026-10-31 (verified locally only)
 1. **Re-create the laptop firewall block** (PowerShell as administrator; commands in `docs/LOCAL_STAGING.md`). Local
    Supabase moved to ports 44320–44329 after Windows reserved the old range; a rule made for 54321–54327 no longer

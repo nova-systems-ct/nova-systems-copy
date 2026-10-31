@@ -5,6 +5,27 @@ Product authority: the owner's master execution prompt of 2026-10-17, refined by
 Owner to-do list: `docs/NOVA_OPERATIONAL_MVP_OWNER_ACTIONS.md` (top section). Keys and costs:
 `docs/NOVA_INTEGRATION_INVENTORY.md`. Activation steps: `docs/NOVA_ACTIVATION_CHECKLIST.md`.
 
+## Session 2026-10-31 (second brief): network check, browser reading, re-check, workers test, workforce roles
+Commits on `mvp/operational` (local only, not pushed): `bf89b5a` network exposure check · `61c99a3` JavaScript-site
+reading, identity verdict, finding re-check · `0584e25` workers test with isolated fixtures, local isolation test ·
+`2a86124` executive roles · then docs (this section, `docs/CAPABILITY_STATUS_2026-10-31.md`,
+`docs/HARVEY_INTEGRATION_DECISION.md`). Release run: see "Release verification run 14" below.
+- **Network**: Docker publishes local Supabase on 0.0.0.0 (44321-44324, 44327); Wi-Fi is Public; Docker's inbound
+  rule allows it; no Nova block rule exists. Docker's default-bind setting is ignored by this Docker Desktop (tested,
+  reverted). `staging.mjs check` / `serve --lan` now print the exposure until the administrator commands are run.
+- **Audit**: script-built sites are read in a guarded headless browser (every request through the existing guard, GET
+  only, dead proxy for WebSockets; mutation-checked). Identity is decided before evaluation; unconfirmed sites are held
+  until a person confirms. Nova's findings re-checked: 6 still observed, 1 no longer observed (escalation contact +
+  workers), 4 not re-checked (need Vercel). Representative PDF: v10 of Nova's audit.
+- **Workers**: the test runs beside Nova's workers using unregistered capabilities and a LOCAL TEST business; Nova's
+  workers verified untouched. Local cross-business isolation: 20 checks. Hosted isolation stays separate.
+- **Workforce**: executive assistant, COO, CFO, CMO registered for Nova and running through the queue; first records
+  2026-10-31: CFO "No balance on record: available funds unknown"; COO "0 failed job(s)…"; CMO "0 stalled
+  inquiry(ies)…"; assistant "2 item(s) wait for the owner".
+- **Not built this session**: Harvey adapter (decision recorded), cold-email acquisition, wallet pass signing, Apple
+  Messages/Android adapters, Zion video pipeline, public website repositioning (owner decision: CLAUDE.md forbids it),
+  hosted deployment. Exact list: `docs/CAPABILITY_STATUS_2026-10-31.md`.
+
 ## Session 2026-10-31: installer committed, Nova's own installation, audit → PDF → Vault, research conclusions
 Tested revision: the commit that adds this section (parent `c39368b`), on **local staging only** (Docker Supabase on
 ports 4432x, app :5180, API :8790, background worker running). Nothing hosted, nothing pushed, no paid call, no real
