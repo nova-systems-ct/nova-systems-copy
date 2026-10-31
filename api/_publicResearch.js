@@ -15,6 +15,37 @@ const norm = (s) => String(s || '').toLowerCase().replace(/&/g, ' and ').replace
 const tokens = (s) => new Set(norm(s).split(' ').filter(Boolean));
 export function nameSimilarity(a, b) { const A = tokens(a), B = tokens(b); if (!A.size || !B.size) return 0; let i = 0; for (const t of A) if (B.has(t)) i++; return i / (A.size + B.size - i); }
 
+// Is the website the one of the business being audited? Decided before the site is evaluated or competitors are
+// chosen. Sources: the public map (same website / same phone / town), and what the site itself says (name, town).
+//   confirmed   — map listing with this website in this town, map phone on the site, or the site names the business
+//                 and its town
+//   likely      — the site names the business, nothing places it (evaluated; the report says so)
+//   unconfirmed — the site never names the business, or nothing could be read (NOT evaluated; held for a person)
+//   conflict    — the map lists this website in another town (neither evaluated nor used to choose competitors)
+export function verifyIdentity({ name, location, map, crawl, confirmedBy = null }) {
+  const basis = []; const digitsOf = (s) => String(s || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+  const m = map?.status === 'ok' ? map.match : null;
+  const conflictNote = m?.location_conflict ? `The public map lists this website at ${m.display_name || 'another place'}, not ${location || 'the town given'}.` : null;
+  // a person in the workspace said the website is this business's: evaluated; a map location conflict still blocks
+  // choosing "nearby" competitors, because the location itself is in doubt
+  if (confirmedBy) return { status: 'confirmed', evaluate: true, competitors: !conflictNote, basis: [`Confirmed by ${confirmedBy.by || 'a person in this workspace'} on ${String(confirmedBy.at || '').slice(0, 10)}.`, ...(conflictNote ? [conflictNote] : [])] };
+  if (conflictNote) return { status: 'conflict', evaluate: false, competitors: false, basis: [conflictNote] };
+  const bare = String(name || '').replace(/\([^)]*\)/g, ' ');
+  const want = [...tokens(bare)].filter((t) => t.length > 1);
+  const text = ` ${norm(crawl?.site_text || '')} `;
+  const nameOnSite = !!(crawl?.reachable && want.length && want.every((t) => text.includes(` ${t} `)));
+  const town = norm(String(location || '').split(',')[0]);
+  const townOnSite = !!(crawl?.reachable && town && text.includes(` ${town} `));
+  const phoneMatch = !!(m?.phone && (crawl?.signals?.phones || []).some((p) => digitsOf(p) === digitsOf(m.phone)));
+  if (m?.website_matches) basis.push('The public map lists this business with this website in this town.');
+  if (phoneMatch) basis.push('The phone on the public map listing is the phone on the website.');
+  if (nameOnSite) basis.push(`The website names the business ("${bare.trim()}").`);
+  if (townOnSite) basis.push(`The website names the town (${String(location).split(',')[0].trim()}).`);
+  if (m?.website_matches || phoneMatch || (nameOnSite && townOnSite)) return { status: 'confirmed', evaluate: true, competitors: true, basis };
+  if (nameOnSite) return { status: 'likely', evaluate: true, competitors: true, basis: [...basis, 'Nothing public places it in the town given; the owner should confirm.'] };
+  return { status: 'unconfirmed', evaluate: false, competitors: true, basis: [...basis, crawl?.reachable ? `The website does not name "${bare.trim()}".` : 'The website could not be read.', 'Findings about the website are held until a person confirms it belongs to this business.'] };
+}
+
 // ------------------------------------------------------------------ industry → OpenStreetMap categories
 const OSM = [
   [/roof|gutter/i, [['craft', 'roofer']], 'roofer'],
@@ -186,8 +217,8 @@ function excerptsOf(text, re, url, limit = 6) {
   const out = []; for (const m of text.matchAll(re)) { const i = m.index || 0; out.push({ text: clean(text.slice(Math.max(0, i - 50), i + m[0].length + 40), 140), match: m[0].trim(), url }); if (out.length >= limit) break; }
   return out;
 }
-export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now = () => new Date(), timeoutMs = 8000 } = {}) {
-  const pages = []; const skipped = []; let allowed = () => true;
+export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now = () => new Date(), timeoutMs = 8000, render = null } = {}) {
+  const pages = []; let skipped = []; let allowed = () => true;
   const root = new URL(rootUrl);
   try {
     const r = await (fetchImpl || fetch)(new URL('/robots.txt', root).toString(), { headers: { 'User-Agent': UA } });
@@ -200,29 +231,56 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   };
   let home;
   try { home = await fetchPage(root.toString()); } catch (e) { return { reachable: false, error: e.message, dns_not_found: e.code === 'ENOTFOUND' || /ENOTFOUND/.test(e.message || ''), pages, skipped, signals: emptySignals(), features: {} }; }
-  const textOf = (h) => clean(h, 200000);
-  const record = (p) => pages.push({ url: p.finalUrl, status: p.status, retrieved_at: p.retrievedAt, ms: p.ms, bytes: (p.html || '').length, title: clean((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(p.html || '') || [])[1], 120), h1: clean((/<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(p.html || '') || [])[1], 120), html: p.html || '' });
-  record(home);
+  const textOf = (h) => clean(String(h || '').replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, ' '), 200000);
+  const entry = (p, extra = {}) => ({ url: p.finalUrl, status: p.status, retrieved_at: p.retrievedAt, ms: p.ms, bytes: (p.html || '').length, title: clean((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(p.html || '') || [])[1], 120), h1: clean((/<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(p.html || '') || [])[1], 120), html: p.html || '', text: p.text ? clean(p.text, 200000) : null, ...extra });
   const host = hostOf(home.finalUrl);
-  const links = [...String(home.html || '').matchAll(/<a\b[^>]*href=["']([^"'#][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)].map((m) => ({ href: m[1], text: clean(m[2], 60) }));
-  const seen = new Set([new URL(home.finalUrl).pathname]); const queue = [];
-  for (const l of links) {
-    let u; try { u = new URL(l.href, home.finalUrl); } catch { continue; }
-    if (!/^https?:$/.test(u.protocol) || hostOf(u.toString()) !== host) continue;
-    u.hash = ''; if (seen.has(u.pathname)) continue; seen.add(u.pathname);
-    const score = PRIORITY.findIndex((re) => re.test(u.pathname) || re.test(l.text));
-    if (score >= 0) queue.push({ url: u.toString(), score });
-  }
-  queue.sort((a, b) => a.score - b.score);
-  for (const q of queue) {
+  // same-site links worth reading (contact, booking, services, about ...), best first
+  const linksOf = (html, base) => {
+    const seen = new Set([new URL(base).pathname]); const queue = [];
+    for (const m of String(html || '').matchAll(/<a\b[^>]*href=["']([^"'#][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+      let u; try { u = new URL(m[1], base); } catch { continue; }
+      if (!/^https?:$/.test(u.protocol) || hostOf(u.toString()) !== host) continue;
+      u.hash = ''; if (seen.has(u.pathname)) continue; seen.add(u.pathname);
+      const t = clean(m[2], 60); const score = PRIORITY.findIndex((re) => re.test(u.pathname) || re.test(t));
+      if (score >= 0) queue.push({ url: u.toString(), score });
+    }
+    return queue.sort((a, b) => a.score - b.score).map((q) => q.url);
+  };
+  pages.push(entry(home));
+  for (const url of linksOf(home.html, home.finalUrl)) {
     if (pages.length >= maxPages) break;
-    if (!allowed(new URL(q.url).pathname)) { skipped.push({ url: q.url, reason: 'robots.txt disallows it' }); continue; }
-    try { const p = await fetchPage(q.url); if (p.status < 400) record(p); else skipped.push({ url: q.url, reason: `HTTP ${p.status}`, status: p.status }); }
-    catch (e) { skipped.push({ url: q.url, reason: e.message }); }
+    if (!allowed(new URL(url).pathname)) { skipped.push({ url, reason: 'robots.txt disallows it' }); continue; }
+    try { const p = await fetchPage(url); if (p.status < 400) pages.push(entry(p)); else skipped.push({ url, reason: `HTTP ${p.status}`, status: p.status }); }
+    catch (e) { skipped.push({ url, reason: e.message }); }
   }
+  // A page whose served HTML is an empty shell filled in by JavaScript. With a renderer the site is read again the way
+  // a visitor's browser shows it; without one, anything "not found" on it is unknown, not absent.
+  const scriptBuilt = (h) => /<script\b/i.test(h || '') && clean(String(h || '').replace(/<head\b[\s\S]*?<\/head>/i, ' ').replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, ' '), 2000).length < 200;
+  const rendered_by_script = scriptBuilt(home.html);
+  let read_with = 'html'; let render_note = null;
+  if (rendered_by_script && render) {
+    try {
+      const [h] = await render([home.finalUrl]);
+      if (h && !h.error && h.html) {
+        const rendered = [entry({ finalUrl: home.finalUrl, status: h.status || home.status, retrievedAt: h.retrievedAt, html: h.html, text: h.text, ms: null }, { rendered: true })];
+        const rSkipped = []; const next = [];
+        for (const url of linksOf(h.html, home.finalUrl)) {
+          if (rendered.length + next.length >= maxPages) break;
+          if (!allowed(new URL(url).pathname)) { rSkipped.push({ url, reason: 'robots.txt disallows it' }); continue; }
+          next.push(url);
+        }
+        for (const r of next.length ? await render(next) : []) {
+          if (r.error) rSkipped.push({ url: r.url, reason: r.error });
+          else if (r.status >= 400) rSkipped.push({ url: r.url, reason: `HTTP ${r.status}`, status: r.status });
+          else rendered.push(entry({ finalUrl: r.url, status: r.status, retrievedAt: r.retrievedAt, html: r.html, text: r.text, ms: null }, { rendered: true }));
+        }
+        pages.length = 0; pages.push(...rendered); skipped = rSkipped; read_with = 'browser';
+      } else render_note = h?.error || 'the renderer returned no page';
+    } catch (e) { render_note = String(e.message || e).slice(0, 160); }
+  } else if (rendered_by_script) render_note = 'no page renderer on this server';
   const signals = emptySignals();
   for (const p of pages) {
-    const s = extractPublicSignals(p.html, p.url); const text = textOf(p.html);
+    const s = extractPublicSignals(p.html, p.url); const text = p.text || textOf(p.html);
     signals.phones.push(...s.clickToCallNumbers); signals.emails.push(...s.mailtoAddresses);
     for (const f of s.forms) signals.forms.push({ ...f, url: p.url });
     signals.booking_tools.push(...s.bookingTools); signals.chat_tools.push(...s.chatTools);
@@ -234,18 +292,16 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   }
   for (const k of ['phones', 'emails', 'booking_tools', 'chat_tools']) signals[k] = [...new Set(signals[k])];
   const bookingLinks = pages.some((p) => /book|schedul|appointment|reserv/i.test(new URL(p.url).pathname));
-  // A page whose served HTML is an empty shell filled in by JavaScript: this reader (no browser) cannot see its content,
-  // so anything "not found" on it is unknown, not absent.
-  const scriptBuilt = (h) => /<script\b/i.test(h || '') && clean(String(h || '').replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<head\b[\s\S]*?<\/head>/i, ' '), 2000).length < 200;
-  const rendered_by_script = scriptBuilt(home.html);
   const features = {
     https: /^https:/i.test(home.finalUrl), mobile_viewport: signals.no_viewport.length === 0,
     click_to_call: signals.phones.length > 0, contact_form: signals.forms.length > 0, online_booking: signals.booking_tools.length > 0 || bookingLinks,
     prices_published: signals.prices.length > 0, hours_published: signals.hours.length > 0 || signals.structured.some((x) => x.hasHours), reviews_or_social_proof: signals.reviews_proof.length > 0,
     chat: signals.chat_tools.length > 0,
   };
-  if (rendered_by_script) for (const k of SCRIPT_HIDDEN) if (!features[k]) features[k] = null;
-  return { reachable: true, home_status: home.status, rendered_by_script, pages: pages.map(({ html, ...rest }) => rest), skipped, signals, features };
+  if (rendered_by_script && read_with !== 'browser') for (const k of SCRIPT_HIDDEN) if (!features[k]) features[k] = null;
+  // what the site says about itself, for identity checks (titles, headings and visible text; bounded)
+  const site_text = pages.map((p) => [p.title, p.h1, p.text || textOf(p.html)].filter(Boolean).join(' ')).join(' ').slice(0, 30000);
+  return { reachable: true, home_status: home.status, rendered_by_script, read_with, render_note, pages: pages.map(({ html, text, ...rest }) => rest), skipped, signals, features, site_text };
 }
 const SCRIPT_HIDDEN = ['click_to_call', 'contact_form', 'online_booking', 'prices_published', 'hours_published', 'reviews_or_social_proof', 'chat'];
 function emptySignals() { return { phones: [], emails: [], forms: [], booking_tools: [], chat_tools: [], social: {}, structured: [], prices: [], hours: [], reviews_proof: [], no_viewport: [] }; }

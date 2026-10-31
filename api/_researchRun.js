@@ -5,7 +5,8 @@
 import dns from 'node:dns';
 import { dbGet, dbOne, dbInsert, dbPatch, dbFetch, enc, nowIso } from './_sales/core.js';
 import { runQuickScan } from './_demo.js';
-import { resolveIdentity, geocodePlace, crawlSite, industryToOsm, findCompetitorPlaces, searchPlacesByCategory, pickCompetitors, compareJourneys, goalRelevant, coveredBy, FEATURE_LABELS } from './_publicResearch.js';
+import * as Renderer from './_renderPage.js';
+import { verifyIdentity, resolveIdentity, geocodePlace, crawlSite, industryToOsm, findCompetitorPlaces, searchPlacesByCategory, pickCompetitors, compareJourneys, goalRelevant, coveredBy, FEATURE_LABELS } from './_publicResearch.js';
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
 const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return null; } };
@@ -50,7 +51,7 @@ export const MODULES = {
 };
 const MODULE_OF = { location_conflict: 'website_fixes', website_dns: 'website_fixes', home: 'website_fixes', https: 'website_fixes', mobile: 'website_fixes', phones: 'website_fixes', link: 'agents_booking', inquiry_path: 'agents_booking', click_to_call: 'agents_booking', long_form: 'agents_booking', online_booking: 'agents_booking', contact_form: 'agents_booking', chat: 'agents_booking', prices_published: 'website_fixes', hours_published: 'website_fixes', map_phone: 'website_fixes', dns_spf: 'email_setup', dns_dmarc: 'email_setup', reviews_or_social_proof: 'reviews_referrals', mobile_viewport: 'website_fixes' };
 const GOAL_KEY = { website_dns: 'click_to_call', link: 'online_booking', inquiry_path: 'online_booking', click_to_call: 'click_to_call', long_form: 'contact_form', online_booking: 'online_booking', contact_form: 'contact_form', prices_published: 'prices_published', reviews_or_social_proof: 'reviews_or_social_proof', hours_published: 'hours_published', dns_spf: 'email_dns', dns_dmarc: 'email_dns', mobile: 'speed', mobile_viewport: 'speed' };
-const STEP_LABELS = [['identity', 'Find the business on public maps'], ['site', 'Read the website'], ['checks', 'Check contact paths and links'], ['email', 'Check public email records'], ['competitors', 'Find comparable nearby businesses'], ['compare', 'Compare customer journeys'], ['record', 'Record evidence and proposed findings']];
+const STEP_LABELS = [['identity', 'Find the business on public maps'], ['site', 'Read the website'], ['verify', 'Confirm the website is this business'], ['checks', 'Check contact paths and links'], ['email', 'Check public email records'], ['competitors', 'Find comparable nearby businesses'], ['compare', 'Compare customer journeys'], ['record', 'Record evidence and proposed findings']];
 const TOPIC_OF = { dns_spf: 'spf', dns_dmarc: 'dmarc', dns_mx: 'mx' };
 // Proposals that rest only on "not found in the served HTML": withdrawn when the site turns out to be built by script.
 const HTML_ONLY = ['click_to_call', 'hours_published', 'reviews_or_social_proof', 'long_form', 'gap:'];
@@ -79,7 +80,9 @@ export async function runResearch(runId, deps = {}) {
   const evidence = []; // { key, row } rows to insert; findings reference keys
   const ev = (key, source, observation, confidence = 'high', at = now().toISOString(), method = 'public_research') => { evidence.push({ key, row: { case_id: c.id, source: source.slice(0, 500), capture_date: at, method: `automated_review:${runId.slice(0, 8)}:${method}`, observation: String(observation).slice(0, 3000), source_quality: 'medium', confidence, privacy_level: 'internal', author: 'Nova public research' } }); return key; };
   const proposals = []; // { key, check_key, title, detail, why, next, confirm, priority, module_key, evidence: [keys] }
-  const propose = (p) => { const gk = GOAL_KEY[p.key]; const related = goalRelevant(goal, gk); proposals.push({ ...p, priority: related ? bump(p.priority) : p.priority, why: related && p.why ? `${p.why} This bears directly on your goal: "${goal.slice(0, 120)}".` : p.why, module_key: MODULE_OF[p.key] || null }); };
+  // Identity first: until the website is confirmed to be this business's, findings about it are held, not proposed.
+  let verdict = null; const held = [];
+  const propose = (p) => { if (verdict && !verdict.evaluate && !['location_conflict', 'website_dns'].includes(p.key)) { held.push(p.key); return; } const gk = GOAL_KEY[p.key]; const related = goalRelevant(goal, gk); proposals.push({ ...p, priority: related ? bump(p.priority) : p.priority, why: related && p.why ? `${p.why} This bears directly on your goal: "${goal.slice(0, 120)}".` : p.why, module_key: MODULE_OF[p.key] || null }); };
   const limitations = [];
 
   // 1. identity
@@ -102,7 +105,10 @@ export async function runResearch(runId, deps = {}) {
   let crawl = null;
   await step('site', async () => {
     if (!website) return { status: 'skipped', note: 'No website saved.' };
-    crawl = await crawlSite(website, { fetchImpl: deps.fetchImpl, lookup: deps.lookup, maxPages: full ? 12 : 6, now });
+    // JavaScript-built pages are read in a headless browser whose every request goes through the same network guard
+    // (api/_renderPage.js). Off with AUDIT_RENDER=off, or where Playwright/Chromium are not installed.
+    const render = deps.render !== undefined ? deps.render : process.env.AUDIT_RENDER === 'off' ? null : (await Renderer.available()).ok ? (urls) => Renderer.renderPages(urls, { fetchImpl: deps.fetchImpl, lookup: deps.lookup, now }) : null;
+    crawl = await crawlSite(website, { fetchImpl: deps.fetchImpl, lookup: deps.lookup, maxPages: full ? 12 : 6, now, render });
     if (!crawl.reachable && crawl.dns_not_found) {
       // A domain that does not exist in public DNS is a verifiable fact, unlike a timeout or a blocked crawler.
       const at = now().toISOString(); const host = hostOf(website);
@@ -111,11 +117,12 @@ export async function runResearch(runId, deps = {}) {
       return { status: 'done', note: 'The website address does not exist in public DNS' };
     }
     if (!crawl.reachable) { limitations.push(`The website could not be reached from Nova (${crawl.error}). That is not evidence of a problem with the business.`); ev('site', `Website ${website}`, `The website could not be reached from Nova's server (${crawl.error}). Nothing was assumed about it.`, 'low', now().toISOString(), 'site'); return { status: 'unavailable', note: 'Website not reachable from Nova' }; }
-    for (const p of crawl.pages) ev(`page:${p.url}`, `Public web page ${p.url} (retrieved ${p.retrieved_at})`, `HTTP ${p.status}; title "${p.title || '(none)'}"${p.h1 ? `; main heading "${p.h1}"` : ''}; ${Math.round(p.bytes / 1024)} KB of HTML in ${p.ms} ms.`, 'high', p.retrieved_at, 'page');
+    for (const p of crawl.pages) ev(`page:${p.url}`, `Public web page ${p.url} (retrieved ${p.retrieved_at})`, `HTTP ${p.status}; title "${p.title || '(none)'}"${p.h1 ? `; main heading "${p.h1}"` : ''}; ${Math.round(p.bytes / 1024)} KB of HTML${p.ms != null ? ` in ${p.ms} ms` : ''}.${p.rendered ? ' Read in a headless browser (its JavaScript run, as a phone visitor sees it).' : ''}`, 'high', p.retrieved_at, 'page');
     const s = crawl.signals; const at = crawl.pages[0].retrieved_at; const src = `Public website ${crawl.pages[0].url} and ${crawl.pages.length - 1} linked page(s) (retrieved ${at})`;
-    if (crawl.rendered_by_script) {
+    if (crawl.rendered_by_script && crawl.read_with === 'browser') ev('script_built', src, `The HTML the server sends is an empty shell filled in by JavaScript, so the ${crawl.pages.length} page(s) were read in a headless browser, as a phone visitor sees them.`, 'high', at, 'script_built');
+    if (crawl.rendered_by_script && crawl.read_with !== 'browser') {
       // Unavailable, not absent: the served HTML is an empty shell the browser fills in with JavaScript.
-      limitations.push('The website builds its pages with JavaScript and Nova\'s reader uses no browser, so phone links, forms, booking, prices, hours and reviews on it could not be checked. They are reported as not checked, never as missing.');
+      limitations.push(`The website builds its pages with JavaScript and could not be read in a browser here (${crawl.render_note || 'no renderer'}), so phone links, forms, booking, prices, hours and reviews on it could not be checked. They are reported as not checked, never as missing.`);
       ev('script_built', src, `The HTML served for ${crawl.pages.length} page(s) is an empty shell filled in by JavaScript, so tap-to-call links, forms, booking, prices, hours and reviews could not be checked. Not finding them here is not evidence that the site lacks them.`, 'high', at, 'script_built');
       return { note: `${crawl.pages.length} page(s) read; built by JavaScript, so their content could not be checked` };
     }
@@ -130,13 +137,27 @@ export async function runResearch(runId, deps = {}) {
     return { note: `${crawl.pages.length} page(s) read${crawl.skipped.length ? `, ${crawl.skipped.length} not read` : ''}` };
   });
 
+  // 2b. identity verdict, before anything about the website is judged or competitors are chosen
+  await step('verify', async () => {
+    if (!website) return { status: 'skipped', note: 'No website saved.' };
+    if (crawl && !crawl.reachable && crawl.dns_not_found) return { status: 'skipped', note: 'The website address does not exist.' };
+    verdict = verifyIdentity({ name, location, map: id, crawl, confirmedBy: I.website_confirmed && I.website_confirmed.website === website ? I.website_confirmed : null });
+    const at = now().toISOString();
+    ev('identity_verdict', `Nova identity check of ${website} against the public map and the site's own text (${at})`, `${verdict.status === 'confirmed' ? 'Confirmed' : verdict.status === 'likely' ? 'Likely' : verdict.status === 'conflict' ? 'In conflict' : 'Not confirmed'}: ${verdict.basis.join(' ')}`, verdict.status === 'confirmed' ? 'high' : 'medium', at, 'identity_verdict');
+    if (!verdict.evaluate) limitations.push(`The website was not evaluated: identity ${verdict.status}. ${verdict.basis.join(' ')}`);
+    else if (verdict.status === 'likely') limitations.push(`The website names the business but nothing public places it in ${location || 'the town given'}; findings assume it is this business's site.`);
+    return { status: verdict.evaluate ? 'done' : 'unavailable', note: verdict.status === 'confirmed' ? 'Confirmed' : verdict.status === 'likely' ? 'Likely (the site names the business)' : verdict.status === 'conflict' ? 'Conflict: not evaluated' : 'Not confirmed: not evaluated' };
+  });
+
   // 3. contact paths and links (tested quick scan) + crawl-derived checks
   await step('checks', async () => {
     if (!website) return { status: 'skipped', note: 'No website saved.' };
     const scan = await runQuickScan(website, { fetchImpl: deps.fetchImpl, lookup: deps.lookup, now });
     for (const x of scan.checks || []) {
-      const k = ev(`check:${x.key}:${x.url}`, `Public web page ${x.url} (retrieved ${x.checked_at})`, x.observation, x.result === 'unknown' ? 'low' : 'high', x.checked_at, `${x.key}:${x.result}`);
-      if (x.result === 'issue') propose({ key: x.key, check_key: `${x.key}:${hostOf(x.url)}${(() => { try { return new URL(x.url).pathname; } catch { return ''; } })()}`, title: x.label === 'A visible way to get in touch' ? 'No visible way to get in touch on the home page' : x.observation.length <= 110 ? x.observation.replace(/\.$/, '') : x.label, detail: x.observation, why: x.why, next: x.next, confirm: x.confirm, priority: prio(x.strength), evidence: [k] });
+      // On a JavaScript-built site the quick scan sees only the served shell: its content checks are not judged from it.
+      const shellOnly = crawl?.rendered_by_script && ['phones', 'inquiry_path', 'link'].includes(x.key);
+      const k = ev(`check:${x.key}:${x.url}`, `Public web page ${x.url} (retrieved ${x.checked_at})`, shellOnly ? `${x.observation} (Served HTML only: the page is built by JavaScript, so this check is not used.)` : x.observation, x.result === 'unknown' || shellOnly ? 'low' : 'high', x.checked_at, `${x.key}:${shellOnly ? 'unknown' : x.result}`);
+      if (x.result === 'issue' && !shellOnly) propose({ key: x.key, check_key: `${x.key}:${hostOf(x.url)}${(() => { try { return new URL(x.url).pathname; } catch { return ''; } })()}`, title: x.label === 'A visible way to get in touch' ? 'No visible way to get in touch on the home page' : x.observation.length <= 110 ? x.observation.replace(/\.$/, '') : x.label, detail: x.observation, why: x.why, next: x.next, confirm: x.confirm, priority: prio(x.strength), evidence: [k] });
     }
     if (crawl?.reachable) {
       const host = hostOf(crawl.pages[0].url);
@@ -164,6 +185,7 @@ export async function runResearch(runId, deps = {}) {
   // 5–6. competitors + comparison
   const compared = [];
   await step('competitors', async () => {
+    if (verdict && !verdict.competitors) { limitations.push('Competitors were not chosen: the business\'s identity or location is in conflict, so "nearby" is not known.'); return { status: 'unavailable', note: 'Identity in conflict' }; }
     const cat = industryToOsm(industry);
     if (!cat) { limitations.push(`Competitor discovery is not available for the industry "${industry || 'not given'}"; competitors can be added by hand.`); return { status: 'unavailable', note: 'Industry not mapped to a public map category' }; }
     let center = id?.match && !id.match.location_conflict ? { lat: id.lat, lon: id.lon, basis: 'the business\'s map location' } : null;
@@ -215,18 +237,37 @@ export async function runResearch(runId, deps = {}) {
     // Nova withdraws its own UNREVIEWED proposals that this run shows were unsupported (the page turned out to be built by
     // script) or that repeat a reviewed finding. Recorded on the finding, never deleted; a reviewer can restore it.
     const stamp = now().toISOString().slice(0, 16).replace('T', ' ');
+    // What this run actually measured, so a proposal it no longer sees can be withdrawn (and one it sees again restored).
+    const siteMeasured = !!crawl?.reachable && (!crawl.rendered_by_script || crawl.read_with === 'browser') && verdict?.evaluate !== false;
+    const measured = new Set([...(siteMeasured ? HTML_ONLY.filter((k) => !k.endsWith(':')) : []), ...(steps.find((x) => x.key === 'email')?.status === 'done' && verdict?.evaluate !== false ? ['dns_spf', 'dns_dmarc', 'dns_mx'] : [])]);
+    const topicOf = (ck) => ck.split(':')[0];
+    const current = new Set(proposals.map((x) => x.check_key));
+    const unseen = crawl?.rendered_by_script && crawl.read_with !== 'browser';
     for (const f of recorded.filter((x) => x.origin === 'automated_review' && x.review_status === 'draft' && x.check_key)) {
-      const key = f.check_key.split(':')[0];
-      const why = crawl?.rendered_by_script && HTML_ONLY.some((k) => f.check_key.startsWith(k.endsWith(':') ? k : `${k}:`)) ? 'it rested on page content that could not be seen (the site is built by JavaScript)'
-        : coverOf(key, f.check_key) ? `it repeats the recorded finding "${coverOf(key, f.check_key).title.slice(0, 120)}"` : null;
+      const key = topicOf(f.check_key); const htmlOnly = HTML_ONLY.some((k) => f.check_key.startsWith(k.endsWith(':') ? k : `${k}:`));
+      const why = verdict && !verdict.evaluate && !['location_conflict', 'website_dns'].includes(key) ? `the website is not confirmed to be this business's (identity ${verdict.status})`
+        : unseen && htmlOnly ? 'it rested on page content that could not be seen (the site is built by JavaScript)'
+          : coverOf(key, f.check_key) ? `it repeats the recorded finding "${coverOf(key, f.check_key).title.slice(0, 120)}"`
+            : measured.has(key) && !current.has(f.check_key) ? `the research of ${stamp} UTC measured this again and no longer observes it` : null;
       if (!why) continue;
       await dbPatch('audit_findings', `id=eq.${enc(f.id)}&review_status=eq.draft`, { review_status: 'rejected', limitations: `${f.limitations ? `${f.limitations} ` : ''}Withdrawn by Nova's research on ${stamp} UTC: ${why}. Not deleted; a reviewer can restore it.`.slice(0, 2000) });
       existing.add(f.check_key); withdrawn++;
     }
+    let restored = 0;
     for (const p of proposals) {
       if (existing.has(p.check_key)) { already++; continue; }
       if (coverOf(p.key, p.check_key)) { covered++; continue; }
       const links = [...new Set(p.evidence.map((k) => idOf[k]).filter(Boolean))]; if (!links.length) continue;
+      // Withdrawn earlier by Nova (never by a person) and observed again now: restored for review with fresh evidence.
+      const prior = await dbOne(`audit_findings?case_id=eq.${enc(c.id)}&check_key=eq.${enc(p.check_key)}&select=id,review_status,origin,limitations`);
+      if (prior) {
+        if (prior.origin === 'automated_review' && prior.review_status === 'rejected' && /Withdrawn by Nova's research/.test(prior.limitations || '')) {
+          await dbPatch('audit_findings', `id=eq.${enc(prior.id)}`, { review_status: 'draft', detail: p.detail.slice(0, 3000), limitations: `${p.confirm ? `To confirm: ${p.confirm} ` : ''}Observed again by Nova's research on ${stamp} UTC after an earlier withdrawal.`.slice(0, 2000) });
+          for (const e of links) await dbInsert('audit_finding_evidence', { finding_id: prior.id, evidence_id: e });
+          restored++;
+        } else already++;
+        existing.add(p.check_key); continue;
+      }
       const f = await dbInsert('audit_findings', { case_id: c.id, title: p.title.slice(0, 300), statement_type: 'observed_fact', detail: p.detail.slice(0, 3000), priority: p.priority, confidence: 'high', recommended_action: p.next || null, customer_impact: p.why || null, limitations: p.confirm ? `To confirm: ${p.confirm}` : null, financial_impact_status: 'unknown', nova_can_implement: 'unknown', review_status: 'draft', origin: 'automated_review', check_key: p.check_key, module_key: p.module_key });
       if (f.conflict || !f.row) { already++; continue; }
       for (const e of links) await dbInsert('audit_finding_evidence', { finding_id: f.row.id, evidence_id: e });
@@ -241,8 +282,8 @@ export async function runResearch(runId, deps = {}) {
       await dbInsert('audit_competitors', { case_id: c.id, name: x.name.slice(0, 160), url: x.website, rationale: x.rationale.slice(0, 600), observations: x.features ? Object.entries(FEATURE_LABELS).map(([k, l]) => ({ kind: 'observed', text: `${l}: ${yesNo(x.features[k])}`, source: x.website, captured_at: x.at, conditions: `public website, ${x.pagesRead} page(s)` })) : [] });
       have.push({ name: x.name });
     }
-    summary = { evidence_added: inserted.length, findings_proposed: proposed, findings_already_recorded: already, findings_covered_by_recorded: covered, findings_withdrawn: withdrawn, rendered_by_script: !!crawl?.rendered_by_script, competitors: compared.length, competitor_websites_compared: compared.filter((x) => x.features).length, pages_read: crawl?.pages?.length || 0, identity: id?.match ? id.confidence : (id?.status === 'unavailable' ? 'unavailable' : 'not found'), issues: proposals.length, limitations, client_features: crawl?.reachable ? crawl.features : null };
-    return { note: `${inserted.length} evidence records, ${proposed} new finding(s)${covered ? `, ${covered} already covered by a recorded finding` : ""}${withdrawn ? `, ${withdrawn} unsupported proposal(s) withdrawn` : ""}` };
+    summary = { evidence_added: inserted.length, findings_proposed: proposed, findings_already_recorded: already, findings_covered_by_recorded: covered, findings_withdrawn: withdrawn, findings_restored: restored, findings_held: held.length, identity_verdict: verdict?.status || null, read_with: crawl?.read_with || null, rendered_by_script: !!crawl?.rendered_by_script, competitors: compared.length, competitor_websites_compared: compared.filter((x) => x.features).length, pages_read: crawl?.pages?.length || 0, identity: id?.match ? id.confidence : (id?.status === 'unavailable' ? 'unavailable' : 'not found'), issues: proposals.length, limitations, client_features: crawl?.reachable ? crawl.features : null };
+    return { note: `${inserted.length} evidence records, ${proposed} new finding(s)${covered ? `, ${covered} already covered by a recorded finding` : ""}${withdrawn ? `, ${withdrawn} proposal(s) withdrawn` : ""}${restored ? `, ${restored} restored (observed again)` : ""}${held.length ? `, ${held.length} held until identity is confirmed` : ""}` };
   });
   const bad = steps.filter((s) => ['failed', 'unavailable'].includes(s.status)).length;
   await dbPatch('audit_cases', `id=eq.${enc(c.id)}`, { last_review_at: nowIso(), updated_at: nowIso() });

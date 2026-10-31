@@ -37,8 +37,9 @@ async function call(tok, method, op, { query = {}, body } = {}) {
 
 // Stand-in public internet: one site with a broken quote link, mixed phone numbers, MX but no SPF/DMARC.
 const SITE = 'https://stand-in-roofing.example';
+const NAME = `LOCAL TEST Workspace Roofing ${Date.now().toString(36)}`;
 const PAGES = {
-  [`${SITE}/`]: { status: 200, html: '<html><head><title>Stand-in Roofing</title><meta name="viewport" content="width=device-width"></head><body><a href="tel:2035550101">Call</a> <a href="tel:2035550199">Office</a> <a href="/quote">Get a quote</a> <a href="/contact">Contact us</a></body></html>' },
+  [`${SITE}/`]: { status: 200, html: '<html><head><title>Stand-in Roofing</title><meta name="viewport" content="width=device-width"></head><body><h1>' + NAME + '</h1><p>Roof repair in Waterbury, Connecticut</p><a href="tel:2035550101">Call</a> <a href="tel:2035550199">Office</a> <a href="/quote">Get a quote</a> <a href="/contact">Contact us</a></body></html>' },
   [`${SITE}/quote`]: { status: 404, html: '<html><body>Not found</body></html>' },
   [`${SITE}/contact`]: { status: 200, html: '<html><body><form><input type="email" name="email"></form></body></html>' },
 };
@@ -48,7 +49,6 @@ const resolver = { resolveMx: async () => [{ exchange: 'mx.stand-in-mail.example
 setWorkspaceDepsForTests({ fetchImpl, lookup, resolver });
 
 const org = (await db.query("select id from organizations where kind='nova_internal' limit 1")).rows[0].id;
-const NAME = `LOCAL TEST Workspace Roofing ${Date.now().toString(36)}`;
 try {
   // start
   let r = await call(OWNER, 'POST', 'start', { body: { organization_id: org, name: NAME, website: 'stand-in-roofing.example', industry: 'Roofing', location: 'Waterbury, CT', phone: '(203) 555-0101', goal: 'More booked roofing jobs from the website', mode: 'online' } });
@@ -78,7 +78,7 @@ try {
   const mods = (await db.query('select distinct module_key from audit_findings where case_id=$1', [caseId])).rows.map((x) => x.module_key).sort();
   check('every proposed finding is mapped to the Nova module that would address it', !mods.includes(null) && mods.includes('email_setup') && mods.includes('agents_booking'), JSON.stringify(mods));
   const ev = (await db.query('select source, capture_date, confidence, method from audit_evidence where case_id=$1', [caseId])).rows;
-  check('every evidence record has a source with a retrieval time, a capture date, a method and a confidence', ev.every((e) => /\((retrieved|queried) \d{4}-/.test(e.source) && e.capture_date && /^automated_review:/.test(e.method) && e.confidence), JSON.stringify(ev[0]));
+  check('every evidence record has a source with a retrieval time, a capture date, a method and a confidence', ev.every((e) => /\((retrieved|queried|checked) \d{4}-|against the public map and the site's own text \(\d{4}-/.test(e.source) && e.capture_date && /^automated_review:/.test(e.method) && e.confidence), JSON.stringify(ev[0]));
   const fs1 = (await db.query("select f.title, f.priority, f.review_status, f.origin, f.statement_type, (select count(*) from audit_finding_evidence l where l.finding_id=f.id)::int ev from audit_findings f where case_id=$1", [caseId])).rows;
   check('proposed findings are drafts (never auto-reviewed), observed facts, each linked to evidence', fs1.every((f) => f.review_status === 'draft' && f.origin === 'automated_review' && f.statement_type === 'observed_fact' && f.ev >= 1), JSON.stringify(fs1));
   check('the broken quote link is high priority', fs1.some((f) => /quote/i.test(f.title) && f.priority === 'high'), JSON.stringify(fs1.map((f) => [f.title, f.priority])));

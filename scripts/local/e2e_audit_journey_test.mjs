@@ -82,10 +82,23 @@ try {
   check('research shows live step-by-step progress', await seen(p.getByRole('list', { name: 'Research progress' }), 15000) && await seen(p.getByText('Find the business on public maps')));
   check('research finishes and reports what it read and recorded', await seen(p.getByText(/page\(s\) read, \d+ competitor website\(s\) compared, \d+ evidence records/), 180000), errors.join('; '));
   const runRow = (await db.query('select status, steps from audit_research_runs where case_id=$1 order by created_at desc limit 1', [caseId])).rows[0];
-  check('the research run is saved with every step and an end state', ['completed', 'partial'].includes(runRow?.status) && runRow.steps.length === 7 && runRow.steps.every((x) => x.status !== 'pending' && x.status !== 'running'), JSON.stringify(runRow?.steps?.map((x) => `${x.key}:${x.status}`)));
+  check('the research run is saved with every step and an end state', ['completed', 'partial'].includes(runRow?.status) && runRow.steps.length === 8 && runRow.steps.every((x) => x.status !== 'pending' && x.status !== 'running'), JSON.stringify(runRow?.steps?.map((x) => `${x.key}:${x.status}`)));
   const ev = (await db.query("select count(*)::int n from audit_evidence where case_id=$1 and method like 'automated_review:%'", [caseId])).rows[0].n;
   check('evidence records were saved with their sources', ev >= 3, `evidence ${ev}`);
   await shot(p, '02-after-review-ipad');
+
+  // 4b. identity before evaluation: example.com never names this test business, so its findings are held until a
+  // person confirms the website is theirs; the confirmation is recorded (who, when) and the research runs again
+  const verify = runRow.steps.find((x) => x.key === 'verify');
+  const heldNow = (await db.query("select count(*)::int n from audit_findings where case_id=$1 and origin='automated_review' and review_status='draft'", [caseId])).rows[0].n;
+  check('a website that does not name the business is not evaluated: its findings are held, and the screen says so', verify?.status === 'unavailable' && heldNow === 0 && await seen(p.getByText(/Findings about the website are on hold/)), JSON.stringify(verify));
+  const t1 = (await db.query('select now() t')).rows[0].t;
+  await p.getByRole('button', { name: /This website belongs to .*: research again/ }).click();
+  let run2 = null;
+  for (let t = Date.now(); Date.now() - t < 180000; await new Promise((r) => setTimeout(r, 2000))) { run2 = (await db.query('select status, steps from audit_research_runs where case_id=$1 and created_at >= $2 order by created_at desc limit 1', [caseId, t1])).rows[0]; if (run2 && !['queued', 'running'].includes(run2.status)) break; }
+  const conf = (await db.query('select intake from audit_cases where id=$1', [caseId])).rows[0].intake.website_confirmed;
+  check('the confirmation is recorded with who and when, and the website is then evaluated', conf?.website === 'https://example.com/' && conf.by && conf.at && run2?.steps.find((x) => x.key === 'verify')?.status === 'done', JSON.stringify({ conf, v: run2?.steps?.find((x) => x.key === 'verify') }));
+  await p.reload(); await p.waitForTimeout(1500);
 
   // 5. findings: review one
   await p.getByRole('tab', { name: /Findings/ }).click();

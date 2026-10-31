@@ -44,6 +44,7 @@
     "supabase/ops-09-worker-capabilities-migration-standalone.sql",
     "supabase/ops-10-public-research-migration-standalone.sql",
     "supabase/ops-11-installable-modules-migration-standalone.sql",
+    "supabase/ops-12-finding-recheck-migration-standalone.sql",
     "supabase/zz-public-schema-lockdown-standalone.sql"
   ]
 }

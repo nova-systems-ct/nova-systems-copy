@@ -115,6 +115,8 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
   }
   const fin = content.estimates_and_assumptions || {};
   para(fin.statement || 'Financial impact is unknown: no business records were supplied.', { size: 9.5, color: MUTED, gap: 10 });
+  // the three kinds of statement in this report, so none is read as another
+  label('How to read this report', '"What we saw" is measured: each item names its public source and when it was read. "Likely effect" is Nova\'s inference and was not measured. What could not be checked is listed under Limitations and is never counted as a problem.');
 
   // 2. Findings
   section(`${num()}  Findings`, 'Priority findings');
@@ -128,6 +130,7 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     y = top + 18;
     para(f.title, { size: 13, font: 'times', style: 'normal', indent: 12, gap: 4, lead: 1.3 });
     label('What we saw', f.observed, 12);
+    if (f.recheck) label(f.recheck.status === 'still_observed' ? `Re-checked ${String(f.recheck.at || '').slice(0, 10)}: still observed` : `Not re-checked (${String(f.recheck.at || '').slice(0, 10)})`, f.recheck.note, 12);
     label('Likely effect (inferred, not measured)', f.customer_impact || f.why, 12);
     label('Recommended next step', f.remedy, 12);
     if (f.module) label('Nova module', f.module, 12);
@@ -135,6 +138,13 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     if (Array.isArray(f.evidence) && f.evidence.length) label('Evidence', f.evidence.map((e) => `- ${e}`).join('\n'), 12);
     doc.setDrawColor(...RULE); doc.setLineWidth(0.5); need(14); doc.line(M, y, W - M, y); y += 18;
   });
+  // findings measured again and no longer true: kept as history, out of the priority list
+  const gone = Array.isArray(content.no_longer_observed) ? content.no_longer_observed : [];
+  if (gone.length) {
+    section(`${num()}  Since first observed`, 'No longer observed');
+    para('Each of these was recorded earlier and measured again; it is no longer true. Kept as history.', { size: 9.5, color: MUTED, gap: 8 });
+    gone.forEach((g) => { need(48); para(g.title, { size: 11.5, font: 'times', style: 'normal', gap: 2 }); para(`Re-checked ${String(g.rechecked_at || '').slice(0, 10)}: ${g.note || ''}`, { size: 9, color: MUTED, gap: 10 }); });
+  }
 
   // 3. Competitors (only when compared on real public pages)
   const comps = Array.isArray(content.competitor_comparison) ? content.competitor_comparison : [];

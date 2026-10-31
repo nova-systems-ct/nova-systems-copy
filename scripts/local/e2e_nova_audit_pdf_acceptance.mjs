@@ -55,18 +55,32 @@ try {
   // never "missing"; a proposal that repeats a reviewed finding is not added again; listing coverage is stated
   const own = (await q("select title, review_status, origin, check_key, limitations from audit_findings where case_id=$1", [CASE]));
   check('the research read the business\'s own domain', run.summary.pages_read > 0 && (await q("select count(*)::int n from audit_evidence where case_id=$1 and source like 'Public web page https://nova-systems.app%' and method like $2", [CASE, `%${(await q('select id from audit_research_runs where case_id=$1 order by created_at desc limit 1', [CASE]))[0].id.slice(0, 8)}%`]))[0].n > 0);
-  check('nova-systems.app is recognized as built by JavaScript (its content is not judged from empty HTML)', run.summary.rendered_by_script === true, JSON.stringify(run.summary).slice(0, 200));
-  const liveHtmlOnly = own.filter((f) => f.origin === 'automated_review' && f.review_status !== 'rejected' && /^(click_to_call|hours_published|reviews_or_social_proof|long_form|gap):/.test(f.check_key || ''));
-  check('no live finding claims tap-to-call, hours or reviews are missing from a page Nova could not see', liveHtmlOnly.length === 0, JSON.stringify(liveHtmlOnly.map((f) => f.title)));
+  check('nova-systems.app is recognized as built by JavaScript and read in a headless browser', run.summary.rendered_by_script === true && run.summary.read_with === 'browser', JSON.stringify({ r: run.summary.read_with, n: run.summary.limitations }).slice(0, 300));
+  check('identity is verified before the site is evaluated (the site names Nova Systems)', ['confirmed', 'likely'].includes(run.summary.identity_verdict) && run.steps.find((x) => x.key === 'verify')?.status === 'done', String(run.summary.identity_verdict));
+  check('what the browser measured is used: the tap-to-call link on the site is seen', run.summary.client_features?.click_to_call === true, JSON.stringify(run.summary.client_features));
+  const staleTel = own.filter((f) => f.origin === 'automated_review' && f.review_status !== 'rejected' && /^click_to_call:/.test(f.check_key || ''));
+  check('no live proposal says tap-to-call is missing while the browser sees it', staleTel.length === 0, JSON.stringify(staleTel.map((f) => f.title)));
   const dupDns = own.filter((f) => f.origin === 'automated_review' && f.review_status !== 'rejected' && /^dns_(spf|dmarc):/.test(f.check_key || ''));
   check('SPF/DMARC are not proposed again beside the reviewed email-setup finding', dupDns.length === 0, JSON.stringify(dupDns.map((f) => f.title)));
   check('withdrawn proposals are kept and say why (never deleted)', own.filter((f) => f.review_status === 'rejected' && /Withdrawn by Nova's research/.test(f.limitations || '')).length >= 1);
   check('the limitations state that only OpenStreetMap was searched for listings', (run.summary.limitations || []).some((l) => /OpenStreetMap only/.test(l)), JSON.stringify(run.summary.limitations));
   check('unavailable competitor discovery is reported as unavailable, not as "no competitors"', run.steps.find((x) => x.key === 'competitors').status === 'unavailable' ? (run.summary.limitations || []).some((l) => /Competitor discovery is not available|competitors were not searched|could not/i.test(l)) : true);
 
+  await p.getByRole('tab', { name: 'Findings' }).click();
+  await p.getByRole('button', { name: 'Re-check against the current state' }).click();
+  check('re-checking the findings against the current state reports what it measured', await seen(p.getByText(/Re-checked \d+ finding\(s\): \d+ still observed, \d+ no longer observed, \d+ could not be re-checked here/), 180000));
+  const rc = await q("select title, review_status, recheck_status, recheck_note from audit_findings where case_id=$1 and origin <> 'automated_review' and review_status <> 'rejected'", [CASE]);
+  console.log(`  re-check: ${rc.map((f) => `[${f.recheck_status}] ${f.title.slice(0, 50)} — ${(f.recheck_note || '').slice(0, 90)}`).join('\n            ')}`);
+  check('every recorded finding has a re-check result', rc.length > 0 && rc.every((f) => f.recheck_status), JSON.stringify(rc.filter((f) => !f.recheck_status).map((f) => f.title)));
+  check('the escalation/workers finding is measured against the workspace and no longer observed', rc.some((f) => /escalations/.test(f.title) && f.recheck_status === 'no_longer_observed' && /escalation contacts named: [1-9]/.test(f.recheck_note)), JSON.stringify(rc.find((f) => /escalations/.test(f.title))));
+  check('findings that need the hosting account are "not re-checked" with the reason (never assumed fixed)', rc.filter((f) => /production|Hosting carries/.test(f.title)).every((f) => f.recheck_status === 'not_rechecked' && /Vercel/.test(f.recheck_note)));
+  check('reviewed findings keep their reviewed status and text (history preserved)', rc.every((f) => f.review_status === 'reviewed'));
+
   await p.getByRole('tab', { name: 'Report & PDF' }).click();
   await p.getByRole('button', { name: 'Draft from recorded evidence' }).click();
   check('a report version is drafted from the recorded evidence', await seen(p.getByText(/Version \d+ drafted|Nothing changed since version/)));
+  const content = (await q('select content from audit_reports where case_id=$1 order by version desc limit 1', [CASE]))[0].content;
+  check('the new version lists no-longer-observed findings separately, out of the priority list', Array.isArray(content.no_longer_observed) && content.no_longer_observed.length >= 1 && !content.findings.some((f) => content.no_longer_observed.some((g) => g.title === f.title)), JSON.stringify(content.no_longer_observed).slice(0, 200));
   const latest = (await q('select id, version from audit_reports where case_id=$1 order by version desc limit 1', [CASE]))[0];
   // the version list refreshes after drafting: use the row of exactly that version, not whichever row is on top yet
   const row = p.locator('div', { has: p.getByText(`Version ${latest.version}`, { exact: true }) }).filter({ has: p.getByRole('button', { name: 'Generate PDF' }) }).last();

@@ -57,6 +57,24 @@ export async function fetchPublicPage(raw, { fetchImpl = fetch, lookup, timeoutM
   throw new Error('Too many redirects');
 }
 
+// The same guard for any GET a page renderer needs (scripts, data, styles): every hop re-validated, size and time
+// capped. Used so that a headless browser never reaches the network itself.
+export async function fetchPublicResource(raw, { fetchImpl = fetch, lookup, timeoutMs = 8000, maxBytes = 3_000_000, accept = '*/*' } = {}) {
+  let url = String(raw);
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const u = await assertPublicHttpUrl(url, lookup);
+    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const r = await fetchImpl(u.toString(), { redirect: 'manual', signal: ctrl.signal, headers: { 'User-Agent': 'NovaAuditResearch/2.0 (+https://nova-systems.app)', Accept: accept } });
+      if ([301, 302, 303, 307, 308].includes(r.status)) { const loc = r.headers.get('location'); if (!loc) throw new Error('Redirect without a location'); url = new URL(loc, u).toString(); continue; }
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > maxBytes) throw new Error('Response too large');
+      return { finalUrl: u.toString(), status: r.status, contentType: r.headers.get('content-type') || 'application/octet-stream', body: buf };
+    } finally { clearTimeout(timer); }
+  }
+  throw new Error('Too many redirects');
+}
+
 const clean = (s, n = 200) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
 const uniq = (a) => [...new Set(a)];
 

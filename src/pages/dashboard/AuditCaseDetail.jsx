@@ -211,6 +211,11 @@ function ReviewCard({ ws, org, caseId, reload, go }) {
           {run.status === 'queued' && !(run.steps || []).length && <li style={{ fontSize: 13, color: C.faint }}>Waiting for the research worker…</li>}
         </ol>
       )}
+      {run && !active && (run.steps || []).some((st) => st.key === 'verify' && st.status === 'unavailable') && (
+        <Notice tone="warn">Findings about the website are on hold: Nova could not confirm that {ws.business.website || 'the website'} belongs to {ws.business.name}.
+          <div style={{ marginTop: 8 }}><button className="ops-btn" disabled={starting} onClick={async () => { setStarting(true); setErr(''); try { await auditCall('details', { org, method: 'POST', body: { case_id: caseId, website_confirmed: true } }); setStarting(false); await start('demo') } catch (x) { setErr(x.message); setStarting(false) } }}>This website belongs to {ws.business.name}: research again</button></div>
+        </Notice>
+      )}
       {s && !active && <Notice tone={run.status === 'failed' ? 'bad' : 'ok'}>{run.status === 'failed' ? `Research stopped: ${run.error || 'see the steps above'}.` : `${s.pages_read} page(s) read, ${s.competitor_websites_compared} competitor website(s) compared, ${s.evidence_added} evidence records. ${s.findings_proposed} new finding${s.findings_proposed === 1 ? '' : 's'} proposed for your review${s.findings_already_recorded ? `; ${s.findings_already_recorded} already recorded` : ''}.`}{(s.limitations || []).length ? <div style={{ fontSize: 12, color: C.dim, marginTop: 6 }}>Not checked: {s.limitations.join(' ')}</div> : null}</Notice>}
       <p style={{ fontSize: 12, color: C.faint }}>{ws.case.last_review_at ? `Last research ${when(ws.case.last_review_at)}` : 'Not researched yet'}</p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -432,17 +437,30 @@ function FindingsTab({ caseId, orgId, items, evidence, onSaved }) {
     if (!ok) setProblems(data.problems || [data.error || 'The review was not saved.']); else await onSaved()
     setBusy('')
   }
+  const [recheckMsg, setRecheckMsg] = useState('')
+  const recheck = async () => {
+    setBusy('recheck'); setProblems([]); setRecheckMsg('')
+    try {
+      const r = await auditCall('recheck', { org: orgId, method: 'POST', body: { case_id: caseId } })
+      setRecheckMsg(`Re-checked ${r.results.length} finding(s): ${r.counts.still_observed} still observed, ${r.counts.no_longer_observed} no longer observed, ${r.counts.not_rechecked} could not be re-checked here.`)
+      await onSaved()
+    } catch (e) { setProblems([e.message || 'The re-check did not run.']) }
+    setBusy('')
+  }
+  const RECHECK = { still_observed: ['failed', 'still observed'], no_longer_observed: ['approved', 'no longer observed'], not_rechecked: ['unknown', 'not re-checked'] }
   const order = { high: 0, medium: 1, low: 2 }
   const sorted = [...items].sort((a, b) => (a.review_status === 'rejected') - (b.review_status === 'rejected') || (order[a.priority] ?? 3) - (order[b.priority] ?? 3))
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <Problems problems={problems} title="Not saved" />
-      <Card title={`Findings · ${items.filter((f) => f.review_status !== 'rejected').length}`}>
+      <Card title={`Findings · ${items.filter((f) => f.review_status !== 'rejected').length}`} actions={<button className="ops-btn" disabled={!!busy} onClick={recheck}>{busy === 'recheck' ? 'Re-checking…' : 'Re-check against the current state'}</button>}>
+        {recheckMsg && <Notice tone="ok">{recheckMsg}</Notice>}
         {!items.length ? <p style={{ color: C.faint, fontSize: 13 }}>No findings yet. Run the evidence review on the Overview, or add one below.</p> : sorted.map((f) => (
           <div key={f.id} style={{ padding: '12px 0', borderBottom: `1px solid ${C.line}`, opacity: f.review_status === 'rejected' ? 0.55 : 1 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Badge value={f.priority === 'high' ? 'failed' : f.priority === 'medium' ? 'pending' : 'unknown'} label={f.priority || 'no priority'} />
               <Badge value={f.review_status === 'reviewed' ? 'approved' : f.review_status === 'rejected' ? 'cancelled' : 'draft'} label={f.review_status === 'draft' ? (f.origin === 'automated_review' ? 'proposed by review' : 'draft') : f.review_status} />
+              {f.recheck_status && <Badge value={RECHECK[f.recheck_status][0]} label={RECHECK[f.recheck_status][1]} />}
               <span style={{ fontSize: 12, color: C.faint }}>{String(f.statement_type).replace('_', ' ')}{f.confidence ? ` · ${f.confidence} confidence` : ''}</span>
             </div>
             <p style={{ fontSize: 15, fontWeight: 600, margin: '8px 0 4px' }}>{f.title}</p>
@@ -450,6 +468,7 @@ function FindingsTab({ caseId, orgId, items, evidence, onSaved }) {
             {f.customer_impact && <p style={{ fontSize: 13, color: C.dim, margin: '4px 0 0' }}><strong style={{ color: C.text }}>Likely effect (inferred):</strong> {f.customer_impact}</p>}
             {f.recommended_action && <p style={{ fontSize: 13, color: C.dim, margin: '4px 0 0' }}><strong style={{ color: C.text }}>Next step:</strong> {f.recommended_action}</p>}
             {f.limitations && <p style={{ fontSize: 12, color: C.faint, margin: '4px 0 0' }}>{f.limitations}</p>}
+            {f.recheck_note && <p style={{ fontSize: 12, color: C.dim, margin: '4px 0 0' }}><strong style={{ color: C.text }}>Re-checked {String(f.rechecked_at || '').slice(0, 10)}:</strong> {f.recheck_note}</p>}
             <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
               {f.review_status !== 'reviewed' && <button className="ops-btn" disabled={busy === f.id} onClick={() => review(f.id, 'reviewed')}>Confirm (mark reviewed)</button>}
               {f.review_status !== 'rejected' && <button className="ops-btn danger" disabled={busy === f.id} onClick={() => review(f.id, 'rejected')}>Reject</button>}

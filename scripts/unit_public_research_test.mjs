@@ -127,5 +127,39 @@ check('a tap-to-call proposal is covered by a recorded click-to-call finding', !
 check('an unrelated proposal is not covered', !R.coveredBy('hours_published', recorded));
 check('a rejected finding does not cover anything', !R.coveredBy('spf', [{ ...recorded[0], review_status: 'rejected' }]));
 
+// 10. identity is verified before the website is evaluated or competitors are chosen
+const siteOf = (text, phones = []) => ({ reachable: true, site_text: text, signals: { phones } });
+let v = R.verifyIdentity({ name: 'Brass City Roofing', location: 'Waterbury, CT', map: { status: 'ok', match: { website_matches: true, location_conflict: false } }, crawl: siteOf('Welcome') });
+check('a map listing with this website in this town confirms identity', v.status === 'confirmed' && v.evaluate && v.competitors, JSON.stringify(v));
+v = R.verifyIdentity({ name: 'Nova Systems (own business)', location: 'Waterbury, CT', map: { status: 'ok', match: null }, crawl: siteOf('Nova Systems | Business systems for Connecticut. Based in Waterbury, Connecticut.') });
+check('the site naming the business and its town confirms identity (labels in brackets are ignored)', v.status === 'confirmed' && v.evaluate, JSON.stringify(v));
+v = R.verifyIdentity({ name: 'Brass City Roofing', location: 'Waterbury, CT', map: { status: 'ok', match: null }, crawl: siteOf('Brass City Roofing - roof repair') });
+check('the site naming the business without any location evidence is "likely" (evaluated, says so)', v.status === 'likely' && v.evaluate, JSON.stringify(v));
+v = R.verifyIdentity({ name: 'Brass City Roofing', location: 'Waterbury, CT', map: { status: 'ok', match: null }, crawl: siteOf('Shoreline Plumbing - emergency plumber in Milford') });
+check('a site that never names the business is NOT evaluated (findings held until a person confirms)', v.status === 'unconfirmed' && !v.evaluate, JSON.stringify(v));
+v = R.verifyIdentity({ name: 'The Ridge Bar & Grill', location: 'Waterbury, CT', map: { status: 'ok', match: { website_matches: true, location_conflict: true, display_name: 'Woodridge, Illinois' } }, crawl: siteOf('The Ridge Bar & Grill Woodridge IL') });
+check('the same website listed in another state is a conflict: neither evaluated nor used to pick competitors', v.status === 'conflict' && !v.evaluate && !v.competitors, JSON.stringify(v));
+v = R.verifyIdentity({ name: 'Brass City Roofing', location: 'Waterbury, CT', map: { status: 'unavailable' }, crawl: { reachable: false } });
+check('with neither the map nor the site reachable, identity is unconfirmed and nothing is evaluated', v.status === 'unconfirmed' && !v.evaluate, JSON.stringify(v));
+v = R.verifyIdentity({ name: 'Brass City Roofing', location: 'Waterbury, CT', map: { status: 'ok', match: { website_matches: false, location_conflict: false, phone: '+1 203 555 0100' } }, crawl: siteOf('Brass City Roofing', ['+1-203-555-0100']) });
+check('the map phone matching the website phone confirms identity', v.status === 'confirmed', JSON.stringify(v));
+v = R.verifyIdentity({ name: 'Brass City Roofing', location: 'Waterbury, CT', map: { status: 'ok', match: null }, crawl: siteOf('Shoreline Plumbing'), confirmedBy: { by: 'owner@example.com', at: '2026-10-31T12:00:00Z' } });
+check('a person\'s recorded confirmation lets the site be evaluated, and says who and when', v.status === 'confirmed' && v.evaluate && /owner@example\.com on 2026-10-31/.test(v.basis[0]), JSON.stringify(v));
+v = R.verifyIdentity({ name: 'The Ridge Bar & Grill', location: 'Waterbury, CT', map: { status: 'ok', match: { website_matches: true, location_conflict: true, display_name: 'Woodridge, Illinois' } }, crawl: siteOf('The Ridge'), confirmedBy: { by: 'owner', at: '2026-10-31' } });
+check('a confirmed website with a map location conflict is evaluated but not used to choose "nearby" competitors', v.evaluate && !v.competitors, JSON.stringify(v));
+
+// 11. with a renderer, a script-built site is read as a visitor sees it (stand-in renderer; the real one is tested
+// in unit_page_renderer_test)
+const rendered = { 'https://spa.example/': '<html><head><meta name="viewport" content="width=device-width"><title>Spa Co</title></head><body><h1>Spa Co</h1><a href="tel:+12035550123">Call</a><a href="/contact">Contact</a></body></html>', 'https://spa.example/contact': '<html><head><meta name="viewport" content="width=device-width"></head><body><p>Hours: Mon-Fri 9am-6pm</p></body></html>' };
+const asked = [];
+const fakeRender = async (urls) => urls.map((u) => { asked.push(u); return rendered[u] ? { url: u, status: 200, html: rendered[u], text: rendered[u].replace(/<[^>]+>/g, ' '), retrievedAt: 't' } : { url: u, error: 'nf' }; });
+const spaR = await R.crawlSite('https://spa.example/', { fetchImpl: site({ '/': shell }), lookup, maxPages: 3, render: fakeRender });
+check('a script-built site is read with the browser when one is available', spaR.read_with === 'browser' && spaR.rendered_by_script === true, JSON.stringify({ r: spaR.read_with, n: spaR.render_note }));
+check('what the browser shows is measured: tap-to-call and hours found (true, not unknown)', spaR.features.click_to_call === true && spaR.features.hours_published === true, JSON.stringify(spaR.features));
+check('links found on the rendered page are followed (contact page read)', asked.includes('https://spa.example/contact') && spaR.pages.length === 2, JSON.stringify(asked));
+const spaFail = await R.crawlSite('https://spa.example/', { fetchImpl: site({ '/': shell }), lookup, maxPages: 3, render: async () => { throw new Error('chromium crashed'); } });
+check('if the renderer fails, the content stays "not checked" and the reason is kept', spaFail.read_with === 'html' && spaFail.features.click_to_call === null && /chromium crashed/.test(spaFail.render_note), JSON.stringify({ n: spaFail.render_note, f: spaFail.features.click_to_call }));
+check('a plain HTML site never calls the renderer', (await R.crawlSite('https://brasscityroofing.com/', { fetchImpl: crawlFetch, lookup, maxPages: 2, render: async () => { throw new Error('should not be called'); } })).read_with === 'html');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

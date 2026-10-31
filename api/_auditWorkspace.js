@@ -78,7 +78,8 @@ async function composeDraft(c, { summary } = {}) {
   ]);
   const evById = Object.fromEntries(evidence.map((e) => [e.id, e]));
   const rank = { high: 0, medium: 1, low: 2 };
-  const ordered = [...findings].sort((a, b) => (rank[a.priority] ?? 3) - (rank[b.priority] ?? 3) || String(a.created_at).localeCompare(String(b.created_at)));
+  const gone = findings.filter((f) => f.recheck_status === 'no_longer_observed');
+  const ordered = [...findings.filter((f) => f.recheck_status !== 'no_longer_observed')].sort((a, b) => (rank[a.priority] ?? 3) - (rank[b.priority] ?? 3) || String(a.created_at).localeCompare(String(b.created_at)));
   // Checks of the latest automated run: only evidence whose method carries an explicit result (automated_review:run:key:result).
   const runIds = evidence.filter((e) => String(e.method || '').startsWith('automated_review:')).map((e) => e.method.split(':')[1]);
   const latestRun = runIds[runIds.length - 1];
@@ -116,7 +117,8 @@ async function composeDraft(c, { summary } = {}) {
     client_features: rs?.client_features || null,
     competitor_comparison: competitors.map((x) => ({ name: x.name, url: x.url, rationale: x.rationale, observations: (x.observations || []).map((o) => o.text) })),
     evidence_reviewed: used.map((e) => ({ source: e.source, captured: e.capture_date, method: e.method, observation: e.observation, confidence: e.confidence })),
-    findings: ordered.map((f) => ({ title: f.title, type: f.statement_type, priority: f.priority, confidence: f.confidence, review_status: f.review_status, origin: f.origin, observed: f.detail, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status || 'unknown', limitations: f.limitations, remedy: f.recommended_action, module: MODULES[f.module_key] || null, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision, evidence: links.filter((l) => l.finding_id === f.id).map((l) => evById[l.evidence_id]?.source).filter(Boolean) })),
+    findings: ordered.map((f) => ({ title: f.title, type: f.statement_type, priority: f.priority, confidence: f.confidence, review_status: f.review_status, origin: f.origin, observed: f.detail, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status || 'unknown', limitations: f.limitations, remedy: f.recommended_action, module: MODULES[f.module_key] || null, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision, evidence: links.filter((l) => l.finding_id === f.id).map((l) => evById[l.evidence_id]?.source).filter(Boolean), recheck: f.recheck_status ? { status: f.recheck_status, note: f.recheck_note, at: f.rechecked_at } : null })),
+    no_longer_observed: gone.map((f) => ({ title: f.title, rechecked_at: f.rechecked_at, note: f.recheck_note })),
     prescriptions,
     estimates_and_assumptions: { scenarios: [], statement: 'No financial scenario was prepared; financial impact is unknown.' },
     recommendations: recList,
@@ -189,6 +191,9 @@ export async function handleAuditWorkspace(req, res, op, caller) {
       const next = { ...(c.intake || {}) };
       for (const [k, max] of [['name', 200], ['industry', 100], ['location', 150], ['public_phone', 40], ['goal', 400], ['contact_name', 120]]) if (k in b) next[k] = sanitize(b[k], max) || null;
       if ('website' in b) { if (b.website && String(b.website).trim()) { const n = normalizeWebsite(b.website); if (n.error) return send(res, 400, { error: n.error, field: 'website' }); next.website = n.url; } else next.website = null; }
+      // "This website belongs to this business": recorded with who and when, and tied to that exact address
+      if (b.website_confirmed === true) { if (!next.website) return send(res, 400, { error: 'Add the website first.', field: 'website' }); next.website_confirmed = { website: next.website, by: caller.email || caller.id, at: nowIso() }; }
+      if (b.website_confirmed === false || (next.website_confirmed && next.website_confirmed.website !== next.website)) delete next.website_confirmed;
       const [row] = await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}`, { intake: next, updated_at: nowIso() });
       return send(res, 200, { ok: true, intake: row.intake, saved_at: row.updated_at });
     }
@@ -278,6 +283,15 @@ export async function handleAuditWorkspace(req, res, op, caller) {
     }
 
     // ---------------------------------------------------------------- archive / restore (reversible; nothing deleted)
+    // ---------------------------------------------------------------- re-check recorded findings against the current state
+    if (op === 'recheck') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
+      const biz = c.business_id ? await dbOne(`businesses?id=eq.${enc(c.business_id)}&select=website,confirmed_website`) : null;
+      const { recheckFindings } = await import('./_auditRecheck.js');
+      const out = await recheckFindings(c, { orgId, website: c.intake?.website || biz?.confirmed_website || biz?.website || null });
+      return send(res, 200, { ok: true, ...out });
+    }
+
     if (op === 'archive') {
       if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
       const archive = b.archived !== false;
@@ -291,4 +305,4 @@ export async function handleAuditWorkspace(req, res, op, caller) {
     return send(res, 500, { error: 'Something went wrong on the server. Nothing you typed was lost; try again.' });
   }
 }
-export const WORKSPACE_OPS = ['start', 'workspace', 'details', 'review', 'research-start', 'research-status', 'draft-report', 'pdf', 'pdf-file', 'archive'];
+export const WORKSPACE_OPS = ['start', 'workspace', 'details', 'review', 'research-start', 'research-status', 'recheck', 'draft-report', 'pdf', 'pdf-file', 'archive'];
