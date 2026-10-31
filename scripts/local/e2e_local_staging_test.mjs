@@ -14,7 +14,7 @@ const pw = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 const read = (f) => Object.fromEntries(fs.readFileSync(f, 'utf8').split(/\r?\n/).filter((l) => /^[A-Z_][A-Z0-9_]*=/.test(l)).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 const env = read('.env.local-staging'); const acct = read('.env.local-staging-accounts');
 for (const u of [env.SUPABASE_URL, env.APP_BASE_URL]) if (!/^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(u)) throw new Error('local staging only');
-const APP = env.APP_BASE_URL; const SB = env.SUPABASE_URL; const MAIL = (env.LOCAL_MAIL_URL || 'http://127.0.0.1:54324').replace(/\/$/, '');
+const APP = env.APP_BASE_URL; const SB = env.SUPABASE_URL; const MAIL = (env.LOCAL_MAIL_URL || 'http://127.0.0.1:44324').replace(/\/$/, '');
 let pass = 0, fail = 0; const results = [];
 const check = (n, c, x = '') => { results.push([c ? 'PASS' : 'FAIL', n]); if (c) { pass++; console.log(`PASS — ${n}`); } else { fail++; console.log(`FAIL — ${n} ${x}`); } };
 const note = (n) => { results.push(['NOTE', n]); console.log(`NOTE — ${n}`); };

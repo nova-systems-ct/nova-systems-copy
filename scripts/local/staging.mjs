@@ -180,7 +180,7 @@ async function serve() {
     server: { host: lan ? '0.0.0.0' : 'localhost', port: APP_PORT, strictPort: true, proxy: { '/api': `http://127.0.0.1:${API_PORT}` } },
   });
   await vite.listen();
-  console.log(`✓ Nova local staging: http://localhost:${APP_PORT}  (API on ${API_PORT}, this computer only; Supabase Studio: http://127.0.0.1:54323)`);
+  console.log(`✓ Nova local staging: http://localhost:${APP_PORT}  (API on ${API_PORT}, this computer only; Supabase Studio: http://127.0.0.1:44323)`);
   if (lan) console.log(`✓ On the same Wi-Fi (iPad): ${lanIps.map((ip) => `http://${ip}:${APP_PORT}`).join('  ') || 'no Wi-Fi address found'} — sign-in required; Supabase, Studio, the database and the mail inbox are NOT served here`);
 }
 

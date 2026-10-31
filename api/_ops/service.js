@@ -159,6 +159,12 @@ export async function handleInboundTurn({ orgId, conversationId, messageId, now 
   const rv = conv.engine_state === 'revive_followup' ? (conv.engine_context || {}) : null;
   let job = rv?.revive_job_id ? await resumeRevivedJob({ orgId, conv, rv }) : null;
   if (!job) job = await openJobForConversation({ orgId, contact, conversation: conv, channel: conv.channel === 'form' ? 'form' : 'sms', isTest: !!c.ops.is_test });
+  // Business-level switch (Install Systems): when Nova Agents is turned off for this business, a person answers.
+  const agents = await dbOne(`ops_installed_modules?organization_id=eq.${enc(orgId)}&module_key=eq.agents_booking&select=status`).catch(() => null);
+  if (agents?.status === 'disabled') {
+    if (job.state !== 'escalated' && R.canTransition('job', job.state, 'escalated')) await transition({ orgId, entity: 'job', table: 'ops_jobs', id: job.id, field: 'state', from: job.state, to: 'escalated', actor: { type: 'system', id: 'core_engine' }, reason: 'Nova Agents is turned off for this business; a person must answer', patch: { escalation_reason: 'Nova Agents is turned off for this business' } });
+    return { escalated: 'agents_module_disabled', job_id: job.id };
+  }
   if (rv?.revive_job_id && job.id !== rv.revive_job_id) await dbInsert('ops_transitions', { organization_id: orgId, entity: 'job', entity_id: job.id, from_state: job.state, to_state: job.state, actor_type: 'system', reason: `new request after a Revive follow-up (${rv.revive_reason})`, evidence: { previous_job_id: rv.revive_job_id, recipient_id: rv.revive_recipient_id || null } });
   const busy = await busyIntervals(orgId);
   const slotCache = {};

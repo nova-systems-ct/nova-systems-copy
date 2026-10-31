@@ -27,7 +27,8 @@ export const CAPABILITIES = [
     job_types: ['marketing_publish', 'email_sequence_step'], code: 'worker/index.mjs, worker/emailSequenceEngine.mjs' },
 ];
 export const capabilityByKey = (k) => CAPABILITIES.find((c) => c.key === k) || null;
-export const PAUSED_STATES = new Set(['suspended', 'inactive', 'draft', 'onboarding', 'training']);
+// 'inactive' means retired: no longer registered, so it holds nothing (the capability runs as if never registered).
+export const PAUSED_STATES = new Set(['suspended', 'draft', 'onboarding', 'training']);
 
 // Job types whose registered worker is not allowed to act right now. Unregistered capabilities keep running as before.
 export function heldJobTypes(workers = []) {
@@ -37,7 +38,7 @@ export function heldJobTypes(workers = []) {
     if (cap && PAUSED_STATES.has(w.status)) for (const t of cap.job_types) held.add(t);
   }
   // a type is held only if NO active registered worker covers it
-  for (const w of workers) { const cap = capabilityByKey(w.capability_key); if (cap && !PAUSED_STATES.has(w.status)) for (const t of cap.job_types) held.delete(t); }
+  for (const w of workers) { const cap = capabilityByKey(w.capability_key); if (cap && ['active', 'restricted'].includes(w.status)) for (const t of cap.job_types) held.delete(t); }
   return [...held];
 }
 

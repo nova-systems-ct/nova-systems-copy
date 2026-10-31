@@ -33,8 +33,8 @@ node scripts/local/staging.mjs worker      # (second terminal) background worker
 - **Test accounts:** `owner@nova-local.test` and `rep@nova-local.test`. Their generated passwords are in the
   git-ignored file `.env.local-staging-accounts` in the repository folder — open it locally; never paste it anywhere.
 - **Password-recovery emails** go to the local mail inbox (Mailpit), shown by `supabase status` (usually
-  http://127.0.0.1:54324). Nothing is sent to a real mailbox.
-- **Supabase Studio** (tables, users, storage): http://127.0.0.1:54323.
+  http://127.0.0.1:44324). Nothing is sent to a real mailbox.
+- **Supabase Studio** (tables, users, storage): http://127.0.0.1:44323.
 - Stop with `node scripts/local/staging.mjs down` (the data volume is kept).
 
 ## What it configures
@@ -66,12 +66,14 @@ reads (`/rest/v1`); requests carrying the service-role key are refused (403); Su
 stays on the laptop. No service-role key is ever sent to the browser.
 
 **Close the existing exposure first (administrator, one time).** Docker publishes local Supabase on every network
-interface (Studio 54323, database 54322, API 54321, mail 54324, analytics 54327) and the "Docker Desktop Backend"
+interface (Studio 44323, database 44322, API 44321, mail 44324, analytics 44327) and the "Docker Desktop Backend"
 firewall rule allows inbound traffic on **Public** networks — this Wi-Fi is classed Public. The Supabase CLI has no
-option to bind to localhost only. In **PowerShell → Run as administrator**:
+option to bind to localhost only. (The ports moved from 5432x to 4432x on 2026-10-31: after a reboot Windows reserved
+54256–54355 for its network address translation, so Docker could not publish 5432x. A block rule created earlier for
+54321-54327 no longer covers anything; create the one below.) In **PowerShell → Run as administrator**:
 ```
 Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private
-New-NetFirewallRule -DisplayName "Nova local Supabase - block network access" -Direction Inbound -Protocol TCP -LocalPort 54321-54327 -Action Block -Profile Any
+New-NetFirewallRule -DisplayName "Nova local Supabase - block network access" -Direction Inbound -Protocol TCP -LocalPort 44320-44329 -Action Block -Profile Any
 New-NetFirewallRule -DisplayName "Nova local staging - iPad on private Wi-Fi" -Direction Inbound -Protocol TCP -LocalPort 5180 -Action Allow -Profile Private
 ```
 The block rule does not affect the laptop's own access (Windows does not filter loopback). Only mark a network Private

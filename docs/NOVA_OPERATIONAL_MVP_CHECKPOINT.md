@@ -1,9 +1,51 @@
-# Nova — authoritative checkpoint (updated 2026-10-25)
+# Nova — authoritative checkpoint (updated 2026-10-31)
 
 One current record. Earlier notes live in git history (`git log -p -- docs/NOVA_OPERATIONAL_MVP_CHECKPOINT.md`).
 Product authority: the owner's master execution prompt of 2026-10-17, refined by the "inside out" brief of 2026-10-25.
 Owner to-do list: `docs/NOVA_OPERATIONAL_MVP_OWNER_ACTIONS.md` (top section). Keys and costs:
 `docs/NOVA_INTEGRATION_INVENTORY.md`. Activation steps: `docs/NOVA_ACTIVATION_CHECKLIST.md`.
+
+## Session 2026-10-31: installer committed, Nova's own installation, audit → PDF → Vault, research conclusions
+Tested revision: the commit that adds this section (parent `c39368b`), on **local staging only** (Docker Supabase on
+ports 4432x, app :5180, API :8790, background worker running). Nothing hosted, nothing pushed, no paid call, no real
+recipient messaged.
+- **Ports moved** 5432x → 4432x (`supabase/config.toml`): after a reboot Windows reserved 54256–54355, so Docker could not
+  publish 5432x. Data intact. `docs/LOCAL_STAGING.md` updated; the old firewall block rule no longer covers anything —
+  owner action below.
+- **Install Systems modules** (`api/_ops/modules.js`, migration `ops-11`): catalog of six modules; recommendations use
+  only the installed business's own audit (never a prospect's audit held in the same workspace); selection,
+  prerequisites, per-step outcome, failure then retry, turn off / back on (an inquiry while off is escalated to a
+  person), rerun creates no duplicates. A retry that runs through now clears the module's earlier error (found in
+  review; mutation-checked: the new check fails without the fix).
+- **Exact outcome wording**: "registered, active", "test passed", "tasks created (N open)", "checked: records missing",
+  "awaiting approval and a live channel". A created task or a DNS read is never reported as a resolved problem.
+- **Nova's own installation**: a real form-intake TEST inquiry was claimed by the background worker, its outcome saved,
+  the reply recorded as a dry run (sending disabled); after a worker restart nothing was duplicated.
+- **Audit → PDF → Vault**: Nova's saved audit reopened, public research run on nova-systems.app, a version drafted, the
+  PDF generated, downloaded from the Nova Vault page (bytes match the record), still there after reload and a new
+  sign-in on an iPad-sized screen. Rendered pages inspected.
+- **Research conclusions corrected**: nova-systems.app serves an empty JavaScript shell, so the HTML reader had wrongly
+  proposed "no tap-to-call link", "no hours", "no reviews" (the contact page does have a tel: link). Script-built pages
+  are now detected; their content is reported as *not checked*. Nova's own unreviewed proposals that this showed were
+  unsupported, or that repeated a reviewed finding (SPF/DMARC), are withdrawn: kept, marked rejected, with the reason.
+  The report states listings were checked on OpenStreetMap only, and labels impact as "Likely effect (inferred, not
+  measured)". Coverage gaps are listed in `docs/requirement-matrix.md` (update 2026-10-31).
+
+| Suite (local staging) | Result |
+|---|---|
+| `verify_local_all` (unit + schema) | all pass, incl. public research 39/39, worker capabilities 6/6 |
+| lint / build | 0 errors / built (2 pre-existing warnings in `AuditCaseDetail.jsx`) |
+| install modules · Nova install · Nova verify (after worker restart) | 20/20 · 19/19 · 5/5 |
+| Nova audit → PDF → Vault acceptance | 20/20 |
+| local staging · audit workspace · audit journey (webkit) · capture · clock | 31 · 34 · 30 · 12 · 22, all pass |
+| ops core journey · ops browser · sentry/voice · contract composer · training · walkthrough · route sweep · spend guard · security personas | 69 · 32 · 37 · 17 · 7 · 33 · 60 · 13 · 90, all pass |
+| `e2e_workers_test` | not run: it refuses on a non-empty worker registry by design (the installer registered Nova's workers) |
+| `e2e_org_isolation_test` | not applicable locally (targets hosted staging, `.env.staging.local` absent) |
+
+**Remaining gaps**: website reading has no browser (script-built sites stay "not checked"); no listing, review-count,
+search-ranking, ads or social-engagement data source; competitor categories cover common local trades only; DNS
+records, review-request wording, live channels and Revive approval need the owner; executable workforce roles, Harvey
+sidecar, remaining adapters, public website and hosted iPad access are not started in this session.
 
 ## Status observed 2026-10-25 (from the running system, not from earlier reports)
 - Branch `mvp/operational`; work committed through this checkpoint; ~31 commits not on GitHub. No `AGENTS.md` exists

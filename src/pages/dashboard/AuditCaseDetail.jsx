@@ -447,7 +447,7 @@ function FindingsTab({ caseId, orgId, items, evidence, onSaved }) {
             </div>
             <p style={{ fontSize: 15, fontWeight: 600, margin: '8px 0 4px' }}>{f.title}</p>
             <p style={{ fontSize: 13, color: C.dim, margin: 0 }}>{f.detail}</p>
-            {f.customer_impact && <p style={{ fontSize: 13, color: C.dim, margin: '4px 0 0' }}><strong style={{ color: C.text }}>Why it matters:</strong> {f.customer_impact}</p>}
+            {f.customer_impact && <p style={{ fontSize: 13, color: C.dim, margin: '4px 0 0' }}><strong style={{ color: C.text }}>Likely effect (inferred):</strong> {f.customer_impact}</p>}
             {f.recommended_action && <p style={{ fontSize: 13, color: C.dim, margin: '4px 0 0' }}><strong style={{ color: C.text }}>Next step:</strong> {f.recommended_action}</p>}
             {f.limitations && <p style={{ fontSize: 12, color: C.faint, margin: '4px 0 0' }}>{f.limitations}</p>}
             <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>

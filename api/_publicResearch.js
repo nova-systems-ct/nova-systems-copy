@@ -234,23 +234,36 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   }
   for (const k of ['phones', 'emails', 'booking_tools', 'chat_tools']) signals[k] = [...new Set(signals[k])];
   const bookingLinks = pages.some((p) => /book|schedul|appointment|reserv/i.test(new URL(p.url).pathname));
+  // A page whose served HTML is an empty shell filled in by JavaScript: this reader (no browser) cannot see its content,
+  // so anything "not found" on it is unknown, not absent.
+  const scriptBuilt = (h) => /<script\b/i.test(h || '') && clean(String(h || '').replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<head\b[\s\S]*?<\/head>/i, ' '), 2000).length < 200;
+  const rendered_by_script = scriptBuilt(home.html);
   const features = {
     https: /^https:/i.test(home.finalUrl), mobile_viewport: signals.no_viewport.length === 0,
     click_to_call: signals.phones.length > 0, contact_form: signals.forms.length > 0, online_booking: signals.booking_tools.length > 0 || bookingLinks,
     prices_published: signals.prices.length > 0, hours_published: signals.hours.length > 0 || signals.structured.some((x) => x.hasHours), reviews_or_social_proof: signals.reviews_proof.length > 0,
     chat: signals.chat_tools.length > 0,
   };
-  return { reachable: true, home_status: home.status, pages: pages.map(({ html, ...rest }) => rest), skipped, signals, features };
+  if (rendered_by_script) for (const k of SCRIPT_HIDDEN) if (!features[k]) features[k] = null;
+  return { reachable: true, home_status: home.status, rendered_by_script, pages: pages.map(({ html, ...rest }) => rest), skipped, signals, features };
 }
+const SCRIPT_HIDDEN = ['click_to_call', 'contact_form', 'online_booking', 'prices_published', 'hours_published', 'reviews_or_social_proof', 'chat'];
 function emptySignals() { return { phones: [], emails: [], forms: [], booking_tools: [], chat_tools: [], social: {}, structured: [], prices: [], hours: [], reviews_proof: [], no_viewport: [] }; }
 
 // ------------------------------------------------------------------ comparison + goal
+// A proposal another recorded finding already states (reviewed or written by hand, so it has no check_key) is not
+// proposed again. Matched on the topic words of the finding's title and detail; rejected findings cover nothing.
+const TOPIC = { spf: /\bSPF\b/i, dmarc: /\bDMARC\b/i, mx: /\bMX\b|receives? email/i, click_to_call: /click-to-call|tap-to-call|tel: link/i, hours_published: /opening hours|business hours/i, reviews_or_social_proof: /\breviews?\b|testimonials?/i, online_booking: /\bbook(ing)?\b.*\b(time|online|calendar)|pick a time/i, long_form: /\d+[- ](fields?|questions?)/i };
+export function coveredBy(key, findings) {
+  const re = TOPIC[key]; if (!re) return null;
+  return (findings || []).find((f) => f.review_status !== 'rejected' && re.test(`${f.title || ''} ${f.detail || ''}`)) || null;
+}
 export const FEATURE_LABELS = { online_booking: 'online booking', click_to_call: 'tap-to-call phone link', prices_published: 'published prices', contact_form: 'a contact form', reviews_or_social_proof: 'reviews or social proof', hours_published: 'published hours', chat: 'live chat', https: 'a secure (HTTPS) site', mobile_viewport: 'phone-ready pages' };
 export function compareJourneys(own, others) {
   const out = [];
   for (const f of Object.keys(FEATURE_LABELS)) {
-    if (own[f]) continue;
-    const compared = others.filter((o) => o.features && f in o.features);
+    if (own[f] !== false) continue; // present, or not visible to the reader (null): never a gap
+    const compared = others.filter((o) => o.features && o.features[f] != null);
     const withIt = compared.filter((o) => o.features[f]);
     if (compared.length && withIt.length >= 2 && withIt.length * 2 >= compared.length) out.push({ feature: f, label: FEATURE_LABELS[f], competitors_with: withIt.length, compared: compared.length, names: withIt.map((o) => o.name) });
   }

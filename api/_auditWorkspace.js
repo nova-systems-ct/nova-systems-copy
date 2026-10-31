@@ -96,7 +96,7 @@ async function composeDraft(c, { summary } = {}) {
   const proposed = ordered.filter((f) => f.review_status !== 'reviewed').length;
   const rs = lastRun?.summary || null;
   const autoSummary = [
-    website ? `Nova researched ${name}'s public footprint${rs ? `: ${rs.pages_read} page(s) of ${website}, its public email records, its public map listing (${rs.identity})${rs.competitors ? ` and ${rs.competitors} comparable nearby business(es)` : ''}` : ` at ${website}`}.` : `No website was saved for ${name}.`,
+    website ? `Nova researched ${name}'s public footprint${rs ? `: ${rs.pages_read} page(s) of ${website}, its public email records, its OpenStreetMap listing (${rs.identity}; other listings not checked)${rs.competitors ? ` and ${rs.competitors} comparable nearby business(es)` : ''}` : ` at ${website}`}.` : `No website was saved for ${name}.`,
     goal ? `The owner's main goal: "${goal}".` : '',
     inPerson ? `${inPerson} observation${inPerson === 1 ? ' was' : 's were'} recorded in person.` : '',
     ordered.length ? `${ordered.length} finding${ordered.length === 1 ? ' is' : 's are'} recorded${proposed ? `, ${proposed} of them proposed and not yet reviewed by Nova` : ''}. The most important: ${ordered.slice(0, 2).map((f) => f.title).join('; ')}.` : "No problem was verified on what was checked. That does not mean there is none; the full audit looks at calls, replies and bookings with the owner's permission.",

@@ -1,5 +1,16 @@
 # Nova Operational MVP — owner actions (one prioritized list)
 
+## New — 2026-10-31 (verified locally only)
+1. **Re-create the laptop firewall block** (PowerShell as administrator; commands in `docs/LOCAL_STAGING.md`). Local
+   Supabase moved to ports 44320–44329 after Windows reserved the old range; a rule made for 54321–54327 no longer
+   protects anything on public Wi-Fi.
+2. **Review Nova's own audit**: Nova withdrew 5 of its own unreviewed proposals (the site is built by JavaScript, so
+   "no tap-to-call / hours / reviews" could not be seen; SPF/DMARC repeated your reviewed email finding). They are kept
+   and marked with the reason; restore any you disagree with. Finding "no one named for escalations, 0 workers" is from
+   Oct 25 and is now out of date (the installer registered workers and the escalation phone is set): mark it as such.
+3. **Install Systems needs you for**: publishing SPF and DMARC records for nova-systems.app (Nova only checked them),
+   approving review-request wording and a live channel, approving a Revive campaign. Each shows "awaiting …" until done.
+
 ## Do these first — 2026-10-26 (repair session; everything below was verified locally only)
 1. **Local test passwords were rotated** (they had been photographed). The new values are in the git-ignored file
    `.env.local-staging-accounts` in the repo folder. Sign in again on the laptop and the iPad with the new password.

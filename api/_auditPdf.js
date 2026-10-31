@@ -128,7 +128,7 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     y = top + 18;
     para(f.title, { size: 13, font: 'times', style: 'normal', indent: 12, gap: 4, lead: 1.3 });
     label('What we saw', f.observed, 12);
-    label('Why it matters', f.customer_impact || f.why, 12);
+    label('Likely effect (inferred, not measured)', f.customer_impact || f.why, 12);
     label('Recommended next step', f.remedy, 12);
     if (f.module) label('Nova module', f.module, 12);
     if (f.limitations) para(f.limitations, { size: 8.5, color: MUTED, indent: 12, gap: 6 });

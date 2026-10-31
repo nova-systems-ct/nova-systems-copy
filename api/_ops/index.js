@@ -152,6 +152,20 @@ export async function handleOps(req, res, op) {
       const I = await import('./install.js');
       if (action === 'view') { const [current, preview] = await Promise.all([I.latestManifest(s.orgId), I.buildManifest(s.orgId)]); return send(res, 200, { current, changed_since: !!current && current.manifest_sha256 !== preview.sha, preview: current ? null : preview.manifest }); }
       if (action === 'prepare') return send(res, 200, await I.prepareManifest(s.orgId, s.actor));
+      if (action === 'modules') { const M = await import('./modules.js'); return send(res, 200, await M.recommendations(s.orgId)); }
+      if (['select-module', 'disable-module', 'enable-module', 'set-self-business'].includes(action)) {
+        const mem = await dbOne(`organization_members?organization_id=eq.${enc(s.orgId)}&staff_user_id=eq.${enc(s.caller.id)}&status=eq.active&select=role`);
+        if (!isNovaOwner(s.caller) && mem?.role !== 'client_owner') return send(res, 403, { error: 'Only the business owner can choose or turn off modules.' });
+        const M = await import('./modules.js'); const key = sanitize(b.module_key, 40);
+        if (action === 'set-self-business') {
+          const bid = sanitize(b.business_id, 60);
+          if (!(await dbOne(`businesses?id=eq.${enc(bid)}&organization_id=eq.${enc(s.orgId)}&select=id`))) return send(res, 404, { error: 'That business is not in this workspace.' });
+          await dbPatch('ops_business_settings', `organization_id=eq.${enc(s.orgId)}`, { self_business_id: bid, updated_at: new Date().toISOString() });
+          return send(res, 200, { ok: true, self_business_id: bid });
+        }
+        if (action === 'select-module') return send(res, 200, { ok: true, module: await M.selectModule(s.orgId, key, b.selected !== false, s.actor) });
+        return send(res, 200, { ok: true, module: await M.setModuleEnabled(s.orgId, key, action === 'enable-module', s.actor, sanitize(b.reason, 300)) });
+      }
       if (action === 'run') return send(res, 200, await I.runInstall(s.orgId, sanitize(b.manifest_id, 60), s.actor, readiness));
       if (action === 'activate') {
         const m = await dbOne(`organization_members?organization_id=eq.${enc(s.orgId)}&staff_user_id=eq.${enc(s.caller.id)}&status=eq.active&select=role`);

@@ -106,5 +106,26 @@ check('a feature only one competitor has is not reported as a market gap', !gaps
 check('the owner goal "more booked jobs" marks booking findings as goal-related', R.goalRelevant('Get more booked jobs from the website', 'online_booking') === true);
 check('an unrelated goal does not', R.goalRelevant('Lower my software bills', 'online_booking') === false);
 
+// 8. a site whose pages are built by JavaScript (the served HTML is an empty shell): what the reader cannot see is
+// UNKNOWN, never "absent" (nova-systems.app serves <div id="root"></div>; its contact page does have a tel: link)
+const shell = html('<div id="root"></div><script type="module" src="/assets/index-abc.js"></script>', '<meta name="viewport" content="width=device-width"><title>Nova Systems</title>');
+const spa = await R.crawlSite('https://spa.example/', { fetchImpl: site({ '/': shell }), lookup, maxPages: 3 });
+check('a script-built page is detected as such', spa.rendered_by_script === true, JSON.stringify(spa).slice(0, 300));
+check('on a script-built site, tap-to-call, hours, reviews and booking are unknown (null), not missing (false)', ['click_to_call', 'hours_published', 'reviews_or_social_proof', 'online_booking', 'prices_published', 'chat', 'contact_form'].every((k) => spa.features[k] === null), JSON.stringify(spa.features));
+check('what the served HTML does show (HTTPS, phone viewport) is still reported', spa.features.https === true && spa.features.mobile_viewport === true, JSON.stringify(spa.features));
+const plain = await R.crawlSite('https://brasscityroofing.com/', { fetchImpl: crawlFetch, lookup, maxPages: 6 });
+check('an ordinary HTML site is not treated as script-built', plain.rendered_by_script === false);
+const spaGaps = R.compareJourneys({ online_booking: null, click_to_call: false }, [{ name: 'A', features: { online_booking: true, click_to_call: true } }, { name: 'B', features: { online_booking: true, click_to_call: null } }, { name: 'C', features: { online_booking: true, click_to_call: true } }]);
+check('a feature that could not be seen on the client site is never reported as a gap', !spaGaps.some((g) => g.feature === 'online_booking'), JSON.stringify(spaGaps));
+check('a competitor whose feature could not be seen is not counted as compared', spaGaps.find((g) => g.feature === 'click_to_call')?.compared === 2, JSON.stringify(spaGaps));
+
+// 9. a proposal already covered by a recorded finding (reviewed or hand-written, no check_key) is not proposed again
+const recorded = [{ title: 'Email from nova-systems.app is not fully set up for sending', detail: 'the root domain has no SPF record and there is no DMARC policy', review_status: 'reviewed' }, { title: 'The home page has no click-to-call link', detail: 'No tel: link on the home page.', review_status: 'reviewed' }];
+check('an SPF proposal is covered by a recorded finding about SPF', !!R.coveredBy('spf', recorded));
+check('a DMARC proposal is covered by a recorded finding about DMARC', !!R.coveredBy('dmarc', recorded));
+check('a tap-to-call proposal is covered by a recorded click-to-call finding', !!R.coveredBy('click_to_call', recorded));
+check('an unrelated proposal is not covered', !R.coveredBy('hours_published', recorded));
+check('a rejected finding does not cover anything', !R.coveredBy('spf', [{ ...recorded[0], review_status: 'rejected' }]));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

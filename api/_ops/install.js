@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso } from '../_sales/core.js';
 import * as R from './rules.js';
 import * as S from './service.js';
+import { provisionModule, moduleByKey, CATALOG_VERSION, selfAudits } from './modules.js';
 
 const sha = (v) => crypto.createHash('sha256').update(typeof v === 'string' ? v : JSON.stringify(v)).digest('hex');
 const ERR = (status, message) => Object.assign(new Error(message), { status, expose: true });
@@ -32,11 +33,10 @@ function components({ prices, depositNeeded }) {
 }
 
 async function auditLink(orgId) {
-  // The latest audit of a real business: records named with the TEST / LOCAL TEST / DEMO convention are test fixtures.
-  // The plan is built from the most recent real audit that HAS findings: a newer audit that was only just opened must not
+  // Only the audits of the business being installed (modules.js selfAudits), never a prospect's audit held in the same
+  // workspace. The plan uses the most recent of them that HAS findings: a newer audit that was only just opened must not
   // silently replace a finished one; it is reported instead.
-  const cases = (await dbGet(`audit_cases?organization_id=eq.${enc(orgId)}&select=id,created_at,status,businesses(name),audit_findings(count)&order=created_at.desc&limit=25`))
-    .filter((x) => !/^(LOCAL TEST|TEST|DEMO)(\W|$)/.test(x.businesses?.name || ''));
+  const cases = (await selfAudits(orgId)).cases.map((x) => ({ ...x, businesses: { name: x.name } }));
   const count = (x) => x.audit_findings?.[0]?.count || 0;
   const c = cases.find((x) => count(x) > 0) || cases[0] || null;
   if (!c) return null;
@@ -50,8 +50,10 @@ export async function buildManifest(orgId) {
   const depositNeeded = prices.some((p) => (p.deposit_cents || 0) > 0);
   const comps = components({ prices, depositNeeded });
   const audit = await auditLink(orgId);
-  const manifest = { components: comps.map(({ key, stage, label, required, action, owner_action }) => ({ key, stage, label, required, action, owner_action })), audit };
-  return { manifest, sha: sha({ c: manifest.components, a: audit?.findings?.map((f) => [f.id, f.fix]) || [] }) };
+  // Modules the owner selected (catalog recipes); disabled ones stay listed so a run reports them as turned off.
+  const modules = (await dbGet(`ops_installed_modules?organization_id=eq.${enc(orgId)}&select=module_key,status&order=module_key.asc`)).map((x) => x.module_key).filter((k) => moduleByKey(k));
+  const manifest = { components: comps.map(({ key, stage, label, required, action, owner_action }) => ({ key, stage, label, required, action, owner_action })), audit, modules, catalog_version: CATALOG_VERSION };
+  return { manifest, sha: sha({ c: manifest.components, a: audit?.findings?.map((f) => [f.id, f.fix]) || [], m: modules, v: CATALOG_VERSION }) };
 }
 
 export async function latestManifest(orgId) {
@@ -138,6 +140,12 @@ export async function runInstall(orgId, manifestId, actor, readinessFn) {
     const existing = await dbGet(`ops_install_steps?manifest_id=eq.${enc(m.id)}&select=step_key,status,attempts`);
     const prices = await S.approvedServices(orgId);
     const ctx = { prices, depositNeeded: prices.some((p) => (p.deposit_cents || 0) > 0), readiness: await readinessFn(orgId), results: {} };
+    const upsertStep = async (r) => {
+      const prev = existing.find((e) => e.step_key === r.step_key);
+      const row = { manifest_id: m.id, organization_id: orgId, stage: 5, step_key: r.step_key, label: r.label, status: r.status, detail: r.detail, evidence: r.evidence || {}, owner_action: r.owner_action, attempts: (prev?.attempts || 0) + 1, started_at: nowIso(), finished_at: nowIso() };
+      if (prev) await dbPatch('ops_install_steps', `manifest_id=eq.${enc(m.id)}&step_key=eq.${enc(r.step_key)}`, row);
+      else { const ins = await dbInsert('ops_install_steps', row, { onConflict: 'manifest_id,step_key' }); if (ins.conflict) await dbPatch('ops_install_steps', `manifest_id=eq.${enc(m.id)}&step_key=eq.${enc(r.step_key)}`, row); }
+    };
     for (const comp of [...m.manifest.components].sort((a, b) => a.stage - b.stage)) {
       const prev = existing.find((e) => e.step_key === comp.key);
       if (prev && ['done', 'skipped'].includes(prev.status) && comp.key !== 'test_journey') { ctx.results[comp.key] = prev.status; continue; } // finished steps are not repeated
@@ -149,11 +157,29 @@ export async function runInstall(orgId, manifestId, actor, readinessFn) {
       if (prev) await dbPatch('ops_install_steps', `manifest_id=eq.${enc(m.id)}&step_key=eq.${enc(comp.key)}`, row);
       else { const ins = await dbInsert('ops_install_steps', row, { onConflict: 'manifest_id,step_key' }); if (ins.conflict) await dbPatch('ops_install_steps', `manifest_id=eq.${enc(m.id)}&step_key=eq.${enc(comp.key)}`, row); }
     }
+    // Modules: run each selected module's recipe (idempotent; every run re-verifies). Disabled modules are not run.
+    let moduleBlocked = false;
+    for (const key of m.manifest.modules || []) {
+      const st = await dbOne(`ops_installed_modules?organization_id=eq.${enc(orgId)}&module_key=eq.${enc(key)}&select=id,status`);
+      if (!st) continue;
+      if (st.status === 'disabled') { await upsertStep({ step_key: `module:${key}`, label: `${moduleByKey(key).name}`, status: 'skipped', detail: 'Turned off by the owner; records kept', evidence: {}, owner_action: null }); continue; }
+      await dbPatch('ops_installed_modules', `id=eq.${enc(st.id)}`, { status: 'installing', manifest_id: m.id, updated_at: nowIso() });
+      let rows;
+      try { rows = await provisionModule(orgId, key, { results: ctx.results, actor, latestAuditCaseId: m.manifest.audit?.case_id || null }); }
+      catch (e) { rows = [{ step_key: `module:${key}:error`, label: `${moduleByKey(key).name}`, status: 'failed', detail: String(e.message).slice(0, 300), evidence: {}, owner_action: 'Run Install Systems again; if it fails again, report this message.' }]; }
+      for (const r of rows) await upsertStep(r);
+      // A run that got through clears the error a previous attempt recorded, so a retry can finish the plan.
+      const prevErr = existing.find((e) => e.step_key === `module:${key}:error` && e.status === 'failed');
+      if (prevErr && !rows.some((r) => r.step_key === prevErr.step_key)) await dbPatch('ops_install_steps', `manifest_id=eq.${enc(m.id)}&step_key=eq.${enc(prevErr.step_key)}`, { status: 'skipped', detail: `Earlier error cleared: the module ran again at ${nowIso()}`, owner_action: null });
+      const final = rows.some((r) => r.status === 'failed') ? 'failed' : rows.every((r) => ['done', 'skipped'].includes(r.status)) ? 'installed' : 'blocked';
+      if (final !== 'installed') moduleBlocked = true;
+      await dbPatch('ops_installed_modules', `id=eq.${enc(st.id)}`, { status: final, ...(final === 'installed' ? { installed_at: nowIso() } : {}), updated_at: nowIso() });
+    }
     const steps = await dbGet(`ops_install_steps?manifest_id=eq.${enc(m.id)}&select=step_key,status`);
     const reqKeys = m.manifest.components.filter((c) => c.required).map((c) => c.key);
     const reqDone = reqKeys.every((k) => ['done', 'skipped'].includes(steps.find((s) => s.step_key === k)?.status));
     const anyFailed = steps.some((s) => s.status === 'failed');
-    const status = anyFailed ? 'failed' : reqDone ? 'installed' : 'partial';
+    const status = anyFailed ? 'failed' : reqDone && !moduleBlocked ? 'installed' : 'partial';
     await dbPatch('ops_install_manifests', `id=eq.${enc(m.id)}&lock_token=eq.${enc(lock)}`, { status, lock_token: null, lock_expires_at: null, updated_at: nowIso() });
     await dbInsert('ops_transitions', { organization_id: orgId, entity: 'settings', entity_id: m.id, from_state: m.status, to_state: status, actor_type: actor?.type || 'user', actor_id: actor?.id ? String(actor.id) : null, reason: `installation plan v${m.version} run`, evidence: { steps: steps.length } });
     return latestManifest(orgId);
