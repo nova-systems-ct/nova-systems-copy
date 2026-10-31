@@ -54,3 +54,16 @@ as the owner; audit duplicates found in data; Workers/Training/Requests screensh
 confirmed bug, and results were checked against saved database state, not just responses. Run the next session from the
 `nova-mvp-work` folder so `frontend-design`, `impeccable` and `web-design-guidelines` can be used for the design review
 that is still owed.
+
+## Update 2026-10-30 (owner brief of 2026-10-30, pinned revisions)
+| Change | Source @ commit | Notes |
+|---|---|---|
+| frontend-design, webapp-testing | anthropics/skills @ ca45fc496a3436251f191354091d557da31c15b5 | identical to the installed copies; unchanged |
+| impeccable (replaced) | pbakaus/impeccable @ df3a4abe7d0840d5f60324812c432e00b66a4e75, path `.agents/skills/impeccable` | adds `agents/*.toml` (inert definitions); hooks still not installed; launcher not run |
+| react-best-practices (new, name `vercel-react-best-practices`) | vercel-labs/agent-skills @ 1a2c79d4e6c4a2283dc2c614b6538cbe1ed5ca62 | MIT; web-design-guidelines unchanged at this revision |
+| product-marketing, customer-research, copywriting, cro, cold-email, marketing-ideas, events, referrals (updated); competitor-profiling, offers, copy-editing, emails, prospecting, conversion-tracking, attribution, video, marketing-council (new) | coreyhaines31/marketingskills @ 88c79f6528a9347420e57ceb1fff9a60de651768 | MIT; conversion-tracking ships browser snippets and two local Python helpers, not run |
+| receiving-code-review (new) | obra/superpowers @ 2ce8aa15d05bd57213e6f746f953aafb7ded7a8b | MIT |
+
+Discovery 2026-10-30: a fresh headless session in this repo listed every new name (React skill shown as
+`react-best-practices`) and did not list a made-up control. This session (started in the repo) loads them with the Skill
+tool; `verification-before-completion` was invoked at the start.
