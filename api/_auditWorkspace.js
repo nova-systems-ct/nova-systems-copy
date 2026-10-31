@@ -6,14 +6,14 @@
 // retrieval time, method and confidence. A missing element on a public page is never treated as proof of absence.
 // Staff only; every object is re-checked against the caller's organization.
 import crypto from 'node:crypto';
-import dns from 'node:dns';
 import { requireOrgAccess } from './_orgAccess.js';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, storagePut, storageGet } from './_sales/core.js';
 import { sanitize } from './_sanitize.js';
-import { runQuickScan, normalizeWebsite } from './_demo.js';
+import { normalizeWebsite } from './_demo.js';
 import { contentHash, validateReportForApproval } from './_auditRules.js';
 import { computeCaseClockStatus } from './_auditClock.js';
 import { renderAuditPdf } from './_auditPdf.js';
+import { runResearch, MODULES } from './_researchRun.js';
 
 const send = (res, code, body) => res.status(code).json(body);
 const PDF_BUCKET = 'nova-vault';
@@ -29,40 +29,19 @@ async function caseFor(req, res, orgId, caseId) {
 }
 const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return null; } };
 
-// ------------------------------------------------------------------------------------------------ email DNS checks
-// Public DNS only. A lookup failure is "could not check", never "missing".
-export async function checkEmailDns(domain, { resolver = dns.promises, now = () => new Date() } = {}) {
-  const at = now().toISOString(); const checks = [];
-  const absent = (e) => ['ENODATA', 'ENOTFOUND', 'NXDOMAIN'].includes(e?.code);
-  const txt = async (name) => { try { return { ok: true, records: (await resolver.resolveTxt(name)).map((r) => r.join('')) }; } catch (e) { return absent(e) ? { ok: true, records: [] } : { ok: false, error: e?.code || e?.message }; } };
-  let mx; try { mx = { ok: true, records: (await resolver.resolveMx(domain)).map((r) => r.exchange).filter(Boolean) }; } catch (e) { mx = absent(e) ? { ok: true, records: [] } : { ok: false, error: e?.code || e?.message }; }
-  const base = { checked_at: at, kind: 'dns', target: domain };
-  if (!mx.ok) { checks.push({ ...base, key: 'dns_mx', label: 'Email domain can be checked', result: 'unknown', observation: `The DNS lookup for ${domain} did not answer (${mx.error}). Nothing was assumed.` }); return checks; }
-  checks.push({ ...base, key: 'dns_mx', label: 'Receives email at its own domain (MX)', result: 'ok', observation: mx.records.length ? `Mail server (MX) records for ${domain}: ${mx.records.slice(0, 4).join(', ')}.` : `No mail server (MX) records were found for ${domain}; the business may use another address for email.` });
-  if (!mx.records.length) return checks;
-  const spf = await txt(domain); const dmarc = await txt(`_dmarc.${domain}`);
-  const spfRec = spf.ok ? spf.records.find((r) => /^v=spf1\b/i.test(r)) : null;
-  checks.push(!spf.ok ? { ...base, key: 'dns_spf', label: 'Email sender list published (SPF)', result: 'unknown', observation: `The SPF lookup for ${domain} did not answer (${spf.error}).` }
-    : spfRec ? { ...base, key: 'dns_spf', label: 'Email sender list published (SPF)', result: 'ok', observation: `${domain} publishes an SPF record: "${spfRec.slice(0, 180)}".` }
-    : { ...base, key: 'dns_spf', label: 'Email sender list published (SPF)', result: 'issue', observation: `${domain} receives email (MX records exist) but publishes no SPF record.`, why: 'Messages sent from this domain, such as quotes, invoices and replies, are more likely to land in spam or be spoofed.', confirm: 'Which services send email for the business (for example the website, booking tool or invoicing).', next: 'Publish an SPF record that lists every service that sends email for the domain.', strength: 45 });
-  const dRec = dmarc.ok ? dmarc.records.find((r) => /^v=DMARC1\b/i.test(r)) : null;
-  checks.push(!dmarc.ok ? { ...base, target: `_dmarc.${domain}`, key: 'dns_dmarc', label: 'Email protection policy published (DMARC)', result: 'unknown', observation: `The DMARC lookup for ${domain} did not answer (${dmarc.error}).` }
-    : dRec ? { ...base, target: `_dmarc.${domain}`, key: 'dns_dmarc', label: 'Email protection policy published (DMARC)', result: 'ok', observation: `${domain} publishes a DMARC policy: "${dRec.slice(0, 160)}".` }
-    : { ...base, target: `_dmarc.${domain}`, key: 'dns_dmarc', label: 'Email protection policy published (DMARC)', result: 'issue', observation: `No DMARC record was found at _dmarc.${domain}.`, why: 'Without DMARC, anyone can send mail that appears to come from the business, and inbox providers trust its real mail less.', confirm: 'Whether the business sends email from this domain.', next: 'Publish a DMARC record (start with p=none and reporting), then tighten it once SPF and DKIM pass.', strength: 40 });
-  return checks;
-}
+export { checkEmailDns } from './_researchRun.js';
 
 const CHECK_LABELS = { home: 'Home page loads', https: 'Served securely (HTTPS)', mobile: 'Set up for phones', phones: 'One consistent phone number', inquiry_path: 'A visible way to get in touch', link: 'Contact or booking link works', dns_mx: 'Receives email at its own domain (MX)', dns_spf: 'Email sender list published (SPF)', dns_dmarc: 'Email protection policy published (DMARC)' };
-const priorityOf = (strength = 0) => (strength >= 80 ? 'high' : strength >= 40 ? 'medium' : 'low');
-const sourceOf = (c) => (c.kind === 'dns' ? `Public DNS records for ${c.target} (queried ${c.checked_at})` : `Public web page ${c.url} (retrieved ${c.checked_at})`);
-const checkKey = (c) => `${c.key}:${c.kind === 'dns' ? c.target : (hostOf(c.url) || '') + (() => { try { return new URL(c.url).pathname; } catch { return ''; } })()}`;
 
 // ------------------------------------------------------------------------------------------------ summary / next steps
-const DETAIL_KEYS = [['name', 'Business name'], ['website', 'Website'], ['industry', 'Industry'], ['location', 'City / area'], ['public_phone', 'Main phone']];
+// The five starting details (owner brief 2026-10-30): name, location, website, industry/service, main goal or concern.
+// Phone is optional and not counted.
+const DETAIL_KEYS = [['name', 'Business name'], ['location', 'City / area'], ['website', 'Website'], ['industry', 'Industry or main service'], ['goal', 'Main goal or concern'], ['public_phone', 'Main phone (optional)']];
+const REQUIRED_DETAILS = ['name', 'location', 'website', 'industry', 'goal'];
 function nextSteps({ c, details, evidence, findings, latest, pdfs }) {
   const steps = [];
-  const missing = details.filter((d) => !d.value).map((d) => d.label);
-  steps.push({ key: 'details', done: !missing.length, label: 'Business details', detail: missing.length ? `Missing: ${missing.join(', ')}.` : 'All five details saved.', action: 'details' });
+  const missing = details.filter((d) => REQUIRED_DETAILS.includes(d.key) && !d.value).map((d) => d.label);
+  steps.push({ key: 'details', done: !missing.length, label: 'Business details', detail: missing.length ? `Missing: ${missing.join(', ')}. Research can still start; missing details limit it.` : 'All five details saved.', action: 'details' });
   const reviewRuns = evidence.filter((e) => String(e.method || '').startsWith('automated_review:')).length;
   const inPerson = evidence.filter((e) => String(e.method || '').startsWith('in_person:')).length;
   steps.push({ key: 'evidence', done: evidence.length > 0, label: 'Evidence', detail: evidence.length ? `${evidence.length} records (${reviewRuns} from the website and email review, ${inPerson} captured in person).` : (c.scope === '360' ? 'Run the website review, then capture the in-person walkthrough.' : 'Run the website and email review.'), action: 'review' });
@@ -88,43 +67,62 @@ function clockState(c) {
 
 // ------------------------------------------------------------------------------------------------ report composition
 async function composeDraft(c, { summary } = {}) {
-  const [biz, evidence, findings, links, recs] = await Promise.all([
+  const [biz, evidence, findings, links, recs, competitors, lastRun] = await Promise.all([
     c.business_id ? dbOne(`businesses?id=eq.${enc(c.business_id)}&select=name,website,confirmed_website,phone,city,state,industry`) : null,
     dbGet(`audit_evidence?case_id=eq.${enc(c.id)}&select=id,source,capture_date,method,observation,confidence&order=capture_date.asc`),
     dbGet(`audit_findings?case_id=eq.${enc(c.id)}&review_status=neq.rejected&select=*`),
     dbGet(`audit_finding_evidence?select=finding_id,evidence_id,audit_findings!inner(case_id)&audit_findings.case_id=eq.${enc(c.id)}`),
     dbGet(`audit_recommendations?case_id=eq.${enc(c.id)}&select=*&order=priority_rank.asc.nullslast`),
+    dbGet(`audit_competitors?case_id=eq.${enc(c.id)}&select=name,url,rationale,observations&order=created_at.asc`),
+    dbOne(`audit_research_runs?case_id=eq.${enc(c.id)}&status=in.(completed,partial)&select=id,summary,finished_at,scope&order=created_at.desc`).catch(() => null),
   ]);
   const evById = Object.fromEntries(evidence.map((e) => [e.id, e]));
   const rank = { high: 0, medium: 1, low: 2 };
   const ordered = [...findings].sort((a, b) => (rank[a.priority] ?? 3) - (rank[b.priority] ?? 3) || String(a.created_at).localeCompare(String(b.created_at)));
-  const lastRun = evidence.filter((e) => String(e.method || '').startsWith('automated_review:')).map((e) => e.method.split(':')[1]).pop();
-  const runChecks = lastRun ? evidence.filter((e) => String(e.method || '').startsWith(`automated_review:${lastRun}:`)) : [];
-  const checks = runChecks.map((e) => { const [, , key, result] = e.method.split(':'); return { label: CHECK_LABELS[key] || String(key || 'check').replace(/_/g, ' '), result: ['ok', 'issue', 'unknown'].includes(result) ? result : 'unknown', checked_at: e.capture_date }; });
+  // Checks of the latest automated run: only evidence whose method carries an explicit result (automated_review:run:key:result).
+  const runIds = evidence.filter((e) => String(e.method || '').startsWith('automated_review:')).map((e) => e.method.split(':')[1]);
+  const latestRun = runIds[runIds.length - 1];
+  const runEvidence = latestRun ? evidence.filter((e) => String(e.method || '').startsWith(`automated_review:${latestRun}:`)) : [];
+  const checks = runEvidence.filter((e) => { const p = e.method.split(':'); return p.length === 4 && ['ok', 'issue', 'unknown'].includes(p[3]); })
+    .map((e) => { const p = e.method.split(':'); return { label: CHECK_LABELS[p[2]] || String(p[2]).replace(/_/g, ' '), result: p[3], checked_at: e.capture_date }; });
+  // Evidence in this version: anything recorded by people, the latest research run, and older evidence a finding still cites
+  // (re-running research must not inflate the counts).
+  const cited = new Set(links.map((l) => l.evidence_id));
+  const used = evidence.filter((e) => !String(e.method || '').startsWith('automated_review:') || String(e.method).startsWith(`automated_review:${latestRun}:`) || cited.has(e.id));
   const website = c.intake?.website || biz?.confirmed_website || biz?.website || null;
   const name = c.intake?.name || biz?.name || 'the business';
-  const inPerson = evidence.filter((e) => String(e.method || '').startsWith('in_person:')).length;
+  const goal = c.intake?.goal || null;
+  const inPerson = used.filter((e) => String(e.method || '').startsWith('in_person:')).length;
   const proposed = ordered.filter((f) => f.review_status !== 'reviewed').length;
+  const rs = lastRun?.summary || null;
   const autoSummary = [
-    website ? `Nova reviewed the public website ${website}${runChecks.length ? ` and its public email records on ${runChecks[0].capture_date.slice(0, 10)}` : ''}.` : 'No website was reviewed.',
+    website ? `Nova researched ${name}'s public footprint${rs ? `: ${rs.pages_read} page(s) of ${website}, its public email records, its public map listing (${rs.identity})${rs.competitors ? ` and ${rs.competitors} comparable nearby business(es)` : ''}` : ` at ${website}`}.` : `No website was saved for ${name}.`,
+    goal ? `The owner's main goal: "${goal}".` : '',
     inPerson ? `${inPerson} observation${inPerson === 1 ? ' was' : 's were'} recorded in person.` : '',
-    ordered.length ? `${ordered.length} finding${ordered.length === 1 ? ' is' : 's are'} recorded${proposed ? `, ${proposed} of them proposed and not yet reviewed by Nova` : ''}. The most important: ${ordered.slice(0, 2).map((f) => f.title).join('; ')}.` : 'No problem was verified on what was checked. That does not mean there is none.',
+    ordered.length ? `${ordered.length} finding${ordered.length === 1 ? ' is' : 's are'} recorded${proposed ? `, ${proposed} of them proposed and not yet reviewed by Nova` : ''}. The most important: ${ordered.slice(0, 2).map((f) => f.title).join('; ')}.` : "No problem was verified on what was checked. That does not mean there is none; the full audit looks at calls, replies and bookings with the owner's permission.",
     'Financial impact is unknown: no call, booking or revenue records were supplied.',
   ].filter(Boolean).join(' ');
   const recList = recs.length ? recs.map((r, i) => ({ priority: r.priority_rank ?? i + 1, mechanism: r.mechanism, effort: r.effort_range, cost: r.cost_range, verification_plan: r.verification_plan, source: 'recommendation' }))
-    : ordered.filter((f) => f.recommended_action).map((f, i) => ({ priority: i + 1, mechanism: f.recommended_action, source: `finding: ${f.title}` }));
+    : ordered.filter((f) => f.recommended_action).map((f, i) => ({ priority: i + 1, mechanism: f.recommended_action, module: MODULES[f.module_key] || null, source: `finding: ${f.title}` }));
+  const prescriptions = Object.entries(MODULES).map(([k, label]) => ({ key: k, label, findings: ordered.filter((f) => f.module_key === k).map((f) => f.title) })).filter((m) => m.findings.length);
   return {
     title: 'The Nova Audit',
     executive_summary: summary || autoSummary,
+    owner_goal: goal,
     business_identity: { name, website, phone: c.intake?.public_phone || biz?.phone || null, location: c.intake?.location || [biz?.city, biz?.state].filter(Boolean).join(', ') || null, industry: c.intake?.industry || biz?.industry || null },
-    scope_and_method: { mode: c.scope === '360' ? 'online and in person' : 'online', method: 'Automated review of public web pages and public DNS records (no forms submitted, no one contacted), plus any evidence recorded by Nova staff.', in_person_observations: inPerson },
+    scope_and_method: { mode: c.scope === '360' ? 'online and in person' : 'online', depth: lastRun?.scope === 'full' ? 'full public research' : 'demo-depth public research', method: 'Public web pages (robots.txt respected, no forms submitted), public DNS records, OpenStreetMap identity and nearby same-category businesses, plus any evidence recorded by Nova staff. No one was contacted.', in_person_observations: inPerson, research_completed_at: lastRun?.finished_at || null },
+    metrics: rs ? { pages_read: rs.pages_read, evidence_records: used.length, checks: checks.length, issues_observed: checks.filter((x) => x.result === 'issue').length, competitors_compared: rs.competitor_websites_compared } : null,
     checks_performed: checks,
-    evidence_reviewed: evidence.map((e) => ({ source: e.source, captured: e.capture_date, method: e.method, observation: e.observation, confidence: e.confidence })),
-    findings: ordered.map((f) => ({ title: f.title, type: f.statement_type, priority: f.priority, confidence: f.confidence, review_status: f.review_status, origin: f.origin, observed: f.detail, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status || 'unknown', limitations: f.limitations, remedy: f.recommended_action, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision, evidence: links.filter((l) => l.finding_id === f.id).map((l) => evById[l.evidence_id]?.source).filter(Boolean) })),
+    client_features: rs?.client_features || null,
+    competitor_comparison: competitors.map((x) => ({ name: x.name, url: x.url, rationale: x.rationale, observations: (x.observations || []).map((o) => o.text) })),
+    evidence_reviewed: used.map((e) => ({ source: e.source, captured: e.capture_date, method: e.method, observation: e.observation, confidence: e.confidence })),
+    findings: ordered.map((f) => ({ title: f.title, type: f.statement_type, priority: f.priority, confidence: f.confidence, review_status: f.review_status, origin: f.origin, observed: f.detail, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status || 'unknown', limitations: f.limitations, remedy: f.recommended_action, module: MODULES[f.module_key] || null, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision, evidence: links.filter((l) => l.finding_id === f.id).map((l) => evById[l.evidence_id]?.source).filter(Boolean) })),
+    prescriptions,
     estimates_and_assumptions: { scenarios: [], statement: 'No financial scenario was prepared; financial impact is unknown.' },
     recommendations: recList,
-    limitations: 'This review read up to four public web pages and the domain\'s public DNS records at the times stated. It cannot see calls, texts, response times, bookings or revenue, and a missing element on a page does not prove the business lacks it. This is an operational review, not a CPA financial audit.',
-    next_steps: 'Review each finding with Nova, confirm the items marked "to confirm", and decide which fixes to approve first.',
+    research_limitations: rs?.limitations || [],
+    limitations: 'This research reads public sources at the times stated. It cannot see calls, texts, response times, bookings or revenue, and a missing element on a page does not prove the business lacks it. A source that could not be reached is reported as unavailable, not as a problem. This is an operational review, not a CPA financial audit.',
+    next_steps: 'Review each finding with Nova, confirm the items marked "to confirm", and decide which fixes to approve first. The full audit adds call, reply and booking tests with your permission.',
   };
 }
 
@@ -141,7 +139,7 @@ export async function handleAuditWorkspace(req, res, op, caller) {
       const name = sanitize(b.name, 200); if (!name || name.length < 2) return send(res, 400, { error: 'Enter the business name.', field: 'name' });
       let website = null;
       if (b.website && String(b.website).trim()) { const n = normalizeWebsite(b.website); if (n.error) return send(res, 400, { error: n.error, field: 'website' }); website = n.url; }
-      const intake = { name, website, industry: sanitize(b.industry, 100) || null, location: sanitize(b.location, 150) || null, public_phone: sanitize(b.phone, 40) || null, contact_name: sanitize(b.contact_name, 120) || null };
+      const intake = { name, website, industry: sanitize(b.industry, 100) || null, location: sanitize(b.location, 150) || null, public_phone: sanitize(b.phone, 40) || null, goal: sanitize(b.goal, 400) || null, contact_name: sanitize(b.contact_name, 120) || null };
       const scope = b.mode === 'in_person' ? '360' : 'digital';
       // Reuse the business when the name or website already exists in this organization.
       const all = await dbGet(`businesses?organization_id=eq.${enc(orgId)}&select=id,name,website,confirmed_website`);
@@ -189,43 +187,50 @@ export async function handleAuditWorkspace(req, res, op, caller) {
     if (op === 'details') {
       if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
       const next = { ...(c.intake || {}) };
-      for (const [k, max] of [['name', 200], ['industry', 100], ['location', 150], ['public_phone', 40], ['contact_name', 120]]) if (k in b) next[k] = sanitize(b[k], max) || null;
+      for (const [k, max] of [['name', 200], ['industry', 100], ['location', 150], ['public_phone', 40], ['goal', 400], ['contact_name', 120]]) if (k in b) next[k] = sanitize(b[k], max) || null;
       if ('website' in b) { if (b.website && String(b.website).trim()) { const n = normalizeWebsite(b.website); if (n.error) return send(res, 400, { error: n.error, field: 'website' }); next.website = n.url; } else next.website = null; }
       const [row] = await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}`, { intake: next, updated_at: nowIso() });
       return send(res, 200, { ok: true, intake: row.intake, saved_at: row.updated_at });
     }
 
     // ---------------------------------------------------------------- review: website + email DNS → evidence + proposed findings
-    if (op === 'review') {
+    // ---------------------------------------------------------------- research: start (queued or in-process), status, synchronous review
+    if (op === 'review' || op === 'research-start') {
       if (req.method !== 'POST') return send(res, 405, { error: 'POST only' });
       const reviewer = await dbOne("workers?capability_key=eq.audit_review&status=neq.inactive&select=status");
-      if (reviewer && reviewer.status !== 'active' && reviewer.status !== 'restricted') return send(res, 409, { error: 'The Audit evidence worker is paused. Resume it on the Workers page to run the review.', paused: true });
-      const biz = c.business_id ? await dbOne(`businesses?id=eq.${enc(c.business_id)}&select=website,confirmed_website`) : null;
-      const website = c.intake?.website || biz?.confirmed_website || biz?.website;
-      if (!website) return send(res, 409, { error: 'Add the business website in Business details first. Without one, record in-person or owner-provided evidence instead.', need: 'website' });
-      const runId = crypto.randomUUID().slice(0, 8);
-      const scan = await runQuickScan(website, { fetchImpl: deps.fetchImpl, lookup: deps.lookup, now: deps.now });
-      const webChecks = (scan.checks || []).map((x) => ({ ...x, kind: 'web' }));
-      const domain = hostOf(scan.checks?.[0]?.url || website);
-      const dnsChecks = domain ? await checkEmailDns(domain, { resolver: deps.resolver, now: deps.now }) : [];
-      const checks = [...webChecks, ...dnsChecks];
-      if (!checks.length) return send(res, 422, { error: scan.limitation || 'Nothing could be checked.', result: scan.result });
-      const author = `Nova automated review (run by ${caller.email || caller.id})`;
-      const rows = checks.map((x) => ({ case_id: c.id, source: sourceOf(x), capture_date: x.checked_at, method: `automated_review:${runId}:${x.key}:${x.result}`, observation: [x.observation, x.result === 'issue' && x.confirm ? `To confirm: ${x.confirm}` : ''].filter(Boolean).join(' ').slice(0, 3000), source_quality: 'medium', confidence: x.result === 'unknown' ? 'low' : 'high', privacy_level: 'internal', author }));
-      const inserted = (await dbInsert('audit_evidence', rows)).rows || [];
-      const existing = new Set((await dbGet(`audit_findings?case_id=eq.${enc(c.id)}&check_key=not.is.null&select=check_key`)).map((f) => f.check_key));
-      let proposed = 0; let skipped = 0;
-      for (let i = 0; i < checks.length; i++) {
-        const x = checks[i]; if (x.result !== 'issue') continue;
-        const key = checkKey(x); if (existing.has(key)) { skipped++; continue; }
-        const ev = inserted[i]; if (!ev) continue;
-        const f = await dbInsert('audit_findings', { case_id: c.id, title: x.label === 'A visible way to get in touch' ? 'No visible way to get in touch on the home page' : x.observation.length <= 110 ? x.observation.replace(/\.$/, '') : x.label, statement_type: 'observed_fact', detail: x.observation, priority: priorityOf(x.strength), confidence: 'high', recommended_action: x.next || null, customer_impact: x.why || null, limitations: x.confirm ? `To confirm: ${x.confirm}` : null, financial_impact_status: 'unknown', nova_can_implement: 'unknown', review_status: 'draft', origin: 'automated_review', check_key: key });
-        if (f.conflict || !f.row) { skipped++; continue; }
-        await dbInsert('audit_finding_evidence', { finding_id: f.row.id, evidence_id: ev.id });
-        existing.add(key); proposed++;
+      if (reviewer && reviewer.status !== 'active' && reviewer.status !== 'restricted') return send(res, 409, { error: 'The Audit evidence worker is paused. Resume it on the Workers page to run the research.', paused: true });
+      const I = c.intake || {};
+      if (!I.name && !c.business_id) return send(res, 409, { error: 'Add the business name first.', need: 'name' });
+      const active = await dbOne(`audit_research_runs?case_id=eq.${enc(c.id)}&status=in.(queued,running)&select=*&order=created_at.desc`);
+      if (active && Date.now() - new Date(active.heartbeat_at || active.created_at).getTime() < 10 * 60_000) {
+        if (op === 'research-start') return send(res, 200, { ok: true, run: active, already_running: true });
+        return send(res, 409, { error: 'Research is already running for this audit.', run_id: active.id });
       }
-      await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}`, { last_review_at: nowIso(), updated_at: nowIso() });
-      return send(res, 200, { ok: true, run_id: runId, website: webChecks[0]?.url || website, result: scan.result, checks: { total: checks.length, issues: checks.filter((x) => x.result === 'issue').length, ok: checks.filter((x) => x.result === 'ok').length, unknown: checks.filter((x) => x.result === 'unknown').length }, evidence_added: inserted.length, findings_proposed: proposed, findings_already_recorded: skipped, limitation: scan.limitation });
+      if (active) await dbPatch('audit_research_runs', `id=eq.${enc(active.id)}`, { status: 'failed', error: 'Stopped responding; superseded by a new run.', finished_at: nowIso() });
+      const scope = b.scope === 'full' ? 'full' : 'demo';
+      const ins = await dbInsert('audit_research_runs', { organization_id: orgId, case_id: c.id, scope, requested_by: caller.id });
+      if (!ins.row) return send(res, 409, { error: 'Research was just started from another screen. Reload.' });
+      const run = ins.row;
+      if (op === 'review') {
+        const out = await runResearch(run.id, deps);
+        const s = out.summary || {};
+        return send(res, 200, { ok: true, run_id: run.id, steps: out.steps, ...s, website: I.website || null });
+      }
+      const mode = process.env.AUDIT_RESEARCH_MODE || 'auto';
+      const beat = mode === 'auto' ? await dbOne('worker_runtime_heartbeats?select=last_seen_at&order=last_seen_at.desc').catch(() => null) : null;
+      const queue = mode === 'queue' || (mode === 'auto' && beat && Date.now() - new Date(beat.last_seen_at).getTime() < 2 * 60_000);
+      if (queue) {
+        await dbInsert('jobs', { job_type: 'audit_research', organization_id: orgId, payload: { run_id: run.id }, idempotency_key: `audit_research:${run.id}` });
+      } else {
+        // No background worker is alive: run in this server process (local staging). Hosted serverless needs the worker.
+        runResearch(run.id, deps).catch(async (e) => { await dbPatch('audit_research_runs', `id=eq.${enc(run.id)}`, { status: 'failed', error: String(e.message).slice(0, 300), finished_at: nowIso() }).catch(() => {}); });
+      }
+      return send(res, 200, { ok: true, run, mode: queue ? 'queued for the background worker' : 'running on this server' });
+    }
+    if (op === 'research-status') {
+      const rid = sanitize(q.run_id, 60);
+      const run = await dbOne(`audit_research_runs?case_id=eq.${enc(c.id)}${rid ? `&id=eq.${enc(rid)}` : ''}&select=*&order=created_at.desc`);
+      return send(res, 200, { run: run || null });
     }
 
     // ---------------------------------------------------------------- draft report (new version only when content changed)
@@ -286,4 +291,4 @@ export async function handleAuditWorkspace(req, res, op, caller) {
     return send(res, 500, { error: 'Something went wrong on the server. Nothing you typed was lost; try again.' });
   }
 }
-export const WORKSPACE_OPS = ['start', 'workspace', 'details', 'review', 'draft-report', 'pdf', 'pdf-file', 'archive'];
+export const WORKSPACE_OPS = ['start', 'workspace', 'details', 'review', 'research-start', 'research-status', 'draft-report', 'pdf', 'pdf-file', 'archive'];

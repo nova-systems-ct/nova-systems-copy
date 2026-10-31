@@ -13,7 +13,7 @@ const STATE_LABEL = { waiting_for_client: 'Not started', queue: 'Not started', a
 const STATE_TONE = { active: 'running', at_risk: 'pending', overdue: 'failed', paused: 'paused', completed: 'completed' }
 const DRAFT_KEY = 'nova.audit.new'
 const local = { get: () => { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null') } catch { return null } }, set: (v) => { try { v ? localStorage.setItem(DRAFT_KEY, JSON.stringify(v)) : localStorage.removeItem(DRAFT_KEY) } catch { /* unavailable */ } } }
-const blank = { name: '', website: '', industry: '', location: '', phone: '', mode: 'online' }
+const blank = { name: '', location: '', website: '', industry: '', goal: '', phone: '', mode: 'online' }
 
 export default function AuditCases() {
   const navigate = useNavigate()
@@ -82,13 +82,14 @@ export default function AuditCases() {
 
       {open && (
         <Card title="Start an audit" actions={<button className="ops-btn" aria-label="Close" onClick={() => { setOpen(false); setStartErr(null) }} style={{ border: 0 }}><X size={18} /></button>} style={{ marginBottom: 18 }}>
-          <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>Five details are enough to start. The website lets Nova run the public evidence review; everything can be edited later.</p>
+          <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>Five details are enough to start: name, area, website, industry and the owner's main goal. Nova researches the public footprint from these; everything can be edited later.</p>
           <div className="ops-two">
             <Field label="Business name (required)" id="na-name"><input id="na-name" className="ops-input" value={form.name} onChange={set('name')} autoCapitalize="words" /></Field>
             <Field label="Website" id="na-web"><input id="na-web" className="ops-input" value={form.website} onChange={set('website')} inputMode="url" autoCapitalize="none" placeholder="business.com" /></Field>
-            <Field label="Industry" id="na-ind"><input id="na-ind" className="ops-input" value={form.industry} onChange={set('industry')} placeholder="Roofing, restaurant, dental…" /></Field>
+            <Field label="Industry or main service" id="na-ind"><input id="na-ind" className="ops-input" value={form.industry} onChange={set('industry')} placeholder="Roofing, restaurant, dental…" /></Field>
             <Field label="City / area" id="na-loc"><input id="na-loc" className="ops-input" value={form.location} onChange={set('location')} placeholder="Waterbury, CT" /></Field>
-            <Field label="Main phone" id="na-ph"><input id="na-ph" className="ops-input" value={form.phone} onChange={set('phone')} inputMode="tel" /></Field>
+            <Field label="Main goal or concern" id="na-goal"><input id="na-goal" className="ops-input" value={form.goal} onChange={set('goal')} placeholder="More booked jobs, fewer missed calls…" /></Field>
+            <Field label="Main phone (optional)" id="na-ph"><input id="na-ph" className="ops-input" value={form.phone} onChange={set('phone')} inputMode="tel" /></Field>
             <fieldset style={{ border: 0, padding: 0, margin: '0 0 12px' }}>
               <legend style={{ fontSize: 12, fontWeight: 600, color: C.dim, marginBottom: 6 }}>How will you audit?</legend>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

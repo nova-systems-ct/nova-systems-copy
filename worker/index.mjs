@@ -168,6 +168,13 @@ const handlers = {
   },
 
   // ---- Nova Operations (api/_ops). All re-read live state; all idempotent per their keys. ----
+  // Public-first audit research (api/_researchRun.js). Progress is written to audit_research_runs as it runs.
+  async audit_research(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { runResearch } = await import('../api/_researchRun.js');
+    const out = await runResearch(job.payload?.run_id);
+    return { run_id: job.payload?.run_id, summary: out.summary };
+  },
   async ops_conversation_turn(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
     opsEnv(ctx); const { handleInboundTurn } = await import('../api/_ops/service.js');

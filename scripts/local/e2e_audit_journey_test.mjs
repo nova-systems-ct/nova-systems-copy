@@ -37,7 +37,7 @@ async function signIn(p) {
 }
 try {
   let ctx = await browser.newContext(IPAD);
-  let p = await ctx.newPage(); const errors = []; p.on('pageerror', (e) => errors.push(e.message));
+  let p = await ctx.newPage(); const errors = []; const watch = (pg) => { pg.on('pageerror', (e) => errors.push(`${e.message} @ ${pg.url()}`)); pg.on('requestfailed', (r) => { if (/\.(js|jsx|mjs|css)(\?|$)|\/src\//.test(r.url())) errors.push(`request failed ${r.url()} (${r.failure()?.errorText})`); }); }; watch(p);
   let dialogs = 0; p.on('dialog', async (d) => { dialogs++; await d.dismiss(); });
   await signIn(p);
 
@@ -48,13 +48,14 @@ try {
   await p.getByLabel('Website').fill('example.com');
   await p.getByLabel('Industry').fill('Reserved test domain');
   await p.getByLabel('City / area').fill('Waterbury, CT');
+  await p.getByLabel('Main goal or concern').fill('Show how a test page compares');
   await p.getByLabel('Main phone').fill('(203) 555-0100');
   await shot(p, '01-new-audit-ipad');
   await p.getByRole('button', { name: 'Start audit' }).click();
   await p.waitForURL(/\/dashboard\/audit\/[0-9a-f-]{36}/, { timeout: 20000 });
   const caseId = p.url().match(/audit\/([0-9a-f-]{36})/)[1];
   check('five details start an audit and open it', await seen(p.getByRole('heading', { level: 1, name: NAME })));
-  check('the overview lists next steps, details, evidence review, findings, report and the clock', await seen(p.getByRole('heading', { name: 'Next steps' })) && await seen(p.getByRole('heading', { name: 'Business details' })) && await seen(p.getByRole('heading', { name: 'Evidence review' })) && await seen(p.getByRole('heading', { name: 'Delivery clock' })));
+  check('the overview lists next steps, details, evidence review, findings, report and the clock', await seen(p.getByRole('heading', { name: 'Next steps' })) && await seen(p.getByRole('heading', { name: 'Business details' })) && await seen(p.getByRole('heading', { name: 'Public research' })) && await seen(p.getByRole('heading', { name: 'Delivery clock' })));
   check('the clock says why it has not started and offers the next action', await seen(p.getByText(/Not started\. No delivery policy/)) && await seen(p.getByRole('button', { name: 'Review the proposed policy' })));
 
   // 2. a duplicate start is caught
@@ -77,8 +78,11 @@ try {
   check('the saved detail is in the database', intake.public_phone === '(203) 555-0199' && intake.website === 'https://example.com/', JSON.stringify(intake));
 
   // 4. evidence review
-  await p.getByRole('button', { name: /Run website and email review/ }).click();
-  check('the review reports what it checked', await seen(p.getByText(/^Checked \d+ things on/), 45000), errors.join('; '));
+  await p.getByRole('button', { name: /Run public research/ }).click();
+  check('research shows live step-by-step progress', await seen(p.getByRole('list', { name: 'Research progress' }), 15000) && await seen(p.getByText('Find the business on public maps')));
+  check('research finishes and reports what it read and recorded', await seen(p.getByText(/page\(s\) read, \d+ competitor website\(s\) compared, \d+ evidence records/), 180000), errors.join('; '));
+  const runRow = (await db.query('select status, steps from audit_research_runs where case_id=$1 order by created_at desc limit 1', [caseId])).rows[0];
+  check('the research run is saved with every step and an end state', ['completed', 'partial'].includes(runRow?.status) && runRow.steps.length === 7 && runRow.steps.every((x) => x.status !== 'pending' && x.status !== 'running'), JSON.stringify(runRow?.steps?.map((x) => `${x.key}:${x.status}`)));
   const ev = (await db.query("select count(*)::int n from audit_evidence where case_id=$1 and method like 'automated_review:%'", [caseId])).rows[0].n;
   check('evidence records were saved with their sources', ev >= 3, `evidence ${ev}`);
   await shot(p, '02-after-review-ipad');
@@ -112,7 +116,7 @@ try {
   await shot(p, '03-pdf-saved-ipad');
 
   // 7. sign out, sign back in: everything is still there; the Vault opens it
-  await ctx.close(); ctx = await browser.newContext(IPAD); p = await ctx.newPage(); p.on('pageerror', (e) => errors.push(e.message));
+  await ctx.close(); ctx = await browser.newContext(IPAD); p = await ctx.newPage(); watch(p);
   await signIn(p); await p.goto(`${APP}/dashboard/audit/${caseId}`);
   check('after signing in again: details, evidence count and the stored PDF are shown', await seen(p.getByRole('heading', { level: 1, name: NAME })) && await p.getByLabel('Main phone').inputValue() === '(203) 555-0199' && await seen(p.getByRole('button', { name: 'Download' })));
   await p.goto(`${APP}/dashboard/nova-vault`);

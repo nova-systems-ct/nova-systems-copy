@@ -41,7 +41,7 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
   if (biz.website) { doc.setFontSize(9.5); doc.setTextColor(150, 150, 150); doc.text(t(biz.website), W / 2, y + 24, { align: 'center' }); }
 
   // cover facts: three measured figures from this version's content only
-  const facts = [[String(findings.length), findings.length === 1 ? 'finding' : 'findings'], [String(evidence.length), evidence.length === 1 ? 'evidence record' : 'evidence records'], [String(checks.length || '-'), 'checks run']];
+  const facts = [[String(findings.length), findings.length === 1 ? 'finding' : 'findings'], [String(evidence.length), evidence.length === 1 ? 'evidence record' : 'evidence records'], content.metrics?.competitors_compared ? [String(content.metrics.competitors_compared), 'competitors compared'] : [String(checks.length || '-'), 'checks run']];
   const colW = (W - 2 * M) / 3; const fy = 560;
   doc.setDrawColor(60, 60, 60); doc.setLineWidth(0.5); doc.line(M, fy - 34, W - M, fy - 34); doc.line(M, fy + 34, W - M, fy + 34);
   facts.forEach(([n, l], i) => {
@@ -81,7 +81,8 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     doc.setFont(font, style); doc.setFontSize(size); doc.setTextColor(...color);
     for (const raw of t(text).split('\n')) {
       const lines = raw.trim() ? doc.splitTextToSize(raw, W - 2 * M - indent) : [''];
-      for (const l of lines) { need(size * lead); doc.text(l, M + indent, y); y += size * lead; }
+      // re-apply the style per line: a page break draws the header in another colour
+      for (const l of lines) { need(size * lead); doc.setFont(font, style); doc.setFontSize(size); doc.setTextColor(...color); doc.text(l, M + indent, y); y += size * lead; }
     }
     y += gap;
   };
@@ -91,24 +92,32 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     para(v, { size: 10, indent, gap: 8 });
   };
 
+  let n = 0; const num = () => String(++n).padStart(2, '0');
   // 1. Summary
-  section('01  Summary', 'What we found');
+  section(`${num()}  Summary`, 'What we found');
+  if (content.owner_goal) { label('Your goal', content.owner_goal); }
   para(content.executive_summary, { size: 11.5, gap: 14 });
   need(64);
   doc.setFillColor(...SOFT); doc.rect(M, y, W - 2 * M, 54, 'F');
   const cells = [[counts.high, 'High priority'], [counts.medium, 'Medium'], [counts.low, 'Low'], [`${reviewed}/${findings.length}`, 'Reviewed by Nova']];
   const cw = (W - 2 * M) / cells.length;
-  cells.forEach(([n, l], i) => {
+  cells.forEach(([v, l], i) => {
     const cx = M + cw * i + 16;
-    doc.setFont('times', 'normal'); doc.setFontSize(20); doc.setTextColor(...INK); doc.text(String(n), cx, y + 26);
+    doc.setFont('times', 'normal'); doc.setFontSize(20); doc.setTextColor(...INK); doc.text(String(v), cx, y + 26);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...MUTED); doc.text(l.toUpperCase(), cx, y + 42, { charSpace: 0.8 });
   });
-  y += 76;
+  y += 66;
+  const m = content.metrics;
+  if (m) {
+    need(30);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...MUTED);
+    doc.text(t(`Measured in this research: ${m.pages_read} website page(s) read  -  ${m.checks} checks (${m.issues_observed} with an issue)  -  ${m.evidence_records} evidence records  -  ${m.competitors_compared} competitor website(s) compared`), M, y); y += 18;
+  }
   const fin = content.estimates_and_assumptions || {};
   para(fin.statement || 'Financial impact is unknown: no business records were supplied.', { size: 9.5, color: MUTED, gap: 10 });
 
   // 2. Findings
-  section('02  Findings', 'Priority findings');
+  section(`${num()}  Findings`, 'Priority findings');
   if (!findings.length) para('No findings are recorded in this version.', { color: MUTED });
   findings.forEach((f, i) => {
     need(90);
@@ -121,18 +130,55 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     label('What we saw', f.observed, 12);
     label('Why it matters', f.customer_impact || f.why, 12);
     label('Recommended next step', f.remedy, 12);
+    if (f.module) label('Nova module', f.module, 12);
+    if (f.limitations) para(f.limitations, { size: 8.5, color: MUTED, indent: 12, gap: 6 });
     if (Array.isArray(f.evidence) && f.evidence.length) label('Evidence', f.evidence.map((e) => `- ${e}`).join('\n'), 12);
     doc.setDrawColor(...RULE); doc.setLineWidth(0.5); need(14); doc.line(M, y, W - M, y); y += 18;
   });
 
-  // 3. Next steps
-  section('03  Next steps', 'What to do first');
+  // 3. Competitors (only when compared on real public pages)
+  const comps = Array.isArray(content.competitor_comparison) ? content.competitor_comparison : [];
+  if (comps.length) {
+    section(`${num()}  Market`, 'How nearby competitors compare');
+    const feat = (obs, label) => { const o = (obs || []).find((x) => String(x).toLowerCase().startsWith(`${label.toLowerCase()}:`)); return o ? /yes\s*$/i.test(o) : null; };
+    const LABELS = ['online booking', 'tap-to-call phone link', 'published prices', 'a contact form', 'reviews or social proof', 'published hours', 'live chat', 'phone-ready pages'];
+    const KEYS = ['online_booking', 'click_to_call', 'prices_published', 'contact_form', 'reviews_or_social_proof', 'hours_published', 'chat', 'mobile_viewport'];
+    const cols = [{ name: biz.name || 'Client', vals: KEYS.map((k) => (content.client_features ? !!content.client_features[k] : null)) }, ...comps.slice(0, 3).map((c) => ({ name: c.name, vals: LABELS.map((l) => feat(c.observations, l)) }))];
+    const labelW = 170; const colW = (W - 2 * M - labelW) / cols.length;
+    need(40 + LABELS.length * 20);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...MUTED);
+    cols.forEach((c, i) => { const lines = doc.splitTextToSize(t(c.name).toUpperCase(), colW - 8).slice(0, 2); lines.forEach((ln, k) => doc.text(ln, M + labelW + colW * i + colW / 2, y + k * 9, { align: 'center' })); });
+    y += 22; doc.setDrawColor(...RULE); doc.line(M, y, W - M, y); y += 14;
+    LABELS.forEach((l, r) => {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...INK); doc.text(t(l.charAt(0).toUpperCase() + l.slice(1)), M, y);
+      cols.forEach((c, i) => {
+        const cx = M + labelW + colW * i + colW / 2; const v = c.vals[r];
+        if (v === null) { doc.setTextColor(...MUTED); doc.setFontSize(9); doc.text('-', cx, y, { align: 'center' }); }
+        else { doc.setDrawColor(...(i === 0 ? INK : GOLD)); doc.setLineWidth(0.9); if (v) { doc.setFillColor(...(i === 0 ? INK : GOLD)); doc.circle(cx, y - 3, 3.6, 'FD'); } else doc.circle(cx, y - 3, 3.6, 'S'); }
+      });
+      y += 20;
+    });
+    para('Filled circle: found on the business\'s public website. Open circle: not found on the pages read. Dash: not compared.', { size: 8, color: MUTED, gap: 8 });
+    comps.slice(0, 3).forEach((c) => para(`${c.name}${c.url ? ` (${c.url})` : ''}: ${c.rationale}`, { size: 8.5, color: MUTED, gap: 4 }));
+    y += 6;
+  }
+
+  // 4. Prescriptions by module
+  const rx = Array.isArray(content.prescriptions) ? content.prescriptions : [];
+  if (rx.length) {
+    section(`${num()}  Prescription`, 'What Nova would install');
+    rx.forEach((p) => { label(p.label, p.findings.map((x) => `- ${x}`).join('\n')); });
+    para('Each module is installed only after you approve its scope, connected accounts and cost.', { size: 9, color: MUTED, gap: 8 });
+  }
+
+  // 5. Next steps
+  section(`${num()}  Next steps`, 'What to do first');
   if (recs.length) recs.forEach((r, i) => para(`${i + 1}.  ${r.mechanism}${r.effort ? `  (effort: ${r.effort})` : ''}`, { gap: 4 }));
   para(content.next_steps, { gap: 10 });
 
-  // 4. What we checked
+  // 6. What we checked
   if (checks.length) {
-    section('04  Coverage', 'What we checked');
+    section(`${num()}  Coverage`, 'What we checked');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...MUTED); need(20);
     doc.text('CHECK', M, y); doc.text('RESULT', M + 300, y); doc.text('WHEN', W - M, y, { align: 'right' }); y += 8;
     doc.setDrawColor(...RULE); doc.line(M, y, W - M, y); y += 14;
@@ -145,8 +191,10 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     y += 10;
   }
 
-  // 5. Limitations
-  section(checks.length ? '05  Limitations' : '04  Limitations', 'What this report cannot tell you');
+  // 7. Limitations
+  section(`${num()}  Limitations`, 'What this report cannot tell you');
+  const rl = Array.isArray(content.research_limitations) ? content.research_limitations.filter(Boolean) : [];
+  if (rl.length) label('Not checked in this research', rl.map((x) => `- ${x}`).join('\n'));
   para(content.limitations, { size: 9.5, color: MUTED });
 
   // Appendix: evidence

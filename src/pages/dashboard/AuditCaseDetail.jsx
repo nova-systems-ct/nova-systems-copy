@@ -157,7 +157,7 @@ function DetailsCard({ ws, org, caseId, reload }) {
   const save = async () => {
     setState({ kind: 'saving' })
     try {
-      await auditCall('details', { org, method: 'POST', body: { case_id: caseId, name: v.name, website: v.website, industry: v.industry, location: v.location, public_phone: v.public_phone } })
+      await auditCall('details', { org, method: 'POST', body: { case_id: caseId, name: v.name, website: v.website, industry: v.industry, location: v.location, public_phone: v.public_phone, goal: v.goal } })
       local.set(key, null); setState({ kind: 'saved', at: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }); await reload()
     } catch (e) { setState({ kind: 'failed', text: `Not saved: ${e.message} Your text is kept on this device.` }) }
   }
@@ -165,7 +165,7 @@ function DetailsCard({ ws, org, caseId, reload }) {
     <Card title="Business details" actions={<SaveState state={state} />}>
       {ws.details.map((d) => (
         <Field key={d.key} label={d.label} id={`bd-${d.key}`}>
-          <input id={`bd-${d.key}`} className="ops-input" value={v[d.key] || ''} onChange={(e) => setV({ ...v, [d.key]: e.target.value })} inputMode={d.key === 'public_phone' ? 'tel' : d.key === 'website' ? 'url' : 'text'} autoCapitalize={d.key === 'website' ? 'none' : 'words'} placeholder={d.key === 'website' ? 'business.com' : ''} />
+          {d.key === 'goal' ? <textarea id={`bd-${d.key}`} className="ops-textarea" rows={2} value={v[d.key] || ''} onChange={(e) => setV({ ...v, [d.key]: e.target.value })} placeholder="e.g. more booked jobs, fewer missed calls, better reviews" /> : <input id={`bd-${d.key}`} className="ops-input" value={v[d.key] || ''} onChange={(e) => setV({ ...v, [d.key]: e.target.value })} inputMode={d.key === 'public_phone' ? 'tel' : d.key === 'website' ? 'url' : 'text'} autoCapitalize={d.key === 'website' ? 'none' : 'words'} placeholder={d.key === 'website' ? 'business.com' : ''} />}
         </Field>
       ))}
       <button className="ops-btn primary" disabled={!dirty || state?.kind === 'saving'} onClick={save}>Save details</button>
@@ -173,26 +173,53 @@ function DetailsCard({ ws, org, caseId, reload }) {
   )
 }
 
+// Public research with live step-by-step progress. Polls the app's own status endpoint (no model calls) every 2 s while a
+// run is queued or running, stops when it ends or after 4 minutes, and resumes showing a run that was already in progress.
+const STEP_ICON = { pending: '○', running: '◐', done: '✓', unavailable: '–', skipped: '–', failed: '✕' }
 function ReviewCard({ ws, org, caseId, reload, go }) {
-  const [busy, setBusy] = useState(false); const [res, setRes] = useState(null); const [err, setErr] = useState('')
-  const run = async () => {
-    setBusy(true); setErr(''); setRes(null)
-    try { setRes(await auditCall('review', { org, method: 'POST', body: { case_id: caseId } })); await reload() } catch (e) { setErr(e.message) }
-    setBusy(false)
+  const [run, setRun] = useState(null); const [err, setErr] = useState(''); const [starting, setStarting] = useState(false)
+  const timer = useRef(null); const started = useRef(0)
+  const active = run && ['queued', 'running'].includes(run.status)
+  const poll = useCallback(async () => {
+    try {
+      const r = await auditCall('research-status', { org, query: { case_id: caseId, ...(run?.id ? { run_id: run.id } : {}) } })
+      setRun(r.run)
+      if (r.run && ['queued', 'running'].includes(r.run.status) && Date.now() - started.current < 240_000) timer.current = setTimeout(poll, 2000)
+      else if (r.run && !['queued', 'running'].includes(r.run.status)) await reload()
+    } catch (e) { setErr(`Progress could not be read: ${e.message}`) }
+  }, [org, caseId, run?.id, reload])
+  useEffect(() => { started.current = Date.now(); poll(); return () => clearTimeout(timer.current) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const start = async (scope) => {
+    setStarting(true); setErr('')
+    try { const r = await auditCall('research-start', { org, method: 'POST', body: { case_id: caseId, scope } }); setRun(r.run); started.current = Date.now(); clearTimeout(timer.current); timer.current = setTimeout(poll, 1200) }
+    catch (e) { setErr(e.message) }
+    setStarting(false)
   }
-  const e = ws.evidence
+  const e = ws.evidence; const s = run?.summary
   return (
-    <Card title="Evidence review">
-      <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>Reads up to four public pages of the website and the domain's public email records. Nothing is submitted and no one is contacted. A missing item on a page is never treated as proof.</p>
-      <p style={{ fontSize: 14, margin: '8px 0' }}><strong>{e.total}</strong> evidence records · {e.website_and_email} website/email · {e.in_person} in person · {e.other} other</p>
-      <p style={{ fontSize: 12, color: C.faint }}>{ws.case.last_review_at ? `Last review ${when(ws.case.last_review_at)}` : 'Not reviewed yet'}</p>
+    <Card title="Public research">
+      <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>Reads the website (respecting its robots.txt), public email records, the public map listing and comparable nearby businesses. Nothing is submitted and no one is contacted. A source that cannot be reached is reported as unavailable, never as a problem.</p>
+      <p style={{ fontSize: 14, margin: '8px 0' }}><strong>{e.total}</strong> evidence records · {e.website_and_email} from research · {e.in_person} in person · {e.other} other</p>
+      {run && (
+        <ol aria-label="Research progress" style={{ listStyle: 'none', padding: 0, margin: '8px 0', display: 'grid', gap: 4 }}>
+          {(run.steps || []).map((st) => (
+            <li key={st.key} style={{ display: 'flex', gap: 8, fontSize: 13, color: st.status === 'pending' ? C.faint : C.text }}>
+              <span aria-hidden="true" style={{ width: 14, color: st.status === 'done' ? C.green : st.status === 'failed' ? C.red : st.status === 'running' ? C.gold : C.faint }}>{STEP_ICON[st.status] || '○'}</span>
+              <span style={{ flex: 1 }}>{st.label}{st.note ? <span style={{ color: C.faint }}> · {st.note}</span> : null}</span>
+            </li>
+          ))}
+          {run.status === 'queued' && !(run.steps || []).length && <li style={{ fontSize: 13, color: C.faint }}>Waiting for the research worker…</li>}
+        </ol>
+      )}
+      {s && !active && <Notice tone={run.status === 'failed' ? 'bad' : 'ok'}>{run.status === 'failed' ? `Research stopped: ${run.error || 'see the steps above'}.` : `${s.pages_read} page(s) read, ${s.competitor_websites_compared} competitor website(s) compared, ${s.evidence_added} evidence records. ${s.findings_proposed} new finding${s.findings_proposed === 1 ? '' : 's'} proposed for your review${s.findings_already_recorded ? `; ${s.findings_already_recorded} already recorded` : ''}.`}{(s.limitations || []).length ? <div style={{ fontSize: 12, color: C.dim, marginTop: 6 }}>Not checked: {s.limitations.join(' ')}</div> : null}</Notice>}
+      <p style={{ fontSize: 12, color: C.faint }}>{ws.case.last_review_at ? `Last research ${when(ws.case.last_review_at)}` : 'Not researched yet'}</p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button className="ops-btn primary" disabled={busy || !ws.business.website} onClick={run} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{busy ? <><Loader2 size={15} className="animate-spin" /> Reviewing (up to 30 s)…</> : <><Search size={15} /> {ws.case.last_review_at ? 'Run the review again' : 'Run website and email review'}</>}</button>
+        <button className="ops-btn primary" disabled={starting || active || !ws.business.name} onClick={() => start('demo')} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{active ? <><Loader2 size={15} className="animate-spin" /> Researching…</> : <><Search size={15} /> {ws.case.last_review_at ? 'Run the research again' : 'Run public research'}</>}</button>
+        <button className="ops-btn" disabled={starting || active} onClick={() => start('full')}>Deeper research (more pages)</button>
         <button className="ops-btn" onClick={() => go('evidence')}>Add evidence by hand</button>
       </div>
-      {!ws.business.website && <p style={{ fontSize: 13, color: C.amber }}>Save the website in Business details to run the review.</p>}
+      {!ws.business.website && <p style={{ fontSize: 13, color: C.amber }}>No website saved: research can still check the map listing and competitors; add the website for the full picture.</p>}
       {err && <Notice tone="bad">{err}</Notice>}
-      {res && <Notice tone="ok">Checked {res.checks.total} things on {res.website}: {res.checks.issues} issue{res.checks.issues === 1 ? '' : 's'}, {res.checks.ok} fine, {res.checks.unknown} could not be checked. {res.findings_proposed} new finding{res.findings_proposed === 1 ? '' : 's'} proposed for your review{res.findings_already_recorded ? `; ${res.findings_already_recorded} already recorded` : ''}.</Notice>}
     </Card>
   )
 }

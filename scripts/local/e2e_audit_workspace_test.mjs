@@ -51,7 +51,7 @@ const org = (await db.query("select id from organizations where kind='nova_inter
 const NAME = `LOCAL TEST Workspace Roofing ${Date.now().toString(36)}`;
 try {
   // start
-  let r = await call(OWNER, 'POST', 'start', { body: { organization_id: org, name: NAME, website: 'stand-in-roofing.example', industry: 'Roofing', location: 'Waterbury, CT', phone: '(203) 555-0101', mode: 'online' } });
+  let r = await call(OWNER, 'POST', 'start', { body: { organization_id: org, name: NAME, website: 'stand-in-roofing.example', industry: 'Roofing', location: 'Waterbury, CT', phone: '(203) 555-0101', goal: 'More booked roofing jobs from the website', mode: 'online' } });
   check('the owner starts an audit from five details', r.status === 200 && r.json.case?.id, JSON.stringify(r.json));
   const caseId = r.json.case.id;
   const saved = (await db.query('select intake, scope, business_id from audit_cases where id=$1', [caseId])).rows[0];
@@ -70,7 +70,13 @@ try {
   r = await call(OWNER, 'POST', 'review', { body: { organization_id: org, case_id: caseId } });
   check('the review runs and records evidence', r.status === 200 && r.json.evidence_added >= 6, JSON.stringify(r.json));
   const firstEvidence = r.json.evidence_added;
-  check('it proposes findings for the broken quote link, the mixed phone numbers, missing SPF and missing DMARC', r.json.findings_proposed === 4, JSON.stringify(r.json));
+  const keys1 = (await db.query('select check_key from audit_findings where case_id=$1', [caseId])).rows.map((x) => x.check_key.split(':')[0]).sort();
+  check('it proposes findings for the broken quote link, mixed phone numbers, missing SPF and DMARC, missing hours and missing reviews', JSON.stringify(keys1) === JSON.stringify(['dns_dmarc', 'dns_spf', 'hours_published', 'link', 'phones', 'reviews_or_social_proof']) && r.json.findings_proposed === 6, JSON.stringify(keys1));
+  check('an unreachable map lookup is reported as unavailable, not as a missing business', r.json.steps.find((x) => x.key === 'identity').status === 'unavailable' && (r.json.limitations || []).some((l) => /map lookup/.test(l)), JSON.stringify(r.json.steps.find((x) => x.key === 'identity')));
+  const goalFinding = (await db.query("select priority, customer_impact from audit_findings where case_id=$1 and check_key like 'link:%'", [caseId])).rows[0];
+  check('a finding related to the owner goal says so', /your goal/.test(goalFinding?.customer_impact || ''), JSON.stringify(goalFinding));
+  const mods = (await db.query('select distinct module_key from audit_findings where case_id=$1', [caseId])).rows.map((x) => x.module_key).sort();
+  check('every proposed finding is mapped to the Nova module that would address it', !mods.includes(null) && mods.includes('email_setup') && mods.includes('agents_booking'), JSON.stringify(mods));
   const ev = (await db.query('select source, capture_date, confidence, method from audit_evidence where case_id=$1', [caseId])).rows;
   check('every evidence record has a source with a retrieval time, a capture date, a method and a confidence', ev.every((e) => /\((retrieved|queried) \d{4}-/.test(e.source) && e.capture_date && /^automated_review:/.test(e.method) && e.confidence), JSON.stringify(ev[0]));
   const fs1 = (await db.query("select f.title, f.priority, f.review_status, f.origin, f.statement_type, (select count(*) from audit_finding_evidence l where l.finding_id=f.id)::int ev from audit_findings f where case_id=$1", [caseId])).rows;
@@ -78,7 +84,7 @@ try {
   check('the broken quote link is high priority', fs1.some((f) => /quote/i.test(f.title) && f.priority === 'high'), JSON.stringify(fs1.map((f) => [f.title, f.priority])));
   r = await call(OWNER, 'POST', 'review', { body: { organization_id: org, case_id: caseId } });
   const fs2 = (await db.query('select count(*)::int n from audit_findings where case_id=$1', [caseId])).rows[0].n;
-  check('a second review adds fresh evidence but no duplicate findings', r.json.evidence_added === firstEvidence && r.json.findings_proposed === 0 && r.json.findings_already_recorded === 4 && fs2 === 4, JSON.stringify(r.json));
+  check('a second review adds fresh evidence but no duplicate findings', r.json.evidence_added === firstEvidence && r.json.findings_proposed === 0 && r.json.findings_already_recorded === 6 && fs2 === 6, JSON.stringify(r.json));
 
   // draft report
   r = await call(OWNER, 'POST', 'draft-report', { body: { organization_id: org, case_id: caseId } });
