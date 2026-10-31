@@ -190,6 +190,12 @@ const handlers = {
     opsEnv(ctx); const { sendCampaignMessage } = await import('../api/_ops/harvest.js');
     return sendCampaignMessage({ orgId: job.organization_id, recipientId: job.payload?.recipient_id, enqueue: (j) => ctx.store.enqueue(j) });
   },
+  // Executive roles (api/_hierarchy/roles.js): one durable task per run for one business; recurring for Nova's own
+  // business (seeded below), on demand for others. A role whose worker is not registered and active does nothing.
+  async role_ea_brief(job, ctx) { return runRole('role_ea_brief', job, ctx); },
+  async role_coo_check(job, ctx) { return runRole('role_coo_check', job, ctx); },
+  async role_cfo_review(job, ctx) { return runRole('role_cfo_review', job, ctx); },
+  async role_cmo_review(job, ctx) { return runRole('role_cmo_review', job, ctx); },
   // Every 5 minutes: release expired holds, verify referral outcomes, run health checks, page on open incidents.
   async ops_sentry_sweep(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
@@ -273,7 +279,29 @@ async function scheduleNext(ctx, jobType, everyMinutes) {
   const slot = Math.floor(next.getTime() / (everyMinutes * 60_000));
   await ctx.store.enqueue({ job_type: jobType, payload: { every_minutes: everyMinutes }, scheduled_at: next.toISOString(), idempotency_key: `${jobType}:${slot}` });
 }
+async function runRole(type, job, ctx) {
+  if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+  opsEnv(ctx); const { runRoleTask, ROLE_OF_JOB, ROLES } = await import('../api/_hierarchy/roles.js');
+  const role = ROLE_OF_JOB[type];
+  const out = await runRoleTask(role, { orgId: job.organization_id, jobId: job.id });
+  const every = Number(job.payload?.every_minutes);
+  if (every && ctx.store) { const next = new Date(Date.now() + every * 60_000); const slot = Math.floor(next.getTime() / (every * 60_000)); await ctx.store.enqueue({ job_type: type, organization_id: job.organization_id, payload: { every_minutes: every }, scheduled_at: next.toISOString(), idempotency_key: `${type}:${job.organization_id}:${slot}` }); }
+  void ROLES; return out;
+}
+// Role runs for Nova's own business, for each role whose worker is registered and active.
+async function seedRoles(ctx) {
+  if (ctx.mode !== 'postgres') return;
+  const h = { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}` };
+  try {
+    const [org] = await (await fetch(`${ctx.url}/rest/v1/organizations?kind=eq.nova_internal&select=id&order=created_at.asc&limit=1`, { headers: h })).json();
+    const workers = await (await fetch(`${ctx.url}/rest/v1/workers?capability_key=in.(executive_assistant,coo,cfo,cmo)&status=in.(active,restricted)&select=capability_key`, { headers: h })).json();
+    if (!org) return;
+    const { ROLES } = await import('../api/_hierarchy/roles.js');
+    for (const w of workers) { const def = ROLES[w.capability_key]; const slot = Math.floor(Date.now() / (def.every_minutes * 60_000)); await ctx.store.enqueue({ job_type: def.job_type, organization_id: org.id, payload: { every_minutes: def.every_minutes }, idempotency_key: `${def.job_type}:${org.id}:${slot}` }); }
+  } catch (e) { console.error('[worker] role seeding failed:', e.message); }
+}
 export async function seedRecurring(ctx) {
+  await seedRoles(ctx);
   for (const [jobType, every] of [['ops_sentry_sweep', 5], ['ops_scoreboard_tick', 60]]) {
     const slot = Math.floor(Date.now() / (every * 60_000));
     await ctx.store.enqueue({ job_type: jobType, payload: { every_minutes: every }, idempotency_key: `${jobType}:${slot}` });

@@ -13,6 +13,7 @@ import { handleGovernance } from '../_hierarchy/governance.js';
 import { handleWorkItems } from '../_hierarchy/workitems.js';
 import { handleMeetings } from '../_hierarchy/meetings.js';
 import { handleHandoffs } from '../_hierarchy/handoffs.js';
+import { handleRoles } from '../_hierarchy/roles.js';
 
 const TABLE = {
   apply: handleApply,     // applicant portal + public invitation acceptance
@@ -28,6 +29,7 @@ const TABLE = {
   notifications: handleNotifications, // in-app inbox, delivery report, maintenance
   hierarchy: handleHierarchy, // Nova organizational hierarchy registry (portfolio, positions, workers, CEO Twin/authority matrix policy)
   governance: handleGovernance, // Nova hierarchy governance (worker contracts, escalations, kill switches, decision records)
+  roles: handleRoles, // executable executive roles: owner playbook, balances, expense decisions, run-now
   workitems: handleWorkItems, // Nova hierarchy work & reporting (work items, heartbeats, Venture Lab, Owner Brief, operational memory)
   handoffs: handleHandoffs, // Nova hierarchy handoffs: my work, result receipt, routed escalations, overdue sweep
   meetings: handleMeetings, // Nova hierarchy Meeting Engine (Meet Now, Committee Room, transcript, evidence board, action items, Incident Room)

@@ -38,7 +38,7 @@ export const handleHierarchy = wrap(async (req, res, op) => {
   if (op === 'capabilities') {
     const nova = await dbOne("organizations?kind=eq.nova_internal&select=id&order=created_at.asc");
     const since = new Date(Date.now() - 7 * 86400_000).toISOString();
-    const [workers, settings, rules, camps, beat, jobs] = await Promise.all([
+    const [workers, settings, rules, camps, beat, jobs, balance] = await Promise.all([
       dbGet('workers?capability_key=not.is.null&select=id,display_name,status,capability_key,created_at,updated_at'),
       // optional facts: an installation without the operations tables still lists every capability (readiness shows blocked)
       nova ? dbOne(`wave1_org_settings?organization_id=eq.${enc(nova.id)}&select=business_hours,escalation_contacts`).catch(() => null) : null,
@@ -46,8 +46,9 @@ export const handleHierarchy = wrap(async (req, res, op) => {
       dbGet("demand_campaigns?status=eq.approved&select=id").catch(() => []),
       dbOne('worker_runtime_heartbeats?select=last_seen_at&order=last_seen_at.desc').catch(() => null),
       dbGet(`jobs?created_at=gte.${enc(since)}&select=job_type,status,completed_at,created_at&order=created_at.desc&limit=5000`).catch(() => []),
+      nova ? dbOne(`finance_balance_snapshots?organization_id=eq.${enc(nova.id)}&select=as_of&order=as_of.desc`).catch(() => null) : null,
     ]);
-    const facts = { hasServices: !!(settings?.business_hours && rules.length), hasEscalation: !!(settings?.escalation_contacts || []).length, approvedCampaigns: camps.length, heartbeatFresh: !!beat && Date.now() - new Date(beat.last_seen_at).getTime() < 10 * 60_000 };
+    const facts = { hasServices: !!(settings?.business_hours && rules.length), hasEscalation: !!(settings?.escalation_contacts || []).length, approvedCampaigns: camps.length, heartbeatFresh: !!beat && Date.now() - new Date(beat.last_seen_at).getTime() < 10 * 60_000, balanceAgeDays: balance ? Math.floor((Date.now() - new Date(balance.as_of).getTime()) / 86400_000) : null };
     const out = CAPABILITIES.map((c) => {
       const w = workers.find((x) => x.capability_key === c.key && x.status !== 'inactive') || null;
       const mine = jobs.filter((j) => c.job_types.includes(j.job_type));

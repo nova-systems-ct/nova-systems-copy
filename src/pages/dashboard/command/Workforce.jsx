@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { authedFetch } from '../../../lib/apiAuth'
 import { useOrg } from '../../../lib/OrgContext'
 import { C, css, Card, Badge, Notice, when } from '../ops/ui'
+import ExecutiveDesk from './ExecutiveDesk'
 
 // Workers (repair 2026-10-26, brief §7). Only capabilities with real, tested code can be registered (api/_workerCapabilities.js).
 // Status comes from the registry; activity comes from the job queue (completed / failed / waiting in the last 7 days),
@@ -16,7 +17,7 @@ async function call(op, { method = 'GET', body } = {}) {
 const STATUS = { active: ['running', 'Active'], restricted: ['pending', 'Restricted'], suspended: ['paused', 'Paused'], inactive: ['cancelled', 'Retired'], draft: ['draft', 'Draft'], onboarding: ['draft', 'Onboarding'], training: ['draft', 'Training'] }
 
 export default function Workforce() {
-  const { user, currentMembership } = useOrg()
+  const { user, currentMembership, currentOrgId } = useOrg()
   const isOwner = currentMembership?.role === 'nova_super_admin'
   const [data, setData] = useState(null); const [people, setPeople] = useState([]); const [err, setErr] = useState('')
   const [busy, setBusy] = useState(''); const [msg, setMsg] = useState(null); const [pauseFor, setPauseFor] = useState(null); const [reason, setReason] = useState('')
@@ -52,6 +53,7 @@ export default function Workforce() {
       {err && <Notice tone="bad">Workers could not be loaded: {err} <button className="ops-btn" onClick={load}>Try again</button></Notice>}
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       {!data && !err && <p role="status" style={{ color: C.faint }}>Loading workers…</p>}
+      {isOwner && currentOrgId && <ExecutiveDesk orgId={currentOrgId} />}
       {people.length > 0 && (
         <Card title={`People · ${people.length}`} style={{ marginBottom: 16 }}>
           {people.map((p) => { const pr = presence[p.id]; return (
@@ -71,7 +73,7 @@ export default function Workforce() {
             <div role="tree" aria-label="Reporting lines" style={{ fontSize: 14 }}>
               <div role="treeitem" aria-expanded="true" style={{ fontWeight: 600 }}>{ownerName} <span style={{ color: C.faint, fontWeight: 400 }}>· Owner, approves policy, campaigns and reports</span>
                 <div role="group" style={{ borderLeft: `1px solid ${C.line}`, marginLeft: 8, paddingLeft: 16, marginTop: 8 }}>
-                  <div role="treeitem" aria-expanded="true" style={{ fontWeight: 600, color: C.dim }}>Coordination <span style={{ color: C.faint, fontWeight: 400 }}>· handled by the owner today; no automated coordinator is built</span>
+                  <div role="treeitem" aria-expanded="true" style={{ fontWeight: 600, color: C.dim }}>Coordination <span style={{ color: C.faint, fontWeight: 400 }}>· {caps.find((c) => c.key === 'coo')?.worker?.status === 'active' ? 'the COO worker checks workflow health; the owner decides anything that needs authority' : 'handled by the owner (register the COO worker to automate workflow checks)'}</span>
                     <div role="group" style={{ borderLeft: `1px solid ${C.line}`, marginLeft: 8, paddingLeft: 16, marginTop: 8, display: 'grid', gap: 10 }}>
                       {roles.map((role) => (
                         <div key={role} role="treeitem" aria-expanded="true">

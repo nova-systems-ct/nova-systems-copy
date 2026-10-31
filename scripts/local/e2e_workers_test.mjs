@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { CAPABILITIES } from '../../api/_workerCapabilities.js';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -49,8 +50,8 @@ try {
   await p.getByRole('button', { name: /SIGN IN/ }).click(); await p.waitForURL(/\/dashboard/);
   await p.getByRole('link', { name: 'Workers' }).first().click();
   check('Workers opens from the menu and explains who does the work', await seen(p.getByRole('heading', { level: 1, name: 'Who does the work' })));
-  check('it lists the seven code-backed workers and counts only the registered ones', await seen(p.getByText(`${ownerBefore.length} of 7 workers registered`)));
-  check('the hierarchy shows the owner and says coordination is the owner today', await seen(p.getByRole('tree')) && await seen(p.getByText(/no automated coordinator is built/)));
+  check('it lists every code-backed worker and counts only the registered ones', await seen(p.getByText(`${ownerBefore.length} of ${CAPABILITIES.length} workers registered`)));
+  check('the hierarchy shows the owner and says coordination is the owner today', await seen(p.getByRole('tree')) && await seen(p.getByText(/the COO worker checks workflow health|register the COO worker to automate workflow checks/)));
   check('readiness names real blockers in plain words (text messages are a dry run)', await seen(p.getByText(/Dry run: replies are recorded, not sent/)));
 
   for (const { name } of FIX) {

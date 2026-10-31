@@ -25,6 +25,20 @@ export const CAPABILITIES = [
   { key: 'marketing_publisher', name: 'Marketing publishing worker', role: 'Growth',
     does: 'Publishes owner-approved marketing items and sends approved email sequence steps.',
     job_types: ['marketing_publish', 'email_sequence_step'], code: 'worker/index.mjs, worker/emailSequenceEngine.mjs' },
+  // Executive roles (owner brief 2026-10-30 §11): each title maps to a handler in api/_hierarchy/roles.js and does work
+  // only while registered and active. None sends messages, moves money or invents financial data.
+  { key: 'executive_assistant', name: "Owner's executive assistant", role: 'Executive',
+    does: 'Every hour prepares the owner brief: escalated conversations, spending decisions, approvals, results to review, overdue and blocked work, in priority order with what each needs. Escalates anything waiting longer than the owner\'s limit (in the app).',
+    job_types: ['role_ea_brief'], code: 'api/_hierarchy/roles.js (executive_assistant), api/_hierarchy/roleRules.js (eaPrioritize)' },
+  { key: 'coo', name: 'COO worker', role: 'Executive',
+    does: 'Every 30 minutes checks workflow health: retries failed maintenance jobs once (never anything that sends, charges or books), assigns unassigned role tasks, blocks work whose prerequisites are unfinished, flags completed work without evidence, and reports each worker\'s load.',
+    job_types: ['role_coo_check'], code: 'api/_hierarchy/roles.js (coo), api/_hierarchy/roleRules.js (cooRetry)' },
+  { key: 'cfo', name: 'CFO worker', role: 'Executive',
+    does: 'Checks each proposed expense against the latest balance you entered (and its date), money already committed and your spending policy; approves only within your automatic limit and monthly budget, otherwise sends it to you with a recommendation. Without a current balance, funds are reported as unknown. Never connects to a bank or moves money.',
+    job_types: ['role_cfo_review'], code: 'api/_hierarchy/roles.js (cfo), api/_hierarchy/roleRules.js (cfoDecision)' },
+  { key: 'cmo', name: 'CMO worker', role: 'Executive',
+    does: 'Every 6 hours finds inquiries stalled for 7+ days and proposes a Revive campaign, reports campaign results from recorded sends, replies and bookings, and proposes your test budget (only if you set one) to the CFO. Proposes; never sends.',
+    job_types: ['role_cmo_review'], code: 'api/_hierarchy/roles.js (cmo), api/_hierarchy/roleRules.js (cmoProposals)' },
 ];
 export const capabilityByKey = (k) => CAPABILITIES.find((c) => c.key === k) || null;
 // 'inactive' means retired: no longer registered, so it holds nothing (the capability runs as if never registered).
@@ -60,6 +74,8 @@ export function readinessFor(key, { env = process.env, facts = {} } = {}) {
     case 'reporting': return [c('Background worker running', facts.heartbeatFresh, facts.heartbeatFresh ? 'Heartbeat in the last 10 minutes' : 'No recent heartbeat')];
     case 'audit_review': return [c('Internet access from the server', true, 'Reads public pages only; no paid service')];
     case 'marketing_publisher': return [c('A connected publishing channel', false, 'No social account or publishing channel is connected yet'), c('Email sent for real', email, email ? 'Live' : 'Dry run')];
+    case 'executive_assistant': case 'coo': case 'cmo': return [c('Background worker running', facts.heartbeatFresh, facts.heartbeatFresh ? 'Heartbeat in the last 10 minutes' : 'No recent heartbeat: start the worker')];
+    case 'cfo': return [c('Background worker running', facts.heartbeatFresh, facts.heartbeatFresh ? 'Heartbeat in the last 10 minutes' : 'No recent heartbeat'), c('A current balance to check against', facts.balanceAgeDays != null && facts.balanceAgeDays <= 7, facts.balanceAgeDays == null ? 'None entered: funds are reported as unknown (no bank is connected)' : `Entered ${facts.balanceAgeDays} day(s) ago`)];
     default: return [];
   }
 }
