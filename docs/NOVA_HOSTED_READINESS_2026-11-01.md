@@ -104,3 +104,7 @@ No money was intentionally spent, no paid provider calls enabled, no customer ou
 - Apple CSR and a truthful registration preparation record are in `docs/apple/`. Nothing was submitted to Apple; its Developer portal requires sign-in. Do not upload the CSR before securing its private key. Android/Apple channel implementations remain incomplete.
 
 Owner selected isaac_0427@icloud.com for app access. Auth Admin updated the existing UUID without confirming its email, then accepted the invitation-send request. Membership remains attached to the original UUID; delivery and activation still need verification. No new password was generated or printed.
+
+Deployment `dep-dbjsr37lk1mc73a748s0`, source `511d943`, is live. Verified the signed-out `/reset-password` page shows the invitation requirement, no password fields, and a successfully loaded Nova logo. Screenshot: `docs/qa/password-setup-guard-2026-11-01.jpg`. Build and lint pass; 31 local suites pass and one renderer suite remains skipped. Authenticated acceptance is still blocked on owner activation.
+
+Apple sign-in advanced through password entry to two-factor verification, but Apple rejected the supplied code. No successful Developer dashboard access or Apple submission is claimed. The owner handoff is on that verification screen; request a fresh code there.
