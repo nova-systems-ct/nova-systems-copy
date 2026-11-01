@@ -49,7 +49,7 @@ export function createHostServer({ dist=path.join(ROOT,'dist'), routes, maxBodyB
         return;
       }
       if(!['GET','HEAD'].includes(req.method)) return json(405,{error:'Method not allowed'});
-      let file=path.resolve(dist,'.'+url.pathname);
+      let file=path.resolve(dist,'.'+rawPath);
       if(!file.startsWith(path.resolve(dist)+path.sep)) file=path.join(dist,'index.html');
       if(!fs.existsSync(file)||!fs.statSync(file).isFile()) {
         if(path.extname(url.pathname)) return json(404,{error:'Not found'});

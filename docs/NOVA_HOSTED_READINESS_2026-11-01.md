@@ -1,141 +1,95 @@
-# Nova hosted readiness — 1 November 2026
+# Nova staging handoff — 1 November 2026
 
-## Follow-up: staging provisioning completed after owner authorization
+## Current result
 
-This update supersedes the earlier migration approval blocker below. Isaac explicitly handed over setup authority while prohibiting spending.
+A free hosted testing preview is live at https://nova-staging-demo.onrender.com/login . It is not production and is not fully accepted end to end. The production domain and production database are unchanged.
 
-- Applied 44 of the 46 canonical migration entries to `nova-staging`, plus one narrow application-function hardening migration. The two Crystal Clear entries were excluded because that company remains paused. Removed the Crystal Clear portfolio seed from the hierarchy migration; no Crystal tables or portfolio entity were created.
-- Verified 195 public tables, all with RLS enabled. Created Nova Systems' organization and linked its portfolio entry; no owner Auth user or membership has been created yet.
-- Restricted `claim_next_job` to `service_role`, verified `anon=false`, `authenticated=false`, `service_role=true`. Fixed the 11 function search-path warnings and removed anonymous execution of the three membership RPCs. Retained authenticated/service-role membership checks.
-- Remaining advisor findings: 142 informational RLS-without-policy notices on server-managed tables; the `btree_gist` extension in public; three authenticated security-definer helper warnings. These are disclosed, not called a clean security audit. No policy was broadly opened to silence an advisor.
-- Created six preview-only, `mvp/operational` branch variables in Vercel: `VITE_SUPABASE_URL`, the compatible public `VITE_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SALES_EMAIL_MODE=dry_run`, `WAVE1_SEND_ENABLED=false`, `NOVA_AI_PAID_CALLS=disabled`. No production environment values changed. No service-role secret was copied from production.
-- Supabase Chrome sign-in was submitted through the secure authentication interface. It stopped at an hCaptcha human-verification challenge; sign-in is not confirmed. The browser is a separate cloud browser, not Isaac's physical laptop session.
-- Added `scripts/testenv/verify_release_privileges.sql` for repeatable read-only checks against the installed database.
-- Code changes remain on `codex/render-demo`; this branch's Vercel auto-deploy is disabled in `vercel.json` so a review push does not publish an incomplete setup. Other branch deployment settings are unchanged.
+- Source branch: `codex/render-demo`; draft review: https://github.com/nova-systems-ct/nova-systems-copy/pull/1 .
+- Render service: `nova-staging-demo`, `srv-dbjq50nlk1mc73a0cvb0`, Virginia, compute plan **free**, one instance, automatic deploys off.
+- Workspace: the owner's only Render workspace, `My Workspace`, `tea-d95q6c8k1i2s73ag79kg`.
+- Staging Supabase: `nova-staging`, `ubjnddxmdaxnbpzcmxnc`.
+- Production Supabase `xizmgruvuazmummotzkp` was not modified.
 
-### Exact next handoff
+## Completed and checked
 
-1. Complete the human-verification challenge in this conversation's Chrome handoff. Do not paste credentials into chat.
-2. Finish staging-only server credentials through a secure configuration flow. Create the required buckets through the Storage API/dashboard: private `nova-vault`, private `ops-private`, private `portfolios`, and public `portfolio` only for intended marketing assets. The older installation document omitted `ops-private`; current agreement/photo code requires it. Verify private bucket access restrictions before uploading anything.
-3. Create the Nova application owner account for `isaac@nova-systems.app` using a secure invitation/account-setup flow, verify the identity, and attach its real Auth UUID to the Nova owner membership. Isaac enters any new password himself. No fabricated Auth database rows or shared temporary password.
-4. Complete a dedicated preview session secret, cron secret and correct app base URL. Choose a commercially permitted hosting plan/provider without purchasing anything here. No 24/7 free worker is promised.
-5. Rebuild staging only after configuration is complete; run the full owner/customer/worker/device gate below. The existing Vercel preview has not been rebuilt with the new settings and is not claimed ready.
+### Database and access
 
-No money was spent, provider calls enabled, real outreach sent, subscription changed, or production database modified.
+44 of the 46 canonical migration entries are applied, plus a narrow application-function hardening migration (45 history entries). The two Crystal Clear migrations and its portfolio seed remain excluded because that company is paused.
 
-Baseline inspected: `ae045c4` on `mvp/operational`. This review was performed in a separate Codex workspace, not on Isaac's Windows laptop. This document is also the handoff for the next coding session; no message was sent to Claude.
+All 195 public tables have RLS enabled. `claim_next_job` is executable by `service_role`, not by `anon` or `authenticated`. Eleven application-function search paths are fixed. Anonymous access to the membership RPCs is revoked; signed-in membership checks remain available. `scripts/testenv/verify_release_privileges.sql` passed against staging.
 
-## Release decision
+Remaining advisor findings are disclosed: 142 informational server-managed tables with RLS but no policy; `btree_gist` in public; three authenticated security-definer membership helpers. These are not a clean security audit. No broad policy was added to silence a warning.
 
-**Not ready for owner acceptance online.** A Vercel build being READY and `/login` returning HTTP 200 do not establish that authentication, database writes, research, PDFs or workers work online.
+The Nova Systems organization exists. `isaac@nova-systems.app` has an Auth record and its real UUID is linked to Nova's `nova_super_admin` membership. The account is still awaiting activation/password setup; inbox ownership has not been claimed as verified. No password or invitation token is in this document or git.
 
-| Area | Evidence from this review | Remaining release requirement |
+A synthetic release-QA Auth account was created for testing. Automated review rejected granting it a global administrator membership. No membership was granted, and that QA account was subsequently disabled. Do not enable it or grant it broad access to bypass this boundary; use the owner's approved account or request a specifically scoped test role.
+
+### Storage
+
+Created and read back through the Storage API:
+
+| Bucket | Public | File limit |
 | --- | --- | --- |
-| Code | Production build and lint succeed | Re-run after subsequent changes |
-| Local verification | 29 suites pass; renderer suite skips because Chromium is unavailable | Install and launch the supported browser; run its network-isolation tests |
-| Vercel preview | Existing preview for `ae045c4` serves `/login` with HTTP 200 | Add staging-only backend configuration, rebuild, then test authenticated flows |
-| Supabase staging | `nova-staging`, `ubjnddxmdaxnbpzcmxnc`: only the first of 46 migrations applied; no owner account | Approved ordered migration, storage setup, owner identity and membership |
-| Supabase production | Legacy `nova_system`, `xizmgruvuazmummotzkp`, inspected read-only | Separate migration/backup plan; do not target it during staging setup |
-| Background work | Scheduled role and queue logic exists in code | A running worker host, correct staging target, heartbeat and restart tests |
-| Browser/device testing | No browser installation in this workspace; browser download failed | Real browser journeys followed by Isaac's physical iPad check |
-| Hosting cost | Owner's last instruction is a zero-budget setup, with Vercel downgraded to Hobby | Confirm a commercially permitted host/plan; no purchases or upgrades authorized here |
+| nova-vault | false | 10 MiB |
+| ops-private | false | 10 MiB |
+| portfolios | false | 5 MiB |
 
-## Changes made in this review
+A synthetic non-customer storage check uploaded successfully with the server credential; the public read URL was refused. The public marketing `portfolio` bucket was not created. Do not make client documents public.
 
-1. Fixed the home greeting's placeholder-name match. A control character had replaced the intended regular-expression word boundary, so `Local Test Owner` could be greeted as `Local`. The helper now suppresses placeholder names and retains real first names; nine test cases cover this behavior.
-2. Corrected local verification reporting. Missing Chromium now exits the renderer suite with code 3. The runner separates PASS, SKIP, FAIL and TIMEOUT and exits 3 when verification is incomplete. A regression test runs actual child processes, including the old exit-zero skip behavior. It failed before the fix and passed afterward.
+### Hosting
 
-These changes do not provision hosted accounts or enable outreach.
+Vercel's `mvp/operational` preview branch has staging frontend and server configuration, including a server-only service credential. Production variables were not changed. Vercel browser passkey sign-in was not confirmed, but the authenticated connector successfully saved the configuration.
 
-## Supabase approval boundary
+The free Render preview runs the same built Vite frontend and existing API handlers through `scripts/hosting/server.mjs`. The adapter limits request bodies, preserves raw webhook bytes, parses JSON/form bodies, blocks internal helper routes and private files, applies security headers and excludes the preview from search indexing. Its tests cover encoded asset names such as the Nova logo. `APP_BASE_URL` uses Render's documented service URL at startup.
 
-Automatic approval review rejected applying `supabase/schema-update.sql` to staging because it contains broad persistent table, seed-data, backfill and access-policy changes. No alternate execution path was attempted. The remainder of the ordered migration sequence is not applied.
+Render and Vercel preview settings keep paid AI, email, SMS and sequence sending off. Provider keys for charging, phone and outbound email were not copied into Render. The configured session and cron secrets are staging-specific.
 
-The concrete approval needed is: **Apply `supabase/schema-update.sql` and the remaining ordered migrations in `supabase/migration-manifest.json` to `nova-staging` (`ubjnddxmdaxnbpzcmxnc`) only.** The canonical manifest contains 46 entries; 45 remain after the base identity migration. Do not apply this sequence to the existing production database as if it were empty.
+Supabase Auth's site URL is the Render staging origin. Its redirect allowlist contains only the staging callback and the two configured reset/dashboard query variants. No arbitrary external redirect wildcard was added.
 
-After approval:
+### Product and documents
 
-1. Reconfirm staging project ID, current migration history and ordered manifest; stop on an unexpected schema difference or migration error.
-2. Apply via the migration API in order. Record each successful version, and re-check tables, policies and advisors. Do not report “connected” after only writing environment variables.
-3. Create/configure required private storage buckets with tenant-safe policies using the installation documentation.
-4. Establish Isaac's application login for `isaac@nova-systems.app`, verify the email as required, and associate the verified Auth user UUID with Nova's owner membership. Supabase dashboard login and Nova app login are separate identities. Never infer ownership from a matching display name or client-editable metadata.
-5. Set the password through a secure account setup flow; do not put passwords, service keys or signing private keys into chat, source control or client-side variables.
+- Corrected the owner greeting's placeholder-name bug.
+- Corrected the verifier so skipped browser tests cannot be reported as passing.
+- Revised Privacy, Terms and Cookie Policy to match actual collection, provider use, browser sessions/drafts and consent behavior. The optional inquiry checkbox explicitly covers marketing email. Removed blanket form-submission consent to promotional calls/texts and unverified default fees.
+- Improved legal-page typography, narrow-screen header layout, keyboard focus and printing. These pages are visually checked at the cloud browser's current size, not every device size.
+- Notices can reduce ambiguity; they do not guarantee immunity from lawsuits. Engagement-specific terms, actual retention procedures, permitted marketing and any recording workflow still need appropriate legal review before activation. Do not claim statutory compliance merely because a policy page exists.
 
-## Security observations
+## Verification evidence and limits
 
-Staging advisors reported only three informational “RLS enabled, no policy” findings on the three empty base tables. This means normal client access is denied without policies; it is not evidence that those tables are publicly readable.
+- Build and lint pass.
+- 30 local suites pass; one renderer suite is skipped. A Chromium package was obtained but its process crashes in this container. Its temporary Playwright-path links were removed; no passing browser-security result is claimed.
+- Node host adapter: 11 checks pass, including encoded image filenames (the first hosted visual inspection exposed and reproduced that defect before the fix).
+- Hosted `/healthz`, `/login`, `/privacy` and `/terms` respond 200.
+- Unauthenticated audit API responds 401; `/api/_auth` and `/.env` respond 404.
+- A hosted page responding 200 is not proof of the authenticated audit/PDF/worker journey.
 
-Production advisors reported:
+## Owner's immediate handoff
 
-- 42 tables with RLS enabled and no policies (informational; check intended access before changing).
-- One trigger function, `nova_ai_audits_set_reference_number`, with a mutable search path. Prepare a narrow, reviewed search-path fix that qualifies its sequence name.
-- Three security-definer membership/permission helpers executable by `anon`, and the same three executable by `authenticated`. Their definitions were inspected: they use `auth.uid()`, active membership checks and a fixed public search path. The warnings alone do not prove privilege escalation. Confirm policy dependencies and intended grants before revoking execution; indiscriminate revocation can break RLS.
-- Leaked-password protection is disabled. Determine availability on the actual account plan and configure through the Auth settings if supported.
+1. Activate the staged `isaac@nova-systems.app` account and choose its password through the secure account-setup flow. This is a new app identity, separate from the Supabase dashboard account. Do not put passwords or one-time links in chat.
+2. Then test the hosted login. Full acceptance still needs an owner session: five-detail audit → saved evidence → draft report → PDF → private Vault → sign out/in → reopen the same version.
+3. Verify on the physical iPad, including keyboard, touch, PDF opening and hotspot access.
 
-No production grants, functions or Auth settings were changed.
+## Remaining engineering/provider work
 
-Advisor references:
+- Run authenticated owner, client and organization-isolation tests against staging after account activation; add a narrowly scoped test persona only with approved permissions.
+- Finish demo-workspace setup and actual queued-worker acceptance. No continuously running worker has been deployed by this change. A queue or a schedule record is not a worker run.
+- Free Render web services sleep after 15 minutes without inbound traffic, may take about a minute to wake and have monthly quotas. They are for testing, not a 24/7 production promise. Included build/bandwidth usage may incur overage charges where a payment method exists; verify workspace billing caps before broader/public promotion. No paid compute plan or upgrade was selected.
+- Public-first audit research must distinguish observed, inferred and not checked. Public sources cannot establish exact lost revenue without relevant operating data.
+- Apple Wallet signing is **not implemented**: `walletReadiness()` explicitly returns false. The owner needs the Pass Type ID, signing certificate/private key and Apple intermediate certificate in secure server configuration, then actual signing/update/redemption implementation and a physical iPhone test. Developer membership alone is insufficient to claim a functioning pass.
+- Apple Messages for Business is separate from Wallet. MSP/provider onboarding and business approval are not complete. No Apple submission or paid provider purchase was made.
+- Social, telephony/printer and video integrations are not live merely because adapter code exists. Sweet Bella requires its actual TV/POS/printer models, menu approval and provider acceptance tests.
+- Full dashboard redesign, TV presentation view and all-device visual review are not complete.
+- Production rollout, production migrations and a 24-hour soak test remain undone.
 
-- https://supabase.com/docs/guides/database/database-linter
+## References
+
+- https://supabase.com/docs/guides/auth/redirect-urls
 - https://supabase.com/docs/guides/database/postgres/row-level-security
-
-The deployed CSP still permits inline script and eval and allows browser connections to some provider APIs. Review actual browser dependencies before tightening it. Never place Anthropic, Resend or Supabase service-role secrets in `VITE_` variables. The local Windows firewall commands from `docs/LOCAL_STAGING.md` still require an administrator on Isaac's laptop; this workspace cannot verify or change that firewall.
-
-## Product critique and acceptance target
-
-Evaluate the product through customer value, execution reliability, economics and usability. Do not impersonate named entrepreneurs or claim they reviewed it.
-
-- **Value:** Each audit must surface a specific observed problem, a source, a timestamp and a useful next action. Public evidence can demonstrate a broken booking path or compare published offers. It cannot establish exact lost revenue without the relevant operational records. Keep measured, inferred and unavailable information distinct.
-- **Execution:** A module that registers a worker or creates a repair task is not necessarily an installed repair. Show prerequisites, actual changes, acceptance evidence and an undo/disable control. Do not label tasks created as problems resolved.
-- **Economics:** Cost per research run, retry limits and spending approvals must remain visible. A clock displaying hundreds of hours is a deadline calculation, not proof of paid AI usage. Establish actual provider usage before attributing costs.
-- **Usability:** Make the owner's primary path sign in → start five-detail audit → inspect evidence → draft report → generate PDF → reopen from Vault. Keep executive configuration and other setup away from that primary path. Every action card must open its relevant task or explain the missing prerequisite.
-- **Real work:** The executive roles currently schedule/check/propose/escalate work. That is not yet an autonomous company, connected bank account, working social outreach adapter or printer integration.
-- **Sweet Bella:** The first client acceptance slice should prove a real menu update on the existing TV hardware, a bilingual order saved once and printed through a verified compatible POS/printer integration, and an owner-approved menu. Do not promise that arbitrary printers or all social channels are already supported.
-
-Preserve Nova's existing approved logo and black, white and gold palette (`#0A0A0A`, `#FAFAFA`, `#C9A84C`), with clear hierarchy and fewer competing actions. No visual redesign is claimed by this review.
-
-## End-to-end gate before Isaac tests
-
-Run against staging with outbound sending and paid AI disabled first:
-
-1. **Owner:** sign in with the real owner identity; check correct name, business and role; sign out and sign back in.
-2. **Audit:** five inputs, persistent save, refresh, interrupted research/retry, evidence provenance, identity confirmation, understandable unavailable-data states.
-3. **Report:** generate draft PDF, inspect every rendered page, reopen the same saved version from the private Vault after a fresh session; test download on physical iPad.
-4. **Customer:** correct private link, approved menu/pricing, inquiry → service → time → agreement; retries and double taps create one record. Keep payments and sending in test mode until specifically enabled.
-5. **Worker:** enqueue a real isolated test job; verify one persisted result, pause/resume, retry limits, restart recovery and no duplicate execution. A schedule row alone is not a successful run.
-6. **Security:** no-session denial, expired-session denial, cross-organization denial through both API and database/storage; validate private report links and browser-reader network protection.
-7. **Devices:** phone 390px, iPad portrait/landscape, laptop 1440px and 1080p/4K display checks. Check keyboard, touch targets, focus, overflow, loading/empty/error states and PDF opening. Use a dedicated TV presentation/menu view rather than exposing the owner's private dashboard.
-8. **Soak:** only after these pass, run the hosted worker and staged business flow for 24 hours with heartbeat, job history, error and cost monitoring. Report interruptions honestly.
-
-The disposable PostgreSQL/PostgREST harness is not installed in this workspace. Its older migration list also lacks `ops-09-worker-capabilities-migration-standalone.sql`; repair and execute it before claiming its browser suite passed here. Do not change this list without exercising the resulting database and affected worker screens.
-
-## Apple Wallet and Messages setup
-
-Wallet loyalty passes and Apple Messages for Business are different integrations. The likely intended acronym “MSP” means Messaging Service Provider, not a Wallet certificate.
-
-For standard Wallet loyalty passes with an active Apple Developer membership:
-
-1. Open Certificates, Identifiers & Profiles → Identifiers → add a Pass Type ID (for example, an identifier chosen for Nova's loyalty pass).
-2. Create a certificate signing request securely and retain its private key in the signing environment.
-3. Under Certificates, create a Pass Type ID certificate, associate the identifier, upload the CSR, and download the issued certificate.
-4. Configure server-side signing with the certificate, its matching private key and Apple's required intermediate certificate. Keep private keys out of the frontend and git.
-5. Implement generation of the signed `.pkpass`, then verify installation on an actual iPhone and test updates/redemption against real saved loyalty data. A branded image is not a working pass. NFC/contactless loyalty has additional Apple requirements; a barcode pass does not establish NFC approval.
-
-Official instructions: https://developer.apple.com/help/account/capabilities/create-wallet-identifiers-and-certificates/
-
-Pass construction: https://developer.apple.com/documentation/walletpasses/building-a-pass
-
-For Messages for Business, use Apple Business Register and the selected provider's documented onboarding. A Developer membership alone does not make Nova an approved MSP. No MSP application or Wallet certificate was created during this review.
-
-Provider onboarding example: https://learn.microsoft.com/en-us/dynamics365/customer-service/administer/configure-apple-messages-for-business-channel
-
-## Hosting and cost
-
-The connected Vercel app works, but CLI login in this workspace was not confirmed: its token polling was blocked by network policy. Do not report the CLI as authenticated or attempt a network-policy bypass.
-
-Vercel Hobby is restricted to personal, non-commercial use; Nova's business site needs a permitted plan/host. A free Render web service sleeping when idle is not a 24/7 background worker. Do not purchase an upgrade, promise free always-on service, or start live paid calls just to clear this gate.
-
-- https://vercel.com/docs/limits/fair-use-guidelines
 - https://render.com/docs/free
+- https://vercel.com/docs/limits/fair-use-guidelines
+- https://developer.apple.com/help/account/capabilities/create-wallet-identifiers-and-certificates/
+- https://developer.apple.com/documentation/walletpasses/creating-a-store-card-pass
+- https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business
+- https://portal.ct.gov/ag/sections/privacy/the-connecticut-data-privacy-act
 
-No production deployment, database migration beyond the earlier base migration, live outreach, paid provider call or subscription purchase was performed by this review.
+No money was intentionally spent, no paid provider calls enabled, no customer outreach sent, and nothing was deployed to the production domain.

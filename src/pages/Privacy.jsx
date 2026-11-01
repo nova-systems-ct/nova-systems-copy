@@ -20,7 +20,7 @@ const SECTIONS = [
   },
   {
     "heading": "5. Service providers and public research",
-    "body": "Our application uses Supabase for database, authentication and file storage, and Vercel for website hosting where deployed. Depending on the services enabled, providers may include Resend for email, Twilio for communications, Stripe for payments and Anthropic for AI processing. Public research requests can reach the business website, public listing services such as OpenStreetMap, and DNS providers. Optional integrations are not all active for every account. Each provider processes information under its own applicable terms and our service configuration. Card entry is handled by the payment provider; do not send card numbers to Nova by email or chat."
+    "body": "Our application uses Supabase for database, authentication and file storage, and Vercel or Render for website hosting, depending on the deployment. Depending on the services enabled, providers may include Resend for email, Twilio for communications, Stripe for payments and Anthropic for AI processing. Public research requests can reach the business website, public listing services such as OpenStreetMap, and DNS providers. Optional integrations are not all active for every account. Each provider processes information under its own applicable terms and our service configuration. Card entry is handled by the payment provider; do not send card numbers to Nova by email or chat."
   },
   {
     "heading": "6. Storage and safeguards",
