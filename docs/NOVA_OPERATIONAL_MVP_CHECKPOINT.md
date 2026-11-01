@@ -26,6 +26,18 @@ reading, identity verdict, finding re-check · `0584e25` workers test with isola
   Messages/Android adapters, Zion video pipeline, public website repositioning (owner decision: CLAUDE.md forbids it),
   hosted deployment. Exact list: `docs/CAPABILITY_STATUS_2026-10-31.md`.
 
+**Release verification run 14** (clean export of `22390b1`, Node 24, on AC power, 2026-10-31 → 11-01): `npm ci`, build,
+lint (0 errors), `verify_local_all` (28 suites) all exit 0. End-to-end, server and worker started from the export:
+first pass 16/21 suites passed; three were interrupted for ~8 h each by an overnight suspend (owner training,
+walkthrough, route sweep), one was the in-person capture draft-on-reload check, one the disposable hierarchy harness
+(`fetch failed`). Re-run on the same export: all five passed (capture 12/12, hierarchy browser 22 passed + 2 skipped as
+not built, training 7/7, walkthrough 33/33, route sweep 60/60). After a worker restart from the export:
+`e2e_install_nova_acceptance verify` 5/5 (no duplicate jobs, replies, workers or fix tasks). The hierarchy harness
+lacked the workforce migration (logged, not failing); added to `scripts/testenv/migrations.mjs` after `22390b1`. Known
+harness drift: the disposable harness also lacks `ops-09` (worker capabilities), so its Workers page cannot list
+capabilities; adding it exposes an ambiguous locator in that older test — not fixed this session. Not run: hosted
+isolation (`scripts/e2e_org_isolation_test.mjs`, no hosted staging). Logs: this session's scratchpad `release14-*`.
+
 ## Session 2026-10-31: installer committed, Nova's own installation, audit → PDF → Vault, research conclusions
 Tested revision: the commit that adds this section (parent `c39368b`), on **local staging only** (Docker Supabase on
 ports 4432x, app :5180, API :8790, background worker running). Nothing hosted, nothing pushed, no paid call, no real

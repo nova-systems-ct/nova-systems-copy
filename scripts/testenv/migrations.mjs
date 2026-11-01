@@ -17,6 +17,7 @@ export const HIERARCHY_PARTS = [
   'supabase/hierarchy-03-work-and-reporting-migration-standalone.sql',
   'supabase/hierarchy-04-meetings-migration-standalone.sql',
   'supabase/hierarchy-05-handoffs-migration-standalone.sql',
+  'supabase/ops-13-workforce-roles-migration-standalone.sql',   // executive roles: tasks, owner playbook, balances, expenses
 ];
 export const SALES_PARTS = [
   'supabase/sales-team-01-access-and-hiring-migration-standalone.sql',
