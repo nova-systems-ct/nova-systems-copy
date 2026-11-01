@@ -177,7 +177,8 @@ ALTER TABLE executive_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE model_runs ENABLE ROW LEVEL SECURITY;
 
 -- ---- seed: Isaac as Owner, Aura reserved, CEO Twin governed-but-unapproved, Model Council reserved,
--- Nova Systems/Crystal Clear/Aura/Nova Venture Lab as portfolio entities. No financial/legal facts invented:
+-- Nova Systems/Aura/Nova Venture Lab as portfolio entities. Crystal Clear is paused and is not seeded.
+-- No financial/legal facts invented:
 -- budget_status/risk_status are left as their honest defaults, and every non-Nova-Systems entity starts 'planned'.
 INSERT INTO portfolio_entities (key, name, entity_type, status, industry, purpose, organization_id)
 SELECT 'nova-systems', 'Nova Systems', 'owned_company', CASE WHEN o.id IS NOT NULL THEN 'active' ELSE 'planned' END, 'Business intelligence & execution', 'Diagnose businesses with evidence and, where authorized, implement the fix.', o.id
@@ -189,7 +190,6 @@ LIMIT 1;
 
 INSERT INTO portfolio_entities (key, name, entity_type, status, industry, purpose)
 VALUES
-  ('crystal-clear', 'Crystal Clear', 'owned_company', 'planned', NULL, 'Placeholder for the planned physical-services company. Name, service catalog, legal structure and market are undecided — see docs/NOVA_HIERARCHY_OWNER_ACTIONS.md.'),
   ('aura', 'Aura', 'internal_project', 'planned', NULL, 'Placeholder for the future Aura intelligence/assistant system. Not built. See the reserved Aura Control Seat position.'),
   ('nova-venture-lab', 'Nova Venture Lab', 'internal_project', 'planned', NULL, 'Zero-cost experimentation and revenue-validation unit. No experiments exist yet.')
 ON CONFLICT (key) DO NOTHING;
