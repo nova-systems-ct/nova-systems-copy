@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Download } from "lucide-react";
-import novaLogo from "@/assets/nova logo.png";
+import NovaLogo from "@/components/NovaLogo";
 import { useSEO } from "@/hooks/useSEO";
 import { generateLegalPDF } from "@/utils/generatePdf";
 
@@ -21,7 +21,7 @@ export default function LegalPageLayout({ title, effectiveDate, sections, seoDes
       <header className="border-b border-black/10" style={{ borderTop: `2px solid ${GOLD}` }}>
         <div className="max-w-3xl mx-auto px-6 py-6 flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <img src={novaLogo} alt="Nova Systems" className="h-7 w-7 object-contain" />
+            <NovaLogo size={28} surface="light" />
             <span className="text-xs font-black tracking-[0.2em] uppercase">Nova Systems</span>
           </Link>
           <button

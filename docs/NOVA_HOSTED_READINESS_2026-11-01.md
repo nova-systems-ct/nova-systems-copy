@@ -20,7 +20,7 @@ All 195 public tables have RLS enabled. `claim_next_job` is executable by `servi
 
 Remaining advisor findings are disclosed: 142 informational server-managed tables with RLS but no policy; `btree_gist` in public; three authenticated security-definer membership helpers. These are not a clean security audit. No broad policy was added to silence a warning.
 
-The Nova Systems organization exists. `isaac@nova-systems.app` has an Auth record and its real UUID is linked to Nova's `nova_super_admin` membership. The account is still awaiting activation/password setup; inbox ownership has not been claimed as verified. No password or invitation token is in this document or git.
+The Nova Systems organization exists. `isaac_0427@icloud.com` has an Auth record (owner-selected sign-in email; business contact remains isaac@nova-systems.app) and its real UUID is linked to Nova's `nova_super_admin` membership. The account is still awaiting activation/password setup; inbox ownership has not been claimed as verified. No password or invitation token is in this document or git.
 
 A synthetic release-QA Auth account was created for testing. Automated review rejected granting it a global administrator membership. No membership was granted, and that QA account was subsequently disabled. Do not enable it or grant it broad access to bypass this boundary; use the owner's approved account or request a specifically scoped test role.
 
@@ -65,7 +65,7 @@ Supabase Auth's site URL is the Render staging origin. Its redirect allowlist co
 
 ## Owner's immediate handoff
 
-1. Activate the staged `isaac@nova-systems.app` account and choose its password through the secure account-setup flow. This is a new app identity, separate from the Supabase dashboard account. Do not put passwords or one-time links in chat.
+1. Activate the staged `isaac_0427@icloud.com` account and choose its password through the secure account-setup flow. This is a new app identity, separate from the Supabase dashboard account. Do not put passwords or one-time links in chat.
 2. Then test the hosted login. Full acceptance still needs an owner session: five-detail audit → saved evidence → draft report → PDF → private Vault → sign out/in → reopen the same version.
 3. Verify on the physical iPad, including keyboard, touch, PDF opening and hotspot access.
 
@@ -93,3 +93,14 @@ Supabase Auth's site URL is the Render staging origin. Its redirect allowlist co
 - https://portal.ct.gov/ag/sections/privacy/the-connecticut-data-privacy-act
 
 No money was intentionally spent, no paid provider calls enabled, no customer outreach sent, and nothing was deployed to the production domain.
+
+## Account setup follow-up — 1 November, evening
+
+- Confirmed through staging Auth that Isaac's app identity has no password, no confirmed email and no prior sign-in. This is separate from his Supabase dashboard login.
+- Tried the supported Admin invitation email to the owner only; Auth returned HTTP 400 `email_address_invalid`. Auth logs confirm rejection. No successful email delivery is claimed. Public DNS does publish a Google MX for nova-systems.app; that does not prove the mailbox exists or establish the rejection's cause. Do not repeatedly resend or disable confirmation to get around this.
+- Fixed invitation routing into password setup, prevented reset-page redirect loops, and hid the password form when no session exists. Added seven routing checks, including recovery and hostile external destinations.
+- Sign-in now trims the email (never the password), distinguishes unconfirmed setup from invalid credentials, and recovers its controls after network errors. Password-reset requests show a busy state.
+- Login, legal and password-setup screens share approved Nova logo artwork; the placeholder letter N is removed. Full dashboard design review remains incomplete.
+- Apple CSR and a truthful registration preparation record are in `docs/apple/`. Nothing was submitted to Apple; its Developer portal requires sign-in. Do not upload the CSR before securing its private key. Android/Apple channel implementations remain incomplete.
+
+Owner selected isaac_0427@icloud.com for app access. Auth Admin updated the existing UUID without confirming its email, then accepted the invitation-send request. Membership remains attached to the original UUID; delivery and activation still need verification. No new password was generated or printed.

@@ -10,7 +10,7 @@ const suites = [
   'unit_wave1_test', 'unit_wave1_handlers_test', 'unit_wave1_api_test', 'unit_audit_rules_test', 'unit_audit_handlers_test', 'unit_crm_sales_test',
   'unit_audit_clock_test', 'unit_public_research_test', 'unit_page_renderer_test', 'unit_workforce_roles_test', 'unit_worker_capabilities_test', 'unit_job_queue_test', 'unit_job_queue_correctness_test', 'unit_social_adapters_test', 'unit_email_sequence_test',
   'unit_sales_academy_rules_test', 'unit_sales_documents_rules_test', 'unit_sales_pipeline_rules_test', 'unit_sales_proposal_rules_test', 'unit_sales_commission_rules_test', 'unit_hierarchy_rules_test', 'unit_ops_rules_test', 'validate_academy_content',
-  'validate_wave1_pilot_schema', 'validate_crm_order_audit_schema', 'validate_durable_jobs_schema', 'validate_marketing_automation_schema', 'check_migration_lockdown', 'unit_local_verification_test', 'unit_owner_greeting_test', 'unit_host_server_test',
+  'validate_wave1_pilot_schema', 'validate_crm_order_audit_schema', 'validate_durable_jobs_schema', 'validate_marketing_automation_schema', 'check_migration_lockdown', 'unit_local_verification_test', 'unit_owner_greeting_test', 'unit_host_server_test', 'unit_auth_destination_test',
 ];
 export function runLocalSuites(names, { root = process.cwd(), timeoutMs = 180_000, log = console.log } = {}) {
   let failed = 0, passed = 0, skipped = 0;
