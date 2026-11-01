@@ -59,7 +59,7 @@ Supabase Auth's site URL is the Render staging origin. Its redirect allowlist co
 - Build and lint pass.
 - 30 local suites pass; one renderer suite is skipped. A Chromium package was obtained but its process crashes in this container. Its temporary Playwright-path links were removed; no passing browser-security result is claimed.
 - Node host adapter: 11 checks pass, including encoded image filenames (the first hosted visual inspection exposed and reproduced that defect before the fix).
-- Hosted `/healthz`, `/login`, `/privacy` and `/terms` respond 200.
+- Hosted `/healthz`, `/login`, `/privacy` and `/terms` respond 200. Deployment `dep-dbjrq849v7es73avlto0` of `4d5b089` is live; the logo loads with a nonzero natural width (256 px). Screenshot: `docs/qa/hosted-login-2026-11-01.jpg`.
 - Unauthenticated audit API responds 401; `/api/_auth` and `/.env` respond 404.
 - A hosted page responding 200 is not proof of the authenticated audit/PDF/worker journey.
 
