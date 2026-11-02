@@ -41,3 +41,7 @@ Corrected the affected run's features to null and its content steps to unavailab
 ## Executive desk status correction
 
 The role capabilities no longer require a continuous background-worker heartbeat to acknowledge a completed hosted run. They report the actual last completed role job (excluding skipped jobs), with its timestamp and an explicit statement that a saved run does not guarantee continuous availability. Conversely, a heartbeat by itself does not count as proof a role ran. Added two regression checks (worker-capability suite now 8/8). Existing role logic tests, lint and build pass. Owner-authenticated visual acceptance remains pending.
+
+## Automatic recurrence observed (18:40 EST / 23:40 UTC)
+
+The existing Supabase scheduler ran automatically at 23:40:00 UTC and the pending COO successor job fb95ecee-e7cc-4ddd-aa2b-dd3b553daf92 was leased and completed at 23:40:03.530 UTC, without a manual HTTP kick or laptop worker. It saved work item d3e193db-bb94-4bca-9fc8-f4eaa9cb4806 for review: no failed jobs, expired leases, unassigned tasks or evidence-less completions. This confirms one real scheduled recurrence, not a multi-day reliability guarantee or all roles' future availability.
