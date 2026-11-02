@@ -118,6 +118,24 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
   // the three kinds of statement in this report, so none is read as another
   label('How to read this report', '"What we saw" is measured: each item names its public source and when it was read. "Likely effect" is Nova\'s inference and was not measured. What could not be checked is listed under Limitations and is never counted as a problem.');
 
+  const investigation = content.diagnostic_investigation;
+  if (investigation) {
+    section(`${num()}  Investigation`, 'What was actually tested');
+    para(`${investigation.duration_hours}-hour scope. ${investigation.completed} of ${investigation.total} checks completed; ${investigation.blocked} blocked. Status: ${investigation.state}.`, { size: 10 });
+    if (investigation.delivery_clock?.message) para(investigation.delivery_clock.message, { size: 9, color: MUTED });
+    para('A scheduled test is not a completed test. Public reports and reviews describe source claims, not automatically established facts.', { size: 9, color: MUTED });
+    for (const area of investigation.coverage || []) label(area.label, `${area.completed}/${area.total} completed - ${area.status}`);
+    for (const [index, task] of (investigation.tasks || []).entries()) {
+      label(`Check ${index + 1}: ${String(task.area || 'investigation').replace(/_/g, ' ')}`, `${task.status}${task.channel ? ` - ${task.channel}` : ''}${task.target ? ` - ${task.target}` : ''}`);
+      para(task.question, { size: 10 });
+      if (task.observation) para(task.observation, { size: 9 });
+      if (task.source) para(`Evidence: ${task.source}`, { size: 8.5, color: MUTED });
+      if (task.response_seconds != null) para(`Response: ${task.response_seconds} seconds${task.meaningful_response ? ' (recorded human/meaningful response)' : ' (acknowledgement only)'}.`, { size: 9 });
+      if (task.observed_until) para(`Observation window ended: ${task.observed_until}.`, { size: 9 });
+      if (task.exclusion_reason) para(`Excluded: ${task.exclusion_reason}`, { size: 9, color: MUTED });
+    }
+  }
+
   // 2. Findings
   section(`${num()}  Findings`, 'Priority findings');
   if (!findings.length) para('No findings are recorded in this version.', { color: MUTED });

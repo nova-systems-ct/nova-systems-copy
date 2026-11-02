@@ -130,3 +130,7 @@ The owner explicitly authorized storing the encrypted Apple CSR private key and 
 Isaac reports that dashboard functions remain broken, audit findings are insufficient, and the PDF looks acceptable but is not compelling enough to a buyer. Successful login/persistence/PDF generation must not be described as a complete or sellable audit. Hosted research currently lacks JavaScript rendering, broader business-listing sources and competitor coverage for the entered industry. Two DNS findings do not establish a compelling diagnosis of lost customers or revenue.
 
 Stop additional changes and Apple submissions here. Await the owner's Gemini response, explain it in plain English, distinguish observed defects from unsupported criticism, and use verified code/research evidence to prioritize a useful, sellable audit. Do not invent Gemini's feedback before receiving it. Paid calls, paid plans and outbound campaigns remain off.
+
+## Diagnostic rebuild after owner's new implementation instruction
+
+See `docs/NOVA_DIAGNOSTIC_REBUILD_2026-11-02.md`. The owner ended the review-only pause for the real audit rebuild (not Apple submissions). This adds persisted investigations, bounded multi-day public research jobs, analyst customer-test planning/response evidence, findings and report coverage. Outbound customer-test execution, broader source discovery and a continuously hosted worker remain incomplete. Do not describe this as an autonomous 72-hour audit or claim it is deployed without a separate deployment result. No paid calls or real customer contacts were made.

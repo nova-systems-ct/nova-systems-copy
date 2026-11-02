@@ -169,6 +169,21 @@ const handlers = {
 
   // ---- Nova Operations (api/_ops). All re-read live state; all idempotent per their keys. ----
   // Public-first audit research (api/_researchRun.js). Progress is written to audit_research_runs as it runs.
+  async audit_contact_observe(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { observeDiagnosticContact } = await import('../api/_auditTransport.js');
+    return observeDiagnosticContact(job);
+  },
+  async audit_contact_dispatch(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { dispatchDiagnosticContact } = await import('../api/_auditTransport.js');
+    return dispatchDiagnosticContact(job);
+  },
+  async audit_diagnostic_task(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { runDiagnosticTask } = await import('../api/_auditDiagnostic.js');
+    return runDiagnosticTask(job);
+  },
   async audit_research(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
     opsEnv(ctx); const { runResearch } = await import('../api/_researchRun.js');

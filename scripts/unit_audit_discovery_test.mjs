@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+const M=await import('../api/_auditDiscovery.js').catch(()=>({}));
+assert.equal(typeof M.discoverPublicNews,'function','Audit needs an executable public news discovery step');
+let requested;
+const fake=async(url,options)=>{requested=new URL(url);assert.equal(options.redirect,'error');return Response.json({articles:[{url:'https://news.example/factory',title:'Factory expands',seendate:'20261101090000',domain:'news.example'},{url:'javascript:alert(1)',title:'bad'},{url:'http://[::1]/admin',title:'private'},{url:'https://news.example/factory',title:'duplicate'}]});};
+const out=await M.discoverPublicNews({name:'Factory " OR domain:evil.com',location:'Waterbury, CT'},{fetchImpl:fake,now:()=>new Date('2026-11-02T12:00:00Z')});
+assert.equal(requested.host,'api.gdeltproject.org');assert.equal(requested.searchParams.get('maxrecords'),'10');
+assert(!requested.searchParams.get('query').includes('domain:'),'Business name cannot inject search operators');
+assert.equal(out.candidates.length,1);assert.equal(out.candidates[0].identity_confirmed,false);assert.equal(out.candidates[0].claims_verified,false);
+const missing=await M.discoverPublicNews({name:'Factory'},{fetchImpl:async()=>new Response('busy',{status:503})});assert.equal(missing.status,'unavailable');assert.equal(missing.candidates.length,0);
+const empty=await M.discoverPublicNews({name:'Factory'},{fetchImpl:async()=>Response.json({articles:[]})});assert.equal(empty.status,'searched');assert.match(empty.note,/not proof/i);
+const links=M.channelCandidates({social:{instagram:['instagram.com/factory','javascript:alert(1)'],linkedin:['https://linkedin.com/company/factory']},emails:['sales@factory.example'],phones:['+12035550123']});
+assert.equal(links.length,4);assert(links.every(x=>x.identity_confirmed===false));
+console.log('PASS — public-news discovery, operator safety, deduplication and channel candidates passed');

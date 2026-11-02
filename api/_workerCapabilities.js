@@ -21,7 +21,7 @@ export const CAPABILITIES = [
     job_types: ['ops_scoreboard_tick', 'hierarchy_work_item_check'], code: 'api/_ops/reports.js, api/_hierarchy/workitems.js' },
   { key: 'audit_review', name: 'Audit evidence worker', role: 'Nova Audit',
     does: 'Researches a business from five details: its website (robots.txt respected), public email records, its public map listing and comparable nearby businesses. Records sourced evidence and proposes findings for your review. It never approves anything.',
-    job_types: ['audit_research'], on_demand: 'audit research', code: 'api/_researchRun.js, api/_publicResearch.js' },
+    job_types: ['audit_research', 'audit_diagnostic_task', 'audit_contact_dispatch', 'audit_contact_observe'], on_demand: 'audit research', code: 'api/_researchRun.js, api/_publicResearch.js' },
   { key: 'marketing_publisher', name: 'Marketing publishing worker', role: 'Growth',
     does: 'Publishes owner-approved marketing items and sends approved email sequence steps.',
     job_types: ['marketing_publish', 'email_sequence_step'], code: 'worker/index.mjs, worker/emailSequenceEngine.mjs' },

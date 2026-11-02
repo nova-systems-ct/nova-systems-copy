@@ -245,7 +245,7 @@ export default async function handler(req, res) {
     const { verifySvix, handleResendEvent } = await import('./_sales/notifications.js');
     if (!verifySvix(req.headers, rawBody, secret)) return res.status(400).json({ error: 'Invalid signature' });
     let event; try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).json({ error: 'Invalid JSON payload' }); }
-    try { await handleResendEvent(event); } catch (err) { console.error('[resend webhook] processing failed:', err.message); return res.status(500).json({ error: 'Processing failed; please retry.' }); }
+    try { await handleResendEvent(event); const { handleAuditEmailEvent } = await import('./_auditTransport.js'); await handleAuditEmailEvent(event); } catch (err) { console.error('[resend webhook] processing failed:', err.message); return res.status(500).json({ error: 'Processing failed; please retry.' }); }
     return res.status(200).json({ received: true });
   }
 

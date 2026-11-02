@@ -187,6 +187,14 @@ async function handleTest(req, res) {
 }
 
 export default async function handler(req, res) {
+  if (req.query?.op === 'audit-queue-tick') {
+    const { handleAuditQueueTick } = await import('./_auditQueueTick.js');
+    return handleAuditQueueTick(req, res);
+  }
+  if (req.query?.op === 'audit-call-event') {
+    const { handleAuditCallEvent } = await import('./_auditTransport.js');
+    return handleAuditCallEvent(req, res);
+  }
   if (setCors(req, res)) return;
   if (!(await requireStaff(req, res, 'admin.view'))) return;
 

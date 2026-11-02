@@ -6,7 +6,7 @@
 // Retrieved content is untrusted DATA: it is parsed with fixed patterns and stored as short excerpts with its source
 // URL and retrieval time; it is never executed or used as an instruction. A failed lookup is "could not check", never
 // evidence that something is missing.
-import { fetchPublicPage, extractPublicSignals } from './_auditResearch.js';
+import { fetchPublicPage, fetchPublicResource, extractPublicSignals } from './_auditResearch.js';
 
 export const UA = 'NovaAuditResearch/2.0 (+https://nova-systems.app; isaac@nova-systems.app)';
 const clean = (s, n = 200) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/g, ' ').replace(/&amp;/g, '&').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -221,14 +221,15 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   const pages = []; let skipped = []; let allowed = () => true;
   const root = new URL(rootUrl);
   try {
-    const r = await (fetchImpl || fetch)(new URL('/robots.txt', root).toString(), { headers: { 'User-Agent': UA } });
-    if (r.ok && /text\/plain/i.test(r.headers.get('content-type') || 'text/plain')) allowed = parseRobots(await r.text());
+    const r = await fetchPublicResource(new URL('/robots.txt', root).toString(), { fetchImpl, lookup, timeoutMs, maxBytes: 100000, accept: 'text/plain' });
+    if (r.status >= 200 && r.status < 300 && /text\/plain/i.test(r.contentType)) allowed = parseRobots(r.body.toString('utf8'));
   } catch { /* no robots.txt reachable: default allow */ }
   const fetchPage = async (u) => {
     const t0 = Date.now();
     const p = await fetchPublicPage(u, { fetchImpl, lookup, timeoutMs, now });
     return { ...p, ms: Date.now() - t0 };
   };
+  if (!allowed(root.pathname)) return { reachable: false, error: 'robots.txt disallows this source', pages, skipped: [{ url: root.toString(), reason: 'robots.txt disallows it' }], signals: emptySignals(), features: {} };
   let home;
   try { home = await fetchPage(root.toString()); } catch (e) { return { reachable: false, error: e.message, dns_not_found: e.code === 'ENOTFOUND' || /ENOTFOUND/.test(e.message || ''), pages, skipped, signals: emptySignals(), features: {} }; }
   const textOf = (h) => clean(String(h || '').replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, ' '), 200000);

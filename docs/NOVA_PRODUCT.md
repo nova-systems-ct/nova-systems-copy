@@ -15,7 +15,7 @@ A website, chatbot, receptionist or video is a possible component, never the def
   appropriate, an in-person visit. Covers attract → respond → qualify → book/quote → agree → collect → deliver →
   follow up → retain, plus wasted subscriptions, disconnected tools, handoffs and industry constraints. Every finding
   carries evidence, confidence, known metrics and missing inputs. Losses are quantified only when data supports it.
-  The 48–72 h promise needs an owner-approved clock policy and complete inputs. The 5-minute public demo is a scoped
+  The 24–72 h promise needs an owner-approved clock policy and complete inputs. The 5-minute public demo is a scoped
   sample of the real engine, not a replacement. An in-person process audit is not a building/safety inspection.
 - **Nova Agents.** Workers that finish tasks on supported connected channels: capture, keep context, answer within
   approved rules, collect missing details, qualify, offer real availability, prepare the agreement, book, confirm,

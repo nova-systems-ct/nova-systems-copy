@@ -71,13 +71,14 @@ export async function handleAuditExtra(req, res, op, caller) {
       if (b.active_test_authorization) {
         const a = b.active_test_authorization;
         if (!a.authorized_by_name || !Array.isArray(a.channels) || !a.channels.length || !a.ends_on) return send(res, 400, { error: 'Record who authorized the tests, which channels, and the end date' });
-        patch.active_test_authorization = { authorized_by_name: sanitize(a.authorized_by_name, 120), role: sanitize(a.role, 80), channels: a.channels.filter((x) => ['phone', 'form', 'sms'].includes(x)), max_per_day: Math.max(1, Math.min(3, Number(a.max_per_day) || 1)), ends_on: sanitize(a.ends_on, 10), evidence: sanitize(a.evidence, 300), at: nowIso(), recorded_by: caller.id };
+        patch.active_test_authorization = { authorized_by_name: sanitize(a.authorized_by_name, 120), role: sanitize(a.role, 80), channels: a.channels.filter((x) => ['phone', 'form', 'sms', 'email', 'social'].includes(x)), max_per_day: Math.max(1, Math.min(3, Number(a.max_per_day) || 1)), ends_on: sanitize(a.ends_on, 10), speech_transcription: a.speech_transcription === true, targets: Array.isArray(a.targets) ? a.targets.slice(0, 30).map((t) => sanitize(t, 500)) : [], evidence: sanitize(a.evidence, 300), at: nowIso(), recorded_by: caller.id };
       }
       if (b.cancel_active_tests === true && c.active_test_authorization) {
         patch.active_test_authorization = { ...c.active_test_authorization, cancelled_at: nowIso() };
         await dbPatch('audit_test_plan', `case_id=eq.${enc(c.id)}&status=eq.planned&channel=neq.public_review`, { status: 'cancelled', notes: 'permission cancelled by the business' });
       }
-      const [row] = await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}`, patch);
+      const [row] = await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}${patch.intake ? `&updated_at=eq.${enc(c.updated_at)}` : ''}`, patch);
+      if (!row) return send(res, 409, { error: 'The audit changed in another session. Reload before saving.' });
       return send(res, 200, { ok: true, case: row });
     }
 

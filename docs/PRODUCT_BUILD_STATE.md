@@ -334,3 +334,7 @@ Authoritative detail: `docs/NOVA_PILOT_REQUIREMENTS.md`, `NOVA_PILOT_ACCEPTANCE_
 **Verification commands:** `npm run verify:local` (16 suites, no DB/network); `scripts/ui_smoke_mocked.mjs` (mocked backend).
 
 **Exact next task:** owner actions A–F in `NOVA_PILOT_OWNER_ACTIONS.md`; then run e2e scripts and the Journey J installation on a test organization.
+
+## Current continuation — full diagnostic rebuild, 2026-11-02
+
+Supersedes older next-task statements for this work. Owner requested implementation of the real audit before the demo. See `docs/NOVA_DIAGNOSTIC_REBUILD_2026-11-02.md` for code, source/transport limits, scheduler configuration, checks and the exact staging acceptance record. No paid sending is enabled. Do not equate injected-provider tests, a cron definition or a PDF layout fixture with a live multi-day audit. Apple submissions remain separate.
