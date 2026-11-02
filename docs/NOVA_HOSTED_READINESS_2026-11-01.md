@@ -20,7 +20,7 @@ All 195 public tables have RLS enabled. `claim_next_job` is executable by `servi
 
 Remaining advisor findings are disclosed: 142 informational server-managed tables with RLS but no policy; `btree_gist` in public; three authenticated security-definer membership helpers. These are not a clean security audit. No broad policy was added to silence a warning.
 
-The Nova Systems organization exists. `isaac_0427@icloud.com` has an Auth record (owner-selected sign-in email; business contact remains isaac@nova-systems.app) and its real UUID is linked to Nova's `nova_super_admin` membership. The account is still awaiting activation/password setup; inbox ownership has not been claimed as verified. No password or invitation token is in this document or git.
+The Nova Systems organization exists. `isaac_0427@icloud.com` has an Auth record (owner-selected sign-in email; business contact remains isaac@nova-systems.app) and its real UUID is linked to Nova's `nova_super_admin` membership. The owner has now completed activation and password setup; Auth reports a confirmed email and a successful sign-in. No password or invitation token is in this document or git.
 
 A synthetic release-QA Auth account was created for testing. Automated review rejected granting it a global administrator membership. No membership was granted, and that QA account was subsequently disabled. Do not enable it or grant it broad access to bypass this boundary; use the owner's approved account or request a specifically scoped test role.
 
@@ -65,8 +65,8 @@ Supabase Auth's site URL is the Render staging origin. Its redirect allowlist co
 
 ## Owner's immediate handoff
 
-1. Activate the staged `isaac_0427@icloud.com` account and choose its password through the secure account-setup flow. This is a new app identity, separate from the Supabase dashboard account. Do not put passwords or one-time links in chat.
-2. Then test the hosted login. Full acceptance still needs an owner session: five-detail audit → saved evidence → draft report → PDF → private Vault → sign out/in → reopen the same version.
+1. Owner activation and fresh hosted sign-in are verified. Use isaac_0427@icloud.com with the password you selected; this app account is separate from the Supabase dashboard account. Do not put passwords or one-time links in chat.
+2. The existing audit now has saved details, sourced evidence, draft report v1 and a private PDF visible in the Vault after reload. Report approval, physical-device PDF opening, client-role isolation and sign-out/reopen acceptance remain pending.
 3. Verify on the physical iPad, including keyboard, touch, PDF opening and hotspot access.
 
 ## Remaining engineering/provider work
@@ -108,3 +108,17 @@ Owner selected isaac_0427@icloud.com for app access. Auth Admin updated the exis
 Deployment `dep-dbjsr37lk1mc73a748s0`, source `511d943`, is live. Verified the signed-out `/reset-password` page shows the invitation requirement, no password fields, and a successfully loaded Nova logo. Screenshot: `docs/qa/password-setup-guard-2026-11-01.jpg`. Build and lint pass; 31 local suites pass and one renderer suite remains skipped. Authenticated acceptance is still blocked on owner activation.
 
 Apple sign-in advanced through password entry to two-factor verification, but Apple rejected the supplied code. No successful Developer dashboard access or Apple submission is claimed. The owner handoff is on that verification screen; request a fresh code there.
+
+## Hosted owner acceptance — evening follow-up
+
+The owner activated isaac_0427@icloud.com and set a password. Auth confirms verified email, a password and a sign-in. A fresh secure browser sign-in reached the protected owner workspace with the expected owner role and Isaac greeting.
+
+Using the existing Nova case `ba992b1a-eb9d-49a0-be95-12f2e46bd37f` (not a duplicate): saved the owner's stated goal; drafted report v1 from real saved research; generated and stored its draft PDF; reloaded and verified the details/report/PDF remained. Nova Vault lists the same private document `e74cfe09-1c76-4936-95ce-f101956f0185`, 56,856 bytes, v1 draft. A server-side download from private storage matches its recorded size and parses as five PDF pages. No report was approved or sent.
+
+The browser download event returned a path whose file did not exist; its blob PDF preview is blocked by the cloud browser URL policy. Do not bypass this restriction or claim browser/iPad PDF opening passed. The private-storage download and offline rendering are separate evidence. Visual spacing looked questionable in the local render, but operator inspection showed correct zero body tracking; the initial spacing-leak diagnosis was wrong and no rendering fix was made. Added a PDF-operator regression check (four checks) to protect that behavior. Visual acceptance remains pending.
+
+Three public research runs already existed before this acceptance: 42 historical evidence records, 2 proposed DNS findings; report selection uses the latest run plus cited older evidence (16 records), rather than counting all historical records as new proof. JavaScript rendering is unavailable on the host; competitor discovery is unavailable for the entered industry. No paid research was enabled.
+
+Apple owner access and membership are verified; Nova Rewards Pass Type ID registered. Certificate issuance remains pending. Automatic review rejected transferring the encrypted CSR private key plus password to Render without specific authorization; no transfer occurred. See docs/apple/NOVA_APPLE_ACTIVATION.md for the exact approval boundary.
+
+Final checks in this follow-up: 32 local suites pass and one renderer suite is skipped. Unauthenticated audit-PDF and Vault requests return 401; a public read of the actual saved report object is refused. No report/client links were published, no external campaign sent and no paid provider enabled.
