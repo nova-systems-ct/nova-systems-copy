@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
-import { safeReturnTo } from "@/lib/returnTo";
+import { authDestination } from "@/lib/authDestination";
 import { useSEO } from "@/hooks/useSEO";
+import NovaLogo from "@/components/NovaLogo";
 
 const GOLD = "#C9A84C";
 const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 55%, ${GOLD} 80%, #8a6b2a 100%)`;
@@ -10,14 +11,13 @@ const GOLD_GRADIENT = `linear-gradient(135deg, #8a6b2a 0%, ${GOLD} 35%, #E0C476 
 const inputStyle = {
   width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.04)",
   border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#fff",
-  fontSize: 14, outline: "none", boxSizing: "border-box",
+  fontSize: 16, minHeight: 48, boxSizing: "border-box", accentColor: GOLD,
 };
 
-// Reached only via AuthCallback after a real PASSWORD_RECOVERY session is established — this page
+// Reached via AuthCallback after a real recovery or invitation session is established — this page
 // never accepts a password without that session already existing (supabase.auth.updateUser
-// operates on the current session, so there's nothing to check here beyond "a session exists,"
-// which AuthCallback already guaranteed before routing here). If a visitor lands here directly
-// without a session, updateUser will simply fail and the error state below is shown.
+// operates on the current session). A direct visit without a session explains the
+// required invitation instead of offering a form that cannot save.
 export default function ResetPassword() {
   useSEO({ title: "Reset Password — Nova Systems" });
   const navigate = useNavigate();
@@ -26,7 +26,17 @@ export default function ResetPassword() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const destination = safeReturnTo(searchParams.get("returnTo"));
+  const [sessionState, setSessionState] = useState('checking');
+  const destination = authDestination({ returnTo: searchParams.get("returnTo") });
+
+  useEffect(() => {
+    let active = true;
+    if (!supabase) { setSessionState('missing'); return; }
+    supabase.auth.getSession().then(({ data }) => {
+      if (active) setSessionState(data?.session ? 'ready' : 'missing');
+    }).catch(() => { if (active) setSessionState('missing'); });
+    return () => { active = false; };
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,24 +55,25 @@ export default function ResetPassword() {
     }
 
     setLoading(true);
-    const { error: updateErr } = await supabase.auth.updateUser({ password });
-    setLoading(false);
-    if (updateErr) {
-      setError("Could not update your password. Please request a new reset link.");
-      return;
+    try {
+      const { error: updateErr } = await supabase.auth.updateUser({ password });
+      if (updateErr) {
+        setError("Could not update your password. Please request a new reset link.");
+        return;
+      }
+      navigate(destination, { replace: true });
+    } catch {
+      setError('Could not reach the sign-in service. Check your connection and try again.');
+    } finally {
+      setLoading(false);
     }
-    navigate(destination, { replace: true });
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0A0A0A" }}>
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-10">
-          <svg width="40" height="40" viewBox="0 0 32 32" fill="none">
-            <rect x="1" y="1" width="30" height="30" rx="4" stroke={GOLD} strokeWidth="1.5" fill="none" />
-            <text x="16" y="23" textAnchor="middle" fontFamily="'Arial Black',Arial,sans-serif" fontWeight="900" fontSize="18" fill={GOLD}>N</text>
-          </svg>
-          <p className="mt-4 text-xs font-bold tracking-[0.3em] uppercase" style={{ color: GOLD }}>NOVA SYSTEMS</p>
+          <NovaLogo size={96} />
           <p className="text-sm text-white mt-1">Set a new password</p>
         </div>
 
@@ -72,7 +83,11 @@ export default function ResetPassword() {
               {error}
             </div>
           )}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {sessionState === 'checking' ? <p role="status" className="text-sm text-white/70">Checking your setup link…</p>
+            : sessionState === 'missing' ? <div className="text-sm leading-relaxed text-white/70">
+              <p>Open the invitation or password-reset link sent to your email before choosing a password.</p>
+              <a href="/login" className="inline-flex min-h-11 items-center mt-4 underline underline-offset-4" style={{ color: GOLD }}>Return to sign in</a>
+            </div> : <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-[10px] font-bold tracking-[0.15em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)" }} htmlFor="reset-password">New password</label>
               <input id="reset-password" type="password" required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
@@ -89,7 +104,7 @@ export default function ResetPassword() {
             >
               {loading ? "Saving…" : "Save New Password"}
             </button>
-          </form>
+          </form>}
         </div>
       </div>
     </div>

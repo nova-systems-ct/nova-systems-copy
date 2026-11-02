@@ -5,6 +5,7 @@ import heroPoster from "@/assets/hero-poster-v3.jpg";
 import { useSEO } from "@/hooks/useSEO";
 import { supabase } from "@/lib/supabaseClient";
 import { safeReturnTo } from "@/lib/returnTo";
+import NovaLogo from "@/components/NovaLogo";
 
 const GOLD = "#C9A84C";
 const GOLD_BRIGHT = "#E0C476";
@@ -14,7 +15,7 @@ const GOLD_GRADIENT = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${G
 const inputStyle = {
   width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.03)",
   border: "1px solid rgba(255,255,255,0.14)", borderRadius: 12, color: "#FAFAFA",
-  fontSize: 14, outline: "none", boxSizing: "border-box",
+  fontSize: 16, outline: "none", boxSizing: "border-box",
 };
 
 export default function Login() {
@@ -27,6 +28,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
 
   const destination = safeReturnTo(searchParams.get("returnTo"));
@@ -65,13 +67,20 @@ export default function Login() {
       return;
     }
 
-    const { data, error: authErr } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (!authErr && data?.session) {
-      navigate(destination, { replace: true });
-      return;
+    try {
+      const { data, error: authErr } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (!authErr && data?.session) {
+        navigate(destination, { replace: true });
+        return;
+      }
+      setError(authErr?.code === 'email_not_confirmed'
+        ? 'Open your account invitation or confirmation email to finish setup before signing in.'
+        : 'Invalid email or password. Please try again.');
+    } catch {
+      setError('Could not reach the sign-in service. Check your connection and try again.');
+    } finally {
+      setLoading(false);
     }
-    setError("Invalid email or password. Please try again.");
   };
 
   const handleForgotPassword = async () => {
@@ -83,11 +92,18 @@ export default function Login() {
       setError('Enter your email above first, then press "Forgot password?"');
       return;
     }
-    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(target, {
-      redirectTo: `${window.location.origin}/auth/callback`,
-    });
-    setInfo(resetErr ? "" : "If that email has an account, a reset link is on its way.");
-    if (resetErr) setError("Could not send a reset email right now. Please try again shortly.");
+    setResetLoading(true);
+    try {
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(target, {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      });
+      setInfo(resetErr ? "" : "If that email has an account, a reset link is on its way.");
+      if (resetErr) setError("Could not send a reset email right now. Please try again shortly.");
+    } catch {
+      setError('Could not reach the sign-in service. Check your connection and try again.');
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   if (checkingSession) {
@@ -116,7 +132,7 @@ export default function Login() {
       {/* RIGHT PANEL — sign in */}
       <div className="flex-1 flex flex-col justify-center px-6 md:px-14 py-14 relative" style={{ background: "#0D0D0D", borderLeft: "1px solid rgba(201,168,76,0.16)" }}>
         <div className="max-w-sm w-full mx-auto">
-          <img src="/logo.png" alt="Nova Systems" width="96" height="96" style={{ width: 96, height: 96, mixBlendMode: "lighten", margin: "0 auto 18px", display: "block" }} />
+          <NovaLogo style={{ margin: "0 auto 18px", display: "block" }} />
           <h2 className="text-center" style={{ fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 8px" }}>Welcome back.</h2>
           <p className="text-center mb-8" style={{ color: "rgba(250,250,250,0.6)", fontSize: 14 }}>Sign in to your Nova Systems workspace.</p>
 
@@ -141,8 +157,8 @@ export default function Login() {
               <input id="login-password" type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} className="nova-login-input" />
             </div>
             <div className="flex justify-end">
-              <button type="button" onClick={handleForgotPassword} style={{ background: "none", border: "none", cursor: "pointer", color: GOLD, fontSize: 13, padding: 4 }}>
-                Forgot password?
+              <button type="button" disabled={resetLoading || loading} onClick={handleForgotPassword} style={{ background: "none", border: "none", cursor: "pointer", color: GOLD, fontSize: 13, padding: 4, minHeight: 44 }}>
+                {resetLoading ? 'Requesting link…' : 'Forgot password?'}
               </button>
             </div>
             <button

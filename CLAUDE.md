@@ -27,8 +27,9 @@ coordinated activation session, not `docs/PRODUCT_BUILD_STATE.md` (which is the 
 
 ## Standing rules (see the master prompt for full detail)
 
-- Do not modify the public marketing website (homepage, nav, legal pages, public SEO). Product
-  dashboard/auth work is in scope.
+- Public marketing changes require an owner brief. Isaac explicitly authorized the legal-page,
+  consent and design review on 2026-11-01; those revisions are in scope. Product dashboard/auth
+  work remains in scope. Read docs/NOVA_HOSTED_READINESS_2026-11-01.md for the current hosted status.
 - Implementation requests only — no scaffolds, mock dashboards, or future-task-lists as a
   substitute for real domain logic.
 - Status vocabulary: not started / in development / locally verified / staging verified /

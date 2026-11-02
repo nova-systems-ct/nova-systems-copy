@@ -260,3 +260,27 @@ BEGIN
   END LOOP;
 END
 $$;
+-- Release hardening: application function resolution and membership RPC grants.
+DO $$
+DECLARE f record;
+BEGIN
+  FOR f IN
+    SELECT p.oid::regprocedure AS signature
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='public' AND p.proname IN (
+      'claim_next_job','forbid_update_delete','sales_document_version_guard',
+      'sales_document_request_guard','crm_proposal_guard','sales_commission_entry_guard',
+      'sales_payout_guard','loyalty_ledger_append_only','ai_spend_committed',
+      'ai_spend_reserve','ai_spend_settle')
+  LOOP
+    EXECUTE format('ALTER FUNCTION %s SET search_path = pg_catalog, public, pg_temp', f.signature);
+  END LOOP;
+  FOR f IN
+    SELECT p.oid::regprocedure AS signature
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='public' AND p.proname IN ('has_permission','is_org_member','is_platform_owner')
+  LOOP
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon', f.signature);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated, service_role', f.signature);
+  END LOOP;
+END $$;

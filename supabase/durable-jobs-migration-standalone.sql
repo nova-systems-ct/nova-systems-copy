@@ -81,6 +81,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Only the trusted background worker may lease jobs. PostgreSQL otherwise grants new
+-- functions EXECUTE to PUBLIC, which also includes anon and authenticated API callers.
+REVOKE ALL ON FUNCTION public.claim_next_job(TEXT, TEXT[], INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_next_job(TEXT, TEXT[], INTEGER) TO service_role;
+
 ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS members_read_jobs ON jobs;
 -- Platform jobs (organization_id IS NULL) are service-role only; members see their own org's jobs (F-34).
