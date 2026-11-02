@@ -110,6 +110,7 @@ export async function runResearch(runId, deps = {}) {
     // (api/_renderPage.js). Off with AUDIT_RENDER=off, or where Playwright/Chromium are not installed.
     const render = deps.render !== undefined ? deps.render : process.env.AUDIT_RENDER === 'off' ? null : (await Renderer.available()).ok ? (urls) => Renderer.renderPages(urls, { fetchImpl: deps.fetchImpl, lookup: deps.lookup, now }) : null;
     crawl = await crawlSite(website, { fetchImpl: deps.fetchImpl, lookup: deps.lookup, maxPages: full ? 12 : 6, now, render });
+    if (crawl.scope_note) limitations.push(crawl.scope_note);
     if (!crawl.reachable && crawl.dns_not_found) {
       // A domain that does not exist in public DNS is a verifiable fact, unlike a timeout or a blocked crawler.
       const at = now().toISOString(); const host = hostOf(website);

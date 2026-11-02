@@ -432,10 +432,16 @@ export async function handleOps(req, res, op) {
           return send(res, 200, { account: acc, ledger, lots: L.computeLots(ledger).filter((l) => l.remaining > 0) });
         }
         const accounts = await dbGet(`loyalty_accounts?organization_id=eq.${enc(s.orgId)}&select=id,balance,pass_status,is_test,contact_id,crm_contacts(name),updated_at&order=updated_at.desc&limit=200`);
-        return send(res, 200, { programs, accounts, wallet: L.walletReadiness() });
+        return send(res, 200, { programs, accounts, wallet: L.walletReadiness(process.env,s.orgId) });
       }
       const action = sanitize(b.action, 30);
       const s = await inOrg(req, res, orgParam, action === 'redeem' ? 'ops.manage' : 'ops.configure'); if (!s) return;
+      if (action === 'wallet-pass') {
+        if (!rateLimit(req,res,5,60000)) return;
+        const {issueWalletPass}=await import('./wallet.js');
+        res.setHeader('Cache-Control','no-store');
+        return send(res,200,{pass:await issueWalletPass({orgId:s.orgId,accountId:sanitize(b.account_id,60),platform:sanitize(b.platform,20),actor:s.caller})});
+      }
       if (action === 'create-program') return send(res, 200, { program: await L.createProgram({ orgId: s.orgId, name: b.name, rules: b.rules || {}, actor: s.caller }) });
       if (action === 'approve-program') return send(res, 200, { program: await L.approveProgram({ orgId: s.orgId, programId: sanitize(b.program_id, 60), actor: s.caller }) });
       if (['pause', 'resume', 'retire'].includes(action)) return send(res, 200, { program: await L.setProgramStatus({ orgId: s.orgId, programId: sanitize(b.program_id, 60), to: action }) });

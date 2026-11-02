@@ -20,3 +20,13 @@ assert(out.journey_checks.some(x=>x.target.endsWith('/quote')&&x.result==='unava
 assert.equal(out.features.online_booking,false,'A missing booking page must not count as working online booking');
 assert(out.journey_checks.every(x=>x.source&&x.checked_at),'Journey checks preserve the referring page and observation time');
 console.log('PASS — form effort, broken customer paths, uncertainty and evidence provenance');
+// A business hosted on another organization's page must not inherit that host's
+// contact forms, booking links or operating hours from unrelated navigation.
+const seen=[];
+const shared=await crawlSite('https://host.example/visit/cafe/',{lookup:async()=>[{address:'93.184.216.34',family:4}],fetchImpl:async(url)=>{const path=new URL(url).pathname;seen.push(path);return new Response(path==='/robots.txt'?'User-agent: *\nAllow: /':shell('<h1>Independent Cafe</h1><a href="/contact">Museum office</a><a href="/visit/cafe/menu">Cafe menu</a>'),{headers:{'content-type':path==='/robots.txt'?'text/plain':'text/html'}});}});
+assert(!seen.includes('/contact'),'A page-specific audit must not crawl unrelated host pages');assert(shared.pages.every(p=>new URL(p.url).pathname.startsWith('/visit/cafe/')));
+
+const {runQuickScan}=await import('../api/_demo.js');
+const quickSeen=[];
+await runQuickScan('https://host.example/visit/cafe/',{lookup:async()=>[{address:'93.184.216.34',family:4}],fetchImpl:async(url)=>{quickSeen.push(new URL(url).pathname);return new Response(shell('<h1>Independent Cafe</h1><a href="/contact">Museum office</a>'),{headers:{'content-type':'text/html'}});}});
+assert(!quickSeen.includes('/contact'),'The quick scan must honor the same page-specific business boundary');

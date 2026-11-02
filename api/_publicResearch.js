@@ -253,12 +253,15 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   const textOf = (h) => clean(String(h || '').replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, ' '), 200000);
   const entry = (p, extra = {}) => ({ url: p.finalUrl, requested_url:p.requested_url||p.finalUrl, status: p.status, retrieved_at: p.retrievedAt, ms: p.ms, bytes: (p.html || '').length, title: clean((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(p.html || '') || [])[1], 120), h1: clean((/<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(p.html || '') || [])[1], 120), html: p.html || '', text: p.text ? clean(p.text, 200000) : null, ...extra });
   const host = hostOf(home.finalUrl);
+  const scopePath = root.pathname.replace(/\/+$/, '') || '/';
+  const inScope = path => scopePath === '/' || path === scopePath || path.startsWith(`${scopePath}/`);
+  const scope_note = scopePath === '/' ? null : 'Page-specific URL: research is limited to that page and its child paths. Ownership of other pages on this host is not assumed.';
   // same-site links worth reading (contact, booking, services, about ...), best first
   const linksOf = (html, base) => {
     const seen = new Set([new URL(base).pathname]); const queue = [];
     for (const m of String(html || '').matchAll(/<a\b[^>]*href=["']([^"'#][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
       let u; try { u = new URL(m[1], base); } catch { continue; }
-      if (!/^https?:$/.test(u.protocol) || hostOf(u.toString()) !== host) continue;
+      if (!/^https?:$/.test(u.protocol) || hostOf(u.toString()) !== host || !inScope(u.pathname)) continue;
       u.hash = ''; if (seen.has(u.pathname)) continue; seen.add(u.pathname);
       const t = clean(m[2], 60); const score = PRIORITY.findIndex((re) => re.test(u.pathname) || re.test(t));
       if (score >= 0) queue.push({ url: u.toString(), score });
@@ -320,7 +323,7 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   if (rendered_by_script && read_with !== 'browser') for (const k of SCRIPT_HIDDEN) if (!features[k]) features[k] = null;
   // what the site says about itself, for identity checks (titles, headings and visible text; bounded)
   const site_text = pages.map((p) => [p.title, p.h1, p.text || textOf(p.html)].filter(Boolean).join(' ')).join(' ').slice(0, 30000);
-  return { reachable: true, home_status: home.status, rendered_by_script, read_with, render_note, journey_checks:journeyChecks(pages,skipped), pages: pages.map(({ html, text, ...rest }) => rest), skipped, signals, features, site_text };
+  return { reachable: true, home_status: home.status, rendered_by_script, read_with, render_note, scope_note, journey_checks:journeyChecks(pages,skipped), pages: pages.map(({ html, text, ...rest }) => rest), skipped, signals, features, site_text };
 }
 const SCRIPT_HIDDEN = ['click_to_call', 'contact_form', 'online_booking', 'prices_published', 'hours_published', 'reviews_or_social_proof', 'chat'];
 function emptySignals() { return { phones: [], emails: [], forms: [], booking_tools: [], chat_tools: [], social: {}, structured: [], prices: [], hours: [], reviews_proof: [], no_viewport: [] }; }

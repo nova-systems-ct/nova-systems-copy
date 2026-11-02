@@ -7,6 +7,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const suites = [
+  'unit_wallet_api_test',
+  'unit_wallet_passes_test',
   'unit_executive_queue_tick_test',
   'unit_install_current_findings_test',
   'unit_audit_fetch_bounds_test', 'unit_audit_journey_quality_test', 'unit_audit_research_quality_service_test',
