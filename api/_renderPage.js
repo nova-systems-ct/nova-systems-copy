@@ -24,7 +24,10 @@ export async function launchOptions(env = process.env, injectedBundle = null) {
     const imported = injectedBundle || await import('@sparticuz/chromium');
     const bundled = imported.default || imported;
     options.executablePath = await bundled.executablePath();
-    options.args = [...bundled.args.filter(a => !/^--(?:proxy-|disable-features|host-resolver-rules)/.test(a)), ...required];
+    // Lambda's single-process default crashes isolated Playwright contexts. Keep
+    // per-page isolation and the mandatory proxy rather than sharing a context.
+    // Also omit bundle defaults that relax normal document security.
+    options.args = [...bundled.args.filter(a => !/^--(?:proxy-|disable-features|host-resolver-rules|single-process(?:=|$)|disable-web-security(?:=|$)|allow-running-insecure-content(?:=|$)|disable-site-isolation-trials(?:=|$))/.test(a)), ...required];
   }
   return options;
 }
