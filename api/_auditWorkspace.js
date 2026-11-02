@@ -116,6 +116,7 @@ async function composeDraft(c, { summary } = {}) {
     scope_and_method: { mode: c.scope === '360' ? 'online and in person' : 'online', depth: lastRun?.scope === 'full' ? 'full public research' : 'demo-depth public research', method: 'Public web pages (robots.txt respected, no forms submitted), public DNS records, OpenStreetMap identity and nearby same-category businesses, plus any evidence recorded by Nova staff. Contact tests, when present, are listed separately with their recorded method and source.', in_person_observations: inPerson, research_completed_at: lastRun?.finished_at || null },
     metrics: rs ? { pages_read: rs.pages_read, evidence_records: used.length, checks: checks.length, issues_observed: checks.filter((x) => x.result === 'issue').length, competitors_compared: rs.competitor_websites_compared } : null,
     checks_performed: checks,
+    customer_paths: rs?.journey_checks || [],
     client_features: rs?.client_features || null,
     competitor_comparison: competitors.map((x) => ({ name: x.name, url: x.url, rationale: x.rationale, observations: (x.observations || []).map((o) => o.text) })),
     evidence_reviewed: used.map((e) => ({ source: e.source, captured: e.capture_date, method: e.method, observation: e.observation, confidence: e.confidence })),

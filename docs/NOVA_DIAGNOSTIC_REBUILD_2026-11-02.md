@@ -68,3 +68,19 @@ Still requires live activation/acceptance:
 - Renderer fix deployed as `e06abdc1ceaed33d9ae7e9d51b1a3d0e1e914c1a` (`dep-dbk8120n74is73bmpiig`). Second hosted research run `0506810a-10dc-4d60-9ba6-b20315c1cb49` completed at 12:25:29 UTC: six pages read with the actual browser, identity confirmed, 24 evidence records saved and two new draft findings proposed. Job `683ced8a-0dec-4a70-9b6d-62de7e0273c5` completed without error. Overall research remains partial because broader listings are not connected and competitor discovery does not map the entered industry `saaas`. No business-wide loss figures were invented. At 12:25 UTC cron returned zero rows while the active job held its lease, issuing no additional HTTP request.
 - The current cloud-browser session is signed out. Fresh authenticated visual acceptance needs the owner's secure sign-in. No password was reset, read or placed in source. Prior signed-in PDF/Vault acceptance is not a substitute for testing the new Investigation UI.
 - No production change, paid provider call or real customer contact occurred. The multi-day audit clock was not started by these public-research runtime checks.
+
+
+## Audit quality follow-up — 2 November 2026
+
+Owner requested adversarial customer, engineering, security and business-value review with minimal paid usage. No external committee or company reviewed the product; these are review perspectives.
+
+Found and fixed:
+- Form counts included hidden/disabled controls and submit buttons; optional fields were not distinguished from HTML-required fields. Counts now exclude those controls and report required counts. CSS/ancestor visibility, conditional fields and custom validation remain unverified. Form-friction proposals are medium-confidence inferences with unknown financial impact, not measured abandonment; complex RFQs are explicitly considered.
+- The full browser crawl did not turn a booking destination showing a not-found heading with HTTP 200 into a diagnosis. Read-only customer-path checks now preserve referring URL, target, time, status and scope; explicit 404/410 and narrowly recognized missing-page headings produce repair proposals. Temporary errors, blocked or unvisited destinations are unavailable, not absence. Opening a page never proves a completed booking or payment.
+- Reruns left stale automated draft text/confidence unchanged. Fresh evidence now refreshes only Nova's unreviewed automatic draft; reviewed findings remain unchanged.
+- Public-page body downloads had unbounded buffering and their timeout ended after headers. A shared streaming reader cancels at the byte limit, preserves explicit bounded HTML truncation and keeps the deadline through body reading. Renderer resource oversize responses are refused. This is targeted hardening, not an exhaustive security assessment or a claim that all network risks are eliminated.
+- Customer-path results are saved in report snapshots and shown in the dashboard and PDF. Long metric/finding metadata lines now wrap instead of overflowing.
+
+Verification: build and lint pass. Full local verification: 41 suites passed, one actual local Chromium suite skipped because Chromium is not installed here. New regression suites cover streaming limits/body deadlines, meaningful form effort, soft-404 paths/temporary errors, persisted findings/report coverage and preserving reviewed work. The first report-composition test exposed an incomplete test boundary double (missing the real PostgREST in-filter), which was corrected; the full suite then passed with the stated renderer skip. PDF pages were rendered and inspected with an isolated layout fixture; no customer finding was invented for it.
+
+Deployment and real-source acceptance of this follow-up are pending below. Paid AI, calls and email remain disabled; no production data was changed.

@@ -219,6 +219,15 @@ function ReviewCard({ ws, org, caseId, reload, go }) {
         </Notice>
       )}
       {s && !active && <Notice tone={run.status === 'failed' ? 'bad' : 'ok'}>{run.status === 'failed' ? `Research stopped: ${run.error || 'see the steps above'}.` : `${s.pages_read} page(s) read, ${s.competitor_websites_compared} competitor website(s) compared, ${s.evidence_added} evidence records. ${s.findings_proposed} new finding${s.findings_proposed === 1 ? '' : 's'} proposed for your review${s.findings_already_recorded ? `; ${s.findings_already_recorded} already recorded` : ''}.`}{(s.limitations || []).length ? <div style={{ fontSize: 12, color: C.dim, marginTop: 6 }}>Not checked: {s.limitations.join(' ')}</div> : null}</Notice>}
+      {!!s?.journey_checks?.length && !active && <details style={{ borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>
+        <summary style={{ cursor: 'pointer', color: C.text }}>Customer paths · {s.journey_checks.filter(x => x.result === 'broken').length} need repair</summary>
+        <p style={{ color: C.dim, fontSize: 12 }}>These are page checks. No order, payment, inquiry or booking was submitted.</p>
+        <ul style={{ listStyle: 'none', padding: 0 }}>{s.journey_checks.map(path => <li key={path.target} style={{ borderBottom: `1px solid ${C.line}`, padding: '12px 0', overflowWrap: 'anywhere' }}>
+          <strong style={{ color: path.result === 'broken' ? C.red : C.text }}>{path.result === 'broken' ? 'Needs repair' : path.result === 'reachable' ? 'Page opens' : 'Not verified'} · {path.label}</strong>
+          <div style={{ color: C.dim, fontSize: 12, marginTop: 5 }}>{path.target}</div>
+          <div style={{ color: C.faint, fontSize: 12 }}>{path.reason} · {when(path.checked_at)}</div>
+        </li>)}</ul>
+      </details>}
       <p style={{ fontSize: 12, color: C.faint }}>{ws.case.last_review_at ? `Last research ${when(ws.case.last_review_at)}` : 'Not researched yet'}</p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button className="ops-btn primary" disabled={starting || active || !ws.business.name} onClick={() => start('demo')} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{active ? <><Loader2 size={15} className="animate-spin" /> Researching…</> : <><Search size={15} /> {ws.case.last_review_at ? 'Run the research again' : 'Run public research'}</>}</button>

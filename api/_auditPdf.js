@@ -111,7 +111,7 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
   if (m) {
     need(30);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...MUTED);
-    doc.text(t(`Measured in this research: ${m.pages_read} website page(s) read  -  ${m.checks} checks (${m.issues_observed} with an issue)  -  ${m.evidence_records} evidence records  -  ${m.competitors_compared} competitor website(s) compared`), M, y); y += 18;
+    para(`Measured in this research: ${m.pages_read} website page(s) read  -  ${m.checks} checks (${m.issues_observed} with an issue)  -  ${m.evidence_records} evidence records  -  ${m.competitors_compared} competitor website(s) compared`,{size:8.5,color:MUTED});
   }
   const fin = content.estimates_and_assumptions || {};
   para(fin.statement || 'Financial impact is unknown: no business records were supplied.', { size: 9.5, color: MUTED, gap: 10 });
@@ -136,6 +136,16 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     }
   }
 
+  const paths = Array.isArray(content.customer_paths) ? content.customer_paths : [];
+  if(paths.length){
+    section(`${num()}  Customer paths`, 'Can a customer take the next step?');
+    para('Read-only checks of linked destinations. A page opening does not confirm a completed booking, delivered inquiry or payment.',{size:9,color:MUTED});
+    for(const path of paths.slice(0,12)){
+      need(72);
+      label(`${path.result==='broken'?'Needs repair':path.result==='reachable'?'Page opens':'Not verified'}: ${String(path.label||'Customer link').slice(0,45)}`,`${path.target}\n${path.reason||''} · Observed ${path.checked_at||'time unknown'}`);
+    }
+    if(paths.length>12)para(`${paths.length-12} additional link checks are retained with the audit evidence.`,{size:9,color:MUTED});
+  }
   // 2. Findings
   section(`${num()}  Findings`, 'Priority findings');
   if (!findings.length) para('No findings are recorded in this version.', { color: MUTED });
@@ -144,8 +154,7 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     const top = y;
     doc.setFillColor(...(f.priority === 'high' ? INK : f.priority === 'medium' ? GOLD : RULE)); doc.rect(M, top - 10, 3, 14, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...MUTED);
-    doc.text(t(`${String(i + 1).padStart(2, '0')}  ${PRIORITY[f.priority] || 'Priority not set'}  -  ${TYPE[f.type] || f.type || ''}${f.confidence ? `  -  ${f.confidence} confidence` : ''}${f.review_status && f.review_status !== 'reviewed' ? '  -  PROPOSED, NOT YET REVIEWED' : ''}`).toUpperCase(), M + 12, top, { charSpace: 0.6 });
-    y = top + 18;
+    para(`${String(i + 1).padStart(2, '0')}  ${PRIORITY[f.priority] || 'Priority not set'}  -  ${TYPE[f.type] || f.type || ''}${f.confidence ? `  -  ${f.confidence} confidence` : ''}${f.review_status && f.review_status !== 'reviewed' ? '  -  PROPOSED, NOT YET REVIEWED' : ''}`.toUpperCase(),{size:7.5,color:MUTED,indent:12,gap:8});
     para(f.title, { size: 13, font: 'times', style: 'normal', indent: 12, gap: 4, lead: 1.3 });
     label('What we saw', f.observed, 12);
     if (f.recheck) label(f.recheck.status === 'still_observed' ? `Re-checked ${String(f.recheck.at || '').slice(0, 10)}: still observed` : `Not re-checked (${String(f.recheck.at || '').slice(0, 10)})`, f.recheck.note, 12);

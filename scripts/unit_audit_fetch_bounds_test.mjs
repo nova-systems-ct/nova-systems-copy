@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {fetchPublicResource,fetchPublicPage} from '../api/_auditResearch.js';
+const lookup=async()=>[{address:'93.184.216.34',family:4}];
+let read=0,cancelled=false;
+const fetchImpl=async()=>new Response(new ReadableStream({pull(c){read++;if(read>10)c.close();else c.enqueue(new Uint8Array(80));},cancel(){cancelled=true;}}),{headers:{'content-type':'text/html'}});
+await assert.rejects(()=>fetchPublicResource('https://shop.example/',{lookup,fetchImpl,maxBytes:100}),/too large/i);
+assert(cancelled&&read<8,'An oversized streaming response must be cancelled before downloading it all');
+let aborted=false;
+const slow=async(_url,init)=>new Response(new ReadableStream({start(c){const safety=setTimeout(()=>c.error(Error('deadline was not applied')),200);init.signal.addEventListener('abort',()=>{clearTimeout(safety);aborted=true;c.error(Error('body timed out'));},{once:true});}}),{headers:{'content-type':'text/html'}});
+await assert.rejects(()=>fetchPublicPage('https://shop.example/',{lookup,fetchImpl:slow,timeoutMs:25}),/timed out|abort/i);
+assert(aborted,'The request deadline must cover the body, not just response headers');
+console.log('PASS — public research bounds streaming bytes and body duration');

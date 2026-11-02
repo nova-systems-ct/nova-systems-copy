@@ -213,6 +213,24 @@ function parseRobots(txt) {
 const PRICE = /\$\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?(?:\s?(?:\/|per)\s?(?:hr|hour|mo|month|visit|sq\.? ?ft))?/gi;
 const HOURS = /\b(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?\s*(?:[-–—to ]+\s*(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?)?[:\s]+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)/gi;
 const PROOF = [/google\.com\/maps|g\.page|maps\.app\.goo\.gl/i, /yelp\.com\/biz/i, /facebook\.com\/[^"']+\/reviews/i, /trustpilot|angi\.com|homeadvisor|houzz|bbb\.org/i, /"aggregateRating"/i];
+const MISSING_PAGE = /^(?:404(?:\s*[-:|–—]\s*)?|page\s+not\s+found|not\s+found|this\s+page\s+(?:doesn.t\s+exist|is\s+unavailable)|p[aá]gina\s+no\s+encontrada)[.!\s]*$/i;
+function missingPage(page) { return [page.h1,page.title].some(s=>MISSING_PAGE.test(clean(s,160))); }
+function journeyChecks(pages, skipped) {
+  const checks = new Map();
+  for (const source of pages) for (const m of source.html.matchAll(/<a\b[^>]*href=["']([^"'#][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    let target; try { target=new URL(m[1].replace(/&amp;/g,'&'),source.url); } catch { continue; }
+    const label=clean(m[2],100);
+    if (!/^https?:$/.test(target.protocol)||target.username||target.password||(target.port&&!['80','443'].includes(target.port))||hostOf(target.toString())!==hostOf(source.url)||!/(?:contact|book|schedul|appointment|reserv|quote|estimate|request|get.started|order)/i.test(`${target.pathname} ${label}`)) continue;
+    target.hash=''; const url=target.toString(); if(checks.has(url))continue;
+    const page=pages.find(p=>p.url===url||p.requested_url===url), skip=skipped.find(p=>p.url===url);
+    const status=page?.status||skip?.status||null;
+    const soft=page&&status<400&&missingPage(page);
+    const broken=[404,410].includes(status)||soft;
+    checks.set(url,{source:source.url,target:url,label:label||target.pathname,status,checked_at:page?.retrieved_at||skip?.checked_at||source.retrieved_at,result:broken?'broken':page&&status>=200&&status<400?'reachable':'unavailable',reason:soft?'soft_404':status?`http_${status}`:skip?.reason||'not fetched within crawl scope',limitation:'Read-only page check. No form, payment, booking or message was submitted; reachability does not prove the process completes.'});
+    if(checks.size>=30)return [...checks.values()];
+  }
+  return [...checks.values()];
+}
 function excerptsOf(text, re, url, limit = 6) {
   const out = []; for (const m of text.matchAll(re)) { const i = m.index || 0; out.push({ text: clean(text.slice(Math.max(0, i - 50), i + m[0].length + 40), 140), match: m[0].trim(), url }); if (out.length >= limit) break; }
   return out;
@@ -227,13 +245,13 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   const fetchPage = async (u) => {
     const t0 = Date.now();
     const p = await fetchPublicPage(u, { fetchImpl, lookup, timeoutMs, now });
-    return { ...p, ms: Date.now() - t0 };
+    return { ...p, requested_url:u, ms: Date.now() - t0 };
   };
   if (!allowed(root.pathname)) return { reachable: false, error: 'robots.txt disallows this source', pages, skipped: [{ url: root.toString(), reason: 'robots.txt disallows it' }], signals: emptySignals(), features: {} };
   let home;
   try { home = await fetchPage(root.toString()); } catch (e) { return { reachable: false, error: e.message, dns_not_found: e.code === 'ENOTFOUND' || /ENOTFOUND/.test(e.message || ''), pages, skipped, signals: emptySignals(), features: {} }; }
   const textOf = (h) => clean(String(h || '').replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, ' '), 200000);
-  const entry = (p, extra = {}) => ({ url: p.finalUrl, status: p.status, retrieved_at: p.retrievedAt, ms: p.ms, bytes: (p.html || '').length, title: clean((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(p.html || '') || [])[1], 120), h1: clean((/<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(p.html || '') || [])[1], 120), html: p.html || '', text: p.text ? clean(p.text, 200000) : null, ...extra });
+  const entry = (p, extra = {}) => ({ url: p.finalUrl, requested_url:p.requested_url||p.finalUrl, status: p.status, retrieved_at: p.retrievedAt, ms: p.ms, bytes: (p.html || '').length, title: clean((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(p.html || '') || [])[1], 120), h1: clean((/<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(p.html || '') || [])[1], 120), html: p.html || '', text: p.text ? clean(p.text, 200000) : null, ...extra });
   const host = hostOf(home.finalUrl);
   // same-site links worth reading (contact, booking, services, about ...), best first
   const linksOf = (html, base) => {
@@ -251,7 +269,7 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   for (const url of linksOf(home.html, home.finalUrl)) {
     if (pages.length >= maxPages) break;
     if (!allowed(new URL(url).pathname)) { skipped.push({ url, reason: 'robots.txt disallows it' }); continue; }
-    try { const p = await fetchPage(url); if (p.status < 400) pages.push(entry(p)); else skipped.push({ url, reason: `HTTP ${p.status}`, status: p.status }); }
+    try { const p = await fetchPage(url); if (p.status < 400) pages.push(entry(p)); else skipped.push({ url, reason: `HTTP ${p.status}`, status: p.status,checked_at:p.retrievedAt }); }
     catch (e) { skipped.push({ url, reason: e.message }); }
   }
   // A page whose served HTML is an empty shell filled in by JavaScript. With a renderer the site is read again the way
@@ -272,8 +290,8 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
         }
         for (const r of next.length ? await render(next) : []) {
           if (r.error) rSkipped.push({ url: r.url, reason: r.error });
-          else if (r.status >= 400) rSkipped.push({ url: r.url, reason: `HTTP ${r.status}`, status: r.status });
-          else rendered.push(entry({ finalUrl: r.url, status: r.status, retrievedAt: r.retrievedAt, html: r.html, text: r.text, ms: null }, { rendered: true }));
+          else if (r.status >= 400) rSkipped.push({ url: r.url, reason: `HTTP ${r.status}`, status: r.status,checked_at:r.retrievedAt });
+          else rendered.push(entry({ finalUrl: r.finalUrl||r.url, requested_url:r.url, status: r.status, retrievedAt: r.retrievedAt, html: r.html, text: r.text, ms: null }, { rendered: true }));
         }
         pages.length = 0; pages.push(...rendered); skipped = rSkipped; read_with = 'browser';
       } else render_note = h?.error || 'the renderer returned no page';
@@ -292,7 +310,7 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
     if (!/<meta[^>]+name=["']viewport["']/i.test(p.html)) signals.no_viewport.push(p.url);
   }
   for (const k of ['phones', 'emails', 'booking_tools', 'chat_tools']) signals[k] = [...new Set(signals[k])];
-  const bookingLinks = pages.some((p) => /book|schedul|appointment|reserv/i.test(new URL(p.url).pathname));
+  const bookingLinks = pages.some((p) => !missingPage(p)&&/book|schedul|appointment|reserv/i.test(new URL(p.url).pathname));
   const features = {
     https: /^https:/i.test(home.finalUrl), mobile_viewport: signals.no_viewport.length === 0,
     click_to_call: signals.phones.length > 0, contact_form: signals.forms.length > 0, online_booking: signals.booking_tools.length > 0 || bookingLinks,
@@ -302,7 +320,7 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   if (rendered_by_script && read_with !== 'browser') for (const k of SCRIPT_HIDDEN) if (!features[k]) features[k] = null;
   // what the site says about itself, for identity checks (titles, headings and visible text; bounded)
   const site_text = pages.map((p) => [p.title, p.h1, p.text || textOf(p.html)].filter(Boolean).join(' ')).join(' ').slice(0, 30000);
-  return { reachable: true, home_status: home.status, rendered_by_script, read_with, render_note, pages: pages.map(({ html, text, ...rest }) => rest), skipped, signals, features, site_text };
+  return { reachable: true, home_status: home.status, rendered_by_script, read_with, render_note, journey_checks:journeyChecks(pages,skipped), pages: pages.map(({ html, text, ...rest }) => rest), skipped, signals, features, site_text };
 }
 const SCRIPT_HIDDEN = ['click_to_call', 'contact_form', 'online_booking', 'prices_published', 'hours_published', 'reviews_or_social_proof', 'chat'];
 function emptySignals() { return { phones: [], emails: [], forms: [], booking_tools: [], chat_tools: [], social: {}, structured: [], prices: [], hours: [], reviews_proof: [], no_viewport: [] }; }

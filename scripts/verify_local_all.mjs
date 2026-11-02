@@ -7,6 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const suites = [
+  'unit_audit_fetch_bounds_test', 'unit_audit_journey_quality_test', 'unit_audit_research_quality_service_test',
   'unit_renderer_launch_options_test', 'unit_audit_queue_tick_test', 'unit_audit_transport_test', 'unit_audit_discovery_test', 'unit_audit_diagnostic_test', 'unit_audit_diagnostic_service_test', 'unit_wave1_test', 'unit_wave1_handlers_test', 'unit_wave1_api_test', 'unit_audit_rules_test', 'unit_audit_handlers_test', 'unit_crm_sales_test',
   'unit_audit_clock_test', 'unit_public_research_test', 'unit_page_renderer_test', 'unit_workforce_roles_test', 'unit_worker_capabilities_test', 'unit_job_queue_test', 'unit_job_queue_correctness_test', 'unit_social_adapters_test', 'unit_email_sequence_test',
   'unit_sales_academy_rules_test', 'unit_sales_documents_rules_test', 'unit_sales_pipeline_rules_test', 'unit_sales_proposal_rules_test', 'unit_sales_commission_rules_test', 'unit_hierarchy_rules_test', 'unit_ops_rules_test', 'validate_academy_content',
