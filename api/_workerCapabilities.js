@@ -61,6 +61,7 @@ export function readinessFor(key, { env = process.env, facts = {} } = {}) {
   const sms = env.WAVE1_SEND_ENABLED === 'true' && !!env.TWILIO_ACCOUNT_SID && !!env.TWILIO_AUTH_TOKEN;
   const email = (env.SALES_EMAIL_MODE || 'dry_run') === 'live' && !!env.RESEND_API_KEY;
   const c = (label, ok, note) => ({ label, ok: !!ok, note });
+  const execution = () => c('Recorded role execution', !!facts.lastCompletedAt, facts.lastCompletedAt ? `Completed ${facts.lastCompletedAt}. This records a result, not continuous availability.` : 'No completed role run recorded in the last seven days.');
   switch (key) {
     case 'intake_booking': return [
       c('Business hours and an approved service', facts.hasServices, facts.hasServices ? 'Configured' : 'Add hours and at least one service in Operations → Settings'),
@@ -74,8 +75,8 @@ export function readinessFor(key, { env = process.env, facts = {} } = {}) {
     case 'reporting': return [c('Background worker running', facts.heartbeatFresh, facts.heartbeatFresh ? 'Heartbeat in the last 10 minutes' : 'No recent heartbeat')];
     case 'audit_review': return [c('Internet access from the server', true, 'Reads public pages only; no paid service')];
     case 'marketing_publisher': return [c('A connected publishing channel', false, 'No social account or publishing channel is connected yet'), c('Email sent for real', email, email ? 'Live' : 'Dry run')];
-    case 'executive_assistant': case 'coo': case 'cmo': return [c('Background worker running', facts.heartbeatFresh, facts.heartbeatFresh ? 'Heartbeat in the last 10 minutes' : 'No recent heartbeat: start the worker')];
-    case 'cfo': return [c('Background worker running', facts.heartbeatFresh, facts.heartbeatFresh ? 'Heartbeat in the last 10 minutes' : 'No recent heartbeat'), c('A current balance to check against', facts.balanceAgeDays != null && facts.balanceAgeDays <= 7, facts.balanceAgeDays == null ? 'None entered: funds are reported as unknown (no bank is connected)' : `Entered ${facts.balanceAgeDays} day(s) ago`)];
+    case 'executive_assistant': case 'coo': case 'cmo': return [execution()];
+    case 'cfo': return [execution(), c('A current balance to check against', facts.balanceAgeDays != null && facts.balanceAgeDays <= 7, facts.balanceAgeDays == null ? 'None entered: funds are reported as unknown (no bank is connected)' : `Entered ${facts.balanceAgeDays} day(s) ago`)];
     default: return [];
   }
 }

@@ -45,15 +45,15 @@ export const handleHierarchy = wrap(async (req, res, op) => {
       nova ? dbGet(`ops_price_rules?organization_id=eq.${enc(nova.id)}&status=eq.approved&select=id&limit=1`).catch(() => []) : [],
       dbGet("demand_campaigns?status=eq.approved&select=id").catch(() => []),
       dbOne('worker_runtime_heartbeats?select=last_seen_at&order=last_seen_at.desc').catch(() => null),
-      dbGet(`jobs?created_at=gte.${enc(since)}&select=job_type,status,completed_at,created_at&order=created_at.desc&limit=5000`).catch(() => []),
+      dbGet(`jobs?created_at=gte.${enc(since)}&select=job_type,status,completed_at,created_at,result&order=created_at.desc&limit=5000`).catch(() => []),
       nova ? dbOne(`finance_balance_snapshots?organization_id=eq.${enc(nova.id)}&select=as_of&order=as_of.desc`).catch(() => null) : null,
     ]);
     const facts = { hasServices: !!(settings?.business_hours && rules.length), hasEscalation: !!(settings?.escalation_contacts || []).length, approvedCampaigns: camps.length, heartbeatFresh: !!beat && Date.now() - new Date(beat.last_seen_at).getTime() < 10 * 60_000, balanceAgeDays: balance ? Math.floor((Date.now() - new Date(balance.as_of).getTime()) / 86400_000) : null };
     const out = CAPABILITIES.map((c) => {
       const w = workers.find((x) => x.capability_key === c.key && x.status !== 'inactive') || null;
       const mine = jobs.filter((j) => c.job_types.includes(j.job_type));
-      const last = mine.find((j) => j.completed_at);
-      return { ...c, readiness: readinessFor(c.key, { facts }), worker: w, paused: !!w && PAUSED_STATES.has(w.status),
+      const last = mine.filter((j) => j.status === 'completed' && j.completed_at && !j.result?.skipped).sort((a,b)=>new Date(b.completed_at)-new Date(a.completed_at))[0];
+      return { ...c, readiness: readinessFor(c.key, { facts: {...facts,lastCompletedAt:last?.completed_at||null} }), worker: w, paused: !!w && PAUSED_STATES.has(w.status),
         activity: { completed_7d: mine.filter((j) => j.status === 'completed').length, failed_7d: mine.filter((j) => ['failed', 'dead'].includes(j.status)).length, waiting: mine.filter((j) => j.status === 'pending').length, last_completed_at: last?.completed_at || null } };
     });
     return res.status(200).json({ capabilities: out, heartbeat_at: beat?.last_seen_at || null });
