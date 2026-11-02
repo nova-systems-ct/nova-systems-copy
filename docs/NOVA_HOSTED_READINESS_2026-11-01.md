@@ -122,3 +122,11 @@ Three public research runs already existed before this acceptance: 42 historical
 Apple owner access and membership are verified; Nova Rewards Pass Type ID registered. Certificate issuance remains pending. Automatic review rejected transferring the encrypted CSR private key plus password to Render without specific authorization; no transfer occurred. See docs/apple/NOVA_APPLE_ACTIVATION.md for the exact approval boundary.
 
 Final checks in this follow-up: 32 local suites pass and one renderer suite is skipped. Unauthenticated audit-PDF and Vault requests return 401; a public read of the actual saved report object is refused. No report/client links were published, no external campaign sent and no paid provider enabled.
+
+## Current handoff — owner requested pause for Gemini review
+
+The owner explicitly authorized storing the encrypted Apple CSR private key and its password on Render's nova-staging-demo service. The two server environment variables were merged successfully; existing settings were preserved. No secret values are in this checkpoint or git. No certificate was issued.
+
+Isaac reports that dashboard functions remain broken, audit findings are insufficient, and the PDF looks acceptable but is not compelling enough to a buyer. Successful login/persistence/PDF generation must not be described as a complete or sellable audit. Hosted research currently lacks JavaScript rendering, broader business-listing sources and competitor coverage for the entered industry. Two DNS findings do not establish a compelling diagnosis of lost customers or revenue.
+
+Stop additional changes and Apple submissions here. Await the owner's Gemini response, explain it in plain English, distinguish observed defects from unsupported criticism, and use verified code/research evidence to prioritize a useful, sellable audit. Do not invent Gemini's feedback before receiving it. Paid calls, paid plans and outbound campaigns remain off.

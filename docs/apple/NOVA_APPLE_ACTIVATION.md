@@ -8,7 +8,7 @@ Nova's rewards ledger exists, but `api/_ops/loyalty.js:walletReadiness` delibera
 
 ## Prepared material
 
-`Nova-Wallet.certSigningRequest` is a real RSA-2048 certificate signing request, checked with `openssl req -verify`. It is public material and contains no private key. The encrypted matching private key is outside the repository in this working session's private scratch area. **Do not upload this CSR until the encrypted key and its password have been secured in the owner's approved secret storage.** If that private material is lost, generate a new key/CSR before requesting a certificate. A CSR is not an Apple-issued certificate.
+`Nova-Wallet.certSigningRequest` is a real RSA-2048 certificate signing request, checked with `openssl req -verify`. It is public material and contains no private key. With the owner's explicit authorization, the encrypted matching private key and its password were saved to the Render staging service's server environment as APPLE_CSR_PRIVATE_KEY_PEM and APPLE_CSR_PRIVATE_KEY_PASSWORD. No values were printed or committed. Local copies remain mode 0600 outside git. If that private material is lost, generate a new key/CSR before requesting a certificate. A CSR is not an Apple-issued certificate.
 
 Registered and read back in Apple Developer: **Nova Rewards**, `pass.app.nova-systems.rewards`. The Pass Type ID initially had no certificates. Its certificate form is prepared but no CSR has been uploaded and no certificate has been issued.
 Contact supplied by owner: Isaac Nova, isaac@nova-systems.app, (203) 706-0504, https://nova-systems.app . Business: Nova Systems, Waterbury, CT. Entity and team are verified above. Do not publish the account's private mailing address. Support coverage and reward rules still require owner decisions; do not fabricate them.
@@ -49,3 +49,7 @@ No submission is recorded as complete in this document.
 ## Explicit approval needed before certificate issuance
 
 Automatic review rejected storing the encrypted matching CSR private key and its password in the Render staging service environment because the owner had not explicitly authorized those specific secrets going to that destination. Nothing was transferred. Do not retry through another tool or storage path to bypass the rejection. Ask for explicit approval to store both on the owner's `nova-staging-demo` Render service and to request the Pass Type certificate. The encrypted local key/password remain mode 0600 outside git. The CSR form is left unsubmitted.
+
+## Current checkpoint after explicit owner authorization
+
+The owner explicitly approved storing the signing keys in Render. The environment-variable merge completed successfully on nova-staging-demo without replacing unrelated settings. This resolves the earlier automatic-review rejection for that transfer; it was retried only after specific new authorization. Certificate issuance remains paused at the owner's request to review Gemini feedback and improve audit sellability first. No CSR upload, certificate issuance or Wallet activation is claimed. No money was spent.
