@@ -49,3 +49,10 @@ await handleAuditWorkspace({method:'POST',headers:{authorization:'Bearer test'},
 assert.equal(res.code,200,JSON.stringify(res.body));
 assert(tables.audit_reports[0].content.customer_paths?.some(x=>x.result==='broken'),'The stored PDF report must include the actual path tests');
 console.log('PASS — research persists useful path findings, calibrated hypotheses and fresh draft evidence without rewriting reviewed work');
+// A hosted business page is not proof the business owns the host's mail domain.
+let dnsQueries=0;
+tables.audit_cases[0].intake.website='https://shop.example/visit/cafe/';
+tables.audit_research_runs.push({id:'shared-run',organization_id:'o',case_id:'a',scope:'full'});
+await runResearch('shared-run',{...deps,resolver:{resolveMx:async()=>{dnsQueries++;return []}}});
+assert.equal(dnsQueries,0,'Do not diagnose a shared host email domain as this business mail system');
+assert(tables.audit_research_runs.find(r=>r.id==='shared-run').summary.limitations.some(x=>/email domain.*not confirmed/i.test(x)));
