@@ -30,3 +30,13 @@ const {runQuickScan}=await import('../api/_demo.js');
 const quickSeen=[];
 await runQuickScan('https://host.example/visit/cafe/',{lookup:async()=>[{address:'93.184.216.34',family:4}],fetchImpl:async(url)=>{quickSeen.push(new URL(url).pathname);return new Response(shell('<h1>Independent Cafe</h1><a href="/contact">Museum office</a>'),{headers:{'content-type':'text/html'}});}});
 assert(!quickSeen.includes('/contact'),'The quick scan must honor the same page-specific business boundary');
+// A WAF challenge is not the business page and must not produce absence claims.
+let renders=0,blockedFetches=0;
+const challengeFetch=async()=>{blockedFetches++;return new Response('<html><head><title>Just a moment...</title></head><body>Verify you are human<script src="/challenge.js"></script></body></html>',{status:403,headers:{'content-type':'text/html'}})};
+const blocked=await crawlSite('https://shop.example/',{lookup:async()=>[{address:'93.184.216.34',family:4}],fetchImpl:challengeFetch,render:async()=>{renders++;return []}});
+assert.equal(blocked.reachable,false,'An access challenge cannot be evaluated as business content');
+assert.equal(blocked.access_unavailable,true);assert.equal(blocked.pages.length,0);assert.equal(renders,0,'Never launch another browser to bypass a detected challenge');
+const blockedQuick=await runQuickScan('https://shop.example/',{lookup:async()=>[{address:'93.184.216.34',family:4}],fetchImpl:challengeFetch});
+assert.equal(blockedQuick.result,'unavailable');assert.equal(blockedQuick.finding,null);assert(blockedQuick.checks.every(c=>c.result==='unknown'));
+const renderedChallenge=await crawlSite('https://shop.example/',{lookup:async()=>[{address:'93.184.216.34',family:4}],fetchImpl:async url=>new Response(new URL(url).pathname==='/robots.txt'?'':'<html><head><title>Shop</title></head><body><div id="root"></div><script src="/app.js"></script></body></html>',{headers:{'content-type':'text/html'}}),render:async()=>[{status:200,html:'<html><head><title>Verify you are human</title></head><body>Security check</body></html>'}]});
+assert.equal(renderedChallenge.reachable,false,'A rendered challenge is unavailable even when HTTP is 200');assert.equal(renderedChallenge.pages.length,0);

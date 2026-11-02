@@ -154,6 +154,7 @@ export async function runResearch(runId, deps = {}) {
   // 3. contact paths and links (tested quick scan) + crawl-derived checks
   await step('checks', async () => {
     if (!website) return { status: 'skipped', note: 'No website saved.' };
+    if(crawl?.access_unavailable)return {status:'unavailable',note:'Content checks not performed: website access was blocked or unavailable. No retry attempted.'};
     const scan = await runQuickScan(website, { fetchImpl: deps.fetchImpl, lookup: deps.lookup, now });
     for (const x of scan.checks || []) {
       // On a JavaScript-built site the quick scan sees only the served shell: its content checks are not judged from it.

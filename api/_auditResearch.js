@@ -6,6 +6,15 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 
+// Access-denial and challenge responses cannot establish business content.
+export function pageAccessIssue(page) {
+  const status=Number(page?.status||0);
+  const title=String((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(page?.html||'')||[])[1]||'').replace(/<[^>]*>/g,'').trim();
+  if (/^(?:just a moment[.!\s]*|verify (?:that )?you are human[.!\s]*|checking your browser[.!\s]*|access denied[.!\s]*|security (?:check|verification)[.!\s]*)$/i.test(title)) return 'Access challenge or denial: business content was not available to Nova';
+  if ([401,403,429].includes(status)||status>=500) return `HTTP ${status}: business content was unavailable to Nova`;
+  return null;
+}
+
 const MAX_BYTES = 600_000;
 const MAX_REDIRECTS = 3;
 

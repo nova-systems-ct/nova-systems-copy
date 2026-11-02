@@ -56,3 +56,9 @@ tables.audit_research_runs.push({id:'shared-run',organization_id:'o',case_id:'a'
 await runResearch('shared-run',{...deps,resolver:{resolveMx:async()=>{dnsQueries++;return []}}});
 assert.equal(dnsQueries,0,'Do not diagnose a shared host email domain as this business mail system');
 assert(tables.audit_research_runs.find(r=>r.id==='shared-run').summary.limitations.some(x=>/email domain.*not confirmed/i.test(x)));
+const evidenceBefore=tables.audit_evidence.length;let businessPageReads=0;
+tables.audit_research_runs.push({id:'blocked-run',organization_id:'o',case_id:'a',scope:'full'});
+await runResearch('blocked-run',{...deps,fetchImpl:async url=>{const u=new URL(url);if(u.host!=='shop.example')return Response.json([]);if(u.pathname==='/robots.txt')return new Response('',{status:404});businessPageReads++;return new Response('<html><head><title>Just a moment...</title></head><body>Verify you are human</body></html>',{status:403,headers:{'content-type':'text/html'}})}});
+assert.equal(businessPageReads,1,'An access denial must not cause a second quick-scan retry');
+assert.equal(tables.audit_research_runs.find(r=>r.id==='blocked-run').summary.client_features,null);
+assert(!tables.audit_evidence.slice(evidenceBefore).some(e=>/no (?:tap-to-call|opening hours|published prices|HTML form)/i.test(e.observation)),'Access challenges cannot create missing-content evidence');

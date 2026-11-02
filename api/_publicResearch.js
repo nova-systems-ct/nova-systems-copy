@@ -6,7 +6,7 @@
 // Retrieved content is untrusted DATA: it is parsed with fixed patterns and stored as short excerpts with its source
 // URL and retrieval time; it is never executed or used as an instruction. A failed lookup is "could not check", never
 // evidence that something is missing.
-import { fetchPublicPage, fetchPublicResource, extractPublicSignals } from './_auditResearch.js';
+import { fetchPublicPage, fetchPublicResource, extractPublicSignals, pageAccessIssue } from './_auditResearch.js';
 
 export const UA = 'NovaAuditResearch/2.0 (+https://nova-systems.app; isaac@nova-systems.app)';
 const clean = (s, n = 200) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/g, ' ').replace(/&amp;/g, '&').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
@@ -256,6 +256,8 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   const scopePath = root.pathname.replace(/\/+$/, '') || '/';
   const inScope = path => scopePath === '/' || path === scopePath || path.startsWith(`${scopePath}/`);
   const scope_note = scopePath === '/' ? null : 'Page-specific URL: research is limited to that page and its child paths. Ownership of other pages on this host is not assumed.';
+  const denied=(p,reason)=>({reachable:false,access_unavailable:true,home_status:p.status,error:reason,pages:[],skipped:[{url:p.finalUrl||root.toString(),reason,status:p.status,checked_at:p.retrievedAt}],signals:emptySignals(),features:{},scope_note});
+  if(pageAccessIssue(home))return denied(home,pageAccessIssue(home));
   // same-site links worth reading (contact, booking, services, about ...), best first
   const linksOf = (html, base) => {
     const seen = new Set([new URL(base).pathname]); const queue = [];
@@ -272,7 +274,7 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
   for (const url of linksOf(home.html, home.finalUrl)) {
     if (pages.length >= maxPages) break;
     if (!allowed(new URL(url).pathname)) { skipped.push({ url, reason: 'robots.txt disallows it' }); continue; }
-    try { const p = await fetchPage(url); if (p.status < 400) pages.push(entry(p)); else skipped.push({ url, reason: `HTTP ${p.status}`, status: p.status,checked_at:p.retrievedAt }); }
+    try { const p = await fetchPage(url); if (p.status < 400 && !pageAccessIssue(p)) pages.push(entry(p)); else skipped.push({ url, reason: `HTTP ${p.status}`, status: p.status,checked_at:p.retrievedAt }); }
     catch (e) { skipped.push({ url, reason: e.message }); }
   }
   // A page whose served HTML is an empty shell filled in by JavaScript. With a renderer the site is read again the way
@@ -284,6 +286,7 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
     try {
       const [h] = await render([home.finalUrl]);
       if (h && !h.error && h.html) {
+        if(pageAccessIssue(h))return denied(h,pageAccessIssue(h));
         const rendered = [entry({ finalUrl: home.finalUrl, status: h.status || home.status, retrievedAt: h.retrievedAt, html: h.html, text: h.text, ms: null }, { rendered: true })];
         const rSkipped = []; const next = [];
         for (const url of linksOf(h.html, home.finalUrl)) {
@@ -293,7 +296,7 @@ export async function crawlSite(rootUrl, { fetchImpl, lookup, maxPages = 8, now 
         }
         for (const r of next.length ? await render(next) : []) {
           if (r.error) rSkipped.push({ url: r.url, reason: r.error });
-          else if (r.status >= 400) rSkipped.push({ url: r.url, reason: `HTTP ${r.status}`, status: r.status,checked_at:r.retrievedAt });
+          else if (r.status >= 400 || pageAccessIssue(r)) rSkipped.push({ url: r.url, reason: `HTTP ${r.status}`, status: r.status,checked_at:r.retrievedAt });
           else rendered.push(entry({ finalUrl: r.finalUrl||r.url, requested_url:r.url, status: r.status, retrievedAt: r.retrievedAt, html: r.html, text: r.text, ms: null }, { rendered: true }));
         }
         pages.length = 0; pages.push(...rendered); skipped = rSkipped; read_with = 'browser';
