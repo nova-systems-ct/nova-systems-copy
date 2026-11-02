@@ -10,20 +10,20 @@ import {runResearch} from './_researchRun.js';
 export const AUDIT_JOB_TYPES=['audit_research','audit_diagnostic_task','audit_contact_dispatch','audit_contact_observe'];
 const same=(a,b)=>{try{return crypto.timingSafeEqual(Buffer.from(String(a)),Buffer.from(String(b)));}catch{return false;}};
 function targetOK(e){try{return e.SUPABASE_SERVICE_ROLE_KEY&&new URL(e.SUPABASE_URL).hostname===`${e.NOVA_WORKER_TARGET_REF}.supabase.co`;}catch{return false;}}
-export function schedulerSignature(timestamp,nonce,secret){return crypto.createHmac('sha256',secret).update(`nova-audit-tick|${timestamp}|${nonce}`).digest('hex');}
+export function schedulerSignature(timestamp,nonce,secret,prefix='nova-audit-tick'){return crypto.createHmac('sha256',secret).update(`${prefix}|${timestamp}|${nonce}`).digest('hex');}
 const actualHandlers={audit_research:job=>runResearch(job.payload.run_id),audit_diagnostic_task:runDiagnosticTask,audit_contact_dispatch:dispatchDiagnosticContact,audit_contact_observe:observeDiagnosticContact};
-export async function handleAuditQueueTick(req,res,{e=process.env,store,handlers=actualHandlers,heldTypes=async()=>heldJobTypes(await dbGet('workers?capability_key=eq.audit_review&select=status,capability_key')),rememberNonce=async nonce=>{const r=await dbInsert('jobs',{job_type:'audit_tick_receipt',status:'completed',payload:{},completed_at:new Date().toISOString(),idempotency_key:`audit-tick:${nonce}`},{onConflict:'idempotency_key'});return !!r.row;},now=()=>new Date()}={}){
+export async function handleAuditQueueTick(req,res,{e=process.env,store,handlers=actualHandlers,jobTypes=AUDIT_JOB_TYPES,enableFlag='NOVA_AUDIT_HTTP_WORKER_ENABLED',signaturePrefix='nova-audit-tick',receiptPrefix='audit-tick',heldTypes=async()=>heldJobTypes(await dbGet('workers?capability_key=not.is.null&select=status,capability_key')),rememberNonce=async nonce=>{const r=await dbInsert('jobs',{job_type:'audit_tick_receipt',status:'completed',payload:{},completed_at:new Date().toISOString(),idempotency_key:`${receiptPrefix}:${nonce}`},{onConflict:'idempotency_key'});return !!r.row;},now=()=>new Date()}={}){
  if(req.method!=='POST')return res.status(405).json({error:'POST only'});
  const ts=String(req.headers?.['x-nova-audit-timestamp']||'');const nonce=String(req.headers?.['x-nova-audit-nonce']||'');
  const fresh=/^\d{10}$/.test(ts)&&Math.abs(now().getTime()/1000-Number(ts))<=300&&/^[0-9a-f-]{36}$/i.test(nonce);
- const authenticated=e.CRON_SECRET&&fresh&&same(req.headers?.authorization,`Bearer ${schedulerSignature(ts,nonce,e.CRON_SECRET)}`);
+ const authenticated=e.CRON_SECRET&&fresh&&same(req.headers?.authorization,`Bearer ${schedulerSignature(ts,nonce,e.CRON_SECRET,signaturePrefix)}`);
  if(!authenticated)return res.status(403).json({error:'Fresh scheduler signature required'});
- if(e.NOVA_AUDIT_HTTP_WORKER_ENABLED!=='true'||!targetOK(e))return res.status(503).json({error:'Audit queue receiver disabled or project target not confirmed'});
+ if(e[enableFlag]!=='true'||!targetOK(e))return res.status(503).json({error:'Audit queue receiver disabled or project target not confirmed'});
  const workerId=`audit-http-${crypto.randomUUID()}`;
  try{
   if(!await rememberNonce(nonce))return res.status(409).json({error:'Scheduler request already processed'});
-  const held=await heldTypes();const types=AUDIT_JOB_TYPES.filter(t=>!held.includes(t));
-  if(!types.length)return res.status(200).json({processed:false,reason:'Audit evidence worker paused'});
+  const held=await heldTypes();const types=jobTypes.filter(t=>!held.includes(t));
+  if(!types.length)return res.status(200).json({processed:false,reason:'Registered worker paused'});
   const queue=store||createPostgresJobStore({url:e.SUPABASE_URL,serviceKey:e.SUPABASE_SERVICE_ROLE_KEY});
   const job=await queue.claimNext({workerId,leaseSeconds:120,jobTypes:types});
   if(!job)return res.status(200).json({processed:false});

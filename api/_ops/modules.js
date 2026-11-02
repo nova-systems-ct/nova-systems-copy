@@ -52,12 +52,14 @@ export async function selfAudits(orgId) {
     candidates: testWs ? [] : [...new Map(all.filter((x) => x.business_id && !TEST_NAME.test(nameOf(x))).map((x) => [x.business_id, { business_id: x.business_id, name: nameOf(x) }])).values()] };
 }
 
+export const currentFindings = rows => rows.filter(f => f.review_status !== 'rejected' && f.recheck_status !== 'no_longer_observed');
+
 // Recommend from the latest audit of this business: modules whose `addresses` match the findings' module keys, plus the core modules.
 export async function recommendations(orgId) {
   const self = await selfAudits(orgId);
   let audit = null; let findings = [];
   for (const c of self.cases.filter((x) => x.findings > 0)) {
-    const f = await dbGet(`audit_findings?case_id=eq.${enc(c.id)}&review_status=neq.rejected&select=id,title,module_key,review_status,priority`);
+    const f = currentFindings(await dbGet(`audit_findings?case_id=eq.${enc(c.id)}&review_status=neq.rejected&select=id,title,module_key,review_status,priority,recheck_status`));
     if (f.length) { audit = { case_id: c.id, business: c.name || null, created_at: c.created_at }; findings = f; break; }
   }
   const tasks = await dbGet(`work_items?organization_id=eq.${enc(orgId)}&category=eq.install_fix&select=status`).catch(() => []);
@@ -132,7 +134,7 @@ export async function provisionModule(orgId, key, ctx) {
   if (key === 'followup_revive') step('campaign', 'approved campaign', ctx.results.revive === 'done' ? ['done', 'An approved Revive campaign exists'] : ['blocked', 'No approved Revive campaign; nothing is sent until you approve one'], 'Create and approve a Revive campaign in Operations → Revive campaigns.', { done: 'approved campaign found', blocked: 'awaiting your approval' });
   if (key === 'website_fixes') {
     const caseId = ctx.latestAuditCaseId;
-    const fx = caseId ? await dbGet(`audit_findings?case_id=eq.${enc(caseId)}&module_key=eq.website_fixes&review_status=neq.rejected&select=id,title,recommended_action,review_status,priority`) : [];
+    const fx = caseId ? currentFindings(await dbGet(`audit_findings?case_id=eq.${enc(caseId)}&module_key=eq.website_fixes&review_status=neq.rejected&select=id,title,recommended_action,review_status,priority,recheck_status`)) : [];
     if (!fx.length) step('tasks', 'fix tasks', ['skipped', 'The latest audit has no website or listing findings'], null, { default: 'nothing to fix' });
     else {
       let created = 0;

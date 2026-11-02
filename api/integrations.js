@@ -187,6 +187,10 @@ async function handleTest(req, res) {
 }
 
 export default async function handler(req, res) {
+  if (req.query?.op === 'executive-queue-tick') {
+    const { handleExecutiveQueueTick } = await import('./_executiveQueueTick.js');
+    return handleExecutiveQueueTick(req, res);
+  }
   if (req.query?.op === 'audit-queue-tick') {
     const { handleAuditQueueTick } = await import('./_auditQueueTick.js');
     return handleAuditQueueTick(req, res);

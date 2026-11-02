@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso } from '../_sales/core.js';
 import * as R from './rules.js';
 import * as S from './service.js';
-import { provisionModule, moduleByKey, CATALOG_VERSION, selfAudits } from './modules.js';
+import { provisionModule, moduleByKey, CATALOG_VERSION, selfAudits, currentFindings } from './modules.js';
 
 const sha = (v) => crypto.createHash('sha256').update(typeof v === 'string' ? v : JSON.stringify(v)).digest('hex');
 const ERR = (status, message) => Object.assign(new Error(message), { status, expose: true });
@@ -38,10 +38,17 @@ async function auditLink(orgId) {
   // silently replace a finished one; it is reported instead.
   const cases = (await selfAudits(orgId)).cases.map((x) => ({ ...x, businesses: { name: x.name } }));
   const count = (x) => x.audit_findings?.[0]?.count || 0;
-  const c = cases.find((x) => count(x) > 0) || cases[0] || null;
+  let c = null; let findings = []; let recs = [];
+  const checkedEmpty = new Set();
+  for (const candidate of cases.filter(x => count(x) > 0)) {
+    const rows = currentFindings(await dbGet(`audit_findings?case_id=eq.${enc(candidate.id)}&select=id,title,review_status,recheck_status&order=created_at.asc`));
+    if (rows.length) { c = candidate; findings = rows; break; }
+    checkedEmpty.add(candidate.id);
+  }
+  if (!c) c = cases[0] || null;
   if (!c) return null;
-  const newer = cases.filter((x) => new Date(x.created_at) > new Date(c.created_at) && count(x) === 0).map((x) => ({ case_id: x.id, business: x.businesses?.name || null, created_at: x.created_at, status: x.status }));
-  const [findings, recs] = await Promise.all([dbGet(`audit_findings?case_id=eq.${enc(c.id)}&select=id,title&order=created_at.asc`), dbGet(`audit_recommendations?case_id=eq.${enc(c.id)}&select=id,finding_id,mechanism,priority_rank&order=priority_rank.asc.nullslast`)]);
+  if (findings.length) recs = await dbGet(`audit_recommendations?case_id=eq.${enc(c.id)}&select=id,finding_id,mechanism,priority_rank&order=priority_rank.asc.nullslast`);
+  const newer = cases.filter(x => new Date(x.created_at) > new Date(c.created_at) && (count(x) === 0 || checkedEmpty.has(x.id))).map(x => ({case_id:x.id,business:x.businesses?.name||null,created_at:x.created_at,status:x.status}));
   return { case_id: c.id, business: c.businesses?.name || null, created_at: c.created_at, findings: findings.map((f) => ({ id: f.id, title: f.title, fix: recs.find((r) => r.finding_id === f.id)?.mechanism || null })), newer_without_findings: newer };
 }
 
