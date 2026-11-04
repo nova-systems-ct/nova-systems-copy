@@ -1,3 +1,5 @@
+> **Current release — 4 November 2026:** see [free-first execution and hosted receipts](NOVA_FREE_FIRST_EXECUTION_2026-11-04.md), [worker playbooks](NOVA_WORKER_OPERATING_PLAYBOOKS.md) and [application status](NOVA_FREE_FIRST_APPLICATION_PACKETS_2026-11-04.md). The older entries below are historical; production `main` remains unchanged.
+
 # Nova Product Build — Requirement Matrix
 
 Generated 2026-09-23 against commit `69fef38`; updated same day through commit `9af43eb`

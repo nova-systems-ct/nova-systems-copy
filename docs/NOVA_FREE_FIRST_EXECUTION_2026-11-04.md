@@ -50,7 +50,33 @@ Home now presents four connected capabilities: Audit, Core (existing Agents), Ha
 
 Additive migration `supabase/migrations/20261104134533_nova_execution_safety.sql` applied successfully to staging project `ubjnddxmdaxnbpzcmxnc`. The four intended functions exist and authenticated/anonymous callers cannot execute financial approval or learning promotion directly. No business data was deleted or test data inserted into hosted staging.
 
-Existing Render staging service: `nova-staging-demo`, `srv-dbjq50nlk1mc73a0cvb0`, free plan, `https://nova-staging-demo.onrender.com`, manual deployment from `codex/render-demo`. Explicit zero-spend, models-off and sends-off/dry-run flags were merged without replacing existing secrets. Code publication/deploy receipts and a fresh staged CFO run are the next verification step; do not infer them from the local checks above.
+Existing Render staging service: `nova-staging-demo`, `srv-dbjq50nlk1mc73a0cvb0`, free plan, `https://nova-staging-demo.onrender.com`, manual deployment from `codex/render-demo`. Explicit zero-spend, models-off and sends-off/dry-run flags were merged without replacing existing secrets. Code is published on `codex/render-demo` at `2d3eab86e7b5140f820efe9ef4f2377bf4a953ae`. Its source tree exactly matches the locally tested tree `19b1748631ef20690b6d497a7ba7d0c15aec7b35`. Render deployment `dep-dblohp56e07s739hl7jg` became live at **2026-11-04 19:36:16 UTC**. Production `main` and the production domain were not changed.
+
+### Hosted acceptance receipts
+
+The actual hosted `/healthz`, homepage, `/login` and `/manifest.webmanifest` return HTTP 200. Signed-out executive API access returns HTTP 401. The current homepage and loaded email/password sign-in form were also observed in Chrome. The owner account is confirmed and has an existing password; no password was read or changed. The authenticated customer journey and physical iPad still need the owner/device acceptance below. A direct headless browser request from this workspace failed at its network boundary; it is not counted as hosted multi-device acceptance. Multi-device browser acceptance above was local.
+
+All five real role handlers completed on the hosted build, once each, with **playbook 2026-11-04.1**, a persisted output, no error, and model reasoning explicitly disabled:
+
+| Role | Hosted task | Result |
+|---|---|---|
+| CFO | `423dbe40-6d78-4b56-abf6-4927886e0c44` | 18 capability cost/prerequisite/free-alternative entries; spending locked; saved 19:40 UTC |
+| CMO | `018b613b-3bbc-4436-b4d6-06ce5db07421` | Saved for owner review |
+| Decision assistant | `0c61f72b-116d-4bef-bafc-f46e35b72f5b` | Saved for owner review |
+| COO | `d46bd330-a9a1-4fe9-96c1-6c8fe528a47c` | Saved for owner review |
+| Executive assistant | `28c7cf3d-0460-49a8-9784-806d9fb15321` | Saved for owner review |
+
+The new decision assistant was registered as a tested service account, with zero spending limit and no communication permission. Registration and manual acceptance dispatch are recorded as owner-authorized delegated maintenance. The existing signed executive scheduler processed the CFO naturally; four bounded manual invocations of that same scheduler processed the other roles. No scheduler secret was printed, no permission was expanded and no sender was enabled. The decision assistant's next recurring job is saved for 2026-11-05 01:41 UTC. This verifies task execution and recurrence scheduling, not permanent uptime or live LLM inference.
+
+### Owner acceptance — one short pass
+
+1. Open **https://nova-staging-demo.onrender.com/login** on the iPad with internet. Use the existing Nova account/password; no local Windows server or laptop Wi-Fi connection is required. A free service can take time to wake.
+2. Open **Workers → Executive desk**. Review the five saved results. Expand **CFO · Costs, free alternatives and launch prerequisites** for the actual saved register.
+3. Open **Audits**. Create an audit for a business you are authorized to review, complete the five initial details, run public research and review its sourced proposals. Unsupported/unavailable checks must stay visible.
+4. Save a draft report, generate its PDF, open it from the Vault and reload to confirm persistence. Do not mark an investigation approved/completed while required checks or source review remain unfinished.
+5. Return a screenshot plus the action you tapped for any failure. Never send a password, API key or private signing material in chat.
+
+No audit was approved or client report published on the owner's behalf in this release acceptance. No provider application, customer message, purchase or payment was made.
 
 Security advisor context: 142 server-only tables intentionally have RLS without client policies. Three authenticated SECURITY DEFINER warnings refer to the intentional membership/permission/owner predicates (`has_permission`, `is_org_member`, `is_platform_owner`); do not blindly revoke them and break authorization. Existing `btree_gist` schema placement needs dependency-aware hygiene, and leaked-password protection is not enabled in the provider settings. No claim of a complete penetration test or legal certification is made.
 
