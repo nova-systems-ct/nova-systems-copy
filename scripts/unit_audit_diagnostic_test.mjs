@@ -48,3 +48,5 @@ assert.equal(M.proposeDiagnosticFinding({...missed,outcome:'auto_reply'}),null);
 console.log('PASS — honest report approval and evidence-linked diagnoses passed');
 const excluded=M.investigationSummary({...p,tasks:[{area:'news',status:'waived',exclusion_reason:'No permitted source'}]});
 assert.equal(excluded.coverage.find(x=>x.key==='news').status,'excluded','Excluded coverage must not be called checked');
+const reviewedWithExclusion=M.investigationSummary({...p,tasks:[{area:'website',status:'completed',requires_review:true,reviewed_by:'analyst',evidence_id:'real-evidence'},{area:'news',status:'waived',requires_review:true,exclusion_reason:'Source unavailable; coverage explicitly excluded',recorded_by:'analyst'}]});
+assert.equal(reviewedWithExclusion.ready_for_review,true,'An explicitly excluded blocked source must not demand an impossible completed-source review');

@@ -115,6 +115,22 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
   }
   const fin = content.estimates_and_assumptions || {};
   para(fin.statement || 'Financial impact is unknown: no business records were supplied.', { size: 9.5, color: MUTED, gap: 10 });
+  // Older approved snapshots have additional typed sections. Keep their inputs/results intact in the same PDF
+  // used by owner download, client delivery and Vault; do not silently discard them during renderer upgrades.
+  const renderDetails = (value, prefix = '', depth = 0) => {
+    if (value == null || depth > 6) return;
+    if (typeof value !== 'object') { label(prefix || 'Observation', String(value)); return; }
+    if (Array.isArray(value)) { value.forEach((entry, i) => renderDetails(entry, `${prefix || 'Item'} ${i + 1}`, depth + 1)); return; }
+    for (const [key, entry] of Object.entries(value)) renderDetails(entry, `${prefix ? `${prefix} · ` : ''}${key.replace(/_/g, ' ')}`, depth + 1);
+  };
+  if (fin.scenarios?.length || fin.assumptions || fin.inputs) {
+    section(`${num()}  Financial scenarios`, 'Inputs, assumptions and estimated outcomes');
+    para('Scenarios depend on the stated inputs and assumptions. They are not measured revenue loss or a guarantee.', { size: 9, color: MUTED });
+    renderDetails(fin.scenarios, 'Scenario'); renderDetails(fin.assumptions, 'Assumption'); renderDetails(fin.inputs, 'Input');
+  }
+  if (content.scope_and_method) { section(`${num()}  Scope and method`, 'What this review covers'); renderDetails(content.scope_and_method); }
+  if (content.software_review?.length || (content.software_review && !Array.isArray(content.software_review))) { section(`${num()}  Existing systems`, 'Software and handoffs'); renderDetails(content.software_review, 'System'); }
+  if (content.competitor_benchmarks?.length) { section(`${num()}  Competitor evidence`, 'Recorded comparisons'); renderDetails(content.competitor_benchmarks, 'Comparison'); }
   // the three kinds of statement in this report, so none is read as another
   label('How to read this report', '"What we saw" is measured: each item names its public source and when it was read. "Likely effect" is Nova\'s inference and was not measured. What could not be checked is listed under Limitations and is never counted as a problem.');
 

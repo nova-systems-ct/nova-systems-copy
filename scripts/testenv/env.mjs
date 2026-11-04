@@ -17,7 +17,8 @@ import { createStubs, signJwt, verifyJwt } from './stubs.mjs';
 import { splitSql } from './sqlsplit.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const require = createRequire(path.join(ROOT, '.testenv', 'package.json'));
+const RUNTIME = path.resolve(process.env.NOVA_TEST_RUNTIME || path.join(ROOT, '.testenv'));
+const require = createRequire(path.join(RUNTIME, 'package.json'));
 const EmbeddedPostgres = require('embedded-postgres').default;
 const pg = require('pg');
 
@@ -33,13 +34,17 @@ const waitFor = async (fn, ms, what) => { const t0 = Date.now(); let last; while
 // bootstrap: 'full' (default) also pre-creates the legacy Nova tables production already had; 'platform' creates only
 // what Supabase itself provides (roles, auth, storage), so a migration list must build everything else (clean install).
 export async function startTestEnv({ migrations = [], publicBuckets = ['papers'], quiet = true, bootstrap = 'full' } = {}) {
-  const pgExe = path.join(ROOT, '.testenv', 'bin', 'postgrest.exe');
+  const pgExe = path.join(RUNTIME, 'bin', process.platform === 'win32' ? 'postgrest.exe' : 'postgrest');
   if (!fs.existsSync(pgExe)) throw new Error('PostgREST binary missing: download postgrest v16.x for your OS into .testenv/bin (see docs/SALES_TEAM_INSTALLATION.md)');
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nova-testenv-'));
   const pgPort = await freePort();
-  const server = new EmbeddedPostgres({ databaseDir: dataDir, user: 'postgres', password: 'test', port: pgPort, persistent: false, initdbFlags: ['--encoding=UTF8', '--locale=C'], onLog: () => {}, onError: () => {} });
+  const server = new EmbeddedPostgres({ databaseDir: dataDir, user: 'postgres', password: 'test', port: pgPort, persistent: false, autoRehydrateSymlinks: true, initdbFlags: ['--encoding=UTF8', '--locale=C'], ...(process.platform !== 'win32' ? { postgresFlags: ['-h','127.0.0.1','-k',''] } : {}), onLog: () => {}, onError: () => {} });
   await server.initialise(); await server.start();
   const pool = new pg.Pool({ host: '127.0.0.1', port: pgPort, user: 'postgres', password: 'test', database: 'postgres', max: 6 });
+  let stopping = false;
+  // A late idle-connection shutdown event is expected only after teardown begins. Unexpected DB failures still
+  // fail the suite, rather than becoming an unhandled event or being silently swallowed.
+  pool.on('error', err => { if (stopping && err.code === '57P01') return; console.error('[testenv database]',err.message); process.exitCode = 1; });
   const q = (sql, params) => pool.query(sql, params);
 
   const errors = [];
@@ -60,7 +65,7 @@ export async function startTestEnv({ migrations = [], publicBuckets = ['papers']
   // 60 ms after "Starting PostgREST 16.4..." — previously indistinguishable from a slow start. A start-up exit is now
   // detected at once and retried on a fresh port (at most 3 attempts), and every exit is printed with its code and
   // output. A slow start that is still running is NOT retried and keeps the same timeout.
-  const libpq = path.join(ROOT, '.testenv', 'node_modules', '@embedded-postgres', 'windows-x64', 'native', 'bin');
+  const libpq = path.join(RUNTIME, 'node_modules', '@embedded-postgres', `${process.platform}-${process.arch}`, 'native', 'bin');
   const conf = path.join(dataDir, 'postgrest.conf');
   let restPort, proc, restLog = '', spawnedAt, restExit;
   for (let attempt = 1; ; attempt++) {
@@ -115,7 +120,17 @@ export async function startTestEnv({ migrations = [], publicBuckets = ['papers']
       const r = await fetch(`${base}/rest/v1/${pathAndQuery}`, { method, headers: { apikey: anonKey, Authorization: `Bearer ${token || anonKey}`, 'Content-Type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body) });
       const text = await r.text(); let data; try { data = JSON.parse(text); } catch { data = text; } return { status: r.status, data };
     },
-    async stop() { try { await pool.end(); } catch { /* ignore */ } try { proc.kill(); } catch { /* ignore */ } proc.stdout?.destroy(); proc.stderr?.destroy(); proc.unref(); /* F-27: open child pipes kept finished suites alive */ await new Promise((r) => stubs.server.close(r)); const pgChild = server.process; try { await server.stop(); } catch { /* ignore */ } pgChild?.stdout?.destroy(); pgChild?.stderr?.destroy(); pgChild?.unref?.(); /* forked postgres workers inherit these pipes on Windows */ await new Promise((r) => setTimeout(r, 1200)); try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch { /* ignore */ } },
+    async stop() {
+      stopping = true;
+      await new Promise(r => stubs.server.close(r));
+      try { proc.kill(); } catch { /* already stopped */ }
+      proc.stdout?.destroy(); proc.stderr?.destroy(); proc.unref();
+      try { await pool.end(); } catch { /* pool already closed */ }
+      const pgChild = server.process;
+      try { await server.stop(); } catch { /* cluster already stopped */ }
+      pgChild?.stdout?.destroy(); pgChild?.stderr?.destroy(); pgChild?.unref?.();
+      try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }); } catch { /* temp files can be removed by the OS */ }
+    },
   };
   return api;
 }

@@ -240,7 +240,7 @@ export async function runMissedCallFollowup(job, repo, sender, env) {
     await repo.insertMessage(orgId, { conversation_id, direction: 'outbound', automated: true, purpose: 'missed_call', status: 'blocked', blocked_reason: 'no_reviewed_template', idempotency_key: `${key}:exec` });
     return { sent: false, blocked: 'no_reviewed_template' };
   }
-  if (env.WAVE1_SEND_ENABLED !== 'true') {
+  if (env.WAVE1_SEND_ENABLED !== 'true' || env.NOVA_SPENDING_LOCK !== 'disabled') {
     // Live sends are OFF unless explicitly enabled. This is a dry run — NOT a sent message.
     await repo.insertMessage(orgId, { conversation_id, direction: 'outbound', body: template, automated: true, purpose: 'missed_call', status: 'blocked', blocked_reason: 'send_disabled_dry_run', idempotency_key: `${key}:exec` });
     return { sent: false, blocked: 'send_disabled_dry_run' };
@@ -271,6 +271,7 @@ export async function runMissedCallFollowup(job, repo, sender, env) {
 // ---------------------------------------------------------------- Twilio REST sender (production)
 export function createTwilioSender(env, fetchImpl = fetch) {
   return async ({ to, from, body }) => {
+    if (env.NOVA_SPENDING_LOCK !== 'disabled') return { httpStatus: 0, error: 'Spending is locked; no phone provider was contacted.' };
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10_000);
     try {

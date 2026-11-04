@@ -1,3 +1,5 @@
+import { findingSourceRevision } from './_auditSnapshot.js';
+import { renderAuditPdf } from './_auditPdf.js';
 // Nova Audit — intake/clock policy, authorized test plan, competitor benchmarks, software review, financial scenarios,
 // report composition from recorded evidence, PDF of the exact approved version, and secure client delivery links.
 // Staff ops require intelligence.view on the case's organization (re-checked per object). Public ops are scoped by a
@@ -6,7 +8,6 @@ import { requireOrgAccess } from './_orgAccess.js';
 import crypto from 'node:crypto';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, appBase, notify, storagePut, storageSign, storageGet } from './_sales/core.js';
 import { sanitize } from './_sanitize.js';
-import { textPdf } from './_sales/pdf.js';
 import { contentHash, computeScenario, totalScenarios, checkTestEntry, interpretTest, validateClockPolicy, REQUIRED_REPORT_SECTIONS, validateFinding, PROPOSED_CLOCK_POLICY, buildInputChecklist } from './_auditRules.js';
 import { computeCaseClockStatus } from './_auditClock.js';
 import { newToken, sha256 } from './_ops/rules.js';
@@ -276,6 +277,7 @@ export async function handleAuditExtra(req, res, op, caller) {
     }
 
     if (op === 'publish' || op === 'revoke') {
+      if (!isOwner(caller)) return send(res, 403, { error: 'Only the Nova owner can publish or revoke audit reports.' });
       if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
       if (op === 'revoke') {
         const d = await dbOne(`audit_deliveries?id=eq.${enc(sanitize(b.delivery_id, 60))}&select=*,audit_reports!inner(case_id,audit_cases!inner(organization_id))&audit_reports.audit_cases.organization_id=eq.${enc(orgId)}`);
@@ -349,7 +351,8 @@ async function composeReport(c, { summary, limitations, next_steps }) {
     business_identity: { name: biz?.name || c.intake?.name || null, website: biz?.confirmed_website || biz?.website || c.intake?.website || null, phone: biz?.phone || c.intake?.public_phone || null, location: [biz?.city, biz?.state].filter(Boolean).join(', ') || c.intake?.location || null, industry: biz?.industry || c.intake?.industry || null, hours: c.intake?.hours || null },
     scope_and_method: { requested_scope: c.intake?.requested_scope || c.scope, clock_policy: c.clock_policy, active_tests_authorized: !!c.active_test_authorization && !c.active_test_authorization.cancelled_at, tests: tests.filter((t) => t.status === 'done').map((t) => ({ channel: t.channel, target: t.target, competitor: t.is_competitor, performed_at: t.performed_at, conditions: t.conditions, outcome: t.outcome, response_seconds: t.response_seconds, interpretation: interpretTest(t) })) },
     evidence_reviewed: evidence.map((e) => ({ source: e.source, captured: e.capture_date, method: e.method, observation: e.observation, confidence: e.confidence })),
-    findings: findings.filter((f) => f.review_status === 'reviewed').map((f) => ({ title: f.title, type: f.statement_type, observed: f.detail, period: f.period_start || f.period_end ? `${f.period_start || '?'} to ${f.period_end || '?'}` : null, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status, confidence: f.confidence, limitations: f.limitations, remedy: f.recommended_action, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision })),
+    source_findings_revision: findingSourceRevision(findings),
+    findings: findings.filter((f) => f.review_status === 'reviewed').map((f) => ({ id: f.id, title: f.title, type: f.statement_type, observed: f.detail, period: f.period_start || f.period_end ? `${f.period_start || '?'} to ${f.period_end || '?'}` : null, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status, confidence: f.confidence, limitations: f.limitations, remedy: f.recommended_action, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision })),
     estimates_and_assumptions: { scenarios: scenarios.map((s) => ({ label: s.label, status: s.status, inputs: s.inputs, result: s.result, overlap_group: s.overlap_group })), total_monthly_gross_opportunity_cents: tot.monthly_gross_opportunity_cents, counting: `${tot.scenarios} scenario(s); overlapping ones counted once`, all_verified: !tot.any_unverified && scenarios.length > 0, statement: scenarios.length ? 'Scenarios are labeled with the source of every input. A scenario is not a measured loss.' : 'No financial scenario was prepared; financial impact is unknown.' },
     competitor_benchmarks: competitors.map((x) => ({ name: x.name, url: x.url, rationale: x.rationale, observations: x.observations })),
     software_review: software.length ? { items: software.map((s) => ({ name: s.name, category: s.category, monthly_cost: s.monthly_cost_cents, cost_source: s.cost_source, usage: s.usage, classification: s.classification, notes: s.notes })), statement: 'Owner-supplied information only. No cancellation is recommended automatically; any change is the owner’s decision.' } : { statement: 'No software inventory was supplied. Public information cannot show subscriptions, spending or usage.' },
@@ -359,23 +362,7 @@ async function composeReport(c, { summary, limitations, next_steps }) {
   };
 }
 
-const flat = (v, depth = 0) => {
-  if (v == null || v === '') return [];
-  if (typeof v !== 'object') return [String(v)];
-  if (Array.isArray(v)) return v.flatMap((x, i) => (typeof x === 'object' && x ? [`${i + 1}.`, ...flat(x, depth + 1).map((l) => `   ${l}`)] : [`- ${x}`]));
-  return Object.entries(v).flatMap(([k, x]) => (x != null && typeof x === 'object' ? [`${k.replace(/_/g, ' ')}:`, ...flat(x, depth + 1).map((l) => `   ${l}`)] : x == null || x === '' ? [] : [`${k.replace(/_/g, ' ')}: ${x}`]));
-};
 export function renderReportPdf(rep) {
-  const c = rep.content || {};
-  const order = ['executive_summary', 'business_identity', 'findings', 'recommendations', 'estimates_and_assumptions', 'scope_and_method', 'competitor_benchmarks', 'software_review', 'evidence_reviewed', 'limitations', 'next_steps'];
-  const names = { executive_summary: 'Executive summary', business_identity: 'Business', findings: 'Findings', recommendations: 'Prioritized installation recommendation', estimates_and_assumptions: 'Financial scenarios and assumptions', scope_and_method: 'Scope, method and tests', competitor_benchmarks: 'Competitor benchmarks', software_review: 'Software review', evidence_reviewed: 'Evidence appendix', limitations: 'Limitations', next_steps: 'Next steps' };
-  const blocks = [{ style: 'h1', text: REPORT_TITLE }, { style: 'p', text: `Version ${rep.version} · approved ${rep.approved_at || ''}` }, { style: 'mono', text: `Content SHA-256: ${rep.approved_content_sha256}` }, { style: 'gap' }];
-  for (const k of [...order, ...REQUIRED_REPORT_SECTIONS.filter((x) => !order.includes(x))]) {
-    if (c[k] == null) continue;
-    blocks.push({ style: 'h2', text: names[k] || k });
-    for (const line of flat(c[k])) blocks.push({ style: 'p', text: line });
-  }
-  blocks.push({ style: 'gap' }, { style: 'p', text: 'Nova Systems — operational review. Not a CPA financial audit. Figures labeled "scenario" depend on the stated inputs.' });
-  return textPdf({ title: REPORT_TITLE, blocks });
+  return renderAuditPdf({ content: rep.content || {}, version: rep.version, status: rep.status, approvedAt: rep.approved_at, contentSha256: rep.approved_content_sha256 || rep.content_sha256 || '' });
 }
 export { validateFinding };

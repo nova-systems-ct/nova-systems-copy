@@ -93,7 +93,7 @@ export function investigationSummary(plan) {
     const status=!list.length?'not_planned':excluded===list.length?'excluded':list.some(t=>t.requires_review&&!t.reviewed_by&&t.status==='completed')?'needs_review':checked+excluded===list.length?(excluded?'checked_with_exclusions':'checked'):list.some(t=>t.status==='blocked')?'blocked':'incomplete';
     return {key,label,total:list.length,completed:checked,excluded,status};
   });
-  return {id:plan.id,state:plan.status,duration_hours:plan.duration_hours,started_at:plan.started_at||null,deadline_at:plan.deadline_at,completed,total:tasks.length,blocked:tasks.filter(t=>t.status==='blocked').length,ready_for_review:tasks.length>0&&tasks.every(t=>['completed','waived'].includes(t.status)&&(!t.requires_review||t.reviewed_by)),customer_failures:tasks.filter(t=>t.kind==='contact'&&t.status==='completed'&&t.outcome==='no_response'&&t.within_published_hours===true).length,coverage};
+  return {id:plan.id,state:plan.status,duration_hours:plan.duration_hours,started_at:plan.started_at||null,deadline_at:plan.deadline_at,completed,total:tasks.length,blocked:tasks.filter(t=>t.status==='blocked').length,ready_for_review:tasks.length>0&&tasks.every(t=>t.status==='waived'||(t.status==='completed'&&(!t.requires_review||t.reviewed_by))),customer_failures:tasks.filter(t=>t.kind==='contact'&&t.status==='completed'&&t.outcome==='no_response'&&t.within_published_hours===true).length,coverage};
 }
 async function getCase(orgId,caseId){const c=await dbOne(`audit_cases?id=eq.${enc(caseId)}&organization_id=eq.${enc(orgId)}&select=*`);if(!c)throw error('Audit not found',404);return c;}
 async function save(c,p){

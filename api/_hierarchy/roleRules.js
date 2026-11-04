@@ -5,16 +5,23 @@ const DAY = 86400_000;
 
 // CFO: may this expense go ahead? Uses only an owner-entered or connected balance with its "as of" date, subtracts
 // commitments, and applies the owner's policy. Without a current balance the answer is "unknown", never a guess.
-export function cfoDecision({ amountCents, balance, commitmentsCents = 0, spentThisMonthCents = 0, prefs = {}, now = new Date() }) {
-  const reasons = []; const freshDays = Number(prefs.balance_freshness_days) || 7;
+export function cfoDecision({ amountCents, balance, commitmentsCents = 0, spentThisMonthCents = 0, debitsSinceBalanceCents = 0, prefs = {}, now = new Date() }) {
+  const reasons = []; const freshDays = prefs.balance_freshness_days == null ? 7 : Number(prefs.balance_freshness_days);
+  const invalid = (reason, recommendation = 'unknown') => ({ decision: 'needs_owner', recommendation, available_cents: null, reasons: [reason] });
+  if (!Number.isSafeInteger(amountCents) || amountCents < 0) return invalid('Expense must be a non-negative whole number of cents.', 'deny');
+  if (prefs.spending_locked === true && amountCents > 0) return invalid('Spending is locked by the owner. Use a verified free alternative or wait for a new spending authorization.', 'deny');
+  if (![commitmentsCents, spentThisMonthCents, debitsSinceBalanceCents].every(n => Number.isSafeInteger(n) && n >= 0)) return invalid('Commitment or spending records are invalid; reconcile them before approving expenses.');
   if (!balance) return { decision: 'needs_owner', recommendation: 'unknown', available_cents: null, reasons: ['No balance on record: available funds are unknown. Enter a current balance (or connect an account) for the CFO to check.'] };
-  const ageDays = Math.floor((now - new Date(balance.as_of)) / DAY);
-  if (ageDays > freshDays) return { decision: 'needs_owner', recommendation: 'unknown', available_cents: null, reasons: [`The latest balance is ${ageDays} days old (limit ${freshDays}); available funds are unknown until it is updated.`] };
-  const available = Number(balance.balance_cents) - Number(commitmentsCents || 0);
-  reasons.push(`Available: ${available} cents (balance as of ${String(balance.as_of).slice(0, 10)} minus ${commitmentsCents} cents committed).`);
+  const age = now.getTime() - new Date(balance.as_of).getTime();
+  if (!Number.isFinite(age) || age < 0 || !Number.isSafeInteger(Number(balance.balance_cents)) || balance.balance_cents == null || !Number.isFinite(freshDays) || freshDays < 0) return invalid('Balance amount, date or freshness policy is invalid or in the future; funds are unknown.');
+  const ageDays = Math.floor(age / DAY);
+  if (age > freshDays * DAY) return invalid(`The latest balance is ${ageDays} days old (limit ${freshDays}); available funds are unknown until it is updated.`);
+  const available = Number(balance.balance_cents) - commitmentsCents - debitsSinceBalanceCents;
+  reasons.push(`Available: ${available} cents (balance as of ${String(balance.as_of).slice(0, 10)} minus ${commitmentsCents} cents committed and ${debitsSinceBalanceCents} cents recorded since that balance).`);
   if (amountCents > available) return { decision: 'needs_owner', recommendation: 'deny', available_cents: available, reasons: [...reasons, 'The amount is more than the available funds.'] };
-  const auto = Number(prefs.auto_approve_cents) || 0; const budget = prefs.monthly_budget_cents == null ? null : Number(prefs.monthly_budget_cents);
-  if (budget != null && spentThisMonthCents + amountCents > budget) return { decision: 'needs_owner', recommendation: 'approve', available_cents: available, reasons: [...reasons, `It would exceed the monthly budget (${spentThisMonthCents} spent + ${amountCents} > ${budget}).`] };
+  const auto = prefs.auto_approve_cents == null ? 0 : Number(prefs.auto_approve_cents); const budget = prefs.monthly_budget_cents == null ? null : Number(prefs.monthly_budget_cents);
+  if (!Number.isSafeInteger(auto) || auto < 0 || (budget != null && (!Number.isSafeInteger(budget) || budget < 0))) return invalid('Approval limits must be valid non-negative whole cents.');
+  if (budget != null && spentThisMonthCents + commitmentsCents + amountCents > budget) return { decision: 'needs_owner', recommendation: 'deny', available_cents: available, reasons: [...reasons, `It would exceed the monthly budget (${spentThisMonthCents} spent + ${commitmentsCents} committed + ${amountCents} > ${budget}).`] };
   if (!auto) return { decision: 'needs_owner', recommendation: 'approve', available_cents: available, reasons: [...reasons, 'No automatic approval limit is set by the owner, so the owner decides.'] };
   if (amountCents > auto) return { decision: 'needs_owner', recommendation: 'approve', available_cents: available, reasons: [...reasons, `Above the owner's automatic approval limit (${auto} cents).`] };
   if (budget == null) return { decision: 'needs_owner', recommendation: 'approve', available_cents: available, reasons: [...reasons, 'No monthly budget is set, so automatic approval does not apply.'] };

@@ -4,7 +4,7 @@ assert.equal(typeof M.transportGate,'function','Audit needs executable, gated cu
 const now=new Date('2026-11-02T12:00:00Z');
 const task={id:'task',kind:'contact',channel:'email',target:'owner@business.example',question:'What is your quote process?',test_identity:'Nova authorized test',language:'en-US'};
 const approval=M.approveContact(task,{id:'owner',roles:['nova_super_admin']},{max_cost_usd:0.1,expires_at:'2026-11-02T13:00:00Z'},now);
-const full={NOVA_AUDIT_SEND_ENABLED:'true',RESEND_API_KEY:'fixture-key',NOVA_AUDIT_FROM:'audit@nova.example',NOVA_AUDIT_REPLY_DOMAIN:'inbound.nova.example',CLIENT_SESSION_SECRET:'fixture-secret',NOVA_AUDIT_TEST_PRICES:JSON.stringify({email:{max_usd:0.01,version:'fixture-price'},phone:{max_usd:0.05,version:'fixture-price'}})};
+const full={NOVA_AUDIT_SEND_ENABLED:'true',NOVA_SPENDING_LOCK:'disabled',RESEND_API_KEY:'fixture-key',NOVA_AUDIT_FROM:'audit@nova.example',NOVA_AUDIT_REPLY_DOMAIN:'inbound.nova.example',CLIENT_SESSION_SECRET:'fixture-secret',NOVA_AUDIT_TEST_PRICES:JSON.stringify({email:{max_usd:0.01,version:'fixture-price'},phone:{max_usd:0.05,version:'fixture-price'}})};
 assert.equal(M.transportGate({...task,dispatch_approval:approval},{},now).allowed,false);
 assert.equal(M.transportGate({...task,dispatch_approval:approval},full,now).allowed,true);
 assert.equal(M.transportGate({...task,question:'changed',dispatch_approval:approval},full,now).allowed,false);

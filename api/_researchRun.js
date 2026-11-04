@@ -251,6 +251,7 @@ export async function runResearch(runId, deps = {}) {
     // What this run actually measured, so a proposal it no longer sees can be withdrawn (and one it sees again restored).
     const siteMeasured = !!crawl?.reachable && (!crawl.rendered_by_script || crawl.read_with === 'browser') && verdict?.evaluate !== false;
     const measured = new Set([...(siteMeasured ? HTML_ONLY.filter((k) => !k.endsWith(':')) : []), ...(steps.find((x) => x.key === 'email')?.status === 'done' && verdict?.evaluate !== false ? ['dns_spf', 'dns_dmarc', 'dns_mx'] : [])]);
+    const measuredPaths = new Set(siteMeasured ? (crawl.journey_checks || []).filter(x => x.result === 'reachable').map(x => `journey_path:${x.target}`) : []);
     const topicOf = (ck) => ck.split(':')[0];
     const current = new Set(proposals.map((x) => x.check_key));
     const unseen = crawl?.rendered_by_script && crawl.read_with !== 'browser';
@@ -259,10 +260,27 @@ export async function runResearch(runId, deps = {}) {
       const why = verdict && !verdict.evaluate && !['location_conflict', 'website_dns'].includes(key) ? `the website is not confirmed to be this business's (identity ${verdict.status})`
         : unseen && htmlOnly ? 'it rested on page content that could not be seen (the site is built by JavaScript)'
           : coverOf(key, f.check_key) ? `it repeats the recorded finding "${coverOf(key, f.check_key).title.slice(0, 120)}"`
-            : measured.has(key) && !current.has(f.check_key) ? `the research of ${stamp} UTC measured this again and no longer observes it` : null;
+            : (measured.has(key) || measuredPaths.has(f.check_key)) && !current.has(f.check_key) ? `the research of ${stamp} UTC measured this again and no longer observes it` : null;
       if (!why) continue;
       await dbPatch('audit_findings', `id=eq.${enc(f.id)}&review_status=eq.draft`, { review_status: 'rejected', limitations: `${f.limitations ? `${f.limitations} ` : ''}Withdrawn by Nova's research on ${stamp} UTC: ${why}. Not deleted; a reviewer can restore it.`.slice(0, 2000) });
       existing.add(f.check_key); withdrawn++;
+    }
+    const linkReviewedPathEvidence = async f => {
+      const evidenceId = idOf[`journey:${f.check_key.slice('journey_path:'.length)}`];
+      if (evidenceId) await dbInsert('audit_finding_evidence', { finding_id: f.id, evidence_id: evidenceId });
+    };
+    for (const f of recorded.filter(x => x.origin === 'automated_review' && x.review_status === 'reviewed' && measuredPaths.has(x.check_key))) {
+      await dbPatch('audit_findings', `id=eq.${enc(f.id)}&review_status=eq.reviewed`, { recheck_status: 'no_longer_observed', rechecked_at: now().toISOString(), recheck_note: 'The exact linked customer destination was reachable on this research run. A completed booking/payment was not tested.' });
+      await linkReviewedPathEvidence(f);
+    }
+    for (const f of recorded.filter(x => x.origin === 'automated_review' && x.review_status === 'reviewed' && x.check_key?.startsWith('journey_path:') && current.has(x.check_key))) {
+      await dbPatch('audit_findings', `id=eq.${enc(f.id)}&review_status=eq.reviewed`, { recheck_status: 'still_observed', rechecked_at: now().toISOString(), recheck_note: 'The exact linked customer destination was observed broken again on this run. The reviewed finding text is preserved.' });
+      await linkReviewedPathEvidence(f);
+    }
+    const unavailablePaths = new Set((crawl?.journey_checks || []).filter(x => x.result === 'unavailable').map(x => `journey_path:${x.target}`));
+    for (const f of recorded.filter(x => x.origin === 'automated_review' && x.review_status === 'reviewed' && unavailablePaths.has(x.check_key))) {
+      await dbPatch('audit_findings', `id=eq.${enc(f.id)}&review_status=eq.reviewed`, { recheck_status: 'not_rechecked', rechecked_at: now().toISOString(), recheck_note: 'The linked destination could not be verified on this run. Its earlier repair is not assumed to remain confirmed.' });
+      await linkReviewedPathEvidence(f);
     }
     let restored = 0;
     for (const p of proposals) {

@@ -44,7 +44,7 @@ export function evaluateOpsSend({ now = new Date(), purpose, contact, conversati
   return { allowed: true, reason: initiated ? 'customer_initiated_conversation' : 'recorded_consent' };
 }
 
-export const sendMode = (env = process.env) => (env.WAVE1_SEND_ENABLED === 'true' && env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN ? 'live' : 'dry_run');
+export const sendMode = (env = process.env) => (env.NOVA_SPENDING_LOCK === 'disabled' && env.WAVE1_SEND_ENABLED === 'true' && env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN ? 'live' : 'dry_run');
 export const allowlistFrom = (env = process.env) => (env.OPS_SEND_ALLOWLIST ? env.OPS_SEND_ALLOWLIST.split(',').map((s) => s.trim()).filter(Boolean) : null);
 let senderOverride = null;
 export const setSenderForTests = (fn) => { senderOverride = fn; };

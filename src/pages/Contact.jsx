@@ -46,13 +46,13 @@ export default function Contact() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setResult({ error: data.error || "Something went wrong. Please try again or email hello@nova-systems.app directly." });
+        setResult({ error: data.error || "Something went wrong. Please try again or email isaac@nova-systems.app directly." });
       } else {
         setResult({ ok: true, warning: data.warning });
         setForm({ name: "", email: "", phone: "", company: "", category: "general", message: "" });
       }
     } catch {
-      setResult({ error: "Network error — please try again or email hello@nova-systems.app directly." });
+      setResult({ error: "Network error — please try again or email isaac@nova-systems.app directly." });
     }
     setLoading(false);
   };
@@ -80,7 +80,7 @@ export default function Contact() {
                   <Mail className="w-4 h-4 mt-1 flex-shrink-0" style={{ color: GOLD }} />
                   <div>
                     <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em" }}>Email</p>
-                    <a href="mailto:hello@nova-systems.app" style={{ color: "#fff", fontSize: 14 }}>hello@nova-systems.app</a>
+                    <a href="mailto:isaac@nova-systems.app" style={{ color: "#fff", fontSize: 14 }}>isaac@nova-systems.app</a>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">

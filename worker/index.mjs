@@ -124,7 +124,7 @@ const handlers = {
     if (decision.action === 'wait' || decision.action === 'none') return decision;
     let result = decision;
     if (decision.action === 'send') {
-      const live = process.env.SEQUENCE_SEND_ENABLED === 'true' && process.env.RESEND_API_KEY;
+      const live = process.env.NOVA_SPENDING_LOCK === 'disabled' && process.env.SEQUENCE_SEND_ENABLED === 'true' && process.env.RESEND_API_KEY;
       if (live) {
         const r = await fetch('https://api.resend.com/emails', {
           method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': decision.idempotencyKey },
@@ -207,6 +207,7 @@ const handlers = {
   },
   // Executive roles (api/_hierarchy/roles.js): one durable task per run for one business; recurring for Nova's own
   // business (seeded below), on demand for others. A role whose worker is not registered and active does nothing.
+  async role_ceo_brief(job, ctx) { return runRole('role_ceo_brief', job, ctx); },
   async role_ea_brief(job, ctx) { return runRole('role_ea_brief', job, ctx); },
   async role_coo_check(job, ctx) { return runRole('role_coo_check', job, ctx); },
   async role_cfo_review(job, ctx) { return runRole('role_cfo_review', job, ctx); },
@@ -296,12 +297,8 @@ async function scheduleNext(ctx, jobType, everyMinutes) {
 }
 async function runRole(type, job, ctx) {
   if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
-  opsEnv(ctx); const { runRoleTask, ROLE_OF_JOB, ROLES } = await import('../api/_hierarchy/roles.js');
-  const role = ROLE_OF_JOB[type];
-  const out = await runRoleTask(role, { orgId: job.organization_id, jobId: job.id });
-  const every = Number(job.payload?.every_minutes);
-  if (every && ctx.store) { const next = new Date(Date.now() + every * 60_000); const slot = Math.floor(next.getTime() / (every * 60_000)); await ctx.store.enqueue({ job_type: type, organization_id: job.organization_id, payload: { every_minutes: every }, scheduled_at: next.toISOString(), idempotency_key: `${type}:${job.organization_id}:${slot}` }); }
-  void ROLES; return out;
+  opsEnv(ctx); const { runExecutiveJob } = await import('../api/_executiveQueueTick.js');
+  return runExecutiveJob(job, { enqueue: row => ctx.store.enqueue(row) });
 }
 // Role runs for Nova's own business, for each role whose worker is registered and active.
 async function seedRoles(ctx) {
@@ -309,10 +306,18 @@ async function seedRoles(ctx) {
   const h = { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}` };
   try {
     const [org] = await (await fetch(`${ctx.url}/rest/v1/organizations?kind=eq.nova_internal&select=id&order=created_at.asc&limit=1`, { headers: h })).json();
-    const workers = await (await fetch(`${ctx.url}/rest/v1/workers?capability_key=in.(executive_assistant,coo,cfo,cmo)&status=in.(active,restricted)&select=capability_key`, { headers: h })).json();
+    const workers = await (await fetch(`${ctx.url}/rest/v1/workers?portfolio_entity_id=is.null&capability_key=in.(ceo_twin,executive_assistant,coo,cfo,cmo)&status=in.(active,restricted)&select=capability_key`, { headers: h })).json();
     if (!org) return;
     const { ROLES } = await import('../api/_hierarchy/roles.js');
-    for (const w of workers) { const def = ROLES[w.capability_key]; const slot = Math.floor(Date.now() / (def.every_minutes * 60_000)); await ctx.store.enqueue({ job_type: def.job_type, organization_id: org.id, payload: { every_minutes: def.every_minutes }, idempotency_key: `${def.job_type}:${org.id}:${slot}` }); }
+    const { executiveSlotKey } = await import('../api/_executiveQueueTick.js');
+    for (const w of workers) {
+      const def = ROLES[w.capability_key]; if (!def) continue;
+      const scheduleQuery = new URLSearchParams({ organization_id: `eq.${org.id}`, job_type: `eq.${def.job_type}`, status: 'in.(pending,leased)', or: '(payload->>recurring.eq.true,payload->>every_minutes.gt.0)', select: 'id', limit: '1' });
+      const pending = await (await fetch(`${ctx.url}/rest/v1/jobs?${scheduleQuery}`, { headers: h })).json();
+      if (!Array.isArray(pending)) throw new Error('Cannot verify existing executive schedule');
+      if (pending.length) continue;
+      await ctx.store.enqueue({ job_type: def.job_type, organization_id: org.id, payload: { recurring: true }, idempotency_key: executiveSlotKey(def.job_type,org.id,new Date()) });
+    }
   } catch (e) { console.error('[worker] role seeding failed:', e.message); }
 }
 export async function seedRecurring(ctx) {

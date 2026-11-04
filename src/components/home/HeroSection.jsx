@@ -138,16 +138,16 @@ export default function HeroSection() {
             className="font-black text-white leading-[0.95]"
             style={{ fontSize: "clamp(2.3rem, 5.2vw, 5.2rem)", letterSpacing: "-0.02em", maxWidth: 640 }}
           >
-            Your Business Is Losing{" "}
+            Your next customer{" "}
             <span style={{
               background: GOLD_TEXT_GRADIENT,
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
-            }}>Opportunities You Can't See.</span>
+            }}>shouldn’t slip away.</span>
           </h1>
 
           <p className="text-white/55 mt-6 leading-relaxed" style={{ fontSize: "clamp(0.95rem, 1.2vw, 1.1rem)", maxWidth: 460 }}>
-            Nova investigates your business to find where customers, revenue, opportunities, trust, or time may be slipping away — then helps you fix what actually matters.
+            Find the gaps in your customer journey. Connect the systems that do the work. Create new opportunities and bring eligible customers back — with evidence at every step.
           </p>
 
           <div className="flex flex-wrap items-center gap-4 mt-10">
@@ -169,7 +169,7 @@ export default function HeroSection() {
               className="inline-flex items-center gap-3 font-bold uppercase tracking-widest transition-opacity hover:opacity-85"
               style={{ border: `1px solid ${GOLD}`, color: "#FAFAFA", width: "fit-content", fontSize: 12, padding: "17px 28px" }}
             >
-              WATCH THE 5-MINUTE DEMO <ChevronRight className="w-4 h-4" />
+              TRY THE AUDIT PREVIEW <ChevronRight className="w-4 h-4" />
             </Link>
             <Link
               to="/#process"

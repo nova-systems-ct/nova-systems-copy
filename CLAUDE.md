@@ -1,5 +1,14 @@
 # Nova Systems — Project Instructions
 
+## Current owner instruction — 4 November 2026
+Continue from `docs/NOVA_FREE_FIRST_EXECUTION_2026-11-04.md`. The owner explicitly authorizes bug repairs, public-site
+changes, role playbooks, free provider/application preparation and staging deployment. Spending, fee-bearing
+registrations, paid model/message calls and subscription upgrades remain locked. Public Core/Harvest names map to
+the existing Agents/Demand capabilities; do not rename database keys or imply unsupported live channels.
+The role contracts are in `api/_hierarchy/playbooks.js` and `docs/NOVA_WORKER_OPERATING_PLAYBOOKS.md`.
+Application receipts/blockers are in `docs/NOVA_FREE_FIRST_APPLICATION_PACKETS_2026-11-04.md`. Prepared is not submitted.
+Do not silently substitute an older checkpoint or restore the old public-site restriction against this new brief.
+
 ## Start here (repair brief of 2026-10-25)
 Nova is an audit-first business-systems company: Nova Audit, then Agents, Revive and Demand, installed through an
 audit-driven installer. Every session reads, in order: [`docs/NOVA_PRODUCT.md`](docs/NOVA_PRODUCT.md) (goals and

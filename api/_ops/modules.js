@@ -8,6 +8,13 @@ import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso } from '../_sales/core.js'
 import { capabilityByKey } from '../_workerCapabilities.js';
 import { checkEmailDns } from '../_researchRun.js';
 
+export function emailSetupOutcome(checks, host) {
+  const spf = checks.find(x => x.key === 'dns_spf'); const dmarc = checks.find(x => x.key === 'dns_dmarc');
+  if (spf?.result === 'ok' && dmarc?.result === 'ok') return ['done', `Both records are published for ${host} (checked public DNS)`];
+  const missing = [spf?.result === 'issue' && 'SPF', dmarc?.result === 'issue' && 'DMARC'].filter(Boolean);
+  return ['blocked', missing.length ? `Missing ${missing.join(' and ')} for ${host}. Publish the exact records supplied by your authorized mail provider and re-check.` : `Email DNS for ${host} could not be fully verified. A timeout or absent receiving MX does not establish that sending authentication is unnecessary. Confirm the business sending domain and retry.`, { missing, checked_at: nowIso() }];
+}
+
 export const CATALOG_VERSION = 1;
 export const CATALOG = [
   { key: 'agents_booking', name: 'Nova Agents: inquiries and booking', core: true, addresses: ['agents_booking'],
@@ -152,12 +159,8 @@ export async function provisionModule(orgId, key, ctx) {
     if (!host) step('dns', 'SPF and DMARC records', ['blocked', 'No website domain on the latest audit'], 'Add the website to the audit\'s business details.', { default: 'not checked' });
     else {
       const checks = await checkEmailDns(host);
-      const spf = checks.find((x) => x.key === 'dns_spf'); const dmarc = checks.find((x) => x.key === 'dns_dmarc');
-      if (!spf && !dmarc) step('dns', 'SPF and DMARC records', ['skipped', `${host} does not receive email at its own domain (no MX records), so these records are not needed`], null, { default: 'checked: not needed' });
-      else {
-        const missing = [spf?.result === 'issue' && `SPF: a TXT record on ${host} starting "v=spf1", listing each service that sends your email (for example your email host's include) and ending "~all"`, dmarc?.result === 'issue' && `DMARC: a TXT record on _dmarc.${host} with "v=DMARC1; p=none; rua=mailto:<an address you read>"`].filter(Boolean);
-        step('dns', 'SPF and DMARC records', missing.length ? ['blocked', `Checked public DNS ${nowIso()}: missing ${missing.length} record(s)`, { records: missing }] : ['done', `Both records are published for ${host} (checked public DNS)`], missing.length ? `Ask whoever manages ${host}'s DNS to add: ${missing.join(' AND ')}. Nova re-checks on every run.` : null, { done: 'checked: records published', blocked: 'checked: records missing' });
-      }
+      const outcome = emailSetupOutcome(checks, host);
+      step('dns', 'SPF and DMARC records', outcome, outcome[0] === 'blocked' ? outcome[1] : null, { done: 'checked: records published', blocked: 'blocked: DNS not verified' });
     }
   }
   if (key === 'reviews_referrals') step('channel', 'approved wording and live channel', ['blocked', 'Needs approved request wording and a live email or text channel'], 'Approve the review-request wording and connect a live channel; nothing is sent before both.', { default: 'awaiting approval and a live channel' });

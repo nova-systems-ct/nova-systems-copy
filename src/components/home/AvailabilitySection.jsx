@@ -9,7 +9,7 @@ const STATUS = [
   ["Nova Audit — evidence review and report", "Available", "Public-information review, permission-based response tests, and a written report with sourced figures."],
   ["Text and web-form inquiry handling, booking and agreements", "Limited pilot", "Set up per business. Uses only your approved prices and agreement."],
   ["Deposits", "Limited pilot", "Through Stripe-hosted checkout. Paying into your own Stripe account requires a connection we set up with you."],
-  ["AI phone receptionist", "Not live yet", "Built and tested, waiting on phone-number setup. Until then, calls forward to a person on your team."],
+  ["AI phone receptionist", "Not live yet", "Phone providers, numbers and live acceptance must be configured before Nova can handle calls. Use your existing phone service in the meantime."],
   ["Missed-call text-back and past-customer follow-up", "Limited pilot", "Only where customers have given permission, after you approve every message and list."],
   ["Monitoring and the Sunday report", "Limited pilot", "Measured from recorded events; anything not measurable is labeled as such."],
 ];

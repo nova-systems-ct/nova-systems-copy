@@ -161,6 +161,7 @@ export async function storageSign(bucket, path, seconds = 300) {
 export function emailPolicy(to) {
   const mode = (env().SALES_EMAIL_MODE || 'dry_run').toLowerCase();
   if (mode !== 'live') return { send: false, status: 'dry_run', reason: 'SALES_EMAIL_MODE is not "live"' };
+  if (env().NOVA_SPENDING_LOCK !== 'disabled') return { send: false, status: 'blocked', reason: 'The owner has locked spending; no provider dispatch is authorized.' };
   const allow = (env().SALES_EMAIL_ALLOWLIST || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   if (allow.length && !allow.some((a) => (a.startsWith('@') ? to.toLowerCase().endsWith(a) : to.toLowerCase() === a))) return { send: false, status: 'blocked', reason: 'recipient is not on SALES_EMAIL_ALLOWLIST' };
   if (!env().RESEND_API_KEY) return { send: false, status: 'failed', reason: 'RESEND_API_KEY is not configured' };

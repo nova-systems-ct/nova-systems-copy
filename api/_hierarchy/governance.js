@@ -63,12 +63,13 @@ async function auraIsActive() {
 // entity, its org unit, itself, and — if it's an AI/hybrid worker — its model provider). Exported
 // for reuse by api/_hierarchy/workitems.js, which is the actual enforcement point for "a paused
 // worker cannot be given or continue real work" — this module owns the kill_switches table.
-export async function killSwitchStateFor(worker) {
+export async function killSwitchStateFor(worker, targetOrganizationId = null) {
   const rows = await dbGet('kill_switches?engaged=eq.true&select=scope_type,scope_id');
+  const targets = targetOrganizationId ? await dbGet(`portfolio_entities?organization_id=eq.${enc(targetOrganizationId)}&select=id`) : [];
   const has = (type, id) => rows.some((r) => r.scope_type === type && (id == null ? !r.scope_id : r.scope_id === String(id)));
   return {
     global: has('global', null),
-    portfolioEntity: worker?.portfolio_entity_id ? has('portfolio_entity', worker.portfolio_entity_id) : false,
+    portfolioEntity: (worker?.portfolio_entity_id ? has('portfolio_entity', worker.portfolio_entity_id) : false) || targets.some(t => has('portfolio_entity', t.id)),
     orgUnit: worker?.org_unit_id ? has('org_unit', worker.org_unit_id) : false,
     worker: worker ? has('worker', worker.id) : false,
     provider: worker?.model_provider ? has('model_provider', worker.model_provider) : false,

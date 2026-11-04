@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import heroPoster from "@/assets/hero-poster-v3.jpg";
 import { useSEO } from "@/hooks/useSEO";
@@ -62,7 +62,7 @@ export default function Login() {
     setLoading(true);
 
     if (!supabase) {
-      setError("Login is not configured. Contact hello@nova-systems.app.");
+      setError("Login is not configured. Contact isaac@nova-systems.app.");
       setLoading(false);
       return;
     }
@@ -174,10 +174,8 @@ export default function Login() {
 
           <div style={{ height: 1, background: "rgba(250,250,250,0.08)", margin: "28px 0 18px" }} />
           <p className="text-center" style={{ color: "rgba(250,250,250,0.5)", fontSize: 13 }}>
-            Are you a client?{" "}
-            <Link to="/client-login" className="font-semibold hover:opacity-80" style={{ color: GOLD }}>Client sign-in</Link>
-            {" · "}
-            <a href="mailto:hello@nova-systems.app" className="hover:opacity-80" style={{ color: GOLD }}>Contact Nova</a>
+            One sign-in for your Nova workspace.{" "}
+            <a href="mailto:isaac@nova-systems.app" className="hover:opacity-80" style={{ color: GOLD }}>Contact Nova</a>
           </p>
         </div>
       </div>

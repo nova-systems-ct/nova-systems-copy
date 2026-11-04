@@ -6,7 +6,7 @@ const e={CRON_SECRET:'test',NOVA_EXECUTIVE_HTTP_WORKER_ENABLED:'true',SUPABASE_U
 const ts=String(Math.floor(Date.now()/1000)),nonce='00000000-0000-0000-0000-000000000001';
 const headers=prefix=>({'x-nova-audit-timestamp':ts,'x-nova-audit-nonce':nonce,authorization:`Bearer ${schedulerSignature(ts,nonce,e.CRON_SECRET,prefix)}`});
 const res=()=>({code:200,status(n){this.code=n;return this;},json(body){this.body=body;return this;}});let claimed=0;
-const store={claimNext:async({jobTypes})=>{claimed++;assert.deepEqual([...jobTypes].sort(),['role_cfo_review','role_cmo_review','role_coo_check','role_ea_brief']);return null;}};
+const store={claimNext:async({jobTypes})=>{claimed++;assert.deepEqual([...jobTypes].sort(),['role_ceo_brief','role_cfo_review','role_cmo_review','role_coo_check','role_ea_brief']);return null;}};
 const deps={e,store,heldTypes:async()=>[],rememberNonce:async()=>true};
 let r=res();await M.handleExecutiveQueueTick({method:'POST',headers:headers('nova-audit-tick')},r,deps);assert.equal(r.code,403,'An audit signature must not authorize the executive endpoint');assert.equal(claimed,0);
 r=res();await M.handleExecutiveQueueTick({method:'POST',headers:headers('nova-executive-tick')},r,deps);assert.equal(r.code,200);assert.equal(claimed,1);
@@ -16,7 +16,12 @@ const job={id:'job',job_type:'role_cfo_review',organization_id:'org',payload:{re
 const roleRun=async(role,{orgId,jobId})=>{runs++;assert.equal(role,'cfo');assert.equal(orgId,'org');assert.equal(jobId,'job');return {status:'in_review'};};
 const opts={run:roleRun,enqueue:async row=>{queued.push(row);},now:()=>new Date('2026-11-02T12:00:00Z')};
 await M.runExecutiveJob(job,opts);assert.equal(runs,1);assert.equal(queued[0].scheduled_at,'2026-11-02T13:00:00.000Z','Payload cannot accelerate the owner-defined cadence');
-assert.equal(queued[0].idempotency_key,'executive-next:job');
+assert.equal(queued[0].idempotency_key,M.executiveSlotKey(job.job_type,job.organization_id,new Date('2026-11-02T13:00:00Z')));
+assert.equal(M.executiveSlotKey(job.job_type,job.organization_id,new Date('2026-11-02T13:59:00Z')),queued[0].idempotency_key,'Restart seeding and an existing schedule share one cadence slot identity');
 await M.runExecutiveJob({...job,payload:{}},opts);assert.equal(queued.length,1,'A manual one-shot run must not create recurring work');
+await M.runExecutiveJob({...job,payload:{every_minutes:1}},opts);assert.equal(queued.length,2,'Legacy recurring jobs must survive a switch between worker runtimes');
+assert.equal(queued[1].scheduled_at,'2026-11-02T13:00:00.000Z');
+await M.runExecutiveJob({...job,payload:{recurring:true}}, {...opts,run:async()=>({status:'blocked',work_item_id:'same-task'})});
+assert.equal(queued.at(-1).payload.work_item_id,'same-task','Blocked work needs a durable wake-up of the same task');
 await assert.rejects(()=>M.runExecutiveJob({...job,job_type:'ops_followup_send'},opts),/Unsupported/);
 console.log('PASS — hosted executive signature isolation, disabled gate, safe allowlist and bounded recurrence');

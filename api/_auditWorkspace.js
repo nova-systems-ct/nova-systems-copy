@@ -1,3 +1,4 @@
+import { findingSourceRevision } from './_auditSnapshot.js';
 // Nova Audit workspace (repair 2026-10-26, brief §5 items 2–6 and §6). One coherent owner path:
 //   start (five business details, online or in person) → evidence review (public website + public email DNS) →
 //   proposed findings (machine-proposed, never auto-reviewed) → draft report → branded PDF stored in the Vault →
@@ -120,7 +121,8 @@ async function composeDraft(c, { summary } = {}) {
     client_features: rs?.client_features || null,
     competitor_comparison: competitors.map((x) => ({ name: x.name, url: x.url, rationale: x.rationale, observations: (x.observations || []).map((o) => o.text) })),
     evidence_reviewed: used.map((e) => ({ source: e.source, captured: e.capture_date, method: e.method, observation: e.observation, confidence: e.confidence })),
-    findings: ordered.map((f) => ({ title: f.title, type: f.statement_type, priority: f.priority, confidence: f.confidence, review_status: f.review_status, origin: f.origin, observed: f.detail, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status || 'unknown', limitations: f.limitations, remedy: f.recommended_action, module: MODULES[f.module_key] || null, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision, evidence: links.filter((l) => l.finding_id === f.id).map((l) => evById[l.evidence_id]?.source).filter(Boolean), recheck: f.recheck_status ? { status: f.recheck_status, note: f.recheck_note, at: f.rechecked_at } : null })),
+    source_findings_revision: findingSourceRevision(findings),
+    findings: ordered.map((f) => ({ id: f.id, title: f.title, type: f.statement_type, priority: f.priority, confidence: f.confidence, review_status: f.review_status, origin: f.origin, observed: f.detail, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status || 'unknown', limitations: f.limitations, remedy: f.recommended_action, module: MODULES[f.module_key] || null, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision, evidence: links.filter((l) => l.finding_id === f.id).map((l) => evById[l.evidence_id]?.source).filter(Boolean), recheck: f.recheck_status ? { status: f.recheck_status, note: f.recheck_note, at: f.rechecked_at } : null })),
     no_longer_observed: gone.map((f) => ({ title: f.title, rechecked_at: f.rechecked_at, note: f.recheck_note })),
     prescriptions,
     estimates_and_assumptions: { scenarios: [], statement: 'No financial scenario was prepared; financial impact is unknown.' },

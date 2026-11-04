@@ -19,6 +19,7 @@ export function approveContact(task,caller,input,now=new Date()){
 export function transportGate(task,e=process.env,now=new Date()){
  const no=reason=>({allowed:false,reason});const a=task.dispatch_approval;
  if(e.NOVA_AUDIT_SEND_ENABLED!=='true')return no('Automated audit contact sending is disabled. No provider was contacted.');
+ if(e.NOVA_SPENDING_LOCK!=='disabled')return no('Spending is locked by the owner. No phone or email provider was contacted.');
  if(!a||!a.approved_by||Date.parse(a.expires_at)<=now.getTime()||!Number.isFinite(Date.parse(a.expires_at)))return no('This exact test needs a current owner approval.');
  if(a.content_sha256!==hash(snapshot(task)))return no('The test changed after approval.');
  let price;try{price=JSON.parse(e.NOVA_AUDIT_TEST_PRICES||'{}')[task.channel];}catch{return no('Provider pricing is not configured.');}

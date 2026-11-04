@@ -27,6 +27,9 @@ export const CAPABILITIES = [
     job_types: ['marketing_publish', 'email_sequence_step'], code: 'worker/index.mjs, worker/emailSequenceEngine.mjs' },
   // Executive roles (owner brief 2026-10-30 §11): each title maps to a handler in api/_hierarchy/roles.js and does work
   // only while registered and active. None sends messages, moves money or invents financial data.
+  { key: 'ceo_twin', name: 'Isaac’s decision assistant', role: 'Executive',
+    does: 'Reviews the latest saved executive results, owner priorities and blockers, then saves a decision brief with evidence. Optional model reasoning is advisory and off by default. Cannot impersonate Isaac or make commitments.',
+    job_types: ['role_ceo_brief'], code: 'api/_hierarchy/roles.js (ceo_twin), api/_hierarchy/playbooks.js' },
   { key: 'executive_assistant', name: "Owner's executive assistant", role: 'Executive',
     does: 'Every hour prepares the owner brief: escalated conversations, spending decisions, approvals, results to review, overdue and blocked work, in priority order with what each needs. Escalates anything waiting longer than the owner\'s limit (in the app).',
     job_types: ['role_ea_brief'], code: 'api/_hierarchy/roles.js (executive_assistant), api/_hierarchy/roleRules.js (eaPrioritize)' },
@@ -75,7 +78,7 @@ export function readinessFor(key, { env = process.env, facts = {} } = {}) {
     case 'reporting': return [c('Background worker running', facts.heartbeatFresh, facts.heartbeatFresh ? 'Heartbeat in the last 10 minutes' : 'No recent heartbeat')];
     case 'audit_review': return [c('Internet access from the server', true, 'Reads public pages only; no paid service')];
     case 'marketing_publisher': return [c('A connected publishing channel', false, 'No social account or publishing channel is connected yet'), c('Email sent for real', email, email ? 'Live' : 'Dry run')];
-    case 'executive_assistant': case 'coo': case 'cmo': return [execution()];
+    case 'ceo_twin': case 'executive_assistant': case 'coo': case 'cmo': return [execution()];
     case 'cfo': return [execution(), c('A current balance to check against', facts.balanceAgeDays != null && facts.balanceAgeDays <= 7, facts.balanceAgeDays == null ? 'None entered: funds are reported as unknown (no bank is connected)' : `Entered ${facts.balanceAgeDays} day(s) ago`)];
     default: return [];
   }

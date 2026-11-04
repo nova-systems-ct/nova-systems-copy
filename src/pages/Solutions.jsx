@@ -86,7 +86,7 @@ export default function Solutions() {
               Tailored Technical Solutions<br />for Every Business.
             </h1>
             <p className="text-base leading-relaxed max-w-xl" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Whatever you need — we have built it before. Here is how we can help you.
+              Start with the evidence. We recommend supported systems for the problems we can verify, and agree a scope before installation.
             </p>
           </div>
         </section>

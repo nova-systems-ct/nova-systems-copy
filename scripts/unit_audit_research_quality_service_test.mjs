@@ -20,13 +20,14 @@ globalThis.fetch=async(url,init={})=>{
  if(init.method==='POST'){const out=(Array.isArray(b)?b:[b]).map(x=>({id:`row${++seq}`,...structuredClone(x)}));rows.push(...out);return Response.json(out);}
  throw Error(`Unexpected mutation ${init.method}`);
 };
-let many=false;
+let many=false; let bookingState="broken";
 const shell=b=>`<html><head><meta name="viewport" content="width=device-width"><title>Factory Waterbury</title></head><body>${b}</body></html>`;
 const fetchImpl=async url=>{
  const u=new URL(url);if(u.hostname!=='shop.example')return Response.json([]);
  if(u.pathname==='/robots.txt')return new Response('User-agent: *\nAllow: /',{headers:{'content-type':'text/plain'}});
  const controls=many?Array.from({length:8},(_,i)=>`<input name="part${i}" required>`).join(''):'<input name="email" type="email" required><textarea name="request"></textarea>'+Array.from({length:8},()=>'<input type="hidden" name="token">').join('');
- return new Response(shell(u.pathname==='/book'?'<h1>Page not found</h1>':`<h1>Factory Waterbury</h1><a href="/book">Book a consultation</a><a href="/contact">Contact</a><form>${controls}</form>`),{headers:{'content-type':'text/html'}});
+ if(u.pathname==='/book' && bookingState==='blocked')return new Response('Access unavailable',{status:403,headers:{'content-type':'text/html'}});
+ return new Response(shell(u.pathname==='/book'?(bookingState==='broken'?'<h1>Page not found</h1>':'<h1>Book a consultation</h1>'):`<h1>Factory Waterbury</h1><a href="/book">Book a consultation</a><a href="/contact">Contact</a><form>${controls}</form>`),{headers:{'content-type':'text/html'}});
 };
 const deps={fetchImpl,lookup:async()=>[{address:'93.184.216.34',family:4}],resolver:{resolveMx:async()=>[]},render:null};
 await runResearch('run1',deps);
@@ -48,6 +49,17 @@ const res={code:200,status(n){this.code=n;return this;},json(b){this.body=b;retu
 await handleAuditWorkspace({method:'POST',headers:{authorization:'Bearer test'},body:{organization_id:'o',case_id:'a'}},res,'draft-report',{id:'analyst'});
 assert.equal(res.code,200,JSON.stringify(res.body));
 assert(tables.audit_reports[0].content.customer_paths?.some(x=>x.result==='broken'),'The stored PDF report must include the actual path tests');
+const pathFinding=tables.audit_findings.find(f=>f.check_key==='journey_path:https://shop.example/book');
+bookingState='reachable';tables.audit_research_runs.push({id:'repaired-run',organization_id:'o',case_id:'a',scope:'full'});await runResearch('repaired-run',deps);
+assert.equal(pathFinding.review_status,'rejected','A positively rechecked healthy destination must withdraw its stale automatic draft');
+pathFinding.review_status='reviewed';const preservedTitle=pathFinding.title;
+tables.audit_research_runs.push({id:'reviewed-repaired-run',organization_id:'o',case_id:'a',scope:'full'});await runResearch('reviewed-repaired-run',deps);
+assert.equal(pathFinding.recheck_status,'no_longer_observed');assert.equal(pathFinding.title,preservedTitle);
+bookingState='broken';tables.audit_research_runs.push({id:'regressed-path-run',organization_id:'o',case_id:'a',scope:'full'});await runResearch('regressed-path-run',deps);
+assert.equal(pathFinding.recheck_status,'still_observed','A reviewed path must become current again when it breaks after a repair');assert.equal(pathFinding.title,preservedTitle);
+bookingState='blocked';pathFinding.review_status='draft';delete pathFinding.recheck_status;
+tables.audit_research_runs.push({id:'unavailable-path-run',organization_id:'o',case_id:'a',scope:'full'});await runResearch('unavailable-path-run',deps);
+assert.equal(pathFinding.review_status,'draft','Blocked destination is not proof of repair');
 console.log('PASS — research persists useful path findings, calibrated hypotheses and fresh draft evidence without rewriting reviewed work');
 // A hosted business page is not proof the business owns the host's mail domain.
 let dnsQueries=0;

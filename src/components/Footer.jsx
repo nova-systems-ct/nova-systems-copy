@@ -73,7 +73,7 @@ export default function Footer() {
             <p className="text-[9px] tracking-[0.25em] uppercase font-semibold mb-4" style={{ color: GOLD }}>CONTACT</p>
             <div className="space-y-3">
               {[
-                { Icon: Mail, text: "hello@nova-systems.app" },
+                { Icon: Mail, text: "isaac@nova-systems.app" },
                 { Icon: Phone, text: "(203) 706-0504" },
                 { Icon: MapPin, text: "Waterbury, Connecticut" },
               ].map(({ Icon, text }) => (
