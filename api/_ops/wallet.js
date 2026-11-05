@@ -7,10 +7,15 @@ const error=(status,message)=>Object.assign(new Error(message),{status,expose:tr
 const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
 const appleKeys=['APPLE_PASS_TYPE_ID','APPLE_TEAM_ID','APPLE_PASS_SIGNER_CERT_PEM','APPLE_CSR_PRIVATE_KEY_PEM','APPLE_WWDR_CERT_PEM'];
 const googleKeys=['GOOGLE_WALLET_ISSUER_ID','GOOGLE_WALLET_CLASS_ID','GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL','GOOGLE_WALLET_PRIVATE_KEY_PEM'];
-export function walletPlatforms(env=process.env,orgId){
+export function walletPlatforms(env=process.env,orgId,{now=new Date()}={}){
  const scope=!!orgId&&env.NOVA_WALLET_ORGANIZATION_ID===orgId;
  const state=(kind,keys)=>{const missing=[...keys,'NOVA_WALLET_ORGANIZATION_ID','NOVA_WALLET_ISSUER_NAME'].filter(k=>!env[k]);const enabled=env[`${kind.toUpperCase()}_WALLET_ENABLED`]==='true';return {can_issue:scope&&enabled&&!missing.length,missing,reason:missing.length?'Missing server configuration':!scope?'Issuer is not configured for this business':!enabled?'Issuance is disabled':'Configured for signed snapshots; provider/device acceptance still required',automatic_updates:false};};
- return {apple:state('apple',appleKeys),google:state('google',googleKeys)};
+ const apple=state('apple',appleKeys);
+ if(apple.can_issue){
+  try{appleCertificates(env,now);apple.certificate_verified=true;apple.certificate_expires_at=new crypto.X509Certificate(env.APPLE_PASS_SIGNER_CERT_PEM).validTo;}
+  catch{apple.can_issue=false;apple.certificate_verified=false;apple.reason='Apple signing certificate, private key, issuer, identifiers or validity could not be verified';}
+ }
+ return {apple,google:state('google',googleKeys)};
 }
 function approvedSnapshot({orgId,program,account}){
  if(!program||program.organization_id!==orgId||!account||account.organization_id!==orgId||account.program_id!==program.id)throw error(404,'Rewards account not found for this business');
@@ -35,7 +40,7 @@ function appleCertificates(env,now){
 export async function buildWalletPass(platform,data,env=process.env,{now=()=>new Date()}={}){
  const snapshot=approvedSnapshot(data);const state=walletPlatforms(env,data.orgId)[platform];
  if(!state)throw error(422,'Choose Apple or Google Wallet');
- if(!state.can_issue)throw error(409,`${platform} Wallet is disabled or missing configuration for this business`);
+ if(!state.can_issue)throw error(409,`${platform} Wallet is disabled or missing configuration for this business. ${state.reason}`);
  const at=now();const issuer=String(env.NOVA_WALLET_ISSUER_NAME).slice(0,100);
  if(platform==='google'){
   if(!/^\d+$/.test(env.GOOGLE_WALLET_ISSUER_ID)||!env.GOOGLE_WALLET_CLASS_ID.startsWith(`${env.GOOGLE_WALLET_ISSUER_ID}.`)||!/^[\w.-]+\.[\w.-]+$/.test(env.GOOGLE_WALLET_CLASS_ID)||!/@[^@]+\.iam\.gserviceaccount\.com$/.test(env.GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL))throw error(409,'Google issuer, class or service account configuration is invalid');

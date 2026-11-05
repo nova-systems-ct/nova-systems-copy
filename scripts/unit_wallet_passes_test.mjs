@@ -17,6 +17,7 @@ await assert.rejects(()=>M.buildWalletPass('google',{orgId:'o',program:{...progr
 await assert.rejects(()=>M.buildWalletPass('google',{orgId:'o',program:{...program,rules:{...rules,reward_threshold:1}},account},env),/changed|approval/i);
 await assert.rejects(()=>M.buildWalletPass('google',{orgId:'o',program,account:{...account,pass_status:'revoked'}},env),/revoked/i);
 assert.equal(M.walletPlatforms({},'o').apple.can_issue,false);assert.equal(M.walletPlatforms({},'o').google.can_issue,false);
+assert.equal(M.walletPlatforms({NOVA_WALLET_ORGANIZATION_ID:'o',NOVA_WALLET_ISSUER_NAME:'Test',APPLE_WALLET_ENABLED:'true',APPLE_PASS_TYPE_ID:'pass.example.invalid',APPLE_TEAM_ID:'TEST',APPLE_PASS_SIGNER_CERT_PEM:'invalid',APPLE_CSR_PRIVATE_KEY_PEM:'invalid',APPLE_WWDR_CERT_PEM:'invalid'},'o').apple.can_issue,false,'Having all key names is insufficient: broken signing credentials must fail readiness');
 await assert.rejects(()=>M.buildWalletPass('apple',{orgId:'o',program,account},{}),/configured|missing|disabled/i);
 console.log('PASS — real Google signature, approved ledger snapshot, tenant/approval/revocation and disabled provider gates');
 

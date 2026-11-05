@@ -10,9 +10,10 @@ let calls = 0;
 const never = async () => { calls++; throw Error('Must not reach a provider'); };
 assert.equal((await roleReasoning({ ...base, env: {}, fetchImpl: never })).status, 'disabled');
 assert.equal((await roleReasoning({ ...base, env: { NOVA_ROLE_MODEL: 'anthropic' }, paidCall: never })).status, 'blocked'); assert.equal(calls, 0);
-const local = await roleReasoning({ ...base, env: { NOVA_ROLE_MODEL: 'local', NOVA_LOCAL_MODEL: 'fixture', NOVA_LOCAL_MODEL_OFFLINE_CONFIRMED: 'true' }, fetchImpl: async (url, init) => {
+const local = await roleReasoning({ ...base, playbook:{...base.playbook,jobs:['Check the supplied ledger totals only'],proof:['Return source record IDs'],escalate:['Missing ledger']}, env: { NOVA_ROLE_MODEL: 'local', NOVA_LOCAL_MODEL: 'fixture', NOVA_LOCAL_MODEL_OFFLINE_CONFIRMED: 'true' }, fetchImpl: async (url, init) => {
  if(url.endsWith('/api/show'))return Response.json({model_info:{architecture:'fixture'}});
  assert.equal(url, 'http://127.0.0.1:11434/api/chat'); const b = JSON.parse(init.body); assert.equal(b.stream, false); assert.equal(b.options.num_predict, 600); assert.match(b.messages[0].content, /No tool calls/);
+ assert(b.messages[0].content.includes('Check the supplied ledger totals only')&&b.messages[0].content.includes('Return source record IDs')&&b.messages[0].content.includes('Missing ledger'),'The model must receive this worker’s jobs, proof and escalation rules, not just its title');
  return Response.json({ message: { content: JSON.stringify({ summary: 'Funds are unknown.', next_actions: ['Request a dated balance.'], proposed_lesson: 'Keep the balance date visible.' }) } });
 } });
 assert.equal(local.advisory_only, true); assert.equal(local.status, 'generated');
@@ -32,4 +33,7 @@ console.log('PASS — all role playbooks, disabled/locked/local reasoning, inval
 let hostedBody;
 await roleReasoning({...base,env:{NOVA_ROLE_MODEL:'anthropic',NOVA_SPENDING_LOCK:'disabled'},facts:{summary:'PRIVATE_SUMMARY',output:{available_cents:123456789,decisions:[{purpose:'SECRET_EXPENSE'}],executive_results:[{role_key:'cfo',status:'blocked',title:'PRIVATE_TITLE'}]}},memories:[{content:{lessons:[{lesson:'SECRET_APPROVED_NOTE'}]}}],paidCall:async request=>{hostedBody=JSON.stringify(request.body);return {ok:false,reason:'fixture'};}});
 for(const secret of ['PRIVATE_SUMMARY','123456789','SECRET_EXPENSE','PRIVATE_TITLE','SECRET_APPROVED_NOTE'])assert(!hostedBody.includes(secret),`Hosted context must exclude ${secret}`);
+await roleReasoning({...base,env:{NOVA_ROLE_MODEL:'anthropic',NOVA_SPENDING_LOCK:'disabled',NOVA_ROLE_MODEL_NAME:'global-model',NOVA_WORKER_MODEL_NAME_CFO:'chosen-cfo-model'},paidCall:async request=>{hostedBody=request.body;return {ok:false,reason:'test boundary only'};}});
+assert.equal(hostedBody.model,'chosen-cfo-model','A worker must use its own configured model rather than silently using the global selection');
+let overrideCalls=0;const ownOff=await roleReasoning({...base,env:{NOVA_ROLE_MODEL:'local',NOVA_LOCAL_MODEL:'test-downloaded',NOVA_LOCAL_MODEL_OFFLINE_CONFIRMED:'true',NOVA_WORKER_MODEL_CFO:'off'},fetchImpl:async()=>{overrideCalls++;throw Error('Must remain off');}});assert.equal(ownOff.status,'disabled');assert.equal(overrideCalls,0);
 console.log('PASS — hosted prompt excludes raw summaries, money, task text, expenses and memory prose');

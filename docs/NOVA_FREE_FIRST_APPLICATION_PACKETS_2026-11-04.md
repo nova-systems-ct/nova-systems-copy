@@ -36,9 +36,9 @@ A new network is never “installed” because it has been added to this table. 
 
 ## Apple Wallet certificate packet
 
-Existing recorded team: **DWCWDDW2DT**. Pass Type ID: **pass.app.nova-systems.rewards**. Public CSR: `docs/apple/Nova-Wallet.certSigningRequest`. Prior owner-authorized matching encrypted key is already in the server secret store. Do not generate a second key or print the existing key. The signed-in Apple portal reverified the Nova Systems LLC team and this exact identifier on 4 November. The existing CSR is selected on the certificate creation page; final issuance awaits owner confirmation. No certificate has been issued.
+Existing recorded team: **DWCWDDW2DT**. Pass Type ID: **pass.app.nova-systems.rewards**. Public CSR: `docs/apple/Nova-Wallet.certSigningRequest`. Prior owner-authorized matching encrypted key is already in the server secret store. Do not generate a second key or print the existing key. The signed-in Apple portal reverified the Nova Systems LLC team and this exact identifier on 4 November. Update 5 November: the owner authorized issuance. Apple issued certificate YHJMW6Q3S4 for the existing Pass Type ID, expiring 5 December 2027. The downloaded public leaf matches the original CSR and verifies against Apple WWDR G4. The public certificates are installed in the existing staging service beside its encrypted private key; device acceptance remains outstanding.
 
-After secure sign-in, confirm active membership/team and identifier, upload the existing CSR, obtain the issued Pass Type certificate and authentic Apple intermediate, and store those public certificates alongside the existing matching private key. Do not buy or renew membership. Enable issuance only after an actual iPhone saves the real pass and its QR redemption checks the current Nova ledger. The current implementation is a dated snapshot; it does not supply automatic device updates.
+After secure sign-in, confirm active membership/team and identifier, upload the existing CSR, obtain the issued Pass Type certificate and authentic Apple intermediate, and store those public certificates alongside the existing matching private key. Do not buy or renew membership. Prepare a signed artifact only after the server verifies the certificate and matching key. Customer launch still requires an actual iPhone to save the real approved-program pass and a redemption check against the current Nova ledger. The current implementation is a dated snapshot; it does not supply automatic device updates.
 
 Official reference: https://developer.apple.com/help/account/capabilities/create-wallet-identifiers-and-certificates/
 
@@ -97,7 +97,7 @@ RCS Business Messaging needs a supported partner/brand agent, verification, real
 
 1. Test the deployed staging sign-in, new audit, saved report/PDF/Vault and owner inbox.
 2. Open Workers → Executive desk → CFO costs/prerequisites for the current free-first register.
-3. Confirm final Apple Wallet certificate issuance from the prepared existing CSR. Secure Apple sign-in and identifier selection are complete. Any binding new agreement must be reviewed before acceptance; no purchase/renewal is allowed.
+3. Apple Wallet issuance was confirmed and completed on 5 November. Next: choose a real rewards offer for owner approval, then test saving its signed snapshot and redeeming against the ledger on an iPhone. Any new binding provider agreement still needs review; no purchase/renewal is allowed.
 4. Supply actual legal entity and desired sender/channel accounts in their secure provider forms. Fees remain blocked until a new specific spending instruction exists.
 5. Connect and accept one channel at a time. Record the provider receipt, actual cost/quota, permitted use and observed device outcome before describing it as live.
 

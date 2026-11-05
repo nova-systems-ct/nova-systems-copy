@@ -46,3 +46,14 @@ Before a material action: check the customer problem, evidence, smallest useful 
 Owner/admin access uses the existing authenticated permission system. A model cannot create an administrator, widen its permissions, approve itself, release spending or make a binding commitment. A company or worker stop control must be honored before work begins. Never place credentials in a playbook, memory, report, browser variable, repository or notification.
 
 Completion requires a real result and evidence. If a provider login, fee, approval, device, legal detail or native build is missing, record the specific blocker and a free operational fallback. Do not turn “not checked” into “missing,” “prepared” into “submitted,” “queued” into “working,” or “provider accepted” into “delivered.”
+
+
+## 5 November workforce release
+
+All 13 executable capabilities now have versioned operating instructions: mission, inputs, jobs, proof, escalation and shared spending/privacy boundaries. The Workers page has searchable collapsed worker cards, saved reporting lines and a separate Executive desk. `Install Nova workforce` initializes the existing Nova Operations profile, preserves registered-worker pauses, creates missing workers idempotently and seeds Nova-only monitoring/reporting. Unknown hours, services, agreements and rewards are not invented.
+
+Each capability has a distinct LLM profile and an actual bounded optional reasoning path through the shared job runner. Five executives retain their organization-scoped approved memory. Specialist advisory receives only an allowlisted workflow state, never customer message text or arbitrary job instructions. Monitoring/reporting receive bounded scalar metrics. These are separate instructions and context, not 13 separately trained or self-modifying models. Model output cannot change a transport result or authorize actions.
+
+`NOVA_WORKER_MODEL_<CAPABILITY_KEY_UPPERCASE>` and `NOVA_WORKER_MODEL_NAME_<CAPABILITY_KEY_UPPERCASE>` override global model selection. Local inference remains fixed to loopback Ollama, downloaded-model verification and offline confirmation. No hosted free LLM account is connected; all deployed reasoning stays off and paid fallback stays blocked. Do not present configured profiles as active inference.
+
+Nova-only monitoring (`nova_monitoring_review`, five minutes) checks current overdue jobs and expired leases independently of the seven-day report window. Reporting (`nova_reporting_snapshot`, hourly) saves actual counts, not invented revenue. Completion and the single recurring successor are committed atomically against the current live owned lease. A pause defers the original task without consuming retries; a canceled or expired claimant cannot create its next run. Legacy global/client operations handlers are unchanged. Free hosting cannot promise uninterrupted 24/7/365 availability.

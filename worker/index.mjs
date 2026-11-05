@@ -224,6 +224,8 @@ const handlers = {
   async role_coo_check(job, ctx) { return runRole('role_coo_check', job, ctx); },
   async role_cfo_review(job, ctx) { return runRole('role_cfo_review', job, ctx); },
   async role_cmo_review(job, ctx) { return runRole('role_cmo_review', job, ctx); },
+  async nova_monitoring_review(job,ctx){if(ctx.mode!=='postgres')return {skipped:true};opsEnv(ctx);const {runHostedOperationsJob}=await import('../api/_hierarchy/operationsWorkers.js');return runHostedOperationsJob(job);},
+  async nova_reporting_snapshot(job,ctx){if(ctx.mode!=='postgres')return {skipped:true};opsEnv(ctx);const {runHostedOperationsJob}=await import('../api/_hierarchy/operationsWorkers.js');return runHostedOperationsJob(job);},
   // Every 5 minutes: release expired holds, verify referral outcomes, run health checks, page on open incidents.
   async ops_sentry_sweep(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
@@ -244,7 +246,8 @@ const handlers = {
   },
   async ops_scoreboard_tick(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
-    opsEnv(ctx); const { scoreboardTick } = await import('../api/_ops/reports.js');
+    opsEnv(ctx);
+    const { scoreboardTick } = await import('../api/_ops/reports.js');
     const out = await scoreboardTick();
     await scheduleNext(ctx, 'ops_scoreboard_tick', 60);
     return { orgs: out };
@@ -378,14 +381,18 @@ async function processOneJob(store, ctx) {
   processed++; lastType = job.job_type;
   const renew = store.renewLease ? setInterval(() => { store.renewLease(job.id, leaseOwner, 60).catch(() => {}); heartbeat(ctx).catch(() => {}); }, 20_000) : null;
   try {
-    const result = await handler(job, ctx);
+    const {attachWorkerAdvisory}=await import('../api/_hierarchy/workerAdvisory.js');
+    const result = await attachWorkerAdvisory(job,await handler(job, ctx));
     if (renew) clearInterval(renew);
-    if (['channel_conversation_turn','channel_comment_reply'].includes(job.job_type) && (result?.paused || result?.deferred)) {
+    if (['channel_conversation_turn','channel_comment_reply','nova_monitoring_review','nova_reporting_snapshot'].includes(job.job_type) && (result?.paused || result?.deferred)) {
       if (!store.defer) throw new Error('This job store cannot retain paused channel work');
       await store.defer(job.id, leaseOwner, result.deferred ? 5 : 900, result.reason || 'Channel work paused');
       return true;
     }
-    await store.complete(job.id, result, leaseOwner);
+    if(['nova_monitoring_review','nova_reporting_snapshot'].includes(job.job_type)){
+      const {finishOperationsJob}=await import('../api/_hierarchy/operationsWorkers.js');
+      if(!await finishOperationsJob(job,result,leaseOwner)){console.log(`[worker] lease changed before operations completion: ${job.id}`);return true;}
+    }else await store.complete(job.id, result, leaseOwner);
     console.log(`[worker] completed job ${job.id}:`, JSON.stringify(result));
   } catch (err) {
     if (renew) clearInterval(renew);

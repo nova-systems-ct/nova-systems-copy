@@ -18,10 +18,10 @@ export const CAPABILITIES = [
     job_types: ['ops_campaign_send'], code: 'api/_ops/harvest.js' },
   { key: 'monitoring', name: 'Monitoring worker', role: 'Operations',
     does: 'Every 5 minutes checks the queue, stuck jobs and failed sends, and opens alerts for the owner.',
-    job_types: ['ops_sentry_sweep'], code: 'api/_ops/sentry.js' },
+    job_types: ['ops_sentry_sweep','nova_monitoring_review'], code: 'api/_ops/sentry.js' },
   { key: 'reporting', name: 'Reporting worker', role: 'Operations',
     does: 'Every hour records the business scoreboard from real records and checks overdue work items.',
-    job_types: ['ops_scoreboard_tick', 'hierarchy_work_item_check'], code: 'api/_ops/reports.js, api/_hierarchy/workitems.js' },
+    job_types: ['ops_scoreboard_tick', 'hierarchy_work_item_check','nova_reporting_snapshot'], code: 'api/_ops/reports.js, api/_hierarchy/workitems.js' },
   { key: 'audit_review', name: 'Audit evidence worker', role: 'Nova Audit',
     does: 'Researches a business from five details: its website (robots.txt respected), public email records, its public map listing and comparable nearby businesses. Records sourced evidence and proposes findings for your review. It never approves anything.',
     job_types: ['audit_research', 'audit_diagnostic_task', 'audit_contact_dispatch', 'audit_contact_observe'], on_demand: 'audit research', code: 'api/_researchRun.js, api/_publicResearch.js' },
@@ -82,8 +82,8 @@ export function readinessFor(key, { env = process.env, facts = {} } = {}) {
     ];
     case 'followup_revive': return [c('Text messages sent for real', sms, sms ? 'Live' : 'Dry run until Twilio is configured')];
     case 'demand_outreach': return [c('An owner-approved campaign', facts.approvedCampaigns > 0, facts.approvedCampaigns ? `${facts.approvedCampaigns} approved` : 'Nothing is sent until you approve a campaign'), c('Messages sent for real', sms || email, sms || email ? 'Live channel available' : 'Dry run: no live sending channel')];
-    case 'monitoring': return [c('Background worker running', facts.heartbeatFresh, facts.heartbeatFresh ? 'Heartbeat in the last 10 minutes' : 'No recent heartbeat: start the worker (node scripts/local/staging.mjs worker)'), c('Alert email address', !!env.OPS_ALERT_EMAIL, env.OPS_ALERT_EMAIL ? 'Set' : 'Alerts show on the dashboard only (OPS_ALERT_EMAIL not set)')];
-    case 'reporting': return [c('Background worker running', facts.heartbeatFresh, facts.heartbeatFresh ? 'Heartbeat in the last 10 minutes' : 'No recent heartbeat')];
+    case 'monitoring': return [c('Recent monitoring result', !!facts.lastCompletedAt && Date.now()-Date.parse(facts.lastCompletedAt)<20*60000, facts.lastCompletedAt ? `Last completed ${facts.lastCompletedAt}; checks run through the job queue. Alerts appear in the app.` : 'No completed check yet. Register the worker and confirm the hosted schedule runs.')];
+    case 'reporting': return [c('Recent scoreboard result', !!facts.lastCompletedAt && Date.now()-Date.parse(facts.lastCompletedAt)<2*3600000, facts.lastCompletedAt ? `Last completed ${facts.lastCompletedAt}; results use saved business records.` : 'No completed scoreboard yet. Register the worker and confirm the hosted schedule runs.')];
     case 'audit_review': return [c('Internet access from the server', true, 'Reads public pages only; no paid service')];
     case 'marketing_publisher': return [c('A connected publishing channel', false, 'No social account or publishing channel is connected yet'), c('Email sent for real', email, email ? 'Live' : 'Dry run')];
     case 'ceo_twin': case 'executive_assistant': case 'coo': case 'cmo': return [execution()];

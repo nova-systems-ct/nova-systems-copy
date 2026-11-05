@@ -13,11 +13,11 @@ DECLARE scheduler_secret text; timestamp_text text; request_nonce text; signatur
 BEGIN
  IF NOT EXISTS(
   SELECT 1 FROM public.jobs j
-  WHERE j.job_type IN ('channel_conversation_turn','channel_comment_reply','ops_conversation_turn','ops_followup_send')
+  WHERE j.job_type IN ('channel_conversation_turn','channel_comment_reply','ops_conversation_turn','ops_followup_send','nova_monitoring_review','nova_reporting_snapshot')
    AND ((j.status='pending' AND j.scheduled_at<=now()) OR (j.status='leased' AND j.leased_until<=now()))
    AND (
-    NOT EXISTS(SELECT 1 FROM public.workers w WHERE w.capability_key=CASE WHEN j.job_type IN ('channel_conversation_turn','channel_comment_reply') THEN 'channel_inbox' WHEN j.job_type='ops_conversation_turn' THEN 'intake_booking' ELSE 'followup_revive' END AND w.status IN ('draft','onboarding','training','suspended'))
-    OR EXISTS(SELECT 1 FROM public.workers w WHERE w.capability_key=CASE WHEN j.job_type IN ('channel_conversation_turn','channel_comment_reply') THEN 'channel_inbox' WHEN j.job_type='ops_conversation_turn' THEN 'intake_booking' ELSE 'followup_revive' END AND w.status IN ('active','restricted'))
+    NOT EXISTS(SELECT 1 FROM public.workers w WHERE w.capability_key=CASE WHEN j.job_type IN ('channel_conversation_turn','channel_comment_reply') THEN 'channel_inbox' WHEN j.job_type='ops_conversation_turn' THEN 'intake_booking' WHEN j.job_type='nova_monitoring_review' THEN 'monitoring' WHEN j.job_type='nova_reporting_snapshot' THEN 'reporting' ELSE 'followup_revive' END AND w.status IN ('draft','onboarding','training','suspended'))
+    OR EXISTS(SELECT 1 FROM public.workers w WHERE w.capability_key=CASE WHEN j.job_type IN ('channel_conversation_turn','channel_comment_reply') THEN 'channel_inbox' WHEN j.job_type='ops_conversation_turn' THEN 'intake_booking' WHEN j.job_type='nova_monitoring_review' THEN 'monitoring' WHEN j.job_type='nova_reporting_snapshot' THEN 'reporting' ELSE 'followup_revive' END AND w.status IN ('active','restricted'))
    )
  ) THEN RETURN; END IF;
  SELECT decrypted_secret INTO scheduler_secret FROM vault.decrypted_secrets WHERE name='nova_audit_scheduler_token';
