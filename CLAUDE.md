@@ -1,7 +1,7 @@
 # Nova Systems — Project Instructions
 
 ## Current owner instruction — 4 November 2026
-Continue from `docs/NOVA_FREE_FIRST_EXECUTION_2026-11-04.md`. The owner explicitly authorizes bug repairs, public-site
+Continue from `docs/NOVA_CHANNEL_ENGINE_2026-11-04.md` for the current connected-channel release, plus `docs/NOVA_FREE_FIRST_EXECUTION_2026-11-04.md` for the preceding repair release. The owner explicitly authorizes bug repairs, public-site
 changes, role playbooks, free provider/application preparation and staging deployment. Spending, fee-bearing
 registrations, paid model/message calls and subscription upgrades remain locked. Public Core/Harvest names map to
 the existing Agents/Demand capabilities; do not rename database keys or imply unsupported live channels.

@@ -12,7 +12,7 @@ const same=(a,b)=>{try{return crypto.timingSafeEqual(Buffer.from(String(a)),Buff
 function targetOK(e){try{return e.SUPABASE_SERVICE_ROLE_KEY&&new URL(e.SUPABASE_URL).hostname===`${e.NOVA_WORKER_TARGET_REF}.supabase.co`;}catch{return false;}}
 export function schedulerSignature(timestamp,nonce,secret,prefix='nova-audit-tick'){return crypto.createHmac('sha256',secret).update(`${prefix}|${timestamp}|${nonce}`).digest('hex');}
 const actualHandlers={audit_research:job=>runResearch(job.payload.run_id),audit_diagnostic_task:runDiagnosticTask,audit_contact_dispatch:dispatchDiagnosticContact,audit_contact_observe:observeDiagnosticContact};
-export async function handleAuditQueueTick(req,res,{e=process.env,store,handlers=actualHandlers,jobTypes=AUDIT_JOB_TYPES,enableFlag='NOVA_AUDIT_HTTP_WORKER_ENABLED',signaturePrefix='nova-audit-tick',receiptPrefix='audit-tick',heldTypes=async()=>heldJobTypes(await dbGet('workers?capability_key=not.is.null&select=status,capability_key')),rememberNonce=async nonce=>{const r=await dbInsert('jobs',{job_type:'audit_tick_receipt',status:'completed',payload:{},completed_at:new Date().toISOString(),idempotency_key:`${receiptPrefix}:${nonce}`},{onConflict:'idempotency_key'});return !!r.row;},now=()=>new Date()}={}){
+export async function handleAuditQueueTick(req,res,{e=process.env,store,handlers=actualHandlers,jobTypes=AUDIT_JOB_TYPES,enableFlag='NOVA_AUDIT_HTTP_WORKER_ENABLED',signaturePrefix='nova-audit-tick',receiptPrefix='audit-tick',deferPaused=false,heldTypes=async()=>heldJobTypes(await dbGet('workers?capability_key=not.is.null&select=status,capability_key')),rememberNonce=async nonce=>{const r=await dbInsert('jobs',{job_type:'audit_tick_receipt',status:'completed',payload:{},completed_at:new Date().toISOString(),idempotency_key:`${receiptPrefix}:${nonce}`},{onConflict:'idempotency_key'});return !!r.row;},now=()=>new Date()}={}){
  if(req.method!=='POST')return res.status(405).json({error:'POST only'});
  const ts=String(req.headers?.['x-nova-audit-timestamp']||'');const nonce=String(req.headers?.['x-nova-audit-nonce']||'');
  const fresh=/^\d{10}$/.test(ts)&&Math.abs(now().getTime()/1000-Number(ts))<=300&&/^[0-9a-f-]{36}$/i.test(nonce);
@@ -27,7 +27,7 @@ export async function handleAuditQueueTick(req,res,{e=process.env,store,handlers
   const queue=store||createPostgresJobStore({url:e.SUPABASE_URL,serviceKey:e.SUPABASE_SERVICE_ROLE_KEY});
   const job=await queue.claimNext({workerId,leaseSeconds:120,jobTypes:types});
   if(!job)return res.status(200).json({processed:false});
-  const own=`id=eq.${enc(job.id)}&status=eq.leased&leased_by=eq.${enc(workerId)}${job.organization_id?`&organization_id=eq.${enc(job.organization_id)}`:''}`;
+  const own=`id=eq.${enc(job.id)}&status=eq.leased&leased_by=eq.${enc(workerId)}&leased_until=gt.now${job.organization_id?`&organization_id=eq.${enc(job.organization_id)}`:''}`;
   // Keep the lease alive during a bounded research run. Completion/failure preserves cancellation.
   const renew=queue.renewLease?setInterval(()=>queue.renewLease(job.id,workerId,120).catch(()=>{}),20000):null;
   try{
@@ -36,6 +36,7 @@ export async function handleAuditQueueTick(req,res,{e=process.env,store,handlers
    const c=caseId?await dbOne(`audit_cases?id=eq.${enc(caseId)}&organization_id=eq.${enc(job.organization_id)}&select=paused_at,archived_at`):null;
    if(c?.paused_at){await dbPatch('jobs',own,{status:'pending',scheduled_at:new Date(Date.now()+900000).toISOString(),attempts:Math.max(0,Number(job.attempts)-1),leased_by:null,leased_until:null,last_error:'Audit clock paused; work deferred without consuming a retry.'});return res.status(200).json({processed:false,deferred:true});}
    const result=c?.archived_at?{skipped:true,reason:'Audit archived'}:await handlers[job.job_type](job);
+   if(deferPaused&&(result?.paused||result?.deferred)){await dbPatch('jobs',own,{status:'pending',scheduled_at:new Date(Date.now()+(result.deferred?5000:900000)).toISOString(),attempts:Math.max(0,Number(job.attempts)-1),leased_by:null,leased_until:null,last_error:'Business or worker paused; retained for later processing.'});return res.status(200).json({processed:false,deferred:true});}
    await dbPatch('jobs',own,{status:'completed',result,completed_at:new Date().toISOString()});
    return res.status(200).json({processed:true,job_id:job.id,job_type:job.job_type});
   }catch(err){

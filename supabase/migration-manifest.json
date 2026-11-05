@@ -47,6 +47,7 @@
     "supabase/ops-12-finding-recheck-migration-standalone.sql",
     "supabase/ops-13-workforce-roles-migration-standalone.sql",
     "supabase/migrations/20261104134533_nova_execution_safety.sql",
+    "supabase/migrations/20261105001057_nova_channel_engine.sql",
     "supabase/zz-public-schema-lockdown-standalone.sql"
   ]
 }

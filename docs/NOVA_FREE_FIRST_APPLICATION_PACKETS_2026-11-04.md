@@ -1,3 +1,5 @@
+Current channel/account update: see `docs/NOVA_CHANNEL_ENGINE_2026-11-04.md`; earlier not-implemented messaging statements below predate that release. No application submission is implied.
+
 # Nova activation and application packets — 4 November 2026
 
 ## Submission register
@@ -34,7 +36,7 @@ A new network is never “installed” because it has been added to this table. 
 
 ## Apple Wallet certificate packet
 
-Existing recorded team: **DWCWDDW2DT**. Pass Type ID: **pass.app.nova-systems.rewards**. Public CSR: `docs/apple/Nova-Wallet.certSigningRequest`. Prior owner-authorized matching encrypted key is already in the server secret store. Do not generate a second key or print the existing key. These earlier identifiers were not reverified inside a signed-in Apple portal in this run.
+Existing recorded team: **DWCWDDW2DT**. Pass Type ID: **pass.app.nova-systems.rewards**. Public CSR: `docs/apple/Nova-Wallet.certSigningRequest`. Prior owner-authorized matching encrypted key is already in the server secret store. Do not generate a second key or print the existing key. The signed-in Apple portal reverified the Nova Systems LLC team and this exact identifier on 4 November. The existing CSR is selected on the certificate creation page; final issuance awaits owner confirmation. No certificate has been issued.
 
 After secure sign-in, confirm active membership/team and identifier, upload the existing CSR, obtain the issued Pass Type certificate and authentic Apple intermediate, and store those public certificates alongside the existing matching private key. Do not buy or renew membership. Enable issuance only after an actual iPhone saves the real pass and its QR redemption checks the current Nova ledger. The current implementation is a dated snapshot; it does not supply automatic device updates.
 
@@ -78,10 +80,10 @@ Business-use draft:
 
 This describes the intended review use; it is not a claim that all named providers are integrated. For each provider, supply the real app ID, owned business account, stable production OAuth redirect, privacy/deletion URLs, minimal scopes and a screencast of the complete implemented flow. No placeholder callback, fabricated receipt or unsupported DM use is acceptable.
 
-- **Meta**: choose Instagram Login or Facebook Login deliberately; they have different scope names and token types. Existing code uses Facebook Login for publishing. Messaging is a separate implementation/review. Official: https://developers.facebook.com/documentation/business-messaging/instagram-messaging/features/private-replies
+- **Meta**: choose Instagram Login or Facebook Login deliberately; they have different scope names and token types. Existing code uses Facebook Login for publishing. The new signed DM/comment-keyword engine and owner controls are locally verified; OAuth/account permissions, review and provider/device acceptance remain separate. Official: https://developers.facebook.com/documentation/business-messaging/instagram-messaging/features/private-replies
 - **TikTok**: use TikTok for Business and request Business Messaging access separately from Content Posting. Official: https://business-api.tiktok.com/portal/bm-api/education-hub
 - **LinkedIn**: request a supported Community Management product and verified organization. Sharing access is not arbitrary-DM access. Official: https://learn.microsoft.com/en-us/linkedin/marketing/community-management/community-management-api-migration-guide
-- **WhatsApp**: business-number ownership, templates/consent and actual cloud API implementation are still required. Official: https://developers.facebook.com/docs/whatsapp/cloud-api/
+- **WhatsApp**: business-number ownership, templates/consent, account permissions and real provider/device acceptance are still required; the Cloud text connector is now locally verified. Official: https://developers.facebook.com/docs/whatsapp/cloud-api/
 
 ## Branded messaging and Android packets
 
@@ -95,7 +97,7 @@ RCS Business Messaging needs a supported partner/brand agent, verification, real
 
 1. Test the deployed staging sign-in, new audit, saved report/PDF/Vault and owner inbox.
 2. Open Workers → Executive desk → CFO costs/prerequisites for the current free-first register.
-3. Finish secure Apple sign-in so the existing free certificate request can continue. Any binding new agreement must be reviewed before acceptance; no purchase/renewal is allowed.
+3. Confirm final Apple Wallet certificate issuance from the prepared existing CSR. Secure Apple sign-in and identifier selection are complete. Any binding new agreement must be reviewed before acceptance; no purchase/renewal is allowed.
 4. Supply actual legal entity and desired sender/channel accounts in their secure provider forms. Fees remain blocked until a new specific spending instruction exists.
 5. Connect and accept one channel at a time. Record the provider receipt, actual cost/quota, permitted use and observed device outcome before describing it as live.
 

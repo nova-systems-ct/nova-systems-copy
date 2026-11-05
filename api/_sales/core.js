@@ -8,6 +8,7 @@
 //  * Nothing here logs secrets, tokens, or full message bodies.
 import crypto from 'node:crypto';
 import { requireStaff } from '../_auth.js';
+import { currentChannelTurn } from '../_channels/turnContext.js';
 
 export const env = () => process.env;
 const cfg = () => ({ url: env().SUPABASE_URL, key: env().SUPABASE_SERVICE_ROLE_KEY });
@@ -18,6 +19,13 @@ export async function dbFetch(path, { method = 'GET', body, prefer } = {}) {
   const { url, key } = cfg();
   if (!url || !key) throw Object.assign(new Error('Supabase is not configured'), { status: 500 });
   const headers = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+  const turn = currentChannelTurn();
+  if (turn && method !== 'GET') {
+    if (!turn.valid) throw new Error('Channel execution lease lost');
+    headers['x-nova-channel-turn'] = turn.token;
+    headers['x-nova-channel-org'] = turn.orgId;
+    headers['x-nova-channel-conversation'] = turn.conversationId;
+  }
   if (prefer) headers.Prefer = prefer;
   return fetch(`${url}/rest/v1/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
 }

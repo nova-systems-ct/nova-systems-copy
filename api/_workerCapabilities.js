@@ -4,6 +4,9 @@
 // lost) and refuses its on-demand operation. No decorative agents: titles such as CTO/CFO with no implementation are
 // not listed. Readiness checks report configuration by NAME only, never values.
 export const CAPABILITIES = [
+  { key: 'channel_inbox', name: 'Connected-channel conversation worker', role: 'Front desk',
+    does: 'Processes signed Instagram, Facebook Messenger and WhatsApp inquiries through the approved booking workflow. Keeps each business and identity scoped, honors takeover and opt-outs, and records blocked or uncertain sends. Provider authorization and acceptance remain required.',
+    job_types: ['channel_conversation_turn', 'channel_comment_reply'], code: 'api/_channels/service.js, api/_channels/delivery.js' },
   { key: 'intake_booking', name: 'Inquiry and booking worker', role: 'Front desk',
     does: 'Answers each web-form or text inquiry within the business rules: asks for missing details, matches an approved service, offers real calendar times, sends the agreement, confirms the booking, and hands anything unsupported to a person.',
     job_types: ['ops_conversation_turn'], code: 'api/_ops/service.js (handleInboundTurn)' },
@@ -66,6 +69,11 @@ export function readinessFor(key, { env = process.env, facts = {} } = {}) {
   const c = (label, ok, note) => ({ label, ok: !!ok, note });
   const execution = () => c('Recorded role execution', !!facts.lastCompletedAt, facts.lastCompletedAt ? `Completed ${facts.lastCompletedAt}. This records a result, not continuous availability.` : 'No completed role run recorded in the last seven days.');
   switch (key) {
+    case 'channel_inbox': return [
+      c('Signed provider callbacks configured', !!env.NOVA_META_APP_SECRET && !!env.NOVA_META_VERIFY_TOKEN, 'Configure the owned Meta app and its exact authorized business accounts in Connected channels.'),
+      c('Real sending authorized', env.NOVA_SPENDING_LOCK === 'disabled' && env.NOVA_CHANNEL_SEND_ENABLED === 'true', 'Sending remains locked until costs, permissions and the owned-account test are approved.'),
+      c('Connected-provider acceptance', false, 'Code tests do not establish provider acceptance. Record the exact account, permissions, device result and provider receipt before launch.'),
+    ];
     case 'intake_booking': return [
       c('Business hours and an approved service', facts.hasServices, facts.hasServices ? 'Configured' : 'Add hours and at least one service in Operations → Settings'),
       c('Escalation contact named', facts.hasEscalation, facts.hasEscalation ? 'Configured' : 'Name who receives unsupported requests (Operations → Settings)'),

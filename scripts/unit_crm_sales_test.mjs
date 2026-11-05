@@ -9,7 +9,7 @@ const { checkDealStageChange } = await import('../api/_crmSales.js');
 let pass = 0, fail = 0;
 const check = (n, c, x = '') => { if (c) { pass++; console.log(`PASS — ${n}`); } else { fail++; console.log(`FAIL — ${n} ${x}`); } };
 
-const T = { businesses: [], crm_contacts: [], crm_deals: [], crm_activities: [], crm_proposals: [], products: [], leads: [], wave1_conversations: [], wave1_messages: [], wave1_appointments: [], audit_recommendations: [], audit_cases: [] };
+const T = { businesses: [], crm_contacts: [], crm_deals: [], crm_activities: [], crm_proposals: [], products: [], leads: [], wave1_conversations: [], wave1_messages: [], wave1_appointments: [], audit_recommendations: [], audit_cases: [], channel_identities: [] };
 let seq = 0; const allowedOrgs = new Set(['orgA']);
 const get = (row, col) => col.split('.').reduce((o, k) => o?.[k], row);
 function matches(row, [col, cond]) {

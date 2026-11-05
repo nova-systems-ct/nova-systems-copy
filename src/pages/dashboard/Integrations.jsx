@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plug, CheckCircle2, XCircle, AlertTriangle, Circle, Loader2, RefreshCw } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
+import ChannelCenter from './ChannelCenter'
 
 const GOLD = '#C9A84C'
 
@@ -61,7 +62,7 @@ export default function Integrations() {
   }
 
   return (
-    <div style={{ padding: '40px 48px 80px', maxWidth: 1100 }}>
+    <div style={{ padding: '24px clamp(16px, 3vw, 40px) 64px', maxWidth: 1100, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 16, flexWrap: 'wrap' }}>
         <div>
           <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>Admin</p>
@@ -72,9 +73,8 @@ export default function Integrations() {
         </button>
       </div>
       <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13, maxWidth: 640, marginBottom: 32, lineHeight: 1.5 }}>
-        Live status for every external provider this platform actually connects to. "Connected" means the credential
-        is present — click "Test Connection" for a real, on-demand check against that provider's own API. No
-        credential value is ever shown here. Nothing on this page runs automatically against a provider.
+        Prepare your business accounts, review conversations and see what each channel needs before it can go live.
+        Provider diagnostics and connection checks are below.
       </p>
 
       {loadError && (
@@ -83,6 +83,8 @@ export default function Integrations() {
         </div>
       )}
 
+      <ChannelCenter />
+      <details><summary style={{ color: GOLD, cursor: 'pointer', margin: '20px 0' }}>Infrastructure and provider diagnostics</summary>
       {loading ? (
         <div style={{ textAlign: 'center', padding: '80px 0' }}><Loader2 style={{ width: 28, height: 28, animation: 'spin 1s linear infinite', color: GOLD, margin: '0 auto' }} /></div>
       ) : (
@@ -147,6 +149,7 @@ export default function Integrations() {
           })}
         </div>
       )}
+      </details>
     </div>
   )
 }

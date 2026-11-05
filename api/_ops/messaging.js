@@ -57,6 +57,10 @@ export async function orgSettings(orgId) {
 export async function sendSms({ orgId, conversationId, contactId, body, purpose, idempotencyKey, triggerAt = null, sentBy = null, isTest = false, now = new Date() }) {
   const contact = await dbOne(`crm_contacts?id=eq.${enc(contactId)}&organization_id=eq.${enc(orgId)}&select=*`);
   const conv = conversationId ? await dbOne(`wave1_conversations?id=eq.${enc(conversationId)}&organization_id=eq.${enc(orgId)}&select=*`) : null;
+  if (['instagram', 'facebook', 'whatsapp'].includes(conv?.channel)) {
+    const { sendChannelMessage } = await import('../_channels/delivery.js');
+    return sendChannelMessage({ orgId, conversationId, contactId, body, purpose, idempotencyKey, sentBy, isTest, now });
+  }
   const settings = await orgSettings(orgId);
   if (idempotencyKey && await dbOne(`wave1_messages?organization_id=eq.${enc(orgId)}&idempotency_key=eq.${enc(idempotencyKey)}&select=id`)) return { status: 'duplicate', reason: 'already_attempted' };
   const since = new Date(now.getTime() - 24 * 3600_000).toISOString();

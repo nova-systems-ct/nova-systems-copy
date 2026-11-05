@@ -1,6 +1,7 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { requireStaff } from './_auth.js';
+export const config = { api: { bodyParser: false } };
 
 // Integration Center backend — reports connection status for every external provider this
 // codebase actually touches, without ever returning a credential value. Two operations:
@@ -187,6 +188,21 @@ async function handleTest(req, res) {
 }
 
 export default async function handler(req, res) {
+  if (req.query?.op === 'channel-webhook') {
+    const { handleChannelWebhook } = await import('./_channels/service.js');
+    return handleChannelWebhook(req, res);
+  }
+  if (req.method === 'POST' && req.body === undefined) {
+    try {
+      const { rawChannelBody } = await import('./_channels/service.js');
+      const raw = await rawChannelBody(req);
+      req.body = !raw.length ? {} : String(req.headers?.['content-type'] || '').includes('application/x-www-form-urlencoded') ? Object.fromEntries(new URLSearchParams(raw.toString())) : JSON.parse(raw.toString());
+    } catch (e) { return res.status(e.status === 413 ? 413 : 400).json({ error: 'Invalid or oversized request body' }); }
+  }
+  if (req.query?.op === 'core-queue-tick') {
+    const { handleCoreQueueTick } = await import('./_coreQueueTick.js');
+    return handleCoreQueueTick(req, res);
+  }
   if (req.query?.op === 'executive-queue-tick') {
     const { handleExecutiveQueueTick } = await import('./_executiveQueueTick.js');
     return handleExecutiveQueueTick(req, res);
@@ -200,6 +216,10 @@ export default async function handler(req, res) {
     return handleAuditCallEvent(req, res);
   }
   if (setCors(req, res)) return;
+  if (req.query?.op === 'channels') {
+    const { handleChannelAdmin } = await import('./_channels/admin.js');
+    return handleChannelAdmin(req, res);
+  }
   if (!(await requireStaff(req, res, 'admin.view'))) return;
 
   const op = typeof req.query?.op === 'string' ? req.query.op : 'status';

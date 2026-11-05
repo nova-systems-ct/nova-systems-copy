@@ -29,6 +29,7 @@
 
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createLocalJobStore } from './localJobStore.mjs';
 import { createPostgresJobStore } from './postgresJobStore.mjs';
@@ -189,6 +190,17 @@ const handlers = {
     opsEnv(ctx); const { runResearch } = await import('../api/_researchRun.js');
     const out = await runResearch(job.payload?.run_id);
     return { run_id: job.payload?.run_id, summary: out.summary };
+  },
+  async channel_conversation_turn(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { runChannelTurn } = await import('../api/_channels/service.js');
+    const result = await runChannelTurn(job);
+    return result;
+  },
+  async channel_comment_reply(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { sendApprovedComment } = await import('../api/_channels/delivery.js');
+    return sendApprovedComment(job);
   },
   async ops_conversation_turn(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
@@ -353,25 +365,31 @@ async function claimableTypes(ctx) {
 }
 
 async function processOneJob(store, ctx) {
-  const job = await store.claimNext({ workerId: WORKER_ID, leaseSeconds: 60, jobTypes: await claimableTypes(ctx) });
+  const leaseOwner = `${WORKER_ID}:${crypto.randomUUID()}`;
+  const job = await store.claimNext({ workerId: leaseOwner, leaseSeconds: 60, jobTypes: await claimableTypes(ctx) });
   if (!job) return false;
   console.log(`[worker] claimed job ${job.id} (${job.job_type}), attempt ${job.attempts}/${job.max_attempts}`);
   const handler = handlers[job.job_type];
   if (!handler) {
-    await store.fail(job.id, new Error(`No handler registered for job_type '${job.job_type}'`));
+    await store.fail(job.id, new Error(`No handler registered for job_type '${job.job_type}'`), leaseOwner);
     console.error(`[worker] no handler for job_type '${job.job_type}' — marked for retry/dead-letter`);
     return true;
   }
   processed++; lastType = job.job_type;
-  const renew = store.renewLease ? setInterval(() => { store.renewLease(job.id, WORKER_ID, 60).catch(() => {}); heartbeat(ctx).catch(() => {}); }, 20_000) : null;
+  const renew = store.renewLease ? setInterval(() => { store.renewLease(job.id, leaseOwner, 60).catch(() => {}); heartbeat(ctx).catch(() => {}); }, 20_000) : null;
   try {
     const result = await handler(job, ctx);
     if (renew) clearInterval(renew);
-    await store.complete(job.id, result);
+    if (['channel_conversation_turn','channel_comment_reply'].includes(job.job_type) && (result?.paused || result?.deferred)) {
+      if (!store.defer) throw new Error('This job store cannot retain paused channel work');
+      await store.defer(job.id, leaseOwner, result.deferred ? 5 : 900, result.reason || 'Channel work paused');
+      return true;
+    }
+    await store.complete(job.id, result, leaseOwner);
     console.log(`[worker] completed job ${job.id}:`, JSON.stringify(result));
   } catch (err) {
     if (renew) clearInterval(renew);
-    const after = await store.fail(job.id, err);
+    const after = await store.fail(job.id, err, leaseOwner);
     console.error(`[worker] job ${job.id} failed: ${err.message} — now ${after?.status || 'unknown'}`);
   }
   return true;
