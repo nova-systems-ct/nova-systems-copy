@@ -11,7 +11,8 @@ const e={CRON_SECRET:'test',NOVA_CORE_HTTP_WORKER_ENABLED:'true',SUPABASE_URL:'h
 const timestamp=String(Math.floor(Date.now()/1000)),nonce='00000000-0000-0000-0000-000000000005';
 const headers=prefix=>({'x-nova-audit-timestamp':timestamp,'x-nova-audit-nonce':nonce,authorization:`Bearer ${schedulerSignature(timestamp,nonce,e.CRON_SECRET,prefix)}`});
 const res=()=>({code:200,status(c){this.code=c;return this},json(body){this.body=body;return this}});
-let claims=0;const store={claimNext:async({jobTypes})=>{claims++;assert.deepEqual([...jobTypes].sort(),['channel_comment_reply','channel_conversation_turn','nova_monitoring_review','nova_reporting_snapshot','ops_conversation_turn','ops_followup_send']);return null}};
+assert.equal(typeof M.CORE_HANDLERS?.ops_campaign_send, 'function', 'Approved Revive recipients need a real hosted queue handler, not only a laptop worker');
+let claims=0;const store={claimNext:async({jobTypes})=>{claims++;assert.deepEqual([...jobTypes].sort(),['channel_comment_reply','channel_conversation_turn','nova_monitoring_review','nova_reporting_snapshot','ops_campaign_send','ops_conversation_turn','ops_followup_send']);return null}};
 const opts={e,store,heldTypes:async()=>[],rememberNonce:async()=>true};
 let r=res();await M.handleCoreQueueTick({method:'POST',headers:headers('nova-audit-tick')},r,opts);assert.equal(r.code,403);assert.equal(claims,0);
 r=res();await M.handleCoreQueueTick({method:'POST',headers:headers('nova-core-tick')},r,opts);assert.equal(r.code,200);assert.equal(claims,1);

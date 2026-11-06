@@ -5,6 +5,7 @@
 // is closed on "no"); outcomes are counted from real records and kept apart from new-customer acquisition.
 // Twilio is a local stand-in ("simulated provider").
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { startTestEnv } from './testenv/env.mjs';
 import { makeCaller } from './testenv/call.mjs';
 import { startProviderStandIns, clearProviderEnv, setupTestBusiness, inboundSms, TW_TOKEN, WH_SECRET, PUBLIC_BASE } from './testenv/opsFixture.mjs';
@@ -20,7 +21,18 @@ const { createPostgresJobStore } = await import('../worker/postgresJobStore.mjs'
 const W = await import('../worker/index.mjs');
 const store = createPostgresJobStore({ url: env.base, serviceKey: env.serviceKey });
 const ctx = { url: env.base, serviceKey: env.serviceKey, mode: 'postgres', store };
-const runDue = async (max = 80) => { let n = 0; while (n < max && await W.processOneJob(store, ctx)) n++; return n; };
+const hosted = process.env.NOVA_TEST_CORE_RECEIVER === 'true';
+const { handleCoreQueueTick } = await import('../api/_coreQueueTick.js');
+const { schedulerSignature } = await import('../api/_auditQueueTick.js');
+const coreEnv = { ...process.env, SUPABASE_URL: 'https://localtest.supabase.co', NOVA_WORKER_TARGET_REF: 'localtest', NOVA_CORE_HTTP_WORKER_ENABLED: 'true', CRON_SECRET: 'LOCAL-TEST-CORE-SIGNATURE-ONLY' };
+const coreTick = async () => {
+  const timestamp = String(Math.floor(Date.now() / 1000)), nonce = crypto.randomUUID();
+  const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  await handleCoreQueueTick({ method: 'POST', headers: { 'x-nova-audit-timestamp': timestamp, 'x-nova-audit-nonce': nonce, authorization: `Bearer ${schedulerSignature(timestamp, nonce, coreEnv.CRON_SECRET, 'nova-core-tick')}` } }, res, { e: coreEnv, store });
+  if (res.code !== 200 || res.body.retry_recorded) throw Error(`Hosted receiver failed: ${JSON.stringify(res.body)}`);
+  return res.body.processed === true;
+};
+const runDue = async (max = 80) => { let n = 0; while (n < max && await (hosted ? coreTick() : W.processOneJob(store, ctx))) n++; return n; };
 const one = async (q, p) => (await env.sql(q, p)).rows[0];
 const all = async (q, p) => (await env.sql(q, p)).rows;
 const sentTo = (n) => prov.twilio.messages.filter((m) => m.to === n);
@@ -140,6 +152,6 @@ try {
   check('people messaged inside the window are blocked by the attempt limit in the next campaign', r.status === 200 && r.body.preview.by_reason.attempt_limit_reached === 3, JSON.stringify(r.body.preview));
 } catch (e) { fail++; console.log('FAIL — test crashed:', e.stack || e); }
 finally { await env.stop(); await prov.stop(); }
-console.log(`\n${pass} passed, ${fail} failed — Nova Revive stalled-record recovery (real handlers + worker + local PostgreSQL; Twilio is a local stand-in: "simulated provider")`);
+console.log(`\n${pass} passed, ${fail} failed — Nova Revive stalled-record recovery (real handlers + ${hosted ? 'signed hosted receiver' : 'worker'} + local PostgreSQL; Twilio is a local stand-in: "simulated provider")`);
 process.exitCode = fail ? 1 : 0;
 setTimeout(() => process.exit(process.exitCode ?? 0), 10_000).unref();

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useOutletContext, Link } from 'react-router-dom'
-import { api, useLoad, useAction, C, Card, Loading, Badge, PageHeader, Notice, when } from './ui'
+import { api, useLoad, useAction, C, Card, Loading, ErrorBox, Badge, PageHeader, Notice, when } from './ui'
 
 const STAGE = { 2: 'Business inputs', 3: 'Connections', 4: 'Agents and monitoring', 5: 'Modules', 6: 'Controlled test' }
 const MOD_STATUS = { selected: ['pending', 'Chosen, not installed yet'], installing: ['pending', 'Installing'], installed: ['ready', 'Installed'], blocked: ['blocked', 'Blocked'], failed: ['failed', 'Failed'], disabled: ['cancelled', 'Turned off'] }
@@ -10,6 +10,7 @@ function ModulesCard({ orgId, onChanged }) {
   const act = useAction(); const [offFor, setOffFor] = useState(null); const [why, setWhy] = useState('')
   const post = (body, ok) => act.run(() => api('install', { org: orgId, method: 'POST', body }), ok).then((r) => { if (r) { d.reload(); onChanged?.() } return r })
   if (d.loading) return <Loading />
+  if (d.error) return <ErrorBox error={d.error} onRetry={d.reload} />
   const mods = d.data?.modules || []
   return (
     <Card title="Modules" style={{ marginBottom: 16 }}>
@@ -86,45 +87,55 @@ export default function OpsInstall() {
     await act.run(() => api('install', { org: orgId, method: 'POST', body: { action: 'run', manifest_id: plan.id } }), (x) => (x.status === 'installed' ? 'Installed. Every required component is done — you can activate.' : x.status === 'partial' ? 'Installed what was possible. The blocked items below need an owner action.' : 'Some steps failed; see the details below.'))
     d.reload()
   }
-  const activate = async () => { await act.run(() => api('install', { org: orgId, method: 'POST', body: { action: 'activate', manifest_id: cur.id } }), 'Activated. Approved capabilities are live for this business; outreach and live payments still need their own approval.'); d.reload() }
+  const activate = async () => { await act.run(() => api('install', { org: orgId, method: 'POST', body: { action: 'activate', manifest_id: cur.id } }), 'Activation recorded after fresh checks. Messaging and live payments keep their separate controls.'); d.reload() }
   const counts = comps.reduce((a, c) => { const st = steps[c.key]?.status || 'pending'; a[st] = (a[st] || 0) + 1; return a }, {})
+  const needsAttention = comps.filter(c => c.required && ['blocked', 'failed'].includes(steps[c.key]?.status))
+  const required = comps.filter(c => c.required)
+  const readyRequired = required.filter(c => ['done', 'skipped'].includes(steps[c.key]?.status)).length
   return (
     <>
-      <PageHeader title="Install Systems" sub="What this business's installation consists of, installed in stages. Running it again only repeats what is not finished." />
+      <PageHeader title="Install Systems" sub="Connect the business, test the customer journey, then activate. Every run rechecks the current setup." />
+      <style>{`.ops-install-step { display: grid; grid-template-columns: minmax(0, .9fr) auto minmax(0, 1.5fr); gap: 12px; align-items: start; padding: 14px 0; border-bottom: 1px solid ${C.line}; font-size: 13px; overflow-wrap: anywhere; } @media (max-width: 680px) { .ops-install-step { grid-template-columns: minmax(0, 1fr); gap: 7px; } }`}</style>
+      <ErrorBox error={d.error} onRetry={d.reload} />
       {act.view}
-      {d.loading ? <Loading /> : (
+      {d.loading ? <Loading /> : !d.error && (
         <>
-          <ModulesCard orgId={orgId} onChanged={d.reload} />
-          <Card title={cur ? `Installation plan v${cur.version} · ${cur.status}` : 'Installation plan (not prepared yet)'} actions={<div style={{ display: 'flex', gap: 8 }}><button className="ops-btn primary" disabled={act.busy || cur?.status === 'installing'} onClick={run}>{act.busy ? 'Installing…' : 'Install Systems'}</button>{cur?.status === 'installed' && <button className="ops-btn" disabled={act.busy} onClick={activate}>Activate</button>}</div>}>
-            <p style={{ marginTop: 0, color: C.dim, fontSize: 13 }}>{comps.length} components · done {counts.done || 0} · blocked {counts.blocked || 0} · failed {counts.failed || 0}{counts.skipped ? ` · not needed ${counts.skipped}` : ''}{cur?.activated_at ? ` · activated ${when(cur.activated_at)}` : ''}</p>
+          {needsAttention.length > 0 && <Card title="Finish the required setup" style={{ marginBottom: 16 }}>
+            <p style={{ margin: '0 0 10px', fontSize: 13, color: C.dim }}>{needsAttention.length} required {needsAttention.length === 1 ? 'step needs' : 'steps need'} attention before activation. Start here.</p>
+            {needsAttention.slice(0, 3).map(c => <p key={c.key} style={{ fontSize: 13, margin: '6px 0' }}><strong>{c.label}.</strong> <span style={{ color: C.dim }}>{steps[c.key]?.detail}</span></p>)}
+            <Link to="/dashboard/ops/settings" className="ops-btn" style={{ display: 'inline-block', textDecoration: 'none', marginTop: 8 }}>Open business settings</Link>
+          </Card>}
+          <Card title={cur ? `Installation plan v${cur.version} · ${cur.status}` : 'Installation plan (not prepared yet)'} actions={<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="ops-btn primary" disabled={act.busy || cur?.status === 'installing'} onClick={run}>{act.busy ? 'Installing…' : 'Install Systems'}</button>{cur?.status === 'installed' && <button className="ops-btn" disabled={act.busy || d.data?.changed_since} onClick={activate}>Activate</button>}</div>}>
+            <p style={{ marginTop: 0, color: C.dim, fontSize: 13 }}>{readyRequired} of {required.length} required checks passed{counts.failed ? ` · ${counts.failed} failed` : ''}{cur?.activated_at ? ` · activated ${when(cur.activated_at)}` : ''}</p>
             {d.data?.changed_since && <Notice tone="warn">The configuration or audit changed since this plan was prepared. Install Systems will prepare a new version first.</Notice>}
             {(cur?.steps || []).some((s) => s.stage === 5) && (
-              <div style={{ marginTop: 14 }}>
-                <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: C.gold, margin: '0 0 6px' }}>Modules</p>
-                <table className="ops-table"><tbody>
+              <details style={{ marginTop: 14 }} open={cur.steps.some(s => s.stage === 5 && ['blocked', 'failed'].includes(s.status))}>
+                <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, color: C.gold, padding: '10px 0' }}>Module verification · {cur.steps.filter(s => s.stage === 5 && ['done', 'skipped'].includes(s.status)).length} of {cur.steps.filter(s => s.stage === 5).length} passed</summary>
+                <div>
                   {cur.steps.filter((s) => s.stage === 5).map((s) => (
-                    <tr key={s.step_key}>
-                      <td style={{ width: '30%' }}><strong>{s.label}</strong></td>
-                      <td style={{ width: 150 }}><Badge value={s.status === 'done' || s.status === 'skipped' ? 'ready' : s.status} label={s.evidence?.outcome || (s.status === 'skipped' ? 'not needed' : s.status)} /></td>
-                      <td style={{ fontSize: 13 }}><div style={{ color: C.dim }}>{s.detail}</div>{s.owner_action && <div style={{ marginTop: 4, color: '#E9B44C' }}>Next: {s.owner_action}</div>}</td>
-                    </tr>))}
-                </tbody></table>
-              </div>
+                    <div key={s.step_key} className="ops-install-step">
+                      <strong>{s.label}</strong>
+                      <div><Badge value={s.status === 'done' || s.status === 'skipped' ? 'ready' : s.status} label={s.evidence?.outcome || (s.status === 'skipped' ? 'not needed' : s.status)} /></div>
+                      <div><div style={{ color: C.dim }}>{s.detail}</div>{s.owner_action && <div style={{ marginTop: 4, color: C.amber }}>Next: {s.owner_action}</div>}</div>
+                    </div>))}
+                </div>
+              </details>
             )}
             {[2, 3, 4, 6].map((stage) => (
-              <div key={stage} style={{ marginTop: 14 }}>
-                <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: C.gold, margin: '0 0 6px' }}>{STAGE[stage]}</p>
-                <table className="ops-table"><tbody>
+              <details key={stage} style={{ marginTop: 8, borderTop: `1px solid ${C.line}` }} open={comps.some(c => c.stage === stage && c.required && !['done', 'skipped'].includes(steps[c.key]?.status))}>
+                <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, color: C.gold, padding: '14px 0' }}>{STAGE[stage]} · {comps.filter(c => c.stage === stage && ['done', 'skipped'].includes(steps[c.key]?.status)).length} of {comps.filter(c => c.stage === stage).length} passed</summary>
+                <div>
                   {comps.filter((c) => c.stage === stage).map((c) => { const s = steps[c.key]; return (
-                    <tr key={c.key}>
-                      <td style={{ width: '30%' }}><strong>{c.label}</strong>{!c.required && <div style={{ color: C.faint, fontSize: 11 }}>optional</div>}</td>
-                      <td style={{ width: 110 }}><Badge value={s?.status === 'done' ? 'ready' : s?.status === 'skipped' ? 'ready' : s?.status || 'pending'} label={s?.status === 'skipped' ? 'not needed' : s?.status || 'pending'} /></td>
-                      <td style={{ fontSize: 13 }}><div style={{ color: C.dim }}>{s?.detail || c.action}</div>{s?.owner_action && <div style={{ marginTop: 4, color: '#E9B44C' }}>Next: {s.owner_action}</div>}</td>
-                    </tr>) })}
-                </tbody></table>
-              </div>
+                    <div key={c.key} className="ops-install-step">
+                      <div><strong>{c.label}</strong>{!c.required && <div style={{ color: C.faint, fontSize: 11 }}>optional</div>}</div>
+                      <div><Badge value={s?.status === 'done' || s?.status === 'skipped' ? 'ready' : s?.status || 'pending'} label={s?.status === 'skipped' ? 'not needed' : s?.status || 'pending'} /></div>
+                      <div><div style={{ color: C.dim }}>{s?.detail || c.action}</div>{s?.owner_action && <div style={{ marginTop: 4, color: C.amber }}>Next: {s.owner_action}</div>}</div>
+                    </div>) })}
+                </div>
+              </details>
             ))}
           </Card>
+          <div style={{ marginTop: 16 }}><ModulesCard orgId={orgId} onChanged={d.reload} /></div>
           {audit && (
             <Card title="From the audit" style={{ marginTop: 16 }}>
               <p style={{ marginTop: 0, color: C.dim, fontSize: 13 }}>This plan was prepared from the latest audit{audit.business ? ` of ${audit.business}` : ''}. <Link to={`/dashboard/audit/${audit.case_id}`} style={{ color: C.gold }}>Open the audit</Link></p>

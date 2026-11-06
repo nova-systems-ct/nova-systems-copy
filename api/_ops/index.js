@@ -19,6 +19,7 @@ import * as P from './reports.js';
 import * as V from './voice.js';
 import { sendSms, sendMode, allowlistFrom } from './messaging.js';
 import { modelConfigured } from './model.js';
+import { paymentReadiness } from './paymentReadiness.js';
 
 const enqueue = (job) => createPostgresJobStore({ url: process.env.SUPABASE_URL, serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY }).enqueue(job);
 const send = (res, code, body) => res.status(code).json(body);
@@ -170,7 +171,7 @@ export async function handleOps(req, res, op) {
       if (action === 'activate') {
         const m = await dbOne(`organization_members?organization_id=eq.${enc(s.orgId)}&staff_user_id=eq.${enc(s.caller.id)}&status=eq.active&select=role`);
         if (!isNovaOwner(s.caller) && m?.role !== 'client_owner') return send(res, 403, { error: 'Only the business owner can activate an installation.' });
-        return send(res, 200, await I.activate(s.orgId, sanitize(b.manifest_id, 60), s.actor));
+        return send(res, 200, await I.activate(s.orgId, sanitize(b.manifest_id, 60), s.actor, readiness));
       }
       return send(res, 400, { error: 'Unknown install action' });
     }
@@ -545,7 +546,7 @@ export async function readiness(orgId) {
   const [ops, wave, prices, templates, pay, voice, counts, incidents, report] = await Promise.all([
     dbOne(`ops_business_settings?${o}&select=*`), dbOne(`wave1_org_settings?${o}&select=*`),
     dbGet(`ops_price_rules?${o}&status=eq.approved&select=id`), dbGet(`ops_agreement_templates?${o}&status=eq.approved&select=id,legal_review`),
-    dbOne(`ops_payment_accounts?${o}&select=mode,live_enabled`), dbOne(`voice_configurations?${o}&select=status,disclosure_script`),
+    dbOne(`ops_payment_accounts?${o}&select=mode,stripe_account_ref,live_enabled`), dbOne(`voice_configurations?${o}&select=status,disclosure_script`),
     dbGet(`ops_jobs?${o}&select=state,fulfillment_status`), dbGet(`ops_incidents?${o}&status=eq.open&select=id`),
     dbOne(`ops_weekly_reports?${o}&select=id,week_start,generated_at&order=week_start.desc`),
   ]);
@@ -556,7 +557,7 @@ export async function readiness(orgId) {
     item('timezone_hours', 'Time zone and business hours', !!wave?.timezone && wave?.business_hours && Object.keys(wave.business_hours).length > 0, wave?.timezone || 'not set'),
     item('prices', 'Approved prices', prices.length > 0, `${prices.length} approved`),
     item('agreement', 'Approved agreement template', templates.length > 0 ? (templates.some((t) => t.legal_review === 'attorney_reviewed') ? true : 'partial') : false, templates.length ? (templates.some((t) => t.legal_review === 'attorney_reviewed') ? 'attorney reviewed' : 'business-approved; not legally reviewed') : 'none approved'),
-    item('payments', 'Deposits', pay?.mode === 'nova_test_platform' ? 'partial' : false, pay?.mode === 'nova_test_platform' ? 'TEST mode only (Nova test account)' : pay?.mode === 'client_connected_account' ? "Business's own Stripe account connected (test mode until live use is approved)" : 'not configured'),
+    { key: 'payments', label: 'Deposits', ...paymentReadiness(pay, { isTest: !!ops?.is_test, env }) },
     item('stripe_webhook', 'Payment confirmation webhook', !!env.STRIPE_WEBHOOK_SECRET && !!env.STRIPE_SECRET_KEY, env.STRIPE_WEBHOOK_SECRET ? 'configured' : 'missing STRIPE_WEBHOOK_SECRET'),
     item('sms', 'Text messaging', sendMode() === 'live' && wave?.provider_registration === 'approved' && !!wave?.sms_number_ref ? true : false, `${sendMode()}; registration ${wave?.provider_registration || 'unknown'}; number ${wave?.sms_number_ref ? 'assigned' : 'none'}`),
     item('voice', 'AI voice receptionist', voice?.status === 'active' && !!voice?.disclosure_script && sendMode() === 'live' ? true : false, voice ? `${voice.status}${voice.disclosure_script ? '' : '; no disclosure script'}` : 'not configured'),

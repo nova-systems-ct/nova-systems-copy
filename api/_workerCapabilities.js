@@ -12,10 +12,10 @@ export const CAPABILITIES = [
     job_types: ['ops_conversation_turn'], code: 'api/_ops/service.js (handleInboundTurn)' },
   { key: 'followup_revive', name: 'Follow-up and Revive worker', role: 'Follow-up',
     does: 'Sends scheduled follow-ups and Revive messages to eligible customers only, honoring consent, suppression and stop-on-reply.',
-    job_types: ['ops_followup_send'], code: 'api/_ops/service.js (follow-ups), api/_ops/harvest.js' },
+    job_types: ['ops_followup_send', 'ops_campaign_send'], code: 'api/_ops/service.js (follow-ups), api/_ops/harvest.js' },
   { key: 'demand_outreach', name: 'Demand outreach worker', role: 'Demand',
-    does: 'Sends messages for owner-approved Demand campaigns only, within each campaign’s volume and cost limits.',
-    job_types: ['ops_campaign_send'], code: 'api/_ops/harvest.js' },
+    does: 'Tracks owner-approved acquisition campaigns, prospects and outcomes. Contact is recorded manually; an automated Demand sender is not connected. Recovery messages belong to the Revive worker.',
+    job_types: [], on_demand: 'Owner-operated Demand campaign tools', code: 'api/_ops/demand.js' },
   { key: 'monitoring', name: 'Monitoring worker', role: 'Operations',
     does: 'Every 5 minutes checks the queue, stuck jobs and failed sends, and opens alerts for the owner.',
     job_types: ['ops_sentry_sweep','nova_monitoring_review'], code: 'api/_ops/sentry.js' },
@@ -81,7 +81,7 @@ export function readinessFor(key, { env = process.env, facts = {} } = {}) {
       c('Email confirmations sent for real', email, email ? 'Live' : 'Dry run: confirmations are recorded, not sent (Resend domain verification needed)'),
     ];
     case 'followup_revive': return [c('Text messages sent for real', sms, sms ? 'Live' : 'Dry run until Twilio is configured')];
-    case 'demand_outreach': return [c('An owner-approved campaign', facts.approvedCampaigns > 0, facts.approvedCampaigns ? `${facts.approvedCampaigns} approved` : 'Nothing is sent until you approve a campaign'), c('Messages sent for real', sms || email, sms || email ? 'Live channel available' : 'Dry run: no live sending channel')];
+    case 'demand_outreach': return [c('Automated acquisition sender', false, 'Not connected. Demand currently records owner-approved campaigns, manual contacts and outcomes; Revive handles recovery messages separately.')];
     case 'monitoring': return [c('Recent monitoring result', !!facts.lastCompletedAt && Date.now()-Date.parse(facts.lastCompletedAt)<20*60000, facts.lastCompletedAt ? `Last completed ${facts.lastCompletedAt}; checks run through the job queue. Alerts appear in the app.` : 'No completed check yet. Register the worker and confirm the hosted schedule runs.')];
     case 'reporting': return [c('Recent scoreboard result', !!facts.lastCompletedAt && Date.now()-Date.parse(facts.lastCompletedAt)<2*3600000, facts.lastCompletedAt ? `Last completed ${facts.lastCompletedAt}; results use saved business records.` : 'No completed scoreboard yet. Register the worker and confirm the hosted schedule runs.')];
     case 'audit_review': return [c('Internet access from the server', true, 'Reads public pages only; no paid service')];
