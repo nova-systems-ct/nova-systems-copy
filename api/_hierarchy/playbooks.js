@@ -1,6 +1,6 @@
 // Versioned operating instructions. Git versions the baseline; owner-approved business memory adds context.
 // A model's narrative never changes execution permissions, financial arithmetic or an approval decision.
-export const PLAYBOOK_VERSION = '2026-11-05.1';
+export const PLAYBOOK_VERSION = '2026-11-06.1';
 export const COMPANY_MISSION = 'Nova Systems serves businesses by diagnosing evidence-backed customer and revenue friction, installing supported systems that complete approved work, creating sales opportunities, and reviving eligible stalled relationships. Preserve existing systems where they work. Prove the result before claiming success.';
 const BOUNDARIES = [
   'Use only this business’s records and cited evidence. State unknowns; never invent customers, revenue, bank balances, workers or completed installations.',
