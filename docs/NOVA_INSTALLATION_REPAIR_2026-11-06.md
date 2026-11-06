@@ -123,3 +123,24 @@ connected social accounts, useful audit findings or measured recovered revenue.
 The hosted trial is not proof of a real recipient delivery, continuous-worker
 availability, audit quality or recovered revenue. Approved hours, services and
 terms plus the separately listed runtime/provider acceptance remain required.
+
+### Final deployment and owner-screen check
+
+- Final source: `0def0a7691bcd6f304753c8b6d7f8c1a4d963ac6`; deployment
+  `dep-dbn4v28n74is73el0pu0`, observed live at 22:08:46 UTC (5:08 PM New York).
+  The follow-up fixes the dependency instruction and versions the corrected
+  operating instructions as `2026-11-06.1`. Role tests: 27 passed; optional local
+  inference-boundary test passed with paid reasoning off.
+- Verified signed-in Settings and all 13 workers/reporting lines. Monitoring,
+  reporting and executive cards show saved completed results and next scheduled
+  tasks; workers without completed work say so. LLM reasoning remains disabled.
+- Retried Nova's own installation on the final build. It reused plan v1 and the
+  existing form, and now correctly directs Revive to Agents' unfinished setup.
+  Six required prerequisites remain blocked: hours, approved services, approved
+  agreement, available calendar, continuous-worker heartbeat and the customer
+  acceptance test that depends on those inputs. Nothing was activated.
+- Live screen proof: `docs/qa/live-install-2026-11-06/owner-install.png` (cropped
+  to the app content so the account identity is excluded).
+- No paid provider calls, real recipient messages or purchases were made. No
+  audit case/clock was changed by this repair. The test site is
+  `https://nova-staging-demo.onrender.com/dashboard/ops/install`.
