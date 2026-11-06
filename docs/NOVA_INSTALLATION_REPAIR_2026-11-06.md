@@ -43,7 +43,7 @@ Local checks on the repaired source:
 
 | Check | Result | Boundary |
 |---|---|---|
-| Local logic/schema suites | 57 passed; none skipped | Bundled Chromium enabled; not hosted/provider acceptance |
+| Local logic/schema suites | 58 passed; none skipped | Bundled Chromium enabled; not hosted/provider acceptance |
 | Configuration/payment readiness | 17 assertions passed | Read-only fixtures; no network service |
 | Installer safety | 16 passed, 0 failed | Actual API + disposable PostgreSQL |
 | Customer journey | 69 passed, 0 failed | Actual handlers + worker; local SMS/Stripe stand-ins |
@@ -90,4 +90,36 @@ connected social accounts, useful audit findings or measured recovered revenue.
 - Actual customer outcomes before claiming money recovered, ROI or guaranteed
   customers. Unknown impact stays unknown.
 
-Deployment and hosted acceptance are recorded below only after observation.
+## Hosted release and acceptance
+
+- Source commit `ec29dc1489d18302ee2ff0d1bf1bd446d1555f63` deployed to the
+  existing free staging service as `dep-dbn4obafngtc73b2t29g`; observed live at
+  21:54:23 UTC (4:54 PM New York). The main production domain was not replaced.
+- Updated only the existing `nova-staging-core-due-work` scheduler (job 3),
+  preserving its signed Vault-backed authentication and due-work-only behavior.
+- Hosted no-send acceptance job `7c48f753-fe05-42a1-b97f-1fcdf4481a4b` ran through
+  that scheduler and deployed receiver at 22:01:03 UTC. It completed on attempt
+  one; its recipient was `blocked_at_send / no_valid_number`, provider-message
+  count was zero and model reasoning was disabled. The isolated TEST business
+  is `155f7836-d777-491d-b754-1f47e8debc32` and has no phone/email recipient.
+- The first fixture setup used an incorrect column and was rolled back by the
+  database. A later read-only receipt query used an incorrect message-ID column
+  and was rejected. Both were corrected; neither changed an existing business
+  or bypassed a guard. These were test-setup errors, not successful executions.
+- Secure owner sign-in was verified in the live browser after a transient
+  browser transport failure. Installed Nova's selected booking, monitoring and
+  recovery recipes. The result is correctly **partial**, not customer-ready.
+- Saved only known operating inputs: `America/New_York` and Isaac's previously
+  supplied escalation name, business email and phone. Hours, prices and terms
+  were not invented or approved.
+- The live run exposed a misleading dependency instruction: Revive told the
+  owner to choose Agents even though it was chosen but blocked. A regression
+  test failed on that instruction; the repair points to the unfinished setup,
+  or to re-enabling a disabled module, rather than a nonexistent Choose button.
+- Verified the actual deployed Settings controls: saved time zone and escalation
+  phone, empty hours/services/agreements, and the new test-connection input. No
+  account was connected and no agreement or price was approved by the tester.
+
+The hosted trial is not proof of a real recipient delivery, continuous-worker
+availability, audit quality or recovered revenue. Approved hours, services and
+terms plus the separately listed runtime/provider acceptance remain required.

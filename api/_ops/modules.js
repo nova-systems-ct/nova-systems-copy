@@ -126,7 +126,12 @@ export async function provisionModule(orgId, key, ctx) {
   const step = (sub, label, [status, detail, evidence = {}], owner_action = null, outcome = null) => out.push({ step_key: `module:${key}:${sub}`, label: `${m.name}: ${label}`, status, detail, evidence: { ...evidence, outcome: outcome?.[status] || outcome?.default || null }, owner_action: status === 'done' || status === 'skipped' ? null : owner_action });
   for (const d of m.dependencies) {
     const dep = await dbOne(`ops_installed_modules?organization_id=eq.${enc(orgId)}&module_key=eq.${enc(d)}&select=status`);
-    if (!dep || !['installed', 'selected', 'installing'].includes(dep.status)) { step('dependency', `needs ${moduleByKey(d).name}`, ['blocked', `${moduleByKey(d).name} must be selected first`], `Select ${moduleByKey(d).name} as well.`); return out; }
+    if (!dep || !['installed', 'selected', 'installing'].includes(dep.status)) {
+      const name = moduleByKey(d).name;
+      const detail = !dep ? `${name} must be selected first` : dep.status === 'disabled' ? `${name} is turned off` : `${name} is selected, but its setup has not passed`;
+      const action = !dep ? `Select ${name} as well.` : dep.status === 'disabled' ? `Turn ${name} back on, then run Install Systems.` : `Finish or fix the blocked steps for ${name}, then retry Install Systems.`;
+      step('dependency', `needs ${name}`, ['blocked', detail], action); return out;
+    }
   }
   for (const w of m.workers) step(`worker:${w}`, `worker ${capabilityByKey(w)?.name || w}`, await ensureWorker(w, ctx.actor), 'Register or resume it on the Workers page.', { done: 'registered, active', blocked: 'registered, not active' });
   if (key === 'agents_booking') {
