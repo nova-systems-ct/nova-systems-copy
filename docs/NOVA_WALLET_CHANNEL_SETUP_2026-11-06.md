@@ -47,3 +47,34 @@ payments and messaging preparation; no purchases, real charges or customer sends
 
 Prepared documents, adapters, signing readiness and local tests must not be
 reported as submitted applications, connected providers or real delivery.
+
+## Hosted acceptance receipt
+
+- Source commit `6d79e8de5851ed5948746cd89317921814226214` was published through
+  the connected GitHub service after terminal push lacked authentication.
+- Existing free Render deploy `dep-dbn0o6ui0phs73d1piq0` became live at
+  17:20:40 UTC (12:20 PM New York). No plan or billing configuration changed.
+- Signed-in owner generated and downloaded the setup pass through the actual
+  Rewards UI. The 169,684-byte package has the expected generic type, a setup-test
+  serial, Pass Type ID `pass.app.nova-systems.rewards` and team `DWCWDDW2DT`.
+  Every manifest hash and its detached CMS signature were independently verified.
+  This is actual configured signing, not the synthetic local test signer.
+- A subsequent hosted read confirms zero rewards programs, accounts, ledger
+  entries and social connections. Generation does not create fictitious customers.
+- Real PostgreSQL channel acceptance passes on this source: signed receipts,
+  replay protection, scoped identity, existing booking logic, zero-spend replies,
+  STOP/START and tenant denial. Provider calls are controlled local stand-ins.
+- Apple account credentials advanced to two-factor verification, but Apple rejected
+  the supplied verification code. Registration remains unsubmitted.
+- Integration Center reports Stripe, Twilio, Resend and Anthropic disconnected.
+  Their connection flags are not evidence that provider credentials were revoked.
+  No live checkout, phone call or external message was attempted.
+- Both audits were left untouched: no audit record, clock or job was changed by
+  this release. No existing provider key or spending switch was modified.
+
+Owner test: Operations → Rewards → Prepare Apple Wallet test pass → Download
+Apple Wallet test pass. Open on an iPhone and verify Wallet accepts it; an iPad
+download alone is not device acceptance. The pass is explicitly not redeemable.
+
+Receipt screenshot (private account details excluded):
+`docs/qa/live-wallet-2026-11-06/rewards.png`.
