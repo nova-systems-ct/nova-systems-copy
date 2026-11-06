@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 const M=await import('../api/_ops/wallet.js').catch(()=>({}));
+assert.equal(typeof M.buildWalletSetupTest,'function','Owner must be able to test signing without inventing a rewards program or customer');
 assert.equal(typeof M.buildWalletPass,'function','Wallet must generate a real signed artifact, not a readiness placeholder');
 const rules={reward_threshold:10,reward_description:'One complimentary service',terms_text:'Test-only program terms, not a real offer.'};
 const program={id:'p',organization_id:'o',status:'approved',name:'Test Rewards',rules,rules_sha256:crypto.createHash('sha256').update(JSON.stringify(rules)).digest('hex')};
@@ -33,6 +34,19 @@ try{
  const e={NOVA_WALLET_ORGANIZATION_ID:'o',NOVA_WALLET_ISSUER_NAME:'Test issuer',APPLE_WALLET_ENABLED:'true',APPLE_TEAM_ID:'TESTTEAM',APPLE_PASS_TYPE_ID:'pass.example.test',APPLE_PASS_SIGNER_CERT_PEM:fs.readFileSync(path.join(dir,'signer.pem'),'utf8'),APPLE_CSR_PRIVATE_KEY_PEM:fs.readFileSync(path.join(dir,'signer.key'),'utf8'),APPLE_WWDR_CERT_PEM:fs.readFileSync(path.join(dir,'ca.pem'),'utf8')};
  e.APPLE_CSR_PRIVATE_KEY_PEM=crypto.createPrivateKey(e.APPLE_CSR_PRIVATE_KEY_PEM).export({type:'pkcs8',format:'pem',cipher:'aes-256-cbc',passphrase:'test-only'});e.APPLE_CSR_PRIVATE_KEY_PASSWORD='test-only';
  const apple=await M.buildWalletPass('apple',{orgId:'o',program,account},e);const zip=unzipSync(Buffer.from(apple.base64,'base64'));
+ const setup=await M.buildWalletSetupTest({orgId:'o'},e);
+ const setupZip=unzipSync(Buffer.from(setup.base64,'base64'));
+ const setupPass=JSON.parse(Buffer.from(setupZip['pass.json']));
+ assert.equal(setup.test_only,true);assert.equal(setup.platform,'apple');
+ assert(setupPass.generic,'A setup test must not impersonate a real loyalty account');
+ assert.match(setupPass.serialNumber,/^nova_setup_test_/);
+ assert.match(JSON.stringify(setupPass),/not redeemable/i);
+ assert(!setupPass.storeCard&&!setupPass.webServiceURL&&!setupPass.authenticationToken);
+ assert(!JSON.stringify(setupPass).includes('PRIVATE KEY'));
+ fs.writeFileSync(path.join(dir,'setup-manifest.json'),setupZip['manifest.json']);fs.writeFileSync(path.join(dir,'setup-signature'),setupZip.signature);
+ run(['cms','-verify','-binary','-inform','DER','-in','setup-signature','-content','setup-manifest.json','-noverify','-out','setup-verified.json']);
+ await assert.rejects(()=>M.buildWalletSetupTest({orgId:'foreign'},e),/business|disabled|configuration/i);
+ await assert.rejects(()=>M.buildWalletSetupTest({orgId:'o'},{...e,APPLE_WALLET_ENABLED:'false'}),/disabled|configuration/i);
  const pass=JSON.parse(Buffer.from(zip['pass.json']));assert.equal(pass.storeCard.primaryFields[0].value,7);assert.equal(pass.passTypeIdentifier,'pass.example.test');
  assert(!pass.webServiceURL&&!pass.authenticationToken,'An unimplemented update service must not be advertised');
  const manifest=JSON.parse(Buffer.from(zip['manifest.json']));for(const [name,digest]of Object.entries(manifest))assert.equal(crypto.createHash('sha1').update(zip[name]).digest('hex'),digest);

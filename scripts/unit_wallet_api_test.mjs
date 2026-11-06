@@ -11,8 +11,12 @@ globalThis.fetch=async(url,init={})=>{
  if(init.method&&init.method!=='GET'){writes++;throw Error('No mutation expected');}
  throw Error(`Unexpected query ${u.pathname}`);
 };
-const call=async(org,headers={authorization:'Bearer test'})=>{const r={code:200,status(v){this.code=v;return this;},setHeader(){},json(b){this.body=b;return this;}};await handleOps({method:'POST',query:{},headers,body:{organization_id:org,action:'wallet-pass',platform:'apple',account_id:'foreign'}},r,'loyalty');return r;};
+const call=async(org,headers={authorization:'Bearer test'},action='wallet-pass')=>{const r={code:200,status(v){this.code=v;return this;},setHeader(){},json(b){this.body=b;return this;}};await handleOps({method:'POST',query:{},headers,body:{organization_id:org,action,platform:'apple',account_id:'foreign'}},r,'loyalty');return r;};
 assert.equal((await call('o',{})).code,401);assert.equal(accountReads,0);
 assert.equal((await call('foreign')).code,403);assert.equal(accountReads,0,'Authorization must precede object reads');
 assert.equal((await call('o')).code,404);assert.equal(accountReads,1);assert.equal(writes,0);
+assert.equal((await call('o',{},'wallet-setup-test')).code,401);
+assert.equal((await call('foreign',undefined,'wallet-setup-test')).code,403);
+assert.equal((await call('o',undefined,'wallet-setup-test')).code,409,'Missing signer must block the setup test, not silently create a rewards program');
+assert.equal(accountReads,1);assert.equal(writes,0,'Signing setup tests must not mutate programs, accounts, points or customer records');
 console.log('PASS — Wallet HTTP surface rejects unauthenticated, foreign-business and missing-account issuance');

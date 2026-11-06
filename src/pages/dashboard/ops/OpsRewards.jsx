@@ -11,7 +11,8 @@ export default function OpsRewards() {
   const d = useLoad(() => api('loyalty', { org: orgId }), [orgId])
   const act = useAction()
   const [open, setOpen] = useState(null)
-  const [walletResult,setWalletResult]=useState(null)
+  const [walletResponse,setWalletResult]=useState(null)
+  const walletResult=walletResponse?.orgId===orgId?walletResponse.pass:null
   useEffect(()=>{setWalletResult(null);setOpen(null)},[orgId])
   useEffect(()=>{setWalletResult(null)},[open])
   const go = (body, ok) => act.run(() => api('loyalty', { org: orgId, method: 'POST', body }), ok).then((r) => { d.reload(); return r })
@@ -27,10 +28,14 @@ export default function OpsRewards() {
       <Card title="Apple & Google Wallet">
         <p style={{color:C.dim}}>Signed balance snapshots. Redemption always checks Nova’s live ledger. Automatic card updates and device acceptance are not yet verified.</p>
         {['apple','google'].map(platform=><p key={platform} style={{fontSize:13}}><strong>{platform==='apple'?'Apple Wallet':'Google Wallet (Android)'}</strong> · {wallet.platforms?.[platform]?.reason||'Not configured'}</p>)}
+        {business.can_configure&&<div style={{marginTop:16}}>
+          <button className="ops-btn" disabled={act.busy||!wallet.platforms?.apple?.can_issue} onClick={()=>go({action:'wallet-setup-test'},'Test pass generated. Save it on an iPhone to check device acceptance.').then(r=>setWalletResult({orgId,pass:r?.pass||null}))}>Prepare Apple Wallet test pass</button>
+          <p style={{fontSize:12,color:C.dim}}>No rewards program or customer account needed. This clearly marked test has no cash or reward value. Save the pass in Wallet on an iPhone; an iPad can download it for transfer. Apple Pay checkout is a separate test.</p>
+        </div>}
         {walletResult?.platform==='google'&&<a className="ops-btn" href={walletResult.url} target="_blank" rel="noreferrer">Continue to Google Wallet</a>}
         {walletResult?.platform==='apple'&&<button className="ops-btn" onClick={()=>{
           const bytes=Uint8Array.from(atob(walletResult.base64),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([bytes],{type:walletResult.mime_type}));const a=document.createElement('a');a.href=url;a.download=walletResult.file_name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
-        }}>Download signed Apple pass</button>}
+        }}>{walletResult.test_only?'Download Apple Wallet test pass':'Download signed Apple pass'}</button>}
       </Card>
       <div className="ops-two">
         <Card title={live ? `${live.name} · ${live.status} (v${live.version})` : 'No approved program'}>
@@ -54,7 +59,7 @@ export default function OpsRewards() {
           </tbody></table>
         )}
       </Card>
-      {open && <Account orgId={orgId} id={open} live={live} go={go} busy={act.busy} canConfigure={business.can_configure} wallet={wallet} onWallet={(platform)=>go({action:'wallet-pass',account_id:open,platform},'Signed snapshot prepared. Device save is not yet confirmed.').then(r=>setWalletResult(r?.pass||null))} />}
+      {open && <Account orgId={orgId} id={open} live={live} go={go} busy={act.busy} canConfigure={business.can_configure} wallet={wallet} onWallet={(platform)=>go({action:'wallet-pass',account_id:open,platform},'Signed snapshot prepared. Device save is not yet confirmed.').then(r=>setWalletResult({orgId,pass:r?.pass||null}))} />}
     </>
   )
 }

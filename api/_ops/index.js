@@ -436,6 +436,12 @@ export async function handleOps(req, res, op) {
       }
       const action = sanitize(b.action, 30);
       const s = await inOrg(req, res, orgParam, action === 'redeem' ? 'ops.manage' : 'ops.configure'); if (!s) return;
+      if (action === 'wallet-setup-test') {
+        if (!rateLimit(req,res,5,60000)) return;
+        const {buildWalletSetupTest}=await import('./wallet.js');
+        res.setHeader('Cache-Control','no-store');
+        return send(res,200,{pass:await buildWalletSetupTest({orgId:s.orgId})});
+      }
       if (action === 'wallet-pass') {
         if (!rateLimit(req,res,5,60000)) return;
         const {issueWalletPass}=await import('./wallet.js');

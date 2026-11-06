@@ -66,3 +66,25 @@ export async function issueWalletPass({orgId,accountId,platform,actor},env=proce
  await dbInsert('ops_transitions',{organization_id:orgId,entity:'settings',entity_id:account.id,from_state:account.pass_status,to_state:account.pass_status,actor_type:'user',actor_id:actor?.id||null,reason:`${platform} Wallet snapshot generated; device save not confirmed`,evidence:{platform,snapshot_at:result.snapshot_at,artifact_sha256:hash(result.base64||result.url),automatic_updates:false}});
  return result;
 }
+
+// Owner setup check only. No customer, loyalty program, points, redemption or
+// provider send is created. Its serial namespace cannot identify a rewards account.
+export async function buildWalletSetupTest({orgId},env=process.env,{now=()=>new Date()}={}){
+ const at=now();const state=walletPlatforms(env,orgId,{now:at}).apple;
+ if(!state.can_issue)throw error(409,`Apple Wallet setup test is disabled or missing configuration for this business. ${state.reason}`);
+ const {PKPass}=await import('passkit-generator');
+ const logo=Buffer.from(NOVA_LOGO_PNG_BASE64,'base64');
+ const pass=new PKPass({'icon.png':logo,'icon@2x.png':logo,'icon@3x.png':logo,'logo.png':logo},appleCertificates(env,at),{
+  formatVersion:1,passTypeIdentifier:env.APPLE_PASS_TYPE_ID,teamIdentifier:env.APPLE_TEAM_ID,
+  serialNumber:`nova_setup_test_${crypto.randomUUID()}`,organizationName:String(env.NOVA_WALLET_ISSUER_NAME).slice(0,100),
+  description:'Nova Wallet setup test — not redeemable',logoText:'NOVA SYSTEMS · TEST',
+  backgroundColor:'rgb(10,10,10)',foregroundColor:'rgb(250,250,250)',labelColor:'rgb(201,168,76)',
+ });
+ pass.type='generic';
+ pass.primaryFields.push({key:'test',label:'WALLET CONNECTION TEST',value:'Setup test'});
+ pass.secondaryFields.push({key:'value',label:'NO CASH OR REWARD VALUE',value:'Not redeemable'});
+ pass.auxiliaryFields.push({key:'created',label:'GENERATED',value:at.toISOString().slice(0,16).replace('T',' ')});
+ pass.backFields.push({key:'purpose',label:'TEST ONLY',value:'This pass checks Nova’s signing and your device’s ability to save a pass. It is not a rewards account, payment method, discount, ticket or promise of service.'},
+  {key:'acceptance',label:'DEVICE CHECK',value:'Generated is not saved. Open this file on an iPhone and confirm it appears in Wallet. Automatic updates are not connected.'});
+ return {platform:'apple',test_only:true,file_name:'nova-wallet-setup-test.pkpass',mime_type:'application/vnd.apple.pkpass',base64:pass.getAsBuffer().toString('base64'),snapshot_at:at.toISOString(),automatic_updates:false};
+}
