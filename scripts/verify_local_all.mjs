@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 
 const suites = [
   'unit_provider_signin_test',
+  'unit_apple_signin_secret_test',
   'unit_channel_credentials_test', 'unit_rcs_connector_test',
  'unit_apple_messages_test',
  'unit_tiktok_messages_test',

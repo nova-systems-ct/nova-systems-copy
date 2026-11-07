@@ -93,3 +93,31 @@ Google Cloud's client setup page returned Site Unavailable after one reload. Goo
 The existing Meta app is still unpublished. Its Instagram Unified Login setup currently has no compatible configuration and retains the old `nova-systems.vercel.app` redirect. No new permission, token, configuration, webhook subscription or publication was granted. Do not point it at a route that Nova has not implemented.
 
 Local acceptance passed with the real frontend, SDK, API and database, and isolated OAuth identities: Apple/Google authorization redirects, return to the CRM, same-origin destination, rejected callback despite an existing session, disabled/unavailable provider handling, password fallback, desktop/iPad/phone fit. This is not real Apple/Google identity acceptance. Lint/build pass. Across the local logic/schema gate, 61 suites passed on the initial run; a cost-register wording assertion was updated for the actual rejected SMS campaign, and that suite plus the initially skipped renderer both passed afterward with bundled Chromium (63 suites covered). Public SMS form browser acceptance, service-consent/opt-out acceptance and the 69-check core customer journey also passed. No external calls, texts, payments or model inference were triggered.
+
+## Deployed release and remaining account approvals
+
+- Published source: `283e07d2cc1b47d6c08168470e9f1cf5fe81e82c`, branch `codex/render-demo`.
+- Existing free Render service deploy: `dep-dbnnpcrbc2fs73flf4dg`, live November 7 at 19:33:53 UTC (2:33 PM Eastern).
+- Live https://nova-staging-demo.onrender.com/login shows the new Apple/Google entry points and their actual pending setup state. The public `/book` form shows optional, unchecked service-text permission. `/healthz` returned `{"ok":true}`.
+- The separate older `nova-systems.app` production site was not replaced. The opt-in therefore still must be deployed on the exact campaign domain before carrier resubmission.
+- Security personas: 90/90 passed. No application errors were returned by the subsequent Render error-log query; this is not a guarantee of continuous availability on free hosting.
+
+TikTok's Nova Systems account completed Apple authentication and email identity verification. The TikTok For Business grant screen is prepared with only profile, business email/information, partner information, inbox management, account-type read and email read selected. Phone numbers, Promote, ad/video publishing, non-public posts, account-type changes, settings changes and analytics permissions are unselected. **Continue has not been pressed:** it grants account/inbox access and accepts TikTok For Business terms, requiring specific owner approval. This is account preparation, not a Nova Business Messaging API connection or a verified customer conversation. A prior attempt to narrow the proposed scopes did not execute because automatic approval review hit a usage limit; after continuation, the switches were prepared successfully through the same browser interface. No workaround or grant was used.
+
+Apple's pending capability save still needs specific approval because Apple says provisioning profiles for `app.nova-systems.workspace` would be invalidated. The rejected confirmation has not been retried. Google still needs the correct existing account, Meta remains unpublished/unconnected, and Twilio's fee-bearing campaign resubmission remains outside the zero-spending instruction. No live channel connection has been established by these actions.
+
+## Offline Apple client-secret setup utility
+
+`scripts/apple_signin_secret.mjs` now generates the ES256 client-secret JWT required for web Sign in with Apple from an existing, authorized P-256 key. It runs locally, has no network calls, prints no secret, creates only a new owner-readable file, refuses existing files/symlinks, and keeps the key and output outside the repository. Its default lifetime is 30 days; renewal before expiry remains an operator task. It does not create an Apple key, enable a provider, renew membership or accept account terms.
+
+After the real Services ID and Sign in with Apple key exist, run locally using actual IDs and private paths:
+
+```sh
+node scripts/apple_signin_secret.mjs --key-file /private/AuthKey.p8 --key-id APPLE_KEY_ID --team-id APPLE_TEAM_ID --services-id REGISTERED_WEB_SERVICES_ID --out /private/apple.client-secret.jwt
+```
+
+The generated JWT belongs only in Supabase's server-side Apple provider configuration. The web Services ID must match the token subject and be listed first for the web OAuth flow. Apple's callback for this staging project is `https://ubjnddxmdaxnbpzcmxnc.supabase.co/auth/v1/callback`; the app returns to Nova's `/auth/callback` with its validated `returnTo` destination. No real signing key or secret was supplied or generated in this task.
+
+The new test verifies actual P-256 signatures with fresh synthetic keys, claim/expiry validation, private file permissions, refusal to overwrite or follow an output symlink, repository exclusion and absence of credentials in CLI output. It passed, and lint passed. This setup utility does not change the already deployed app and needs no additional app deployment.
+
+Current references: https://developer.apple.com/documentation/accountorganizationaldatasharing/creating-a-client-secret ; https://developer.apple.com/documentation/SigninwithAppleRESTAPI/Generate-and-validate-tokens ; https://supabase.com/docs/guides/auth/social-sign-in/auth-apple .

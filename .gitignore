@@ -1,5 +1,7 @@
 #env
 .env
+*.p8
+*.client-secret.jwt
 .env.*
 !.env.example
 
