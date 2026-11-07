@@ -1,3 +1,4 @@
+import {CHANNEL_JOB_TYPES} from '../api/_channels/providers.js';
 // Nova's durable background worker — the always-on process described in
 // docs/RUNTIME_HOSTING_RECOMMENDATION.md. Polls the jobs table (supabase/durable-jobs-migration-
 // standalone.sql) and executes whatever handler is registered for each job's job_type.
@@ -301,6 +302,9 @@ const handlers = {
   },
 };
 
+for(const type of Object.values(CHANNEL_JOB_TYPES)) handlers[type]=handlers.channel_conversation_turn;
+handlers.ops_sms_turn=handlers.ops_conversation_turn;
+
 function opsEnv(ctx) { process.env.SUPABASE_URL ||= ctx.url; process.env.SUPABASE_SERVICE_ROLE_KEY ||= ctx.serviceKey; }
 // Recurring jobs keep themselves alive: the next run is enqueued with a slot-based idempotency key, so any
 // number of workers or redeliveries create exactly one next run per slot.
@@ -384,7 +388,7 @@ async function processOneJob(store, ctx) {
     const {attachWorkerAdvisory}=await import('../api/_hierarchy/workerAdvisory.js');
     const result = await attachWorkerAdvisory(job,await handler(job, ctx));
     if (renew) clearInterval(renew);
-    if (['channel_conversation_turn','channel_comment_reply','nova_monitoring_review','nova_reporting_snapshot'].includes(job.job_type) && (result?.paused || result?.deferred)) {
+    if ([...Object.values(CHANNEL_JOB_TYPES),'channel_conversation_turn','channel_comment_reply','nova_monitoring_review','nova_reporting_snapshot','ops_sms_turn','ops_conversation_turn'].includes(job.job_type) && (result?.paused || result?.deferred)) {
       if (!store.defer) throw new Error('This job store cannot retain paused channel work');
       await store.defer(job.id, leaseOwner, result.deferred ? 5 : 900, result.reason || 'Channel work paused');
       return true;
