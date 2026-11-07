@@ -6,6 +6,7 @@
 import { startTestEnv } from './testenv/env.mjs';
 import { allMigrations } from './testenv/migrations.mjs';
 import { makeCaller } from './testenv/call.mjs';
+import { inflateSync } from 'node:zlib';
 
 let pass = 0, fail = 0;
 const check = (n, c, x = '') => { if (c) { pass++; console.log(`PASS — ${n}`); } else { fail++; console.log(`FAIL — ${n} ${x}`); } };
@@ -89,6 +90,13 @@ try {
   await audit('recommendations', O({ case_id: caseId, finding_id: fId, mechanism: 'Add a booking link that checks real availability', effort_range: '1–2 days', cost_range: 'per approved scope', dependencies: 'Owner-approved prices', uncertainty: 'Volume estimate is owner-provided', verification_plan: 'Count booked appointments from the link for 30 days', priority_rank: 1 })).catch(() => null);
 
   // ---------------------------------------------------------------- compose → approve → PDF → secure link
+  const rejected = await audit('findings', O({ case_id: caseId, action: 'create', title: 'Historical withdrawn proposal', detail: 'This proposal is excluded from the report basis.', statement_type: 'observed_fact', confidence: 'medium', recommended_action: 'Review the historical observation', evidence_ids: [evId] }));
+  check('historical proposal can be rejected without deleting its history', rejected.status === 200);
+  await audit('findings', O({ case_id: caseId, action: 'review', id: rejected.body.finding.id, review_status: 'rejected' }));
+  const workspaceDraft = await audit('draft-report', O({ case_id: caseId, executive_summary: 'Workspace snapshot with one active finding and rejected history.' }));
+  check('the workspace composer saves a fresh draft with rejected history present', workspaceDraft.status === 200, JSON.stringify(workspaceDraft.body).slice(0,200));
+  const workspaceApproval = await audit('reports', O({ case_id: caseId, action: 'approve', id: workspaceDraft.body.report.id }));
+  check('a fresh workspace draft with rejected history can be approved immediately', workspaceApproval.status === 200, JSON.stringify(workspaceApproval.body).slice(0,200));
   r = await audit('compose', O({ case_id: caseId, executive_summary: 'TEST: the business answers calls in hours but offers no way to book online; customers who arrive after hours have no path. One scenario estimates the opportunity; it depends on owner-provided volume and an assumed conversion.' }));
   const rep = r.body.report;
   check('the report is composed from recorded evidence, findings, scenarios, benchmarks and tests (professional title, not a CPA audit)', r.status === 200 && rep.content.title === 'Operational Findings & Revenue Opportunity Report' && rep.content.evidence_reviewed.length === 1 && rep.content.competitor_benchmarks.length === 3 && /not a CPA financial audit/.test(rep.content.limitations), JSON.stringify(Object.keys(rep.content)));
@@ -98,7 +106,9 @@ try {
   check('the composed report is approved and bound to its content hash', r.status === 200 && !!r.body.report.approved_content_sha256, JSON.stringify(r.body).slice(0, 300));
   r = await audit('report-pdf', { token: owner.token, method: 'GET', query: { organization_id: nova, report_id: rep.id } });
   const pdf = Buffer.from(r.body.pdf_base64 || '', 'base64').toString('latin1');
-  check('the PDF is generated from the exact approved version and carries its hash', r.status === 200 && pdf.startsWith('%PDF') && pdf.includes('Operational Findings') && pdf.includes(r.body.content_sha256.slice(0, 16)));
+  let decoded = pdf;
+  for (const match of pdf.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) { try { decoded += inflateSync(Buffer.from(match[1],'latin1')).toString('latin1'); } catch { /* image streams are not text */ } }
+  check('the PDF is generated from the exact approved version and carries its hash', r.status === 200 && pdf.startsWith('%PDF') && decoded.includes('THE NOVA AUDIT') && decoded.includes(r.body.content_sha256.slice(0, 16)));
   r = await audit('publish', { token: outsider.token, body: { organization_id: nova, report_id: rep.id } });
   check('another organization cannot publish this report', r.status === 403);
   r = await audit('publish', O({ report_id: rep.id }));
@@ -109,7 +119,8 @@ try {
   check('an invalid recipient is refused before any link is created', r.status === 400);
   r = await audit('publish', O({ report_id: rep.id, email_to: 'client-owner@shine.example.test' }));
   check('email defaults to dry run: recorded on the delivery, nothing sent to the provider', r.status === 200 && r.body.notification_status === 'dry_run' && env.stubs.outbox.length === 0, JSON.stringify(r.body).slice(0, 200));
-  Object.assign(process.env, { SALES_EMAIL_MODE: 'live', SALES_EMAIL_ALLOWLIST: '@shine.example.test' });
+  // Explicit unlock applies only to this isolated Resend stand-in. No actual provider endpoint or key is used.
+  Object.assign(process.env, { NOVA_SPENDING_LOCK: 'disabled', SALES_EMAIL_MODE: 'live', SALES_EMAIL_ALLOWLIST: '@shine.example.test' });
   r = await audit('publish', O({ report_id: rep.id, email_to: 'client-owner@shine.example.test' }));
   const mail = env.stubs.outbox.at(-1); const mailedToken = r.body.link?.split('/report/')[1];
   check('live mode emails the approved-version link to the client; delivery shows provider acceptance (not "delivered")', r.status === 200 && r.body.notification_status === 'sent' && mail?.to?.[0] === 'client-owner@shine.example.test' && mail.text.includes(`/report/${mailedToken}`) && /not proof it reached/.test(r.body.note), JSON.stringify(r.body).slice(0, 200));

@@ -45,7 +45,15 @@ export function validateFinding(f, evidenceCount = 0) {
 export function validateReportForApproval(content, findings) {
   const problems = [];
   const c = content && typeof content === 'object' ? content : {};
+  const investigation = c.diagnostic_investigation;
+  const diagnosed = investigation?.state === 'review' && investigation.ready_for_review === true
+    && Array.isArray(investigation.tasks) && investigation.tasks.length > 0
+    && investigation.tasks.every((t) => ['completed', 'waived'].includes(t.status))
+    && investigation.tasks.some((t) => t.status === 'completed' && (t.evidence_id || t.run_id))
+    && Array.isArray(c.evidence_reviewed) && c.evidence_reviewed.length > 0;
+  if (investigation && !diagnosed) problems.push('Complete the investigation and submit its documented coverage for review before approving this report');
   for (const s of REQUIRED_REPORT_SECTIONS) {
+    if (s === 'findings' && diagnosed && Array.isArray(c.findings) && !c.findings.length) continue;
     const v = c[s];
     const empty = v == null || (typeof v === 'string' && !v.trim()) || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length);
     if (empty) problems.push(`report section "${s}" is missing or empty`);
@@ -54,7 +62,7 @@ export function validateReportForApproval(content, findings) {
   for (const re of PROHIBITED) if (re.test(text)) problems.push(`report text contains a claim Nova does not make (${re.source})`);
   // A version drafted while findings were still proposed must not be approved as-is: it would print "proposed".
   if (Array.isArray(c.findings)) for (const f of c.findings) if (f && f.review_status && f.review_status !== 'reviewed') problems.push(`this version was drafted before "${String(f.title || '').slice(0, 60)}" was reviewed; draft a new version and approve that`);
-  if (!findings.length) problems.push('the case has no findings');
+  if (!findings.length && !diagnosed) problems.push('the case has no findings');
   for (const f of findings) {
     const label = `finding "${String(f.title || f.id).slice(0, 60)}"`;
     if (f.review_status !== 'reviewed') problems.push(`${label} has not been reviewed (status: ${f.review_status || 'draft'})`);
@@ -159,7 +167,7 @@ export function validateClockPolicy(p) {
   if (!p || typeof p !== 'object') return ['clock policy is required'];
   if (!p.start_event || String(p.start_event).length < 10) errors.push('describe the clock start event (e.g. "all required inputs received and permission recorded")');
   if (!['business_hours', 'elapsed_hours'].includes(p.hours_basis)) errors.push('choose business hours or elapsed hours');
-  const h = Number(p.target_hours); if (!Number.isInteger(h) || h < 48 || h > 72) errors.push('target must be a whole number of hours between 48 and 72');
+  const h = Number(p.target_hours); if (!Number.isInteger(h) || h < 24 || h > 72) errors.push('target must be a whole number of hours between 24 and 72');
   if (!p.missing_input_rule || String(p.missing_input_rule).length < 10) errors.push('say what happens when inputs are missing (e.g. clock paused until received)');
   if (!p.extension_notice || String(p.extension_notice).length < 10) errors.push('say how and when the client is told about an extension');
   if (p.aim_hours != null && (!Number.isInteger(Number(p.aim_hours)) || Number(p.aim_hours) < 24 || Number(p.aim_hours) > h)) errors.push('the aim must be whole hours, at least 24 and not later than the target');

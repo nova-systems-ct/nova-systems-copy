@@ -26,3 +26,7 @@ export function safeReturnTo(value, fallback = "/dashboard") {
 
   return decoded;
 }
+
+export function loginRedirect({pathname='',search='',hash=''} = {}) {
+  return `/login?returnTo=${encodeURIComponent(safeReturnTo(`${pathname}${search}${hash}`))}`;
+}

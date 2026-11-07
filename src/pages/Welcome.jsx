@@ -323,7 +323,7 @@ export default function Welcome() {
               I agree that Nova Systems may contact me regarding this request. *
             </Checkbox>
             <Checkbox checked={agreeMarketing} onChange={setAgreeMarketing}>
-              I would also like to receive business insights, offers, and marketing communications from Nova Systems.
+              I would also like to receive business insights and offers by email from Nova Systems. Optional; unsubscribe at any time.
             </Checkbox>
             {errors.agreements && <p style={{ color: "#e05252", fontSize: 11 }}>{errors.agreements}</p>}
           </div>

@@ -6,6 +6,7 @@
 // Every posting goes through the database function loyalty_post(), which locks the account (atomic balance checks).
 import { dbGet, dbOne, dbInsert, dbPatch, dbRpc, enc, nowIso } from '../_sales/core.js';
 import { sha256 } from './rules.js';
+import { walletPlatforms } from './wallet.js';
 
 const ERR = (status, message) => Object.assign(new Error(message), { status });
 const DAY = 86400_000;
@@ -140,7 +141,7 @@ export async function adjust({ orgId, accountId, points, reason, actor }) {
 }
 
 // What a Wallet pass needs, and whether it can be issued. Nothing is signed or distributed without Apple credentials.
-export function walletReadiness(env = process.env) {
-  const missing = ['APPLE_PASS_TYPE_ID', 'APPLE_TEAM_ID', 'APPLE_PASS_CERT_P12_BASE64', 'APPLE_PASS_CERT_PASSWORD', 'APPLE_WWDR_CERT_BASE64'].filter((k) => !env[k]);
-  return { can_issue: false, missing, reason: missing.length ? 'Apple Wallet pass signing credentials are not configured (owner: Apple Developer account → Pass Type ID + certificate)' : 'Pass signing is not implemented yet in this build; credentials are present' };
+export function walletReadiness(env = process.env, orgId) {
+  const platforms=walletPlatforms(env,orgId);
+  return {can_issue:platforms.apple.can_issue,missing:platforms.apple.missing,reason:platforms.apple.reason,platforms};
 }

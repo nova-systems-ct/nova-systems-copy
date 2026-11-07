@@ -1,3 +1,4 @@
+import { findingSourceRevision } from './_auditSnapshot.js';
 // Nova Audit workspace (repair 2026-10-26, brief §5 items 2–6 and §6). One coherent owner path:
 //   start (five business details, online or in person) → evidence review (public website + public email DNS) →
 //   proposed findings (machine-proposed, never auto-reviewed) → draft report → branded PDF stored in the Vault →
@@ -6,6 +7,7 @@
 // retrieval time, method and confidence. A missing element on a public page is never treated as proof of absence.
 // Staff only; every object is re-checked against the caller's organization.
 import crypto from 'node:crypto';
+import { diagnosticAction, investigationSummary } from './_auditDiagnostic.js';
 import { requireOrgAccess } from './_orgAccess.js';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, storagePut, storageGet } from './_sales/core.js';
 import { sanitize } from './_sanitize.js';
@@ -101,29 +103,32 @@ async function composeDraft(c, { summary } = {}) {
     goal ? `The owner's main goal: "${goal}".` : '',
     inPerson ? `${inPerson} observation${inPerson === 1 ? ' was' : 's were'} recorded in person.` : '',
     ordered.length ? `${ordered.length} finding${ordered.length === 1 ? ' is' : 's are'} recorded${proposed ? `, ${proposed} of them proposed and not yet reviewed by Nova` : ''}. The most important: ${ordered.slice(0, 2).map((f) => f.title).join('; ')}.` : "No problem was verified on what was checked. That does not mean there is none; the full audit looks at calls, replies and bookings with the owner's permission.",
-    'Financial impact is unknown: no call, booking or revenue records were supplied.',
+    c.intake?.investigation ? 'Customer tests and coverage exclusions are listed in the investigation. Financial impact remains unknown unless supported by separately supplied operating records.' : 'Financial impact is unknown: no call, booking or revenue records were supplied.',
   ].filter(Boolean).join(' ');
   const recList = recs.length ? recs.map((r, i) => ({ priority: r.priority_rank ?? i + 1, mechanism: r.mechanism, effort: r.effort_range, cost: r.cost_range, verification_plan: r.verification_plan, source: 'recommendation' }))
     : ordered.filter((f) => f.recommended_action).map((f, i) => ({ priority: i + 1, mechanism: f.recommended_action, module: MODULES[f.module_key] || null, source: `finding: ${f.title}` }));
   const prescriptions = Object.entries(MODULES).map(([k, label]) => ({ key: k, label, findings: ordered.filter((f) => f.module_key === k).map((f) => f.title) })).filter((m) => m.findings.length);
   return {
+    diagnostic_investigation: c.intake?.investigation ? { ...investigationSummary(c.intake.investigation), delivery_clock: clockState(c), tasks: c.intake.investigation.tasks } : null,
     title: 'The Nova Audit',
     executive_summary: summary || autoSummary,
     owner_goal: goal,
     business_identity: { name, website, phone: c.intake?.public_phone || biz?.phone || null, location: c.intake?.location || [biz?.city, biz?.state].filter(Boolean).join(', ') || null, industry: c.intake?.industry || biz?.industry || null },
-    scope_and_method: { mode: c.scope === '360' ? 'online and in person' : 'online', depth: lastRun?.scope === 'full' ? 'full public research' : 'demo-depth public research', method: 'Public web pages (robots.txt respected, no forms submitted), public DNS records, OpenStreetMap identity and nearby same-category businesses, plus any evidence recorded by Nova staff. No one was contacted.', in_person_observations: inPerson, research_completed_at: lastRun?.finished_at || null },
+    scope_and_method: { mode: c.scope === '360' ? 'online and in person' : 'online', depth: lastRun?.scope === 'full' ? 'full public research' : 'demo-depth public research', method: 'Public web pages (robots.txt respected, no forms submitted), public DNS records, OpenStreetMap identity and nearby same-category businesses, plus any evidence recorded by Nova staff. Contact tests, when present, are listed separately with their recorded method and source.', in_person_observations: inPerson, research_completed_at: lastRun?.finished_at || null },
     metrics: rs ? { pages_read: rs.pages_read, evidence_records: used.length, checks: checks.length, issues_observed: checks.filter((x) => x.result === 'issue').length, competitors_compared: rs.competitor_websites_compared } : null,
     checks_performed: checks,
+    customer_paths: rs?.journey_checks || [],
     client_features: rs?.client_features || null,
     competitor_comparison: competitors.map((x) => ({ name: x.name, url: x.url, rationale: x.rationale, observations: (x.observations || []).map((o) => o.text) })),
     evidence_reviewed: used.map((e) => ({ source: e.source, captured: e.capture_date, method: e.method, observation: e.observation, confidence: e.confidence })),
-    findings: ordered.map((f) => ({ title: f.title, type: f.statement_type, priority: f.priority, confidence: f.confidence, review_status: f.review_status, origin: f.origin, observed: f.detail, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status || 'unknown', limitations: f.limitations, remedy: f.recommended_action, module: MODULES[f.module_key] || null, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision, evidence: links.filter((l) => l.finding_id === f.id).map((l) => evById[l.evidence_id]?.source).filter(Boolean), recheck: f.recheck_status ? { status: f.recheck_status, note: f.recheck_note, at: f.rechecked_at } : null })),
+    source_findings_revision: findingSourceRevision(findings),
+    findings: ordered.map((f) => ({ id: f.id, title: f.title, type: f.statement_type, priority: f.priority, confidence: f.confidence, review_status: f.review_status, origin: f.origin, observed: f.detail, customer_impact: f.customer_impact, financial_impact_status: f.financial_impact_status || 'unknown', limitations: f.limitations, remedy: f.recommended_action, module: MODULES[f.module_key] || null, nova_can_implement: f.nova_can_implement, owner_decision: f.owner_decision, evidence: links.filter((l) => l.finding_id === f.id).map((l) => evById[l.evidence_id]?.source).filter(Boolean), recheck: f.recheck_status ? { status: f.recheck_status, note: f.recheck_note, at: f.rechecked_at } : null })),
     no_longer_observed: gone.map((f) => ({ title: f.title, rechecked_at: f.rechecked_at, note: f.recheck_note })),
     prescriptions,
     estimates_and_assumptions: { scenarios: [], statement: 'No financial scenario was prepared; financial impact is unknown.' },
     recommendations: recList,
     research_limitations: rs?.limitations || [],
-    limitations: 'This research reads public sources at the times stated. It cannot see calls, texts, response times, bookings or revenue, and a missing element on a page does not prove the business lacks it. A source that could not be reached is reported as unavailable, not as a problem. This is an operational review, not a CPA financial audit.',
+    limitations: 'Public sources are limited to what could be accessed at the times stated. Customer tests are individual recorded observations, not a measured business-wide failure rate. Unprovided private records, bookings and revenue remain unknown. A missing element on a page does not prove the business lacks it. Unavailable sources are not problems. This is an operational review, not a CPA financial audit.',
     next_steps: 'Review each finding with Nova, confirm the items marked "to confirm", and decide which fixes to approve first. The full audit adds call, reply and booking tests with your permission.',
   };
 }
@@ -181,8 +186,17 @@ export async function handleAuditWorkspace(req, res, op, caller) {
         findings: { total: live.length, proposed: live.filter((f) => f.review_status !== 'reviewed').length, reviewed: live.filter((f) => f.review_status === 'reviewed').length, rejected: findings.length - live.length, by_priority: { high: live.filter((f) => f.priority === 'high').length, medium: live.filter((f) => f.priority === 'medium').length, low: live.filter((f) => f.priority === 'low').length }, top: live.sort((a, x) => ({ high: 0, medium: 1, low: 2 }[a.priority] ?? 3) - ({ high: 0, medium: 1, low: 2 }[x.priority] ?? 3)).slice(0, 5) },
         reports, latest_report: latest, pdfs,
         clock: clockState(c),
+        investigation: c.intake?.investigation || null,
+        audit_send_enabled: process.env.NOVA_AUDIT_SEND_ENABLED === 'true',
         next_steps: nextSteps({ c, details, evidence, findings, latest, pdfs }),
       });
+    }
+
+    if (op === 'diagnostic') {
+      if (req.method === 'GET') return send(res, 200, { investigation: c.intake?.investigation || null, summary: investigationSummary(c.intake?.investigation) });
+      if (req.method !== 'POST') return send(res, 405, { error: 'GET or POST only' });
+      const investigation = await diagnosticAction(c, b, caller, deps.now());
+      return send(res, 200, { investigation, summary: investigationSummary(investigation) });
     }
 
     // ---------------------------------------------------------------- details: save the five details (and keep the rest of intake)
@@ -194,7 +208,8 @@ export async function handleAuditWorkspace(req, res, op, caller) {
       // "This website belongs to this business": recorded with who and when, and tied to that exact address
       if (b.website_confirmed === true) { if (!next.website) return send(res, 400, { error: 'Add the website first.', field: 'website' }); next.website_confirmed = { website: next.website, by: caller.email || caller.id, at: nowIso() }; }
       if (b.website_confirmed === false || (next.website_confirmed && next.website_confirmed.website !== next.website)) delete next.website_confirmed;
-      const [row] = await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}`, { intake: next, updated_at: nowIso() });
+      const [row] = await dbPatch('audit_cases', `id=eq.${enc(c.id)}&organization_id=eq.${enc(orgId)}&updated_at=eq.${enc(c.updated_at)}`, { intake: next, updated_at: nowIso() });
+      if (!row) return send(res, 409, { error: 'This audit changed in another session. Reload before saving.' });
       return send(res, 200, { ok: true, intake: row.intake, saved_at: row.updated_at });
     }
 
@@ -305,4 +320,4 @@ export async function handleAuditWorkspace(req, res, op, caller) {
     return send(res, 500, { error: 'Something went wrong on the server. Nothing you typed was lost; try again.' });
   }
 }
-export const WORKSPACE_OPS = ['start', 'workspace', 'details', 'review', 'research-start', 'research-status', 'recheck', 'draft-report', 'pdf', 'pdf-file', 'archive'];
+export const WORKSPACE_OPS = ['start', 'workspace', 'details', 'review', 'research-start', 'research-status', 'diagnostic', 'recheck', 'draft-report', 'pdf', 'pdf-file', 'archive'];

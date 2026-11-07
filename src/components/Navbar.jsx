@@ -16,11 +16,9 @@ export default function Navbar() {
   const location = useLocation();
 
   const navLinks = [
-    { label: "Home", path: "/" },
     { label: "Services", path: "/#services" },
     { label: "Solutions", path: "/solutions" },
-    { label: "Why Nova", path: "/#why-nova" },
-    { label: "Case Studies", path: "/portfolio" },
+    { label: "How it works", path: "/#process" },
     { label: "Pricing", path: "/pricing" },
     { label: "About", path: "/company" },
   ];
@@ -40,7 +38,7 @@ export default function Navbar() {
         {/* Desktop — starts at lg, not md: 7 links + 2 buttons + logo genuinely need more than
             768px to avoid the crowding/collision the repair task flagged (verified: it was real,
             not just a horizontal-scroll overflow — elements were visually colliding at 768px). */}
-        <div className="hidden lg:flex items-center gap-8">
+        <div className="hidden xl:flex items-center gap-8">
           {navLinks.map((link) => (
             <Link
               key={link.label}
@@ -69,7 +67,7 @@ export default function Navbar() {
           ))}
         </div>
 
-        <div className="hidden lg:flex items-center gap-3">
+        <div className="hidden xl:flex items-center gap-3">
           <Link
             to="/login"
             className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold tracking-wider uppercase transition-all hover:opacity-85"
@@ -96,7 +94,8 @@ export default function Navbar() {
         </div>
 
         <button
-          className="lg:hidden text-white/70"
+          className="xl:hidden text-white/70"
+          aria-label={mobileOpen ? "Close navigation" : "Open navigation"} aria-expanded={mobileOpen} aria-controls="nova-mobile-navigation"
           onClick={() => setMobileOpen(!mobileOpen)}
         >
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -104,7 +103,7 @@ export default function Navbar() {
       </div>
 
       {mobileOpen && (
-        <div className="lg:hidden border-t border-white/8 px-6 py-4 space-y-3" style={{ background: NAVY }}>
+        <div id="nova-mobile-navigation" className="xl:hidden border-t border-white/8 px-6 py-4 space-y-3" style={{ background: NAVY, maxHeight: "calc(100dvh - 5rem)", overflowY: "auto" }}>
           {navLinks.map((link) => (
             <Link
               key={link.label}

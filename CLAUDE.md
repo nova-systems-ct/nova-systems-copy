@@ -1,5 +1,14 @@
 # Nova Systems — Project Instructions
 
+## Current owner instruction — 4 November 2026
+Continue from `docs/NOVA_CHANNEL_ENGINE_2026-11-04.md` for the current connected-channel release, plus `docs/NOVA_FREE_FIRST_EXECUTION_2026-11-04.md` for the preceding repair release. The owner explicitly authorizes bug repairs, public-site
+changes, role playbooks, free provider/application preparation and staging deployment. Spending, fee-bearing
+registrations, paid model/message calls and subscription upgrades remain locked. Public Core/Harvest names map to
+the existing Agents/Demand capabilities; do not rename database keys or imply unsupported live channels.
+The role contracts are in `api/_hierarchy/playbooks.js` and `docs/NOVA_WORKER_OPERATING_PLAYBOOKS.md`.
+Application receipts/blockers are in `docs/NOVA_FREE_FIRST_APPLICATION_PACKETS_2026-11-04.md`. Prepared is not submitted.
+Do not silently substitute an older checkpoint or restore the old public-site restriction against this new brief.
+
 ## Start here (repair brief of 2026-10-25)
 Nova is an audit-first business-systems company: Nova Audit, then Agents, Revive and Demand, installed through an
 audit-driven installer. Every session reads, in order: [`docs/NOVA_PRODUCT.md`](docs/NOVA_PRODUCT.md) (goals and
@@ -27,8 +36,9 @@ coordinated activation session, not `docs/PRODUCT_BUILD_STATE.md` (which is the 
 
 ## Standing rules (see the master prompt for full detail)
 
-- Do not modify the public marketing website (homepage, nav, legal pages, public SEO). Product
-  dashboard/auth work is in scope.
+- Public marketing changes require an owner brief. Isaac explicitly authorized the legal-page,
+  consent and design review on 2026-11-01; those revisions are in scope. Product dashboard/auth
+  work remains in scope. Read docs/NOVA_HOSTED_READINESS_2026-11-01.md for the current hosted status.
 - Implementation requests only — no scaffolds, mock dashboards, or future-task-lists as a
   substitute for real domain logic.
 - Status vocabulary: not started / in development / locally verified / staging verified /

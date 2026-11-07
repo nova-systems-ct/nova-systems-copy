@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ownerFirstName } from '../../lib/ownerGreeting'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
 import { ArrowRight, Inbox, CalendarCheck, CircleDollarSign, AlertTriangle, ListChecks, Activity, Network, ClipboardCheck, Plug, LineChart } from 'lucide-react'
@@ -97,9 +98,8 @@ export default function ProductHome() {
   // The greeting uses the signed-in account's own name (Supabase Auth profile), never a hard-coded person. A missing name
   // or a placeholder test-account name ("Local Test …") is not shown; the owner can set their name right here.
   const [savedName, setSavedName] = useState(null)
-  const fullName = (savedName ?? user?.user_metadata?.full_name ?? '').trim()
-  const placeholder = !fullName || /^(local test|test)/i.test(fullName)
-  const first = placeholder ? '' : fullName.split(' ')[0]
+  const first = ownerFirstName(savedName ?? user?.user_metadata?.full_name)
+  const placeholder = !first
   const m = d?.metrics
   return (
     <section className="nh" aria-labelledby="owner-home" style={{ marginBottom: 32 }}>

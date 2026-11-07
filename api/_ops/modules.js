@@ -8,6 +8,13 @@ import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso } from '../_sales/core.js'
 import { capabilityByKey } from '../_workerCapabilities.js';
 import { checkEmailDns } from '../_researchRun.js';
 
+export function emailSetupOutcome(checks, host) {
+  const spf = checks.find(x => x.key === 'dns_spf'); const dmarc = checks.find(x => x.key === 'dns_dmarc');
+  if (spf?.result === 'ok' && dmarc?.result === 'ok') return ['done', `Both records are published for ${host} (checked public DNS)`];
+  const missing = [spf?.result === 'issue' && 'SPF', dmarc?.result === 'issue' && 'DMARC'].filter(Boolean);
+  return ['blocked', missing.length ? `Missing ${missing.join(' and ')} for ${host}. Publish the exact records supplied by your authorized mail provider and re-check.` : `Email DNS for ${host} could not be fully verified. A timeout or absent receiving MX does not establish that sending authentication is unnecessary. Confirm the business sending domain and retry.`, { missing, checked_at: nowIso() }];
+}
+
 export const CATALOG_VERSION = 1;
 export const CATALOG = [
   { key: 'agents_booking', name: 'Nova Agents: inquiries and booking', core: true, addresses: ['agents_booking'],
@@ -52,12 +59,14 @@ export async function selfAudits(orgId) {
     candidates: testWs ? [] : [...new Map(all.filter((x) => x.business_id && !TEST_NAME.test(nameOf(x))).map((x) => [x.business_id, { business_id: x.business_id, name: nameOf(x) }])).values()] };
 }
 
+export const currentFindings = rows => rows.filter(f => f.review_status !== 'rejected' && f.recheck_status !== 'no_longer_observed');
+
 // Recommend from the latest audit of this business: modules whose `addresses` match the findings' module keys, plus the core modules.
 export async function recommendations(orgId) {
   const self = await selfAudits(orgId);
   let audit = null; let findings = [];
   for (const c of self.cases.filter((x) => x.findings > 0)) {
-    const f = await dbGet(`audit_findings?case_id=eq.${enc(c.id)}&review_status=neq.rejected&select=id,title,module_key,review_status,priority`);
+    const f = currentFindings(await dbGet(`audit_findings?case_id=eq.${enc(c.id)}&review_status=neq.rejected&select=id,title,module_key,review_status,priority,recheck_status`));
     if (f.length) { audit = { case_id: c.id, business: c.name || null, created_at: c.created_at }; findings = f; break; }
   }
   const tasks = await dbGet(`work_items?organization_id=eq.${enc(orgId)}&category=eq.install_fix&select=status`).catch(() => []);
@@ -117,7 +126,12 @@ export async function provisionModule(orgId, key, ctx) {
   const step = (sub, label, [status, detail, evidence = {}], owner_action = null, outcome = null) => out.push({ step_key: `module:${key}:${sub}`, label: `${m.name}: ${label}`, status, detail, evidence: { ...evidence, outcome: outcome?.[status] || outcome?.default || null }, owner_action: status === 'done' || status === 'skipped' ? null : owner_action });
   for (const d of m.dependencies) {
     const dep = await dbOne(`ops_installed_modules?organization_id=eq.${enc(orgId)}&module_key=eq.${enc(d)}&select=status`);
-    if (!dep || !['installed', 'selected', 'installing'].includes(dep.status)) { step('dependency', `needs ${moduleByKey(d).name}`, ['blocked', `${moduleByKey(d).name} must be selected first`], `Select ${moduleByKey(d).name} as well.`); return out; }
+    if (!dep || !['installed', 'selected', 'installing'].includes(dep.status)) {
+      const name = moduleByKey(d).name;
+      const detail = !dep ? `${name} must be selected first` : dep.status === 'disabled' ? `${name} is turned off` : `${name} is selected, but its setup has not passed`;
+      const action = !dep ? `Select ${name} as well.` : dep.status === 'disabled' ? `Turn ${name} back on, then run Install Systems.` : `Finish or fix the blocked steps for ${name}, then retry Install Systems.`;
+      step('dependency', `needs ${name}`, ['blocked', detail], action); return out;
+    }
   }
   for (const w of m.workers) step(`worker:${w}`, `worker ${capabilityByKey(w)?.name || w}`, await ensureWorker(w, ctx.actor), 'Register or resume it on the Workers page.', { done: 'registered, active', blocked: 'registered, not active' });
   if (key === 'agents_booking') {
@@ -132,7 +146,7 @@ export async function provisionModule(orgId, key, ctx) {
   if (key === 'followup_revive') step('campaign', 'approved campaign', ctx.results.revive === 'done' ? ['done', 'An approved Revive campaign exists'] : ['blocked', 'No approved Revive campaign; nothing is sent until you approve one'], 'Create and approve a Revive campaign in Operations → Revive campaigns.', { done: 'approved campaign found', blocked: 'awaiting your approval' });
   if (key === 'website_fixes') {
     const caseId = ctx.latestAuditCaseId;
-    const fx = caseId ? await dbGet(`audit_findings?case_id=eq.${enc(caseId)}&module_key=eq.website_fixes&review_status=neq.rejected&select=id,title,recommended_action,review_status,priority`) : [];
+    const fx = caseId ? currentFindings(await dbGet(`audit_findings?case_id=eq.${enc(caseId)}&module_key=eq.website_fixes&review_status=neq.rejected&select=id,title,recommended_action,review_status,priority,recheck_status`)) : [];
     if (!fx.length) step('tasks', 'fix tasks', ['skipped', 'The latest audit has no website or listing findings'], null, { default: 'nothing to fix' });
     else {
       let created = 0;
@@ -150,12 +164,8 @@ export async function provisionModule(orgId, key, ctx) {
     if (!host) step('dns', 'SPF and DMARC records', ['blocked', 'No website domain on the latest audit'], 'Add the website to the audit\'s business details.', { default: 'not checked' });
     else {
       const checks = await checkEmailDns(host);
-      const spf = checks.find((x) => x.key === 'dns_spf'); const dmarc = checks.find((x) => x.key === 'dns_dmarc');
-      if (!spf && !dmarc) step('dns', 'SPF and DMARC records', ['skipped', `${host} does not receive email at its own domain (no MX records), so these records are not needed`], null, { default: 'checked: not needed' });
-      else {
-        const missing = [spf?.result === 'issue' && `SPF: a TXT record on ${host} starting "v=spf1", listing each service that sends your email (for example your email host's include) and ending "~all"`, dmarc?.result === 'issue' && `DMARC: a TXT record on _dmarc.${host} with "v=DMARC1; p=none; rua=mailto:<an address you read>"`].filter(Boolean);
-        step('dns', 'SPF and DMARC records', missing.length ? ['blocked', `Checked public DNS ${nowIso()}: missing ${missing.length} record(s)`, { records: missing }] : ['done', `Both records are published for ${host} (checked public DNS)`], missing.length ? `Ask whoever manages ${host}'s DNS to add: ${missing.join(' AND ')}. Nova re-checks on every run.` : null, { done: 'checked: records published', blocked: 'checked: records missing' });
-      }
+      const outcome = emailSetupOutcome(checks, host);
+      step('dns', 'SPF and DMARC records', outcome, outcome[0] === 'blocked' ? outcome[1] : null, { done: 'checked: records published', blocked: 'blocked: DNS not verified' });
     }
   }
   if (key === 'reviews_referrals') step('channel', 'approved wording and live channel', ['blocked', 'Needs approved request wording and a live email or text channel'], 'Approve the review-request wording and connect a live channel; nothing is sent before both.', { default: 'awaiting approval and a live channel' });

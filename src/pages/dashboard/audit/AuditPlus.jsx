@@ -47,7 +47,7 @@ export function IntakeTab({ org, caseId, isOwner, clock = {}, onChanged }) {
           <Field label="Clock start event" id="cp-start"><input id="cp-start" className="ops-input" value={pol.start_event} onChange={(e) => setP({ ...pol, start_event: e.target.value })} /></Field>
           <div className="ops-two">
             <Field label="Hours basis" id="cp-basis"><select id="cp-basis" className="ops-select" value={pol.hours_basis} onChange={(e) => setP({ ...pol, hours_basis: e.target.value })}><option value="business_hours">Business hours</option><option value="elapsed_hours">Calendar (elapsed) hours</option></select></Field>
-            <Field label="Deliver within (48–72 hours)" id="cp-h"><input id="cp-h" type="number" min={48} max={72} className="ops-input" value={pol.target_hours} onChange={(e) => setP({ ...pol, target_hours: Number(e.target.value) })} /></Field>
+            <Field label="Deliver within (24–72 hours)" id="cp-h"><input id="cp-h" type="number" min={24} max={72} className="ops-input" value={pol.target_hours} onChange={(e) => setP({ ...pol, target_hours: Number(e.target.value) })} /></Field>
             <Field label="Aim for (hours, optional)" id="cp-aim"><input id="cp-aim" type="number" min={24} max={72} className="ops-input" value={pol.aim_hours || ''} onChange={(e) => setP({ ...pol, aim_hours: e.target.value === '' ? undefined : Number(e.target.value) })} /></Field>
           </div>
           <Field label="When inputs are missing" id="cp-miss"><input id="cp-miss" className="ops-input" value={pol.missing_input_rule} onChange={(e) => setP({ ...pol, missing_input_rule: e.target.value })} /></Field>
@@ -80,7 +80,7 @@ export function IntakeTab({ org, caseId, isOwner, clock = {}, onChanged }) {
         </Card>
       )}
       {started && <ClockExceptions data={d.data} clock={clock} busy={act.busy} run={clockAct} openExt={openExt} />}
-      <Card title="Permission for active tests (calls, forms)">
+      <Card title="Business permission for customer tests">
         {d.data.active_test_authorization ? (
           <p style={{ fontSize: 13 }}>Authorized by {d.data.active_test_authorization.authorized_by_name} ({d.data.active_test_authorization.role || '—'}) for {d.data.active_test_authorization.channels.join(', ')}, up to {d.data.active_test_authorization.max_per_day}/day until {d.data.active_test_authorization.ends_on}. {d.data.active_test_authorization.cancelled_at ? <Badge value="cancelled" /> : <button className="ops-btn danger" onClick={() => save({ cancel_active_tests: true }, 'Permission cancelled; planned active tests cancelled.')}>Cancel permission</button>}</p>
         ) : <Notice tone="warn">No permission recorded. Only public review is possible until the business authorizes active tests.</Notice>}
@@ -89,8 +89,10 @@ export function IntakeTab({ org, caseId, isOwner, clock = {}, onChanged }) {
           <Field label="Their role" id="at-role"><input id="at-role" className="ops-input" value={a.role} onChange={(e) => setA({ ...a, role: e.target.value })} /></Field>
           <Field label="Ends on" id="at-end"><input id="at-end" type="date" className="ops-input" value={a.ends_on} onChange={(e) => setA({ ...a, ends_on: e.target.value })} /></Field>
           <Field label="Evidence of permission" id="at-ev"><input id="at-ev" className="ops-input" value={a.evidence} onChange={(e) => setA({ ...a, evidence: e.target.value })} placeholder="e.g. signed request form" /></Field>
+          <Field label="Authorized destinations (one per line)" id="at-targets"><textarea id="at-targets" className="ops-textarea" value={(a.targets || []).join('\n')} onChange={(e) => setA({ ...a, targets: e.target.value.split('\n') })} placeholder="Exact phone numbers, email addresses and form/profile URLs" /></Field>
         </div>
-        <div style={{ display: 'flex', gap: 12, fontSize: 13, marginBottom: 10 }}>{['phone', 'form', 'sms'].map((ch) => <label key={ch}><input type="checkbox" checked={a.channels.includes(ch)} onChange={(e) => setA({ ...a, channels: e.target.checked ? [...a.channels, ch] : a.channels.filter((x) => x !== ch) })} /> {ch}</label>)}</div>
+        <div style={{ display: 'flex', gap: 12, fontSize: 13, marginBottom: 10 }}>{['phone', 'form', 'sms', 'email', 'social'].map((ch) => <label key={ch}><input type="checkbox" checked={a.channels.includes(ch)} onChange={(e) => setA({ ...a, channels: e.target.checked ? [...a.channels, ch] : a.channels.filter((x) => x !== ch) })} /> {ch}</label>)}</div>
+        <label style={{ display: 'block', marginBottom: 12 }}><input type="checkbox" checked={a.speech_transcription === true} onChange={e => setA({ ...a, speech_transcription: e.target.checked })} /> The documented permission covers speech transcription for authorized test calls.</label>
         <button className="ops-btn" disabled={act.busy} onClick={() => save({ active_test_authorization: a }, 'Permission recorded.')}>Record permission</button>
       </Card>
     </div>

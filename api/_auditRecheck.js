@@ -9,6 +9,7 @@
 import dns from 'node:dns';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso } from './_sales/core.js';
 import * as Renderer from './_renderPage.js';
+import { crawlSite } from './_publicResearch.js';
 
 const NOT_FOUND = /page not found|404|this page could not be found/i;
 const fieldsIn = (html) => [...String(html || '').matchAll(/<(input|textarea|select)\b([^>]*)>/gi)].filter((m) => !/type=["']?(hidden|submit|button)/i.test(m[2])).length;
@@ -64,13 +65,24 @@ const RULES = [
   } },
 ];
 
-export function ruleFor(finding) { return RULES.find((r) => r.match.test(`${finding.title} ${finding.detail || ''}`)) || null; }
+export function ruleFor(finding) {
+  if (finding.check_key?.startsWith('journey_path:')) return {
+    key: 'journey_path', source: 'site', async run({ journey }) {
+      const checks = await journey(); const target = finding.check_key.slice('journey_path:'.length);
+      const check = checks.find(x => x.target === target);
+      if (!check || !['broken','reachable'].includes(check.result)) return { status: 'not_rechecked', note: 'The linked destination was not verified in the current guarded crawl. No repair is assumed.' };
+      return { status: check.result === 'broken' ? 'still_observed' : 'no_longer_observed', note: `${target}: ${check.result} (${check.reason || 'read-only observation'}). No booking, form or payment was submitted.` };
+    },
+  };
+  if (finding.origin === 'automated_review') return null;
+  return RULES.find((r) => r.match.test(`${finding.title} ${finding.detail || ''}`)) || null;
+}
 
 export async function recheckFindings(c, { orgId, website, deps = {} } = {}) {
   const now = deps.now || (() => new Date());
   const host = (() => { try { return new URL(website).hostname.replace(/^www\./, ''); } catch { return null; } })();
   const runTag = `recheck:${now().toISOString().slice(0, 16)}`;
-  const findings = await dbGet(`audit_findings?case_id=eq.${enc(c.id)}&review_status=neq.rejected&origin=neq.automated_review&select=id,title,detail`);
+  const findings = await dbGet(`audit_findings?case_id=eq.${enc(c.id)}&review_status=neq.rejected&select=id,title,detail,origin,check_key`);
   // pages are read once each through the guarded renderer (served HTML would miss a script-built site's content)
   const canRender = deps.render || ((await Renderer.available()).ok ? (urls) => Renderer.renderPages(urls, { fetchImpl: deps.fetchImpl, lookup: deps.lookup, now }) : null);
   const cache = new Map();
@@ -79,7 +91,12 @@ export async function recheckFindings(c, { orgId, website, deps = {} } = {}) {
     if (!cache.has(url)) cache.set(url, (async () => { const [p] = await canRender([url]); if (!p || p.error) return { error: p?.error || 'not read' }; return { ...p, title: (/<title[^>]*>([\s\S]*?)<\/title>/i.exec(p.html) || [])[1]?.trim() || '' }; })().catch((e) => ({ error: String(e.message || e).slice(0, 120) })));
     return cache.get(url);
   };
-  const ctx = { orgId, host, page, resolver: deps.resolver || dns.promises };
+  let journeyRun;
+  const journey = async () => {
+    journeyRun ||= (deps.crawl || crawlSite)(`https://${host}/`, { maxPages: 8, fetchImpl: deps.fetchImpl, lookup: deps.lookup, render: canRender, now });
+    return (await journeyRun).journey_checks || [];
+  };
+  const ctx = { orgId, host, page, journey, resolver: deps.resolver || dns.promises };
   const out = [];
   for (const f of findings) {
     const rule = ruleFor(f);

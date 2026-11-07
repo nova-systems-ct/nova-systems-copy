@@ -58,7 +58,7 @@ for (const [label, url, lookup] of [
   ['hostname with one public and one private answer', 'https://mixed.example.com/', async () => [{ address: '93.184.216.34' }, { address: '127.0.0.1' }]], ['IPv4-mapped IPv6 private', 'http://[::ffff:127.0.0.1]/', pub],
 ]) check(`SSRF: ${label} is refused`, (await rejects(assertPublicHttpUrl(url, lookup))) !== null);
 
-const resp = (status, headers, body = '') => ({ status, headers: { get: (k) => headers[k.toLowerCase()] ?? null }, arrayBuffer: async () => new TextEncoder().encode(body).buffer });
+const resp = (status, headers, body = '') => new Response(body, {status,headers});
 let redirectErr = await rejects(fetchPublicPage('https://good.example.com/', { lookup: async (h) => (h === 'good.example.com' ? [{ address: '93.184.216.34' }] : [{ address: '10.0.0.1' }]), fetchImpl: async (u) => (u.includes('good') ? resp(302, { location: 'http://internal.example.com/admin' }) : resp(200, { 'content-type': 'text/html' }, 'secret')) }));
 check('a public URL that redirects to an internal host is refused (every hop re-validated)', redirectErr !== null && /private|reserved/.test(redirectErr), String(redirectErr));
 let loops = await rejects(fetchPublicPage('https://loop.example.com/', { lookup: pub, fetchImpl: async () => resp(302, { location: 'https://loop.example.com/' }) }));

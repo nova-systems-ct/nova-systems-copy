@@ -182,6 +182,13 @@ export async function handleCrmSales(req, res, op, caller, d) {
     const [drop] = await rows(`crm_contacts?id=eq.${enc(dropId)}&organization_id=eq.${enc(orgId)}&limit=1`);
     if (!keep || !drop) return fail(404, 'Both contacts must exist in this organization');
     if (keep.merged_into_id || drop.merged_into_id) return fail(409, 'A merged contact cannot be merged again');
+    const identities = await sbSelect(`channel_identities?organization_id=eq.${enc(orgId)}&contact_id=in.(${enc(keepId)},${enc(dropId)})&select=id&limit=1`);
+    if (identities.ok) {
+      if ((await identities.json()).length) return fail(409, 'These contacts include a connected-channel identity. Keep them separate until a channel-aware merge is available. No records were changed.');
+    } else {
+      const problem = await identities.json().catch(() => ({}));
+      if (!['PGRST205','42P01'].includes(problem.code)) return fail(503, 'Channel identity safety could not be checked. No contacts were merged.');
+    }
     const dropDeals = await rows(`crm_deals?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(dropId)}&select=id`);
     const dropConvs = await rows(`wave1_conversations?organization_id=eq.${enc(orgId)}&contact_id=eq.${enc(dropId)}&select=id,channel,staff_takeover`);
     const preview = { keep: { id: keep.id, name: keep.name }, drop: { id: drop.id, name: drop.name }, deals_moved: dropDeals.length, conversations_affected: dropConvs.length, suppression_carried: !!(drop.suppressed || drop.do_not_contact) };

@@ -5,14 +5,14 @@ import { C, Card, Badge, Notice, when } from '../ops/ui'
 // The executive roles at work (owner brief 2026-10-30 §11): each role's latest task and result, spending decisions that
 // need the owner, the owner's playbook settings, and the balance the CFO may use. Everything shown comes from saved
 // records (work items, expense requests, balance snapshots); nothing here is animated or assumed.
-async function call(op, { method = 'GET', body, org } = {}) {
-  const qs = new URLSearchParams({ resource: 'roles', op, ...(method === 'GET' ? { organization_id: org } : {}) })
+async function call(op, { method = 'GET', body, org, query = {} } = {}) {
+  const qs = new URLSearchParams({ resource: 'roles', op, ...query, ...(method === 'GET' ? { organization_id: org } : {}) })
   const r = await authedFetch(`/api/client?${qs}`, { method, headers: method === 'GET' ? {} : { 'Content-Type': 'application/json' }, body: method === 'GET' ? undefined : JSON.stringify({ organization_id: org, ...body }) })
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Error(j.error || `The server answered ${r.status}.`)
   return j
 }
-const NAMES = { executive_assistant: "Owner's executive assistant", coo: 'COO', cfo: 'CFO', cmo: 'CMO' }
+const NAMES = { ceo_twin: 'Isaac’s decision assistant', executive_assistant: "Owner's executive assistant", coo: 'COO', cfo: 'CFO', cmo: 'CMO' }
 const TASK = { assigned: ['pending', 'Received'], in_progress: ['running', 'Working'], in_review: ['approved', 'Result ready'], blocked: ['paused', 'Blocked'], failed: ['failed', 'Failed'], completed: ['approved', 'Completed'], draft: ['draft', 'Proposal'] }
 const EXP = { proposed: ['pending', 'With the CFO'], needs_owner: ['paused', 'Needs you'], approved: ['approved', 'Approved'], denied: ['cancelled', 'Denied'], recorded: ['approved', 'Recorded'], cancelled: ['cancelled', 'Cancelled'] }
 const money = (c) => (c == null ? 'unknown' : `$${(Number(c) / 100).toFixed(2)}`)
@@ -21,20 +21,47 @@ export default function ExecutiveDesk({ orgId }) {
   const [d, setD] = useState(null); const [err, setErr] = useState(''); const [msg, setMsg] = useState(null); const [busy, setBusy] = useState('')
   const [bal, setBal] = useState({ amount: '', label: 'Operating account', as_of: '' })
   const [prefs, setPrefs] = useState({})
+  const [queued, setQueued] = useState(null)
   const load = useCallback(async () => {
     if (!orgId) return
     try { const r = await call('overview', { org: orgId }); setD(r); setPrefs(r.preferences || {}); setErr('') } catch (e) { setErr(e.message) }
   }, [orgId])
   useEffect(() => { load() }, [load])
-  const act = async (key, op, body, ok) => { setBusy(key); setMsg(null); try { await call(op, { method: 'POST', body, org: orgId }); setMsg({ tone: 'ok', text: ok }); await load() } catch (e) { setMsg({ tone: 'bad', text: e.message }) } setBusy('') }
+  useEffect(() => {
+    if (!queued) return
+    let stopped = false; let attempts = 0
+    const timer = setInterval(async () => {
+      if (stopped) return
+      try {
+        const r = await call('job-status', { org: orgId, query: { id: queued } })
+        if (stopped) return
+        if (['completed', 'failed', 'dead_letter', 'cancelled'].includes(r.job.status)) { setQueued(null); setMsg({ tone: r.job.status === 'completed' ? 'ok' : 'bad', text: `Executive run ${r.job.status.replace(/_/g, ' ')}.${r.job.last_error ? ` ${r.job.last_error}` : ' The latest saved result is shown below.'}` }); await load() }
+        else if (++attempts >= 36) { setQueued(null); setMsg({ tone: 'bad', text: 'The run is still waiting. Check the background worker or refresh this desk later; no result has been assumed.' }) }
+      } catch (e) { if (!stopped) { setQueued(null); setMsg({ tone: 'bad', text: e.message }) } }
+    }, 10000)
+    return () => { stopped = true; clearInterval(timer) }
+  }, [queued, orgId, load])
+  const act = async (key, op, body, ok) => { setBusy(key); setMsg(null); try { const r = await call(op, { method: 'POST', body, org: orgId }); if (r.job_id) setQueued(r.job_id); setMsg({ tone: 'ok', text: ok }); await load() } catch (e) { setMsg({ tone: 'bad', text: e.message }) } setBusy('') }
   if (err) return <Notice tone="bad">The executive desk could not be loaded: {err} <button className="ops-btn" onClick={load}>Try again</button></Notice>
   if (!d) return <p role="status" style={{ color: C.faint }}>Loading the executive desk…</p>
   const latest = (role) => d.tasks.find((t) => t.role_key === role && !String(t.title).startsWith('Revive'))
   const waiting = d.expenses.filter((e) => e.status === 'needs_owner' || e.status === 'approved')
   return (
     <Card title="Executive desk" style={{ marginBottom: 16 }}>
-      <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>Each role works only while its worker is registered and active below. Results wait for your review; anything that needs your authority comes to you. No role sends messages, moves money or connects to a bank.</p>
+      <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>Each role has a real job, a playbook and saved evidence. Results wait for your review. Model recommendations are separate from the code that executes work; approved lessons stay within this business.</p>
+      {d.spending_locked && <Notice tone="ok">Spending is locked. Paid model calls, purchases and fee-bearing applications require a new spending authorization.</Notice>}
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      <button className="ops-btn" style={{ marginBottom: 12 }} disabled={!!busy} onClick={load}>{queued ? 'Waiting for worker · refresh' : 'Refresh results'}</button>
+      {!!d.incoming?.length && <details open={d.incoming.some(x => x.status === 'new')} style={{ marginBottom: 20 }}>
+        <summary style={{ fontWeight: 600, cursor: 'pointer' }}>Website inquiries · {d.incoming.filter(x => x.status === 'new').length} new</summary>
+        {d.incoming.map(lead => <article key={lead.id} style={{ padding: '12px 0', borderBottom: `1px solid ${C.line}`, fontSize: 13 }}>
+          <strong>{lead.company || lead.name}</strong> · {lead.name} · {when(lead.created_at)} · {lead.status}
+          <p style={{ color: C.dim, whiteSpace: 'pre-wrap' }}>{lead.message}</p>
+          <p><a href={`mailto:${lead.email}`} style={{ color: C.gold }}>{lead.email}</a>{lead.phone && <> · <a href={`tel:${lead.phone}`} style={{ color: C.gold }}>{lead.phone}</a></>}</p>
+          {lead.status === 'new' && <button className="ops-btn" disabled={!!busy} onClick={() => act(lead.id,'review-public-lead',{id:lead.id,status:'read'},'Marked read. No email was sent.')}>Mark read</button>}
+          {lead.status !== 'replied' && <button className="ops-btn" style={{ marginLeft: 8 }} disabled={!!busy} onClick={() => act(lead.id,'review-public-lead',{id:lead.id,status:'replied'},'Marked as replied manually. Nova did not send a message.')}>I replied manually</button>}
+        </article>)}
+      </details>}
       <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
         {d.roles.map((r) => { const t = latest(r.key); return (
           <div key={r.key} style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 12 }} aria-label={`${NAMES[r.key]} role`}>
@@ -47,10 +74,40 @@ export default function ExecutiveDesk({ orgId }) {
               <p style={{ fontSize: 13, color: C.dim, margin: 0 }}>{t.result?.summary || t.last_error || t.title}</p>
             </> : <p style={{ fontSize: 13, color: C.faint, margin: '8px 0 0' }}>No task has run yet.</p>}
             {t?.status === 'in_review' && <button className="ops-btn" style={{ marginTop: 8, marginRight: 8 }} disabled={!!busy} onClick={() => act(t.id, 'mark-reviewed', { id: t.id }, `${NAMES[r.key]}: result marked reviewed.`)}>Mark reviewed</button>}
-            <button className="ops-btn" style={{ marginTop: 8 }} disabled={!r.worker || busy === r.key} onClick={() => act(r.key, 'run-now', { role: r.key }, `${NAMES[r.key]}: task queued for the background worker.`)}>{busy === r.key ? 'Queuing…' : 'Run now'}</button>
+            <button className="ops-btn" style={{ marginTop: 8 }} disabled={!r.can_run || !!busy} onClick={() => act(r.key, 'run-now', { role: r.key }, `${NAMES[r.key]}: task queued for the background worker.`)}>{busy === r.key ? 'Queuing…' : 'Run now'}</button>
+            <details style={{ marginTop: 12, fontSize: 13 }}>
+              <summary style={{ cursor: 'pointer', color: C.dim }}>Playbook · {r.playbook?.version || 'not recorded'}</summary>
+              <p>{r.playbook?.mission}</p>
+              <ul style={{ paddingLeft: 18 }}>{r.playbook?.jobs.map(x => <li key={x} style={{ marginBottom: 5 }}>{x}</li>)}</ul>
+              <p style={{ color: C.faint }}>Proof required: {r.playbook?.proof.join('; ')}. Escalate: {r.playbook?.escalate.join('; ')}.</p>
+            </details>
+            {r.latest_output?.reasoning && <details style={{ marginTop: 10, fontSize: 13 }}>
+              <summary style={{ cursor: 'pointer', color: C.dim }}>Model reasoning · {r.latest_output.reasoning.status}</summary>
+              <p style={{ color: C.faint }}>Saved result: {when(r.output_created_at)}</p>
+              <p>{r.latest_output.reasoning.reason || r.latest_output.reasoning.summary}</p>
+              {r.latest_output.reasoning.next_actions?.map((x, i) => <p key={i}>{i + 1}. {x}</p>)}
+              {r.latest_output.reasoning.proposed_lesson && <>
+                <p><strong>Proposed lesson:</strong> {r.latest_output.reasoning.proposed_lesson}</p>
+                <button className="ops-btn" disabled={!!busy || !r.output_work_item_id || !['in_review', 'approved', 'completed'].includes(r.output_task_status)} onClick={() => act(`${r.key}-learning`, 'approve-learning', { id: r.output_work_item_id }, 'Lesson approved for this business and role. It will be used as context on future runs.')}>Approve lesson for future runs</button>
+              </>}
+            </details>}
           </div>
         ) })}
       </div>
+
+      {d.roles.find(r => r.key === 'cfo')?.latest_output?.capability_report && <details style={{ marginTop: 20 }}>
+        <summary style={{ cursor: 'pointer', fontSize: 15, fontWeight: 600 }}>CFO · Costs, free alternatives and launch prerequisites</summary>
+        <p style={{ color: C.dim, fontSize: 13 }}>{d.roles.find(r => r.key === 'cfo').latest_output.capability_report.note}</p>
+        <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,260px),1fr))' }}>
+          {d.roles.find(r => r.key === 'cfo').latest_output.capability_report.items.map(item => <details key={item.key} style={{ padding: 14, border: `1px solid ${C.line}`, borderRadius: 10, fontSize: 13 }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{item.name}</summary>
+            <p style={{ color: C.dim }}>Free option: {item.free_alternative}</p>
+            <p style={{ color: C.dim }}>Possible cost: {item.paid_reason}</p>
+            <p>{item.application}</p>
+            <ul style={{ paddingLeft: 18 }}>{item.requirements.map(x => <li key={x}>{x}</li>)}</ul><a href={item.source} target="_blank" rel="noreferrer" style={{ color: C.gold }}>Official provider information</a>
+          </details>)}
+        </div>
+      </details>}
 
       <h3 style={{ fontSize: 14, margin: '18px 0 8px' }}>Spending decisions</h3>
       {!waiting.length ? <p style={{ fontSize: 13, color: C.faint, margin: 0 }}>Nothing waits for you.</p> : waiting.map((e) => (
@@ -58,7 +115,7 @@ export default function ExecutiveDesk({ orgId }) {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}><strong style={{ fontSize: 14 }}>{money(e.amount_cents)} · {e.purpose}</strong><Badge value={(EXP[e.status] || EXP.proposed)[0]} label={(EXP[e.status] || EXP.proposed)[1]} /><span style={{ fontSize: 12, color: C.faint }}>asked by {String(e.requested_by_role).toUpperCase()}</span></div>
           {e.cfo_check && <p style={{ fontSize: 13, color: C.dim, margin: '4px 0' }}>CFO {e.cfo_check.recommendation === 'approve' ? 'recommends approving' : e.cfo_check.recommendation === 'deny' ? 'recommends against' : 'cannot check funds'}: {(e.cfo_check.reasons || []).join(' ')}</p>}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {e.status === 'needs_owner' && <><button className="ops-btn primary" disabled={!!busy} onClick={() => act(e.id, 'decide-expense', { id: e.id, decision: 'approve' }, 'Approved. Record it once it is paid.')}>Approve</button><button className="ops-btn danger" disabled={!!busy} onClick={() => act(e.id, 'decide-expense', { id: e.id, decision: 'deny' }, 'Denied.')}>Deny</button></>}
+            {e.status === 'needs_owner' && <><button className="ops-btn primary" disabled={!!busy || (d.spending_locked && e.amount_cents > 0)} onClick={() => act(e.id, 'decide-expense', { id: e.id, decision: 'approve' }, 'Approved. Record it once it is paid.')}>{d.spending_locked && e.amount_cents > 0 ? 'Spending locked' : 'Approve'}</button><button className="ops-btn danger" disabled={!!busy} onClick={() => act(e.id, 'decide-expense', { id: e.id, decision: 'deny' }, 'Denied.')}>Deny</button></>}
             {e.status === 'approved' && <button className="ops-btn" disabled={!!busy} onClick={() => act(e.id, 'record-expense', { id: e.id }, 'Recorded as spent.')}>Record as paid</button>}
           </div>
         </div>

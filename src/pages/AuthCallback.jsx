@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase, authRedirect } from "@/lib/supabaseClient";
-import { safeReturnTo } from "@/lib/returnTo";
+import { authDestination } from "@/lib/authDestination";
 import { useSEO } from "@/hooks/useSEO";
 
 const GOLD = "#C9A84C";
@@ -10,13 +10,13 @@ const GOLD = "#C9A84C";
 // password-recovery links all land here. supabase-js's `detectSessionInUrl` (on by default)
 // parses whatever token/code is in the URL automatically; this page just waits for that to
 // resolve via onAuthStateChange and then routes to the right place — a real PASSWORD_RECOVERY
-// session goes to /reset-password, everything else goes to the validated returnTo destination.
+// or invitation session goes to /reset-password; other sessions use the validated returnTo.
 export default function AuthCallback() {
   useSEO({ title: "Signing In — Nova Systems" });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState("working"); // working | error
-  const destination = safeReturnTo(searchParams.get("returnTo"));
+  const returnTo = searchParams.get("returnTo");
 
   useEffect(() => {
     if (!supabase) {
@@ -26,17 +26,13 @@ export default function AuthCallback() {
     let settled = false;
     // An invalid, expired or already-used link: say so; never fall through to a sign-in.
     if (authRedirect.error) { setStatus("error"); return; }
-    const isRecovery = authRedirect.type === "recovery";
-    const toReset = () => navigate(`/reset-password?returnTo=${encodeURIComponent(destination)}`, { replace: true });
+    const finish = (event) => navigate(authDestination({ type: authRedirect.type, event, returnTo }), { replace: true });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       if (settled) return;
-      if (event === "PASSWORD_RECOVERY" || (isRecovery && session)) {
+      if (session) {
         settled = true;
-        toReset();
-      } else if (session) {
-        settled = true;
-        navigate(destination, { replace: true });
+        finish(event);
       }
     });
 
@@ -46,7 +42,7 @@ export default function AuthCallback() {
       if (settled) return;
       if (data?.session) {
         settled = true;
-        if (isRecovery) toReset(); else navigate(destination, { replace: true });
+        finish();
       }
     });
 

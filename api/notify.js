@@ -6,6 +6,12 @@ import { requireOrgAccess } from './_orgAccess.js';
 import { sendEmail, resendBase } from './_email.js';
 import { loadInvoice, loadInvoiceClient, createInvoiceCheckout } from './_legacyPayments.js';
 import { textPdf } from './_sales/pdf.js';
+import { dbOne, notifyOwners } from './_sales/core.js';
+
+async function leadAlert(id, name, company) {
+  try { await notifyOwners({ kind: 'public_lead', subject: `New website inquiry: ${company || name}`.slice(0,160), body: 'Open the saved website request in Workers → Executive desk. Email sending may be off; the request is retained in Nova.', link: '/dashboard/command/workforce', channels: ['in_app'], idempotencyKey: `public-lead:${id}` }); }
+  catch { /* The owner inbox reads the saved request even when an in-app notification cannot be written. */ }
+}
 
 // Combined email / notification endpoint — dispatch via ?action=
 //   contact          POST  public — general contact-form email (+ confirmation)
@@ -58,33 +64,38 @@ async function handleContact(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return res.status(500).json({ error: 'We could not save your message right now. Please email hello@nova-systems.app directly so nothing is lost.' });
+    return res.status(500).json({ error: 'We could not save your message right now. Please email isaac@nova-systems.app directly so nothing is lost.' });
   }
 
+  let submission;
   try {
+    const org = await dbOne('organizations?kind=eq.nova_internal&select=id&order=created_at.asc');
+    if (!org) return res.status(503).json({ error: 'The Nova inbox is not configured. Please call (203) 706-0504.' });
     const r = await fetch(`${SUPABASE_URL}/rest/v1/contact_submissions`, {
       method: 'POST',
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, phone: phone || null, company: company || null, category, message }),
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ name, email, phone: phone || null, company: company || null, category, message, organization_id: org.id }),
     });
     if (!r.ok) {
       console.error('[notify:contact] Supabase save error:', r.status, await r.text());
-      return res.status(502).json({ error: 'We could not save your message right now. Please email hello@nova-systems.app directly so nothing is lost.' });
+      return res.status(502).json({ error: 'We could not save your message right now. Please email isaac@nova-systems.app directly so nothing is lost.' });
     }
+    submission = (await r.json().catch(() => []))[0];
   } catch (err) {
     console.error('[notify:contact] Supabase error:', err.message);
-    return res.status(502).json({ error: 'We could not save your message right now. Please email hello@nova-systems.app directly so nothing is lost.' });
+    return res.status(502).json({ error: 'We could not save your message right now. Please email isaac@nova-systems.app directly so nothing is lost.' });
   }
+  if (submission?.id) await leadAlert(submission.id, name, company);
 
   // Everything below is best-effort notification on top of the now-persisted message — a failure
   // here no longer means the submission itself was lost.
   const API_KEY = process.env.RESEND_API_KEY;
-  if (!API_KEY) {
-    return res.status(200).json({ ok: true, warning: 'Saved — email notification skipped (Resend not configured)' });
+  if (!API_KEY || process.env.SALES_EMAIL_MODE !== "live" || process.env.NOVA_SPENDING_LOCK !== "disabled") {
+    return res.status(200).json({ ok: true, warning: 'Saved — email notification is disabled; no delivery or booking is confirmed' });
   }
 
   const FROM = 'Nova Systems <noreply@nova-systems.app>';
-  const DEST = 'Isaac_0427@icloud.com';
+  const DEST = process.env.OPS_ALERT_EMAIL || 'isaac@nova-systems.app';
   const emailBody = [
     `Category: ${category}`,
     `Name: ${name}`,
@@ -122,7 +133,7 @@ async function handleContact(req, res) {
           text: [
             `Hi ${confirmName},`,
             '',
-            'Thanks for reaching out to Nova Systems. Isaac will personally review your request and get back to you within 24 hours.',
+            'Thanks for reaching out to Nova Systems. Your request is saved for Isaac to review. A meeting time is confirmed separately.',
             '',
             'Talk soon,',
             'Isaac Nova',
@@ -157,32 +168,38 @@ async function handleBookDemo(req, res) {
     return res.status(400).json({ error: 'Name, business, email, and phone are required' });
   }
 
+  let saved = false;
+  let submissionId = null;
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
-      await fetch(`${process.env.SUPABASE_URL}/rest/v1/demo_requests`, {
+      const org = await dbOne('organizations?kind=eq.nova_internal&select=id&order=created_at.asc');
+      if (!org) return res.status(503).json({ error: 'The Nova inbox is not configured. Please call (203) 706-0504.' });
+      const savedRequest = await fetch(`${process.env.SUPABASE_URL}/rest/v1/contact_submissions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
           Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-          Prefer: 'return=minimal',
+          Prefer: 'return=representation',
         },
         body: JSON.stringify({
-          name, business, industry, phone, email,
-          revenue, challenge, preferred_time: time, message,
-          status: 'pending',
-          created_at: new Date().toISOString(),
+          organization_id: org.id, name, company: business, phone, email, category: 'sales',
+          message: ['Demo request', `Industry: ${industry || 'not supplied'}`, `Challenge: ${challenge || 'not supplied'}`, `Preferred time (not confirmed): ${time || 'not supplied'}`, revenue && `Voluntary revenue detail: ${revenue}`, message].filter(Boolean).join('\n'),
         }),
       });
+      saved = savedRequest.ok;
+      if (saved) submissionId = (await savedRequest.json().catch(() => []))[0]?.id;
     } catch (err) {
       console.error('[notify:book-demo] Supabase save failed:', err.message);
     }
   }
 
+  if (!saved) return res.status(503).json({ error: 'Your request could not be saved. Please try again or call Nova.' });
+  if (submissionId) await leadAlert(submissionId, name, business);
   const key = process.env.RESEND_API_KEY;
   console.log('[notify:book-demo] RESEND_API_KEY present:', !!key);
 
-  if (!key) return res.status(200).json({ ok: true, warning: 'No Resend key — email not sent' });
+  if (!key || process.env.SALES_EMAIL_MODE !== 'live' || process.env.NOVA_SPENDING_LOCK !== 'disabled') return res.status(200).json({ ok: true, warning: 'Request saved. Email is disabled; no meeting is confirmed.' });
 
   const bodyText = [
     'New Demo Request — Nova Systems',
@@ -283,7 +300,7 @@ async function handleClientMessage(req, res) {
     }
   }
 
-  if (!RESEND_KEY) {
+  if (!RESEND_KEY || process.env.SALES_EMAIL_MODE !== 'live' || process.env.NOVA_SPENDING_LOCK !== 'disabled') {
     return res.status(200).json({
       ok: true,
       warning: 'Email skipped — Resend not configured',
@@ -360,7 +377,7 @@ async function handleSendInvoice(req, res) {
   ].filter((l) => l !== null).join('\n');
 
   const sent = await sendEmail({ to, subject: `Invoice ${inv.invoice_number || ''} — Nova Systems`, text, attachments: [{ filename: `${(inv.invoice_number || 'invoice').replace(/[^a-z0-9._-]/gi, '_')}.pdf`, content: pdf.toString('base64') }], idempotencyKey: `invoice-email:${inv.id}:${new Date().toISOString().slice(0, 16)}` });
-  if (sent.skipped) return res.status(200).json({ ok: false, warning: 'Email not sent — Resend is not configured', warnings });
+  if (sent.skipped) return res.status(200).json({ ok: false, warning: sent.reason === 'spending_locked' ? 'Email not sent — spending is locked by the owner' : 'Email not sent — Resend is not configured', warnings });
   if (!sent.ok) return res.status(502).json({ error: 'The email provider did not accept the invoice email', warnings });
   return res.status(200).json({ ok: true, provider_accepted: true, pay_link_created: !!payLink, warnings });
 }

@@ -1,3 +1,4 @@
+import {channelPauseState} from '../_channels/stops.js';
 // Nova Operations — the customer journey for a client business. Persists every step and every state
 // change; re-checks tenant scope on every object (every query carries organization_id).
 import { dbGet, dbOne, dbInsert, dbPatch, dbRpc, enc, nowIso, appBase } from '../_sales/core.js';
@@ -7,6 +8,8 @@ import { calcomConfigured, getSlots as calcomSlots, createBooking as calcomCreat
 import * as R from './rules.js';
 import { sendSms, orgSettings } from './messaging.js';
 import { extractService } from './model.js';
+import { currentChannelTurn } from '../_channels/turnContext.js';
+import { CHANNEL_PROVIDERS } from '../_channels/providers.js';
 
 export const ERR = (status, message, extra = {}) => Object.assign(new Error(message), { status, expose: true, ...extra });
 const one = async (table, orgId, id, select = '*') => dbOne(`${table}?id=eq.${enc(id)}&organization_id=eq.${enc(orgId)}&select=${select}`);
@@ -155,10 +158,11 @@ export async function handleInboundTurn({ orgId, conversationId, messageId, now 
   if (!contact || contact.suppressed) return { skipped: 'contact_suppressed' };
   const c = await businessContext(orgId);
   if (c.wave.paused) return { skipped: 'organization_paused' };
+  if(conv.channel==='sms'){const pause=await channelPauseState(orgId,{provider:'sms'});if(pause.paused)return pause;}
   const services = await approvedServices(orgId);
   const rv = conv.engine_state === 'revive_followup' ? (conv.engine_context || {}) : null;
   let job = rv?.revive_job_id ? await resumeRevivedJob({ orgId, conv, rv }) : null;
-  if (!job) job = await openJobForConversation({ orgId, contact, conversation: conv, channel: conv.channel === 'form' ? 'form' : 'sms', isTest: !!c.ops.is_test });
+  if (!job) job = await openJobForConversation({ orgId, contact, conversation: conv, channel: ['form', ...CHANNEL_PROVIDERS].includes(conv.channel) ? conv.channel : 'sms', isTest: !!c.ops.is_test });
   // Business-level switch (Install Systems): when Nova Agents is turned off for this business, a person answers.
   const agents = await dbOne(`ops_installed_modules?organization_id=eq.${enc(orgId)}&module_key=eq.agents_booking&select=status`).catch(() => null);
   if (agents?.status === 'disabled') {
@@ -213,10 +217,13 @@ export async function handleInboundTurn({ orgId, conversationId, messageId, now 
       }
     }
   }
-  await dbPatch('wave1_conversations', `id=eq.${enc(conv.id)}&organization_id=eq.${enc(orgId)}`, { engine_state: nextState, engine_context: ctxOut });
+  const channelTurn = currentChannelTurn();
+  if (channelTurn) {
+    await dbRpc('nova_channel_prepare_reply', { p_org: orgId, p_conversation: conv.id, p_message: messageId, p_token: channelTurn.token, p_state: nextState, p_context: ctxOut, p_contact: contact.id, p_reply: reply || null, p_purpose: purpose, p_result: { job_id: job.id, state: job.state, engine_state: nextState }, p_is_test: !!job.is_test });
+  } else await dbPatch('wave1_conversations', `id=eq.${enc(conv.id)}&organization_id=eq.${enc(orgId)}`, { engine_state: nextState, engine_context: ctxOut });
   let send = null;
   if (reply) send = await sendSms({ orgId, conversationId: conv.id, contactId: contact.id, body: reply, purpose, idempotencyKey: `turn:${messageId}`, triggerAt: msg.created_at, isTest: !!job.is_test, now });
-  return { job_id: job.id, state: job.state, engine_state: nextState, reply_status: send?.status || 'no_reply', reply_reason: send?.reason || null };
+  return { job_id: job.id, state: job.state, engine_state: nextState, reply_status: send?.status || 'no_reply', reply_reason: send?.reason || null, ...(send?.paused ? { paused: true, reason: send.reason } : {}) };
 }
 
 // A reply to a Revive follow-up about a still-open request continues THAT request (with its service and history) on

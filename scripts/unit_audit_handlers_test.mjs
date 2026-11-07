@@ -10,7 +10,7 @@ let pass = 0, fail = 0;
 const check = (n, c, x = '') => { if (c) { pass++; console.log(`PASS — ${n}`); } else { fail++; console.log(`FAIL — ${n} ${x}`); } };
 
 const T = { audit_cases: [], audit_evidence: [], audit_findings: [], audit_finding_evidence: [], audit_recommendations: [], audit_reports: [], audit_deliveries: [], businesses: [], orders: [] };
-let seq = 0; const allowedOrgs = new Set(['orgA']);
+let seq = 0; let accountRole = 'nova_super_admin'; const allowedOrgs = new Set(['orgA']);
 const get = (row, col) => col.split('.').reduce((o, k) => o?.[k], row);
 function matches(row, [col, cond]) {
   if (['select', 'order', 'limit', 'on_conflict'].includes(col)) return true;
@@ -30,8 +30,8 @@ globalThis.fetch = async (url, init = {}) => {
   const u = new URL(url); const method = init.method || 'GET';
   const J = (b, s = 200) => ({ ok: s < 400, status: s, json: async () => b, text: async () => JSON.stringify(b) });
   if (u.pathname === '/auth/v1/user') return J({ id: 'user1', email: 'staff@nova.test' });
-  if (u.pathname === '/rest/v1/organization_members') return J([{ role: 'owner' }]);
-  if (u.pathname === '/rest/v1/role_permissions') return J(['intelligence.view', 'growth.view', 'admin.view'].map((k) => ({ role: 'owner', permissions: { key: k } })));
+  if (u.pathname === '/rest/v1/organization_members') return J([{ role: accountRole, staff_user_id: 'user1', organization_id: 'orgA', organizations: { kind: 'nova_internal' } }]);
+  if (u.pathname === '/rest/v1/role_permissions') return J(['intelligence.view', 'growth.view', 'admin.view'].map((k) => ({ role: accountRole, permissions: { key: k } })));
   if (u.pathname === '/rest/v1/rpc/has_permission') return J(allowedOrgs.has(JSON.parse(init.body).target_org_id));
   const table = u.pathname.replace('/rest/v1/', ''); const rows = T[table];
   if (!rows) return J({ message: 'no table' }, 404);
@@ -118,6 +118,16 @@ let d1 = await mkDraft({ executive_summary: 'only this' });
 r = await call('reports', { body: { organization_id: 'orgA', case_id: caseA, action: 'approve', id: d1.id } });
 check('an incomplete report cannot be approved and the problems are listed', r.code === 422 && r.body.problems.length >= 8);
 check('draft creation stores a content hash', typeof d1.content_sha256 === 'string' && d1.content_sha256.length === 64);
+accountRole = 'nova_auditor';
+r = await call('reports', { body: { organization_id: 'orgA', case_id: caseA, action: 'approve', id: d1.id } });
+check('audit view permission cannot approve or publish an owner report', r.code === 403 && T.audit_reports.find(x => x.id === d1.id).status === 'draft', JSON.stringify(r.body));
+accountRole = 'nova_super_admin';
+const stale = await mkDraft(full);
+const changedFinding = T.audit_findings.find(f => f.id === f1); const previousTitle = changedFinding.title;
+changedFinding.title = 'Materially changed after the draft';
+r = await call('reports', { body: { organization_id: 'orgA', case_id: caseA, action: 'approve', id: stale.id } });
+check('material finding changes require a fresh report draft before approval', r.code === 409 && T.audit_reports.find(x => x.id === stale.id).status === 'draft', JSON.stringify(r.body));
+changedFinding.title = previousTitle;
 const d2 = await mkDraft(full);
 r = await call('reports', { body: { organization_id: 'orgA', case_id: caseA, action: 'approve', id: d1.id } });
 check('a superseded version cannot be approved (a newer draft exists)', r.code === 409);

@@ -17,9 +17,24 @@ async function loadChromium() {
   try { const pw = await import('playwright'); return pw.chromium || pw.default?.chromium || null; } catch { return null; }
 }
 
+export async function launchOptions(env = process.env, injectedBundle = null) {
+  const required = ['--disable-background-networking', '--disable-sync', '--no-first-run', '--disable-features=ServiceWorker', '--disable-quic', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'];
+  const options = { headless: true, proxy: { server: 'http://127.0.0.1:9' }, args: required };
+  if (env.NOVA_CHROMIUM_PROVIDER === 'bundled') {
+    const imported = injectedBundle || await import('@sparticuz/chromium');
+    const bundled = imported.default || imported;
+    options.executablePath = await bundled.executablePath();
+    // Lambda's single-process default crashes isolated Playwright contexts. Keep
+    // per-page isolation and the mandatory proxy rather than sharing a context.
+    // Also omit bundle defaults that relax normal document security.
+    options.args = [...bundled.args.filter(a => !/^--(?:proxy-|disable-features|host-resolver-rules|single-process(?:=|$)|disable-web-security(?:=|$)|allow-running-insecure-content(?:=|$)|disable-site-isolation-trials(?:=|$))/.test(a)), ...required];
+  }
+  return options;
+}
+
 export async function available() {
   const chromium = await loadChromium(); if (!chromium) return { ok: false, reason: 'The page renderer (Playwright) is not installed on this server.' };
-  try { const fs = await import('node:fs'); const exe = chromium.executablePath(); if (!exe || !fs.existsSync(exe)) return { ok: false, reason: 'Chromium is not installed for the page renderer.' }; } catch (e) { return { ok: false, reason: e.message }; }
+  try { const fs = await import('node:fs'); const config = await launchOptions(); const exe = config.executablePath || chromium.executablePath(); if (!exe || !fs.existsSync(exe)) return { ok: false, reason: 'Chromium is not installed for the page renderer.' }; } catch (e) { return { ok: false, reason: e.message }; }
   return { ok: true };
 }
 
@@ -27,7 +42,7 @@ export async function available() {
 // { url, error }. `fetchImpl`/`lookup` are injectable so tests run with no network.
 export async function renderPages(urls, { fetchImpl, lookup, timeoutMs = 15000, settleMs = 1500, maxRequests = 80, maxTotalBytes = 6_000_000, now = () => new Date() } = {}) {
   const chromium = await loadChromium(); if (!chromium) throw new Error('page renderer not installed');
-  const browser = await chromium.launch({ headless: true, proxy: { server: 'http://127.0.0.1:9' }, args: ['--disable-background-networking', '--disable-sync', '--no-first-run', '--disable-features=ServiceWorker'] });
+  const browser = await chromium.launch(await launchOptions());
   const out = [];
   try {
     for (const url of urls) {

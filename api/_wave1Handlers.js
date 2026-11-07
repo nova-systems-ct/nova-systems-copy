@@ -54,7 +54,7 @@ export async function handleSmsInbound({ url, params, signature }, repo, env) {
   if (kind === 'opt_out' && repo.cancelQueuedForContact) await repo.cancelQueuedForContact(orgId, contact.id);
   if (kind === 'message' && inbound && repo.opsEnabled && await repo.opsEnabled(orgId)) {
     if (!conv.customer_initiated_at) await repo.updateConversation(orgId, conv.id, { customer_initiated_at: now });
-    await repo.enqueueJob({ job_type: 'ops_conversation_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: inbound.id }, idempotency_key: `ops_turn:${sid}` });
+    await repo.enqueueJob({ job_type: 'ops_sms_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: inbound.id }, idempotency_key: `ops_turn:${sid}` });
   }
   return twiml(200);
 }
@@ -240,7 +240,7 @@ export async function runMissedCallFollowup(job, repo, sender, env) {
     await repo.insertMessage(orgId, { conversation_id, direction: 'outbound', automated: true, purpose: 'missed_call', status: 'blocked', blocked_reason: 'no_reviewed_template', idempotency_key: `${key}:exec` });
     return { sent: false, blocked: 'no_reviewed_template' };
   }
-  if (env.WAVE1_SEND_ENABLED !== 'true') {
+  if (env.WAVE1_SEND_ENABLED !== 'true' || env.NOVA_SPENDING_LOCK !== 'disabled') {
     // Live sends are OFF unless explicitly enabled. This is a dry run — NOT a sent message.
     await repo.insertMessage(orgId, { conversation_id, direction: 'outbound', body: template, automated: true, purpose: 'missed_call', status: 'blocked', blocked_reason: 'send_disabled_dry_run', idempotency_key: `${key}:exec` });
     return { sent: false, blocked: 'send_disabled_dry_run' };
@@ -271,6 +271,7 @@ export async function runMissedCallFollowup(job, repo, sender, env) {
 // ---------------------------------------------------------------- Twilio REST sender (production)
 export function createTwilioSender(env, fetchImpl = fetch) {
   return async ({ to, from, body }) => {
+    if (env.NOVA_SPENDING_LOCK !== 'disabled') return { httpStatus: 0, error: 'Spending is locked; no phone provider was contacted.' };
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10_000);
     try {

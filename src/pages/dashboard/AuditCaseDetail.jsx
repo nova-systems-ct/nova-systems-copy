@@ -1,3 +1,4 @@
+import AuditInvestigation from './audit/AuditInvestigation'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Plus, Loader2, Check, Circle, Download, FileText, Search, Archive, RotateCcw, ExternalLink } from 'lucide-react'
@@ -10,7 +11,7 @@ import { AuditCss, IntakeTab, TestsTab, BenchmarksTab, ScenariosTab, FindingDeta
 // Audit workspace (repair 2026-10-26). One page, task order: business details → evidence review → findings → report →
 // PDF in the Vault → approval. Every save shows saving / saved / failed, keeps typed text on failure, and typed text that
 // was not saved yet survives a reload on this device. The clock card says exactly why it has or has not started.
-const SECTIONS = [['overview', 'Overview'], ['evidence', 'Evidence'], ['findings', 'Findings'], ['report', 'Report & PDF'], ['clock', 'Clock & policy'], ['more', 'More tools']]
+const SECTIONS = [['investigation', 'Investigation'], ['overview', 'Overview'], ['evidence', 'Evidence'], ['findings', 'Findings'], ['report', 'Report & PDF'], ['clock', 'Clock & policy'], ['more', 'More tools']]
 const local = {
   get: (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null') } catch { return null } },
   set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)) } catch { /* storage unavailable */ } },
@@ -39,7 +40,7 @@ export default function AuditCaseDetail() {
   const isOwner = currentMembership?.role === 'nova_super_admin'
   const [ws, setWs] = useState(null)
   const [error, setError] = useState(null)
-  const [section, setSection] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('section')) || 'overview')
+  const [section, setSection] = useState(() => (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('section')) || 'investigation')
   const [evidence, setEvidence] = useState([])
   const [findings, setFindings] = useState([])
   const [recommendations, setRecommendations] = useState([])
@@ -90,6 +91,7 @@ export default function AuditCaseDetail() {
       <nav aria-label="Audit sections" className="ops-tabs" role="tablist">
         {SECTIONS.map(([k, l]) => <button key={k} role="tab" aria-selected={section === k} className={`ops-tab ${section === k ? 'active' : ''}`} style={{ background: 'none', border: 0, borderBottom: `2px solid ${section === k ? C.gold : 'transparent'}`, cursor: 'pointer', fontFamily: 'inherit' }} onClick={() => go(k)}>{l}{k === 'findings' && ws.findings.proposed ? ` (${ws.findings.proposed} to review)` : ''}</button>)}
       </nav>
+      {section === 'investigation' && <AuditInvestigation org={org} caseId={id} plan={ws.investigation} clock={ws.clock} sendEnabled={ws.audit_send_enabled} reload={load} go={go} />}
       {section === 'overview' && <Overview ws={ws} org={org} caseId={id} reload={load} go={go} />}
       {section === 'evidence' && <EvidenceTab caseId={id} orgId={org} items={evidence} onSaved={load} />}
       {section === 'findings' && <FindingsTab caseId={id} orgId={org} items={findings} evidence={evidence} onSaved={load} />}
@@ -217,6 +219,15 @@ function ReviewCard({ ws, org, caseId, reload, go }) {
         </Notice>
       )}
       {s && !active && <Notice tone={run.status === 'failed' ? 'bad' : 'ok'}>{run.status === 'failed' ? `Research stopped: ${run.error || 'see the steps above'}.` : `${s.pages_read} page(s) read, ${s.competitor_websites_compared} competitor website(s) compared, ${s.evidence_added} evidence records. ${s.findings_proposed} new finding${s.findings_proposed === 1 ? '' : 's'} proposed for your review${s.findings_already_recorded ? `; ${s.findings_already_recorded} already recorded` : ''}.`}{(s.limitations || []).length ? <div style={{ fontSize: 12, color: C.dim, marginTop: 6 }}>Not checked: {s.limitations.join(' ')}</div> : null}</Notice>}
+      {!!s?.journey_checks?.length && !active && <details style={{ borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>
+        <summary style={{ cursor: 'pointer', color: C.text }}>Customer paths · {s.journey_checks.filter(x => x.result === 'broken').length} need repair</summary>
+        <p style={{ color: C.dim, fontSize: 12 }}>These are page checks. No order, payment, inquiry or booking was submitted.</p>
+        <ul style={{ listStyle: 'none', padding: 0 }}>{s.journey_checks.map(path => <li key={path.target} style={{ borderBottom: `1px solid ${C.line}`, padding: '12px 0', overflowWrap: 'anywhere' }}>
+          <strong style={{ color: path.result === 'broken' ? C.red : C.text }}>{path.result === 'broken' ? 'Needs repair' : path.result === 'reachable' ? 'Page opens' : 'Not verified'} · {path.label}</strong>
+          <div style={{ color: C.dim, fontSize: 12, marginTop: 5 }}>{path.target}</div>
+          <div style={{ color: C.faint, fontSize: 12 }}>{path.reason} · {when(path.checked_at)}</div>
+        </li>)}</ul>
+      </details>}
       <p style={{ fontSize: 12, color: C.faint }}>{ws.case.last_review_at ? `Last research ${when(ws.case.last_review_at)}` : 'Not researched yet'}</p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button className="ops-btn primary" disabled={starting || active || !ws.business.name} onClick={() => start('demo')} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{active ? <><Loader2 size={15} className="animate-spin" /> Researching…</> : <><Search size={15} /> {ws.case.last_review_at ? 'Run the research again' : 'Run public research'}</>}</button>

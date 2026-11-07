@@ -23,7 +23,8 @@ for (const k of Object.keys(process.env)) if (/^(STRIPE_|TWILIO_|RESEND_|SUPABAS
 
 const manifest = JSON.parse(fs.readFileSync('supabase/migration-manifest.json', 'utf8')).order;
 const env = await startTestEnv({ migrations: manifest, bootstrap: 'platform', publicBuckets: [] });
-Object.assign(process.env, env.appEnv, { APP_BASE_URL: 'http://localhost.test' });
+// Only the isolated local Resend stand-in is enabled here, so recipient/security checks still exercise delivery.
+Object.assign(process.env, env.appEnv, { APP_BASE_URL: 'http://localhost.test', NOVA_SPENDING_LOCK: 'disabled', SALES_EMAIL_MODE: 'live' });
 const WH = 'whsec_local_persona_test_only';
 
 const imp = async (p) => (await import(p)).default;

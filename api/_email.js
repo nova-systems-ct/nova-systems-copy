@@ -6,6 +6,7 @@ export const NOVA_FROM = 'Nova Systems <noreply@nova-systems.app>';
 // Returns { ok, status, id?, skipped? }. Never throws.
 export async function sendEmail({ to, subject, text, html, reply_to, attachments, idempotencyKey }) {
   const key = process.env.RESEND_API_KEY;
+  if (process.env.NOVA_SPENDING_LOCK !== 'disabled') return { ok: false, skipped: true, status: 0, reason: 'spending_locked' };
   if (!key) return { ok: false, skipped: true, status: 0 };
   try {
     const r = await fetch(`${resendBase()}/emails`, {

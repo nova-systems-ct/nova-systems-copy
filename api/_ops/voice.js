@@ -8,6 +8,7 @@ import { normalizePhone, verifyTwilioSignature } from '../_wave1.js';
 import * as R from './rules.js';
 import { businessContext, approvedServices, busyIntervals, openJobForConversation, quoteJob, holdSlot, sendAgreement, transition } from './service.js';
 import { sendSms } from './messaging.js';
+import {channelPauseState} from '../_channels/stops.js';
 
 const MAX_TURNS = 8;
 const xe = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -43,7 +44,7 @@ export async function handleVoiceAiInbound({ url, params, signature }, env, fall
   const cfg = await dbOne(`voice_configurations?organization_id=eq.${enc(orgId)}&select=*`);
   if (!cfg || cfg.status !== 'active' || !cfg.disclosure_script || !base(env)) return fallback(); // human forwarding (existing behavior)
   const c = await businessContext(orgId);
-  if (c.wave.paused || (c.wave.channels_paused || []).includes('voice')) return fallback();
+  if (c.wave.paused || (c.wave.channels_paused || []).includes('voice') || process.env.OPS_KILL_SWITCH==='true' || (await channelPauseState(orgId,{provider:'voice'})).paused) return fallback();
   let contact = await dbOne(`crm_contacts?organization_id=eq.${enc(orgId)}&phone_e164=eq.${enc(from)}&merged_into_id=is.null&select=*`);
   if (!contact) contact = (await dbInsert('crm_contacts', { organization_id: orgId, name: 'Unknown (call)', phone: from, phone_e164: from, source: 'inbound_call' })).row;
   const existing = await dbOne(`voice_call_sessions?organization_id=eq.${enc(orgId)}&provider_call_sid=eq.${enc(callSid)}&select=*`);
@@ -60,6 +61,8 @@ export async function handleVoiceAiTurn({ url, params, signature }, env) {
   const session = await dbOne(`voice_call_sessions?organization_id=eq.${enc(orgId)}&provider_call_sid=eq.${enc(callSid)}&select=*`);
   if (!session) return xml(`${say('Sorry, something went wrong.')}<Hangup/>`);
   const c = await businessContext(orgId);
+  const configuration=await dbOne(`voice_configurations?organization_id=eq.${enc(orgId)}&select=status`);
+  if(configuration?.status!=='active'||c.wave.paused||(c.wave.channels_paused||[]).includes('voice')||process.env.OPS_KILL_SWITCH==='true'||(await channelPauseState(orgId,{provider:'voice'})).paused)return transfer({c,session,reason:'voice_automation_paused'});
   const heard = String(params.SpeechResult || '').trim(); const digit = String(params.Digits || '').trim();
   const turns = Array.isArray(session.turns) ? session.turns : [];
   const cfg = await dbOne(`voice_configurations?organization_id=eq.${enc(orgId)}&select=transcript_retention_days`);

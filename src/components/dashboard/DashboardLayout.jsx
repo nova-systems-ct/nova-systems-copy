@@ -233,12 +233,12 @@ export default function DashboardLayout() {
     <div style={{ display: 'flex', minHeight: '100vh', background: NAVY, fontFamily: "'Inter',system-ui,sans-serif", color: '#fff' }}>
 
       {/* Desktop sidebar */}
-      <aside style={{ width: 232, flexShrink: 0, background: '#0A0A0A', borderRight: '1px solid rgba(201,168,76,0.16)', position: 'sticky', top: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="hidden md:flex">
+      <aside style={{ width: 232, flexShrink: 0, background: '#0A0A0A', borderRight: '1px solid rgba(201,168,76,0.16)', position: 'sticky', top: 0, height: '100vh', flexDirection: 'column', overflow: 'hidden' }} className="hidden lg:flex">
         <Sidebar />
       </aside>
 
       {/* Mobile top bar */}
-      <div className="flex md:hidden" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, background: 'rgba(10,10,10,0.96)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '14px 16px', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="flex lg:hidden" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, background: 'rgba(10,10,10,0.96)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '14px 16px', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>{orgName}</span>
         <button
           onClick={() => setOpen(o => !o)}
@@ -252,7 +252,7 @@ export default function DashboardLayout() {
 
       {/* Mobile drawer */}
       {open && (
-        <div className="md:hidden" style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.6)' }} onClick={() => setOpen(false)}>
+        <div className="lg:hidden" style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.6)' }} onClick={() => setOpen(false)}>
           <aside style={{ width: 240, height: '100%', background: NAVY, borderRight: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
             <Sidebar />
           </aside>
@@ -260,7 +260,7 @@ export default function DashboardLayout() {
       )}
 
       {/* Content */}
-      <main style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }} className="pt-14 md:pt-0">
+      <main style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }} className="pt-14 lg:pt-0">
         <Outlet />
       </main>
     </div>

@@ -1,5 +1,5 @@
 // Install Systems — turn a business's audit findings and current configuration into a versioned installation manifest,
-// then install it in explicit stages. Idempotent (same configuration → same manifest; re-running skips finished steps),
+// then install it in explicit stages. Idempotent (same configuration → same manifest; re-running rechecks prerequisites),
 // resumable (blocked/failed steps run again), concurrency-safe (one run per manifest at a time, via a lease), tenant
 // scoped (every query carries organization_id). It never enables outreach, live payments or paid services: those stay
 // owner decisions and appear as blocked steps with the exact next action.
@@ -7,10 +7,32 @@ import crypto from 'node:crypto';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso } from '../_sales/core.js';
 import * as R from './rules.js';
 import * as S from './service.js';
-import { provisionModule, moduleByKey, CATALOG_VERSION, selfAudits } from './modules.js';
+import { provisionModule, moduleByKey, CATALOG_VERSION, selfAudits, currentFindings } from './modules.js';
+import { paymentReadiness } from './paymentReadiness.js';
 
 const sha = (v) => crypto.createHash('sha256').update(typeof v === 'string' ? v : JSON.stringify(v)).digest('hex');
 const ERR = (status, message) => Object.assign(new Error(message), { status, expose: true });
+const canonical = (v) => Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])])) : v;
+const fields = (row, keys) => Object.fromEntries(keys.map(k => [k, row?.[k] ?? null]));
+
+async function configuration(orgId, prices) {
+  const scope = `organization_id=eq.${enc(orgId)}`;
+  const [ops, wave, agreements, payments, voice] = await Promise.all([
+    dbOne(`ops_business_settings?${scope}&select=*`), dbOne(`wave1_org_settings?${scope}&select=*`),
+    dbGet(`ops_agreement_templates?${scope}&status=eq.approved&select=*&order=template_key.asc`),
+    dbOne(`ops_payment_accounts?${scope}&select=mode,stripe_account_ref,live_enabled`),
+    dbOne(`voice_configurations?${scope}&select=status,disclosure_script`),
+  ]);
+  // Exclude bookkeeping and first-run outputs (form issuance, scoreboard enablement, go-live timestamps).
+  // The hash binds acceptance to the actual prices, terms and operating policy without exposing their content.
+  return {
+    ops: fields(ops, ['display_name', 'industry', 'service_area', 'is_test', 'calendar_provider', 'calcom_event_types', 'slot_interval_minutes', 'hold_minutes', 'lead_time_hours', 'booking_horizon_days', 'review_url', 'referral_terms_status', 'referral_terms', 'missed_call_policy', 'missed_call_policy_attestation', 'ai_extraction_enabled', 'self_business_id', 'agents_enabled']),
+    wave: fields(wave, ['timezone', 'business_hours', 'quiet_hours', 'max_automated_per_day', 'min_gap_minutes', 'paused', 'channels_paused', 'sms_number_ref', 'escalation_contacts', 'templates', 'provider_registration']),
+    prices: prices.map(p => fields(p, ['id', 'service_key', 'version', 'name', 'description', 'duration_minutes', 'buffer_minutes', 'price_cents', 'deposit_cents', 'tax_bps', 'currency', 'options', 'quote_required'])),
+    agreements: agreements.map(a => fields(a, ['id', 'template_key', 'version', 'title', 'body', 'legal_review'])),
+    payments, voice,
+  };
+}
 
 // What the installation consists of. `required` components must be done before activation.
 function components({ prices, depositNeeded }) {
@@ -38,10 +60,17 @@ async function auditLink(orgId) {
   // silently replace a finished one; it is reported instead.
   const cases = (await selfAudits(orgId)).cases.map((x) => ({ ...x, businesses: { name: x.name } }));
   const count = (x) => x.audit_findings?.[0]?.count || 0;
-  const c = cases.find((x) => count(x) > 0) || cases[0] || null;
+  let c = null; let findings = []; let recs = [];
+  const checkedEmpty = new Set();
+  for (const candidate of cases.filter(x => count(x) > 0)) {
+    const rows = currentFindings(await dbGet(`audit_findings?case_id=eq.${enc(candidate.id)}&select=id,title,review_status,recheck_status&order=created_at.asc`));
+    if (rows.length) { c = candidate; findings = rows; break; }
+    checkedEmpty.add(candidate.id);
+  }
+  if (!c) c = cases[0] || null;
   if (!c) return null;
-  const newer = cases.filter((x) => new Date(x.created_at) > new Date(c.created_at) && count(x) === 0).map((x) => ({ case_id: x.id, business: x.businesses?.name || null, created_at: x.created_at, status: x.status }));
-  const [findings, recs] = await Promise.all([dbGet(`audit_findings?case_id=eq.${enc(c.id)}&select=id,title&order=created_at.asc`), dbGet(`audit_recommendations?case_id=eq.${enc(c.id)}&select=id,finding_id,mechanism,priority_rank&order=priority_rank.asc.nullslast`)]);
+  if (findings.length) recs = await dbGet(`audit_recommendations?case_id=eq.${enc(c.id)}&select=id,finding_id,mechanism,priority_rank&order=priority_rank.asc.nullslast`);
+  const newer = cases.filter(x => new Date(x.created_at) > new Date(c.created_at) && (count(x) === 0 || checkedEmpty.has(x.id))).map(x => ({case_id:x.id,business:x.businesses?.name||null,created_at:x.created_at,status:x.status}));
   return { case_id: c.id, business: c.businesses?.name || null, created_at: c.created_at, findings: findings.map((f) => ({ id: f.id, title: f.title, fix: recs.find((r) => r.finding_id === f.id)?.mechanism || null })), newer_without_findings: newer };
 }
 
@@ -51,9 +80,10 @@ export async function buildManifest(orgId) {
   const comps = components({ prices, depositNeeded });
   const audit = await auditLink(orgId);
   // Modules the owner selected (catalog recipes); disabled ones stay listed so a run reports them as turned off.
-  const modules = (await dbGet(`ops_installed_modules?organization_id=eq.${enc(orgId)}&select=module_key,status&order=module_key.asc`)).map((x) => x.module_key).filter((k) => moduleByKey(k));
+  const selected = (await dbGet(`ops_installed_modules?organization_id=eq.${enc(orgId)}&select=module_key,status,config&order=module_key.asc`)).filter(x => moduleByKey(x.module_key));
+  const modules = selected.map(x => x.module_key);
   const manifest = { components: comps.map(({ key, stage, label, required, action, owner_action }) => ({ key, stage, label, required, action, owner_action })), audit, modules, catalog_version: CATALOG_VERSION };
-  return { manifest, sha: sha({ c: manifest.components, a: audit?.findings?.map((f) => [f.id, f.fix]) || [], m: modules, v: CATALOG_VERSION }) };
+  return { manifest, sha: sha(canonical({ c: manifest.components, a: { case_id: audit?.case_id || null, findings: audit?.findings?.map(f => [f.id, f.fix]) || [] }, m: selected.map(x => ({ key: x.module_key, enabled: x.status !== 'disabled', config: x.config || {} })), config: await configuration(orgId, prices), v: CATALOG_VERSION })) };
 }
 
 export async function latestManifest(orgId) {
@@ -81,7 +111,7 @@ async function check(key, orgId, ctx) {
   switch (key) {
     case 'business_profile': return it('timezone_hours').status === 'ready' ? ['done', it('timezone_hours').detail] : ['blocked', 'Time zone or business hours missing'];
     case 'services': return ctx.prices.length ? ['done', `${ctx.prices.length} approved: ${ctx.prices.map((p) => p.name).join(', ')}`] : ['blocked', 'No approved service'];
-    case 'agreement': return it('agreement').status !== 'blocked' ? ['done', it('agreement').detail] : ['blocked', 'No approved agreement template'];
+    case 'agreement': return ['ready', 'partial'].includes(it('agreement').status) ? ['done', it('agreement').detail] : ['blocked', 'No approved agreement template'];
     case 'escalation': return it('escalation').status === 'ready' ? ['done', 'Escalation contact set'] : ['blocked', 'No escalation contact'];
     case 'web_form': {
       const w = await dbOne(`wave1_org_settings?organization_id=eq.${enc(orgId)}&select=organization_id,form_token`);
@@ -102,7 +132,8 @@ async function check(key, orgId, ctx) {
     case 'payments': {
       if (!ctx.depositNeeded) return ['skipped', 'No approved service takes a deposit'];
       const acct = await dbOne(`ops_payment_accounts?organization_id=eq.${enc(orgId)}&select=mode,stripe_account_ref,live_enabled`);
-      return acct?.mode === 'client_connected_account' && R.isStripeAccountId(acct.stripe_account_ref) ? ['done', 'Business’s own Stripe account connected (test mode)'] : ['blocked', acct?.mode === 'nova_test_platform' ? 'Nova TEST account only (test businesses)' : 'No connected Stripe account'];
+      const assessment = paymentReadiness(acct, { isTest: !!r.is_test, env });
+      return [r.is_test && assessment.test_ready ? 'done' : 'blocked', assessment.detail];
     }
     case 'monitoring': return it('worker').status === 'ready' ? ['done', it('worker').detail] : ['blocked', `Worker ${it('worker').detail || 'not seen'}`];
     case 'weekly_report': {
@@ -111,7 +142,7 @@ async function check(key, orgId, ctx) {
       return o ? ['done', 'Sunday 6 PM America/New_York report enabled'] : ['blocked', 'Operations settings missing'];
     }
     case 'revive': { const c = await dbOne(`ops_campaigns?organization_id=eq.${enc(orgId)}&status=in.(approved,running)&select=id,name`); return c ? ['done', `Approved campaign: ${c.name || c.id}`] : ['blocked', 'No approved recovery campaign']; }
-    case 'demand': return ['blocked', 'No approved acquisition campaign'];
+    case 'demand': { const c = await dbOne(`demand_campaigns?organization_id=eq.${enc(orgId)}&status=eq.approved&select=id,name`); return c ? ['done', `Approved campaign: ${c.name || c.id}. Approval does not enable outreach.`] : ['blocked', 'No approved acquisition campaign']; }
     case 'test_journey': {
       const reqd = ['business_profile', 'services', 'agreement', 'web_form', 'calendar'];
       if (reqd.some((k) => ctx.results[k] !== 'done')) return ['blocked', 'Earlier required steps are not done'];
@@ -133,11 +164,12 @@ export async function runInstall(orgId, manifestId, actor, readinessFn) {
   const m = await dbOne(`ops_install_manifests?id=eq.${enc(manifestId)}&organization_id=eq.${enc(orgId)}&select=*`);
   if (!m) throw ERR(404, 'Installation plan not found');
   if (['superseded', 'activated'].includes(m.status)) throw ERR(409, m.status === 'activated' ? 'This plan is already activated. Prepare a new plan to change it.' : 'This plan was replaced by a newer one. Open the latest plan.');
+  if (m.manifest_sha256 !== (await buildManifest(orgId)).sha) throw ERR(409, 'Business settings changed after this plan was prepared. Prepare a new plan and test the current configuration.');
   const lock = crypto.randomBytes(8).toString('hex');
   const got = await dbPatch('ops_install_manifests', `id=eq.${enc(m.id)}&organization_id=eq.${enc(orgId)}&or=(lock_token.is.null,lock_expires_at.lt.${enc(nowIso())})`, { lock_token: lock, lock_expires_at: new Date(Date.now() + 5 * 60_000).toISOString(), status: 'installing', updated_at: nowIso() });
   if (!got.length) throw ERR(409, 'An installation run is already in progress for this plan.');
   try {
-    const existing = await dbGet(`ops_install_steps?manifest_id=eq.${enc(m.id)}&select=step_key,status,attempts`);
+    const existing = await dbGet(`ops_install_steps?manifest_id=eq.${enc(m.id)}&organization_id=eq.${enc(orgId)}&select=step_key,status,attempts`);
     const prices = await S.approvedServices(orgId);
     const ctx = { prices, depositNeeded: prices.some((p) => (p.deposit_cents || 0) > 0), readiness: await readinessFn(orgId), results: {} };
     const upsertStep = async (r) => {
@@ -148,7 +180,7 @@ export async function runInstall(orgId, manifestId, actor, readinessFn) {
     };
     for (const comp of [...m.manifest.components].sort((a, b) => a.stage - b.stage)) {
       const prev = existing.find((e) => e.step_key === comp.key);
-      if (prev && ['done', 'skipped'].includes(prev.status) && comp.key !== 'test_journey') { ctx.results[comp.key] = prev.status; continue; } // finished steps are not repeated
+      // Connections and worker hosts can disappear after an earlier success. Re-check, rather than reuse its badge.
       const started = nowIso();
       let status, detail, evidence = {};
       try { [status, detail, evidence = {}] = await check(comp.key, orgId, ctx); } catch (e) { status = 'failed'; detail = String(e.message).slice(0, 300); }
@@ -179,9 +211,10 @@ export async function runInstall(orgId, manifestId, actor, readinessFn) {
     const reqKeys = m.manifest.components.filter((c) => c.required).map((c) => c.key);
     const reqDone = reqKeys.every((k) => ['done', 'skipped'].includes(steps.find((s) => s.step_key === k)?.status));
     const anyFailed = steps.some((s) => s.status === 'failed');
-    const status = anyFailed ? 'failed' : reqDone && !moduleBlocked ? 'installed' : 'partial';
+    const currentConfig = m.manifest_sha256 === (await buildManifest(orgId)).sha;
+    const status = anyFailed ? 'failed' : reqDone && !moduleBlocked && currentConfig ? 'installed' : 'partial';
     await dbPatch('ops_install_manifests', `id=eq.${enc(m.id)}&lock_token=eq.${enc(lock)}`, { status, lock_token: null, lock_expires_at: null, updated_at: nowIso() });
-    await dbInsert('ops_transitions', { organization_id: orgId, entity: 'settings', entity_id: m.id, from_state: m.status, to_state: status, actor_type: actor?.type || 'user', actor_id: actor?.id ? String(actor.id) : null, reason: `installation plan v${m.version} run`, evidence: { steps: steps.length } });
+    await dbInsert('ops_transitions', { organization_id: orgId, entity: 'settings', entity_id: m.id, from_state: m.status, to_state: status, actor_type: actor?.type || 'user', actor_id: actor?.id ? String(actor.id) : null, reason: `installation plan v${m.version} run`, evidence: { steps: steps.length, configuration_current: currentConfig } });
     return latestManifest(orgId);
   } catch (e) {
     await dbPatch('ops_install_manifests', `id=eq.${enc(m.id)}&lock_token=eq.${enc(lock)}`, { status: 'failed', lock_token: null, lock_expires_at: null, updated_at: nowIso() }).catch(() => null);
@@ -191,10 +224,15 @@ export async function runInstall(orgId, manifestId, actor, readinessFn) {
 
 // Activation is an explicit owner decision, only when every required component is done. It records go-live approval; it
 // does not enable outreach, live payments or any paid service.
-export async function activate(orgId, manifestId, actor) {
+export async function activate(orgId, manifestId, actor, readinessFn) {
   const m = await dbOne(`ops_install_manifests?id=eq.${enc(manifestId)}&organization_id=eq.${enc(orgId)}&select=*`);
   if (!m) throw ERR(404, 'Installation plan not found');
   if (m.status !== 'installed') throw ERR(409, 'Activate after the installation run shows every required component done.');
+  // Repeat the idempotent installation checks at the point of approval. This includes a clearly labelled, cancelled
+  // TEST inquiry; it never sends to a real customer or enables paid/live providers.
+  const verified = await runInstall(orgId, manifestId, actor, readinessFn);
+  if (verified?.id !== m.id || verified.status !== 'installed') throw ERR(409, 'Current installation checks are blocked. Resolve the listed steps and run Install Systems again before activation.');
+  if (m.manifest_sha256 !== (await buildManifest(orgId)).sha) throw ERR(409, 'Business settings changed during verification. Prepare and test a new plan.');
   const [row] = await dbPatch('ops_install_manifests', `id=eq.${enc(m.id)}&organization_id=eq.${enc(orgId)}&status=eq.installed`, { status: 'activated', activated_by: actor.id, activated_at: nowIso(), updated_at: nowIso() });
   if (!row) throw ERR(409, 'The plan changed meanwhile; reload.');
   await dbPatch('ops_business_settings', `organization_id=eq.${enc(orgId)}`, { go_live_approved_at: nowIso(), updated_at: nowIso() });
