@@ -28,7 +28,7 @@ export function normalizePhone(raw) {
 }
 
 // ---- Carrier-standard keywords. STOP-class must ALWAYS win, regardless of workflow state.
-const OPT_OUT = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT']);
+const OPT_OUT = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'REVOKE', 'OPTOUT']);
 // Only carrier-standard re-subscribe keywords. "YES" is deliberately NOT one: a contact answering "yes" to a
 // question must not silently clear an opt-out or grant SMS consent.
 const OPT_IN = new Set(['START', 'UNSTOP']);

@@ -22,7 +22,7 @@ try{
  browser=await chromium.launch({executablePath:await packaged.executablePath(),args:packaged.args,headless:true});
  const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`${H.base}/login`);await page.getByLabel('Email').fill(owner.email);await page.getByLabel('Password').fill(owner.password);await page.getByRole('button',{name:/SIGN IN/}).click();await page.waitForURL(/\/dashboard/);
- await page.goto(`${H.base}/dashboard/command/workforce`);await page.getByRole('button',{name:'Install Nova workforce',exact:true}).click();await page.getByText('13 of 13 workers registered',{exact:false}).waitFor();
+ await page.goto(`${H.base}/dashboard/command/workforce`);await page.getByRole('button',{name:'Install Nova workforce',exact:true}).click();await page.getByText('21 of 21 workers registered',{exact:false}).waitFor();
  await page.goto(`${H.base}/dashboard/ops/rewards`);
  await page.getByRole('button',{name:'Prepare Apple Wallet test pass',exact:true}).click();
  const downloadPromise=page.waitForEvent('download');
@@ -32,10 +32,10 @@ try{
  assert.equal((await H.env.sql('select count(*)::int as n from loyalty_accounts')).rows[0].n,0);
  assert.equal((await H.env.sql('select count(*)::int as n from loyalty_programs')).rows[0].n,0);
  assert.equal((await H.env.sql('select count(*)::int as n from loyalty_ledger')).rows[0].n,0);
- fs.mkdirSync('docs/qa/wallet-setup-2026-11-06',{recursive:true});
+ fs.mkdirSync('docs/qa/wallet-setup-2026-11-07',{recursive:true});
  for(const [name,width,height]of [['desktop',1366,900],['ipad',820,1180],['phone',390,844]]){
   await page.setViewportSize({width,height});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));
-  await page.screenshot({path:`docs/qa/wallet-setup-2026-11-06/${name}.png`,fullPage:true});
+  await page.screenshot({path:`docs/qa/wallet-setup-2026-11-07/${name}.png`,fullPage:true});
  }
  assert.deepEqual(errors,[]);
  console.log('PASS — signed-in owner generates and downloads a signed generic setup pass; zero programs/accounts/points; desktop/iPad/phone fit. Synthetic signer only, not device acceptance.');

@@ -15,7 +15,7 @@ export function createPostgrestRepo({ url, key }) {
       const [s] = await get(`wave1_org_settings?sms_number_ref=eq.${q(num)}&limit=1`);
       return s ? { organization_id: s.organization_id, settings: s } : null;
     },
-    async orgByFormToken(token) { const [s] = await get(`wave1_org_settings?form_token=eq.${q(token)}&limit=1`); return s || null; },
+    async orgByFormToken(token) { const [s] = await get(`wave1_org_settings?form_token=eq.${q(token)}&select=*,organizations(kind)&limit=1`); return s || null; },
     async getSettings(org) { const [s] = await get(`wave1_org_settings?organization_id=eq.${q(org)}&limit=1`); return s || null; },
 
     async recordSourceEvent(source, eventId, org, summary) {

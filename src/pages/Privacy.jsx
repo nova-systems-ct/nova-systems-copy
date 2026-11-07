@@ -3,6 +3,10 @@ import LegalPageLayout from "@/components/LegalPageLayout";
 
 const SECTIONS = [
   {
+    "heading": "Service-text permission",
+    "body": "The optional service-text checkbox on our booking form covers automated messages about that request, such as booking links, appointment reminders and requested audit updates. We record the selected choice, phone number, disclosure version and text, source and time. Leaving it unchecked does not prevent a request or purchase. It does not grant promotional-text permission. Mobile numbers and SMS opt-in data are not shared with third parties or affiliates for their marketing or promotional purposes; messaging providers may process them only to deliver the authorized service. Reply STOP to opt out or HELP for help, or contact isaac@nova-systems.app."
+  },
+  {
     "heading": "1. Information we collect",
     "body": "We collect the contact and business details you submit, audit goals and answers, documents or photos you upload, inquiry and booking records, agreement signatures, and service communications. Public-first audits also collect business website content, public listings, email-domain records and competitor information, with source references. Connected client systems can provide additional records only within the agreed scope. Website requests and service providers may process technical information such as IP addresses, device information, timestamps and error logs."
   },
@@ -48,7 +52,7 @@ export default function Privacy() {
   return (
     <LegalPageLayout
       title="Privacy Policy"
-      effectiveDate="November 1, 2026"
+      effectiveDate="November 7, 2026"
       sections={SECTIONS}
       seoDescription="Nova Systems Privacy Policy \u2014 service scope, information practices and your choices."
     />

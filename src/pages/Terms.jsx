@@ -3,6 +3,10 @@ import LegalPageLayout from "@/components/LegalPageLayout";
 
 const SECTIONS = [
   {
+    "heading": "Optional service texts",
+    "body": "If you select the separate service-text checkbox on the booking form, Nova Systems may send automated booking links, appointment reminders and requested audit updates about that request. Message frequency varies. Message and data rates may apply. Consent is optional, is not a condition of purchase and does not include promotional texts. Reply STOP to opt out or HELP for help. For support, email isaac@nova-systems.app or call (203) 706-0504. Carriers are not liable for delayed or undelivered messages. Read the Privacy Policy for how mobile information and opt-in records are handled."
+  },
+  {
     "heading": "1. Services and agreed scope",
     "body": "Nova Systems provides business audits and authorized systems, integrations and operational services. Each engagement must identify its scope, deliverables, timing, approvals and any external providers in an accepted proposal or service agreement. A feature shown as unavailable, in testing or awaiting setup is not a promise that it is live. A complimentary audit authorization does not purchase an installation or authorize charges."
   },
@@ -44,7 +48,7 @@ export default function Terms() {
   return (
     <LegalPageLayout
       title="Terms of Service"
-      effectiveDate="November 1, 2026"
+      effectiveDate="November 7, 2026"
       sections={SECTIONS}
       seoDescription="Nova Systems Terms of Service \u2014 service scope, information practices and your choices."
     />

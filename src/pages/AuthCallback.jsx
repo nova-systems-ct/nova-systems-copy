@@ -25,7 +25,12 @@ export default function AuthCallback() {
     }
     let settled = false;
     // An invalid, expired or already-used link: say so; never fall through to a sign-in.
-    if (authRedirect.error) { setStatus("error"); return; }
+    if (authRedirect.error) {
+      // Remove provider error payloads, codes and tokens from the address bar;
+      // do not treat a prior browser session as success for a failed callback.
+      window.history.replaceState(null, '', '/auth/callback');
+      setStatus("error"); return;
+    }
     const finish = (event) => navigate(authDestination({ type: authRedirect.type, event, returnTo }), { replace: true });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
@@ -38,13 +43,14 @@ export default function AuthCallback() {
 
     // Covers the case where the session was already established synchronously by the time this
     // effect runs (detectSessionInUrl can resolve before the listener above attaches).
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data, error }) => {
       if (settled) return;
+      if (error) { settled = true; setStatus('error'); return; }
       if (data?.session) {
         settled = true;
         finish();
       }
-    });
+    }).catch(() => { if (!settled) { settled = true; setStatus('error'); } });
 
     const timeout = setTimeout(() => {
       if (!settled) setStatus("error");
@@ -63,7 +69,7 @@ export default function AuthCallback() {
           <p className="text-xs uppercase tracking-[0.2em]" style={{ color: GOLD }}>Signing you in…</p>
         ) : (
           <>
-            <p className="text-sm mb-4 text-white">That link has expired or is no longer valid.</p>
+            <p role="alert" className="text-sm mb-4 text-white">Sign-in could not be completed. The link may have expired or the provider did not approve the request.</p>
             <a href="/login" className="text-xs uppercase tracking-[0.2em]" style={{ color: GOLD }}>Return to login</a>
           </>
         )}

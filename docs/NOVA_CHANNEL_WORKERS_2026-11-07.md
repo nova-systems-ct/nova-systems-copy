@@ -68,4 +68,14 @@ QA images: `docs/qa/channel-workers-2026-11-07/`. These show local acceptance da
 
 ## Release record
 
-Source commit, hosted migration, exact live deploy and post-deploy observations will be appended after verification. Until then, the changes above are locally verified, not a live-release claim.
+The initial channel-worker release is deployed to the existing free staging service, not the old public domain.
+
+- Local source: `fbce04c` plus laptop-dispatch correction `02bdb6f`.
+- Published source: `f7da9bd1808865c38a613e177baee09bd57030d0` on `codex/render-demo`.
+- Hosted migration: `nova_channel_workers_and_messaging_20261107`, applied to the existing staging database. RLS remains enabled and channel ingestion/locking execute rights remain service-only.
+- Render deploy: `dep-dbniva0u01pc73csvo6g`, confirmed live November 7 at 14:04:37 UTC.
+- Staging: https://nova-staging-demo.onrender.com.
+- Signed-in owner installed the workforce: 21/21 registered, correct reporting lines, spending locked. The install did not connect any provider or enable paid model inference.
+- Post-release database check: zero prepared/verified/enabled messaging connections. This must remain visible in any handoff; registered workflows are not live messaging accounts.
+
+Account activation and subsequent consent repairs are recorded separately in `docs/NOVA_PROVIDER_ACTIVATION_2026-11-07.md`. Those repairs require their own release evidence.

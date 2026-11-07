@@ -27,7 +27,7 @@ assert.equal(memory.length, 1);
 const report = cfoCapabilityReport({ now: new Date('2026-11-04'), env: {} });
 assert.equal(report.spending_authorized_by_this_report_cents, 0); assert.equal(report.exact_monthly_total_cents, null); assert(report.spending_locked);
 for (const item of report.items) { assert(item.free_alternative && item.paid_reason && item.requirements.length); assert.match(item.source, /^https:\/\//); }
-assert.match(report.items.find(x => x.key === 'phone_sms').application, /blocked/);
+assert.match(report.items.find(x => x.key === 'phone_sms').application, /rejected|blocked/);
 console.log('PASS — all role playbooks, disabled/locked/local reasoning, invalid output refusal, no paid fallback, organization memory scope and CFO cost register');
 
 let hostedBody;
