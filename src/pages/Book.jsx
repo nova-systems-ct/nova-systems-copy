@@ -16,10 +16,10 @@ const label = { display: "block", fontSize: 11, fontWeight: 700, letterSpacing: 
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
 export default function Book() {
-  useSEO({ title: "Request Your Nova Audit — Nova Systems", description: "Book a short call to scope your Nova Audit. Choose a time from Nova's calendar; the audit itself is delivered within 48–72 hours once scope, access and inputs are confirmed." });
+  useSEO({ title: "Talk to Nova — Nova Systems", description: "Tell Nova what your business needs for calls, messages, bookings and customer follow-up. Send a request to discuss the systems you want connected." });
   const navigate = useNavigate();
   const [params] = useSearchParams(); const campaign = (params.get("c") || "").slice(0, 12); // Demand attribution code
-  const [f, setF] = useState({ name: "", business: "", email: "", phone: "", serviceSms: false, message: "I'd like a Nova Audit consultation." });
+  const [f, setF] = useState({ name: "", business: "", email: "", phone: "", serviceSms: false, message: "I'd like help connecting my business calls, messages, bookings and customer follow-up." });
   const [renderedAt] = useState(Date.now()); const submissionId = useMemo(newId, []);
   const [busy, setBusy] = useState(false); const [error, setError] = useState(null); const [done, setDone] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -37,11 +37,11 @@ export default function Book() {
     <div className="min-h-screen" style={{ background: BLACK, color: WHITE }}>
       <Navbar />
       <main className="max-w-2xl mx-auto px-4 sm:px-6 pt-28 pb-20">
-        <p className="text-xs font-bold tracking-[0.2em] uppercase mb-3" style={{ color: GOLD }}>Nova Audit</p>
-        <h1 className="font-black leading-tight mb-4" style={{ fontSize: "clamp(1.9rem, 5vw, 2.8rem)" }}>Request your audit</h1>
-        <p className="text-base leading-relaxed mb-8" style={{ color: muted }}>Tell us about your business, then choose a time for a short scoping call. The full audit is delivered within 48–72 hours once scope, access and inputs are confirmed. Want a preview first? <Link to="/demo" style={{ color: GOLD }}>Try the five-minute demo</Link>.</p>
+        <p className="text-xs font-bold tracking-[0.2em] uppercase mb-3" style={{ color: GOLD }}>Nova Systems</p>
+        <h1 className="font-black leading-tight mb-4" style={{ fontSize: "clamp(1.9rem, 5vw, 2.8rem)" }}>Put your systems to work</h1>
+        <p className="text-base leading-relaxed mb-8" style={{ color: muted }}>Tell us what you need for calls, messages, bookings and customer follow-up. Send your request to continue in a private conversation. We'll confirm scope and availability before an appointment is booked. Want to see the workflow first? <Link to="/demo" style={{ color: GOLD }}>Try the five-minute demo</Link>.</p>
         {done ? <p role="status" className="text-base">{done}</p> : (
-          <form onSubmit={submit} noValidate className="space-y-5" style={{ background: "rgba(250,250,250,0.03)", border: "1px solid rgba(250,250,250,0.09)", borderRadius: 16, padding: 24 }} aria-label="Request your audit">
+          <form onSubmit={submit} noValidate className="space-y-5" style={{ background: "rgba(250,250,250,0.03)", border: "1px solid rgba(250,250,250,0.09)", borderRadius: 16, padding: 24 }} aria-label="Request help with your systems">
             <div><label style={label} htmlFor="b-name">Your name</label><input id="b-name" autoComplete="name" required value={f.name} onChange={set("name")} style={input} /></div>
             <div><label style={label} htmlFor="b-biz">Business name</label><input id="b-biz" autoComplete="organization" value={f.business} onChange={set("business")} style={input} /></div>
             <div><label style={label} htmlFor="b-email">Email</label><input id="b-email" type="email" autoComplete="email" required value={f.email} onChange={set("email")} style={input} /></div>
@@ -57,7 +57,7 @@ export default function Book() {
             <input type="text" tabIndex={-1} autoComplete="off" aria-hidden="true" value={f.hp || ""} onChange={set("hp")} style={{ position: "absolute", left: -9999, width: 1, height: 1, opacity: 0 }} />
             {error && <p role="alert" className="text-sm" style={{ color: "#E8B04B" }}>{error} If it keeps failing, email <a href="mailto:isaac@nova-systems.app" style={{ color: GOLD }}>isaac@nova-systems.app</a>.</p>}
             <button type="submit" disabled={busy} className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-4 text-xs font-bold tracking-[0.15em] uppercase rounded-lg" style={{ background: GOLD_GRADIENT, color: BLACK, opacity: busy ? 0.6 : 1 }}>
-              {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <>Continue to choose a time <ArrowRight className="w-4 h-4" /></>}
+              {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <>Send request <ArrowRight className="w-4 h-4" /></>}
             </button>
             <p className="text-xs" style={{ color: "rgba(250,250,250,0.45)" }}>Your details are saved in Nova's records to handle this request. See the <Link to="/privacy" style={{ color: GOLD }}>privacy policy</Link>.</p>
           </form>

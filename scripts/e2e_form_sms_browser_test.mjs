@@ -38,7 +38,7 @@ try{
  await fill('81');
  await page.waitForTimeout(2100);
  const post1=page.waitForResponse(r=>r.request().method()==='POST'&&r.url().includes('op=web-inquiry'));
- await page.getByRole('button',{name:/Continue to choose a time/}).click();
+ await page.getByRole('button',{name:'Send request',exact:true}).click();
  const first=await post1;const firstBody=await first.json();assert.equal(first.status(),200,JSON.stringify(firstBody));assert(firstBody.next_url,JSON.stringify(firstBody));
  await page.waitForURL(/\/service\//);
  let person=(await q("select * from crm_contacts where organization_id=$1 and email='sms-browser-81@example.test'",[biz]))[0];
@@ -49,14 +49,14 @@ try{
  // Form anti-spam requires two seconds of real page residence.
  await page.waitForTimeout(2100);
  const post2=page.waitForResponse(r=>r.request().method()==='POST'&&r.url().includes('op=web-inquiry'));
- await page.getByRole('button',{name:/Continue to choose a time/}).click();
+ await page.getByRole('button',{name:'Send request',exact:true}).click();
  const second=await post2;const secondBody=await second.json();assert.equal(second.status(),200,JSON.stringify(secondBody));assert(secondBody.next_url,JSON.stringify(secondBody));
  await page.waitForURL(/\/service\//);
  person=(await q("select * from crm_contacts where organization_id=$1 and email='sms-browser-82@example.test'",[biz]))[0];
  assert.equal(person.sms_consent,false);
  conv=(await q('select * from wave1_conversations where contact_id=$1',[person.id]))[0];assert.equal(conv.channel,'form');assert(conv.customer_initiated_at);
  const proof=(await q("select payload_summary->'sms_service_opt_in' proof from wave1_source_events where organization_id=$1 and payload_summary->'sms_service_opt_in'->>'phone_e164'='+12035550182'",[biz]))[0].proof;
- assert.equal(proof.granted,true);assert.equal(proof.version,'nova-service-sms-2026-11-07');assert.equal(proof.scope,'service_request_only');assert.match(proof.disclosure,/not a condition of purchase/);
+ assert.equal(proof.granted,true);assert.equal(proof.version,'nova-service-sms-2026-11-07-v2');assert.equal(proof.scope,'service_request_only');assert.match(proof.disclosure,/not a condition of purchase/);
  assert.equal((await q("select count(*)::int n from jobs where job_type='ops_sms_turn'"))[0].n,0);
  assert.equal((await q("select count(*)::int n from wave1_messages where direction='outbound'"))[0].n,0);
  assert.deepEqual(errors,[]);

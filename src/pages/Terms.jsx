@@ -4,7 +4,7 @@ import LegalPageLayout from "@/components/LegalPageLayout";
 const SECTIONS = [
   {
     "heading": "Optional service texts",
-    "body": "If you select the separate service-text checkbox on the booking form, Nova Systems may send automated booking links, appointment reminders and requested audit updates about that request. Message frequency varies. Message and data rates may apply. Consent is optional, is not a condition of purchase and does not include promotional texts. Reply STOP to opt out or HELP for help. For support, email isaac@nova-systems.app or call (203) 706-0504. Carriers are not liable for delayed or undelivered messages. Read the Privacy Policy for how mobile information and opt-in records are handled."
+    "body": "If you select the separate service-text checkbox on the booking form, Nova Systems may send automated booking links, appointment reminders and requested service updates about that request. Message frequency varies. Message and data rates may apply. Consent is optional, is not a condition of purchase and does not include promotional texts. Reply STOP to opt out or HELP for help. For support, email isaac@nova-systems.app or call (203) 706-0504. Carriers are not liable for delayed or undelivered messages. Read the Privacy Policy for how mobile information and opt-in records are handled."
   },
   {
     "heading": "1. Services and agreed scope",

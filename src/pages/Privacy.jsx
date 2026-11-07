@@ -4,7 +4,7 @@ import LegalPageLayout from "@/components/LegalPageLayout";
 const SECTIONS = [
   {
     "heading": "Service-text permission",
-    "body": "The optional service-text checkbox on our booking form covers automated messages about that request, such as booking links, appointment reminders and requested audit updates. We record the selected choice, phone number, disclosure version and text, source and time. Leaving it unchecked does not prevent a request or purchase. It does not grant promotional-text permission. Mobile numbers and SMS opt-in data are not shared with third parties or affiliates for their marketing or promotional purposes; messaging providers may process them only to deliver the authorized service. Reply STOP to opt out or HELP for help, or contact isaac@nova-systems.app."
+    "body": "The optional service-text checkbox on our booking form covers automated messages about that request, such as booking links, appointment reminders and requested service updates. We record the selected choice, phone number, disclosure version and text, source and time. Leaving it unchecked does not prevent a request or purchase. It does not grant promotional-text permission. Mobile numbers and SMS opt-in data are not shared with third parties or affiliates for their marketing or promotional purposes; messaging providers may process them only to deliver the authorized service. Reply STOP to opt out or HELP for help, or contact isaac@nova-systems.app."
   },
   {
     "heading": "1. Information we collect",
