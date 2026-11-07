@@ -39,7 +39,7 @@ export default function Book() {
       <main className="max-w-2xl mx-auto px-4 sm:px-6 pt-28 pb-20">
         <p className="text-xs font-bold tracking-[0.2em] uppercase mb-3" style={{ color: GOLD }}>Nova Systems</p>
         <h1 className="font-black leading-tight mb-4" style={{ fontSize: "clamp(1.9rem, 5vw, 2.8rem)" }}>Put your systems to work</h1>
-        <p className="text-base leading-relaxed mb-8" style={{ color: muted }}>Tell us what you need for calls, messages, bookings and customer follow-up. Send your request to continue in a private conversation. We'll confirm scope and availability before an appointment is booked. Want to see the workflow first? <Link to="/demo" style={{ color: GOLD }}>Try the five-minute demo</Link>.</p>
+        <p className="text-base leading-relaxed mb-8" style={{ color: muted }}>Tell us what you need for calls, messages, bookings and customer follow-up. Send your request to continue on a private request page. We'll confirm scope and availability before an appointment is booked. Want to see the workflow first? <Link to="/demo" style={{ color: GOLD }}>Try the five-minute demo</Link>.</p>
         {done ? <p role="status" className="text-base">{done}</p> : (
           <form onSubmit={submit} noValidate className="space-y-5" style={{ background: "rgba(250,250,250,0.03)", border: "1px solid rgba(250,250,250,0.09)", borderRadius: 16, padding: 24 }} aria-label="Request help with your systems">
             <div><label style={label} htmlFor="b-name">Your name</label><input id="b-name" autoComplete="name" required value={f.name} onChange={set("name")} style={input} /></div>
