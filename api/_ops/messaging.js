@@ -1,3 +1,4 @@
+import {channelPauseState} from '../_channels/stops.js';
 // Nova Operations — the one path every automated or staff SMS takes. Eligibility is evaluated at SEND time
 // against live rows (a STOP, takeover, pause or booking between enqueue and send always wins).
 //
@@ -12,6 +13,7 @@
 import { evaluateSendEligibility, classifySendOutcome, localHour, isQuietHour, nextSendWindow } from '../_wave1.js';
 import { createTwilioSender } from '../_wave1Handlers.js';
 import { dbOne, dbInsert, dbPatch, dbGet, enc, nowIso } from '../_sales/core.js';
+import { CHANNEL_PROVIDERS } from '../_channels/providers.js';
 
 export const TRANSACTIONAL = ['reply', 'staff_reply', 'booking_link', 'booking_confirmation', 'appointment_reminder', 'escalation_notice', 'owner_alert'];
 const CUSTOMER_INITIATED_WINDOW_MS = 30 * 86400_000;
@@ -57,7 +59,7 @@ export async function orgSettings(orgId) {
 export async function sendSms({ orgId, conversationId, contactId, body, purpose, idempotencyKey, triggerAt = null, sentBy = null, isTest = false, now = new Date() }) {
   const contact = await dbOne(`crm_contacts?id=eq.${enc(contactId)}&organization_id=eq.${enc(orgId)}&select=*`);
   const conv = conversationId ? await dbOne(`wave1_conversations?id=eq.${enc(conversationId)}&organization_id=eq.${enc(orgId)}&select=*`) : null;
-  if (['instagram', 'facebook', 'whatsapp'].includes(conv?.channel)) {
+  if (CHANNEL_PROVIDERS.includes(conv?.channel)) {
     const { sendChannelMessage } = await import('../_channels/delivery.js');
     return sendChannelMessage({ orgId, conversationId, contactId, body, purpose, idempotencyKey, sentBy, isTest, now });
   }
@@ -69,6 +71,8 @@ export async function sendSms({ orgId, conversationId, contactId, body, purpose,
     now, purpose, contact, conversation: conv, recentAutomatedCount: recent.length, lastAutomatedAt: recent[0]?.created_at || null, allowlist: allowlistFrom(),
     org: { timezone: settings.timezone, quiet_hours: settings.quiet_hours, paused: settings.paused, channels_paused: settings.channels_paused, max_automated_per_day: settings.max_automated_per_day, min_gap_minutes: settings.min_gap_minutes },
   });
+  const pause=await channelPauseState(orgId,{staff:purpose==='staff_reply',provider:'sms'});
+  if(pause.paused)return {status:'deferred',paused:true,reason:pause.reason};
   const base = { conversation_id: conversationId, direction: 'outbound', body, automated: !sentBy, purpose, provider: 'twilio', idempotency_key: idempotencyKey || null, sent_by: sentBy, is_test: isTest, trigger_at: triggerAt };
   if (!conversationId) return { status: 'blocked', reason: 'no_conversation' };
   // A blocked attempt is recorded under its own key, so it never consumes the one real send this key allows.

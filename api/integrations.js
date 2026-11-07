@@ -188,6 +188,12 @@ async function handleTest(req, res) {
 }
 
 export default async function handler(req, res) {
+  if(req.query?.op==='tiktok-webhook'){const {handleTikTokWebhook}=await import('./_channels/tiktokWebhook.js');return handleTikTokWebhook(req,res);}
+  if(req.query?.op==='apple-webhook'){const {handleAppleWebhook}=await import('./_channels/appleWebhook.js');return handleAppleWebhook(req,res);}
+  if (req.query?.op === 'rcs-webhook') {
+    const { handleRcsWebhook } = await import('./_channels/rcsWebhook.js');
+    return handleRcsWebhook(req, res);
+  }
   if (req.query?.op === 'channel-webhook') {
     const { handleChannelWebhook } = await import('./_channels/service.js');
     return handleChannelWebhook(req, res);

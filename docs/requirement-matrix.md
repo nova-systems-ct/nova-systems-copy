@@ -95,3 +95,17 @@ staging-verified, or live-verified. Paid providers are off; no real recipient is
 | D-FULL-03 | Automated authorized customer tests | Owner-bound Resend/Twilio requests, spend reservation, signed callbacks, reply routing and observation jobs | locally verified with injected providers; sending OFF, live acceptance pending |
 | D-FULL-04 | Work while laptop is closed | Audit-only HMAC receiver and due-work-only Supabase scheduler; one leased job per invocation | staging verified: scheduled real research job completed and saved evidence; free-host cold starts/quotas and real multi-day acceptance remain |
 | D-FULL-05 | Truthful reports | Zero-finding approval only with completed evidence, no fabricated losses, exclusion/review coverage | locally verified; physical iPad and real customer report acceptance pending |
+
+
+## Connected-channel workers — 2026-11-07
+
+| Requirement | Implementation and local proof | Remaining external proof |
+|---|---|---|
+| Instagram / Facebook / WhatsApp | Signed inbound events, independent queue types, approved booking journey, comment keyword rules on Instagram; channel engine E2E passes | Owned account authorization, exact permissions and device/customer acceptance |
+| TikTok messaging | Documented Infobip sender/recipient protocol, authenticated inbound, same booking journey, scoped worker, real-account country gate; E2E passes with local MSP stand-in | This MSP excludes Nova's US account. Direct TikTok access has not been approved or connected. No automated comment/like-to-DM claim |
+| Apple Messages for Business | Documented Infobip APPLE_MB protocol, authenticated account-bound callback, same booking journey and scoped worker; E2E passes with local MSP stand-in | Apple business/MSP approval, account credentials and actual iPhone acceptance |
+| Android / Google RCS | Native Google signed callbacks, scoped service-account OAuth, Google brand/agent identity check, ordered durable turns, native unsubscribe/subscribe and no SMS fallback; E2E passes with local Google stand-in | Brand and carrier launch, scoped credentials and actual Android acceptance |
+| SMS / phone worker controls | Own SMS queue type; phone worker is a real synchronous handler; mid-call pause and secure agreement/consent flow verified, 41 checks | Owned Twilio number, applicable registrations, separately approved provider charges and real calls/texts |
+| Customer installation | Owners can prepare scoped connections from Install Systems; server credentials require a separate Nova-admin assignment; browser acceptance at desktop/iPad/phone sizes | Account-owner authentication, provider onboarding, real service/hours/agreement and device acceptance |
+| Workforce | 21 executable capabilities including compatibility worker, separate playbooks and reporting lines; idempotent install retains old pauses and does not enable LLM billing | No hosted LLM is connected; local inference needs an available model host. Provider availability is separate from worker registration |
+| Wallet and payments | Existing Apple signed snapshot/test pass, Google Wallet snapshot signer, client-owned Stripe test checkout remain available | Wallet automatic updates, Google issuer setup, real device redemption and live payment/refund acceptance remain outstanding |

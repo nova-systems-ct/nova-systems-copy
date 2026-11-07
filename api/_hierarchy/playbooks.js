@@ -1,6 +1,6 @@
 // Versioned operating instructions. Git versions the baseline; owner-approved business memory adds context.
 // A model's narrative never changes execution permissions, financial arithmetic or an approval decision.
-export const PLAYBOOK_VERSION = '2026-11-06.1';
+export const PLAYBOOK_VERSION = '2026-11-07.1';
 export const COMPANY_MISSION = 'Nova Systems serves businesses by diagnosing evidence-backed customer and revenue friction, installing supported systems that complete approved work, creating sales opportunities, and reviving eligible stalled relationships. Preserve existing systems where they work. Prove the result before claiming success.';
 const BOUNDARIES = [
   'Use only this business’s records and cited evidence. State unknowns; never invent customers, revenue, bank balances, workers or completed installations.',
@@ -30,7 +30,10 @@ const SPECIALISTS = {
 };
 export function workerPlaybook(key) {
  if(ROLES[key])return rolePlaybook(key);
- const p=SPECIALISTS[key];if(!p)throw new Error('Unknown worker playbook');
+ const channels={instagram_inbox:['Instagram',['channel_instagram_turn','channel_comment_reply']],facebook_inbox:['Facebook Messenger',['channel_facebook_turn']],whatsapp_inbox:['WhatsApp',['channel_whatsapp_turn']],rcs_inbox:['Android RCS',['channel_rcs_turn']],apple_inbox:['Apple Messages for Business',['channel_apple_turn']],tiktok_inbox:['TikTok',['channel_tiktok_turn']],sms_inbox:['SMS',['ops_sms_turn']]};
+ const channel=channels[key];
+ const phone=key==='phone_agent'?{...SPECIALISTS.intake_booking,name:'Phone receptionist worker',mission:'Answer an inbound caller using the approved disclosure, real service and availability. Ask consent before texting a link; transfer unsupported requests. Never claim an order or booking is complete before its required agreement/payment.',tools:['Signed Twilio inbound and turn handlers'],jobs:['Recheck worker, business and emergency pause on every turn','Read approved services and real open times','Hold a time and request consent before texting the agreement','Transfer to the named person or save a callback incident'],proof:['Saved call session, hold, agreement, message outcome and escalation IDs']}:null;
+ const p=phone||(channel?{...SPECIALISTS.channel_inbox,name:`${channel[0]} conversation worker`,mission:`Complete authorized ${channel[0]} inquiries through this business’s approved journey. Never fall back to another channel without consent.`,tools:channel[1]}:SPECIALISTS[key]);if(!p)throw new Error('Unknown worker playbook');
  return {version:PLAYBOOK_VERSION,role:key,company:COMPANY_MISSION,...structuredClone(p),boundaries:[...BOUNDARIES]};
 }
 export function rolePlaybook(role) {

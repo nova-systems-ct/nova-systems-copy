@@ -1,3 +1,5 @@
+> Current channel and workforce implementation: [2026-11-07 release](NOVA_CHANNEL_WORKERS_2026-11-07.md). The details below describe the earlier checkpoint.
+
 # Nova connected channels — engineering release, 4 November 2026
 
 This continues the owner-authorized next system. No purchases, paid provider calls, live customer messages or fee-bearing registrations are authorized. Existing Nova and Sweet Bella audit clocks are not reset or modified by this release.

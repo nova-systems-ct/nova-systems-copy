@@ -14,9 +14,13 @@ import {seedOperationsSchedules} from './operationsWorkers.js';
 async function registerCapability(cap,caller){
  const existing=await dbOne(`workers?capability_key=eq.${enc(cap.key)}&status=neq.inactive&select=*`);
  if(existing)return {worker:existing,already_registered:true};
- const ins=await dbInsert('workers',{worker_type:'service_account',display_name:cap.name,status:'active',capability_key:cap.key,mission:cap.does.slice(0,1000),responsibilities:`Runs: ${cap.job_types.join(', ')}. Code: ${cap.code}`.slice(0,2000),approved_tools:cap.job_types,created_by:caller.id});
+ // Splitting a formerly shared worker must not silently resume work the owner paused before the upgrade.
+ const legacyKey=cap.key==='sms_inbox'?'intake_booking':['instagram_inbox','facebook_inbox','whatsapp_inbox','rcs_inbox','apple_inbox','tiktok_inbox'].includes(cap.key)?'channel_inbox':null;
+ const legacy=legacyKey?await dbOne(`workers?capability_key=eq.${enc(legacyKey)}&status=neq.inactive&select=status`):null;
+ const status=PAUSED_STATES.has(legacy?.status)?legacy.status:'active';
+ const ins=await dbInsert('workers',{worker_type:'service_account',display_name:cap.name,status,capability_key:cap.key,mission:cap.does.slice(0,1000),responsibilities:`Runs: ${cap.job_types.join(', ')}. Code: ${cap.code}`.slice(0,2000),approved_tools:cap.job_types,created_by:caller.id});
  if(!ins.row){const concurrent=await dbOne(`workers?capability_key=eq.${enc(cap.key)}&status=neq.inactive&select=*`);if(concurrent)return {worker:concurrent,already_registered:true};throw Error('Worker registration failed');}
- await dbInsert('worker_status_events',{worker_id:ins.row.id,from_status:null,to_status:'active',changed_by:caller.id,reason:`Registered from tested capability ${cap.key}`});
+ await dbInsert('worker_status_events',{worker_id:ins.row.id,from_status:null,to_status:status,changed_by:caller.id,reason:`Registered from tested capability ${cap.key}${status!=='active'?`; retained ${legacyKey} pause`:''}`});
  await audit(caller,'worker',ins.row.id,'registered_capability',{capability:cap.key});
  return {worker:ins.row,already_registered:false};
 }
@@ -51,17 +55,19 @@ export const handleHierarchy = wrap(async (req, res, op) => {
   if (op === 'capabilities') {
     const nova = await dbOne("organizations?kind=eq.nova_internal&select=id&order=created_at.asc");
     const since = new Date(Date.now() - 7 * 86400_000).toISOString();
-    const [workers, settings, rules, camps, beat, jobs, balance] = await Promise.all([
+    const [workers, settings, rules, camps, beat, jobs, balance, connections, voice] = await Promise.all([
       dbGet('workers?capability_key=not.is.null&select=id,display_name,status,capability_key,manager_worker_id,created_at,updated_at'),
       // optional facts: an installation without the operations tables still lists every capability (readiness shows blocked)
-      nova ? dbOne(`wave1_org_settings?organization_id=eq.${enc(nova.id)}&select=business_hours,escalation_contacts`).catch(() => null) : null,
+      nova ? dbOne(`wave1_org_settings?organization_id=eq.${enc(nova.id)}&select=business_hours,escalation_contacts,sms_number_ref`).catch(() => null) : null,
       nova ? dbGet(`ops_price_rules?organization_id=eq.${enc(nova.id)}&status=eq.approved&select=id&limit=1`).catch(() => []) : [],
       dbGet("demand_campaigns?status=eq.approved&select=id").catch(() => []),
       dbOne('worker_runtime_heartbeats?select=last_seen_at&order=last_seen_at.desc').catch(() => null),
       nova ? dbGet(`jobs?organization_id=eq.${enc(nova.id)}&created_at=gte.${enc(since)}&select=job_type,status,scheduled_at,completed_at,created_at,result&order=created_at.desc&limit=5000`).catch(() => []) : [],
       nova ? dbOne(`finance_balance_snapshots?organization_id=eq.${enc(nova.id)}&select=as_of&order=as_of.desc`).catch(() => null) : null,
+      nova ? dbGet(`channel_connections?organization_id=eq.${enc(nova.id)}&select=provider,status,verified_at,credentials_assigned_by,credentials_assigned_at,last_webhook_at,outbound_enabled,automation_enabled,token_ref`).catch(()=>[]) : [],
+      nova ? dbOne(`voice_configurations?organization_id=eq.${enc(nova.id)}&select=status`).catch(()=>null) : null,
     ]);
-    const facts = { hasServices: !!(settings?.business_hours && rules.length), hasEscalation: !!(settings?.escalation_contacts || []).length, approvedCampaigns: camps.length, heartbeatFresh: !!beat && Date.now() - new Date(beat.last_seen_at).getTime() < 10 * 60_000, balanceAgeDays: balance ? Math.floor((Date.now() - new Date(balance.as_of).getTime()) / 86400_000) : null };
+    const facts = { connections, voiceActive:voice?.status==='active',hasPhone:!!settings?.sms_number_ref, hasServices: !!(settings?.business_hours && rules.length), hasEscalation: !!(settings?.escalation_contacts || []).length, approvedCampaigns: camps.length, heartbeatFresh: !!beat && Date.now() - new Date(beat.last_seen_at).getTime() < 10 * 60_000, balanceAgeDays: balance ? Math.floor((Date.now() - new Date(balance.as_of).getTime()) / 86400_000) : null };
     const out = CAPABILITIES.map((c) => {
       const w = workers.find((x) => x.capability_key === c.key && x.status !== 'inactive') || null;
       const mine = jobs.filter((j) => c.job_types.includes(j.job_type));

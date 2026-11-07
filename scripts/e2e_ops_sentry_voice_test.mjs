@@ -78,9 +78,15 @@ try {
   // ================================================================ crash mid-job → lease expires → re-run without duplicate effects
   await W.heartbeat(ctx, { force: true });
   await inboundSms(client, '+12035550120', 'hello, do you have time Friday?');
-  const turn = await store.claimNext({ workerId: 'crashed-worker', jobTypes: ['ops_conversation_turn'], leaseSeconds: 60 });
+
+  await env.sql("insert into workers(worker_type,display_name,status,capability_key) values('service_account','TEST SMS worker','suspended','sms_inbox')");
+  const smsQueued=await one("select * from jobs where job_type='ops_sms_turn' and organization_id=$1 order by created_at desc limit 1",[biz]);
+  const heldSms=await (await import('../api/_coreQueueTick.js')).CORE_HANDLERS.ops_sms_turn(smsQueued);
+  check('an SMS worker pause holds the turn before creating a booking', heldSms.paused===true && !(await one('select id from ops_jobs where conversation_id=$1',[smsQueued.payload.conversation_id])));
+  await env.sql("update workers set status='active' where capability_key='sms_inbox'");
+  const turn = await store.claimNext({ workerId: 'crashed-worker', jobTypes: ['ops_sms_turn'], leaseSeconds: 60 });
   check('(setup) a worker claimed the conversation turn and then "crashed" (never completed it)', turn?.status === 'leased');
-  check('while the lease is live, no other worker can take the job', !(await store.claimNext({ workerId: 'other', jobTypes: ['ops_conversation_turn'] })));
+  check('while the lease is live, no other worker can take the job', !(await store.claimNext({ workerId: 'other', jobTypes: ['ops_sms_turn'] })));
   await env.sql("update jobs set leased_until = now() - interval '1 second' where id=$1", [turn.id]); // TEST: the lease runs out
   await runDue(5);
   check('after the lease expires the job is re-claimed and the customer gets exactly one reply', sentTo('+12035550120').length === 1 && (await one('select status from jobs where id=$1', [turn.id])).status === 'completed');
@@ -98,6 +104,17 @@ try {
   check('call recording cannot be switched on (consent process not approved)', r.status === 400);
   r = await op('voice-settings', { organization_id: biz, status: 'active', disclosure_script: 'You are speaking with an automated assistant for TEST Shine Detailing.' });
   check('the owner activates the voice assistant with a disclosure', r.status === 200);
+
+  await env.sql("insert into workers(worker_type,display_name,status,capability_key) values('service_account','TEST phone receptionist','suspended','phone_agent')");
+  r=await voice('voice-inbound',{From:'+12035550121',CallSid:'CA_PAUSED_WORKER'});
+  check('a paused phone worker uses human fallback and creates no AI call session', /<Dial/.test(r.body) && !(await one("select id from voice_call_sessions where provider_call_sid='CA_PAUSED_WORKER'")));
+  await env.sql("update workers set status='active' where capability_key='phone_agent'");
+  r=await voice('voice-inbound',{From:'+12035550121',CallSid:'CA_PAUSE_DURING_CALL'});
+  check('an active phone worker starts its real conversation', /<Gather/.test(r.body));
+  await env.sql("update workers set status='suspended' where capability_key='phone_agent'");
+  r=await voice('voice-turn',{From:'+12035550121',CallSid:'CA_PAUSE_DURING_CALL',SpeechResult:'I need a full detail'});
+  check('pausing during a call stops automation before quoting or booking', /<Dial/.test(r.body) && !/<Gather/.test(r.body) && (await one("select engine_state from voice_call_sessions where provider_call_sid='CA_PAUSE_DURING_CALL'")).engine_state==='transferred');
+  await env.sql("update workers set status='active' where capability_key='phone_agent'");
   const forgedCall = await client({ resource: 'ops', op: 'voice-inbound', body: { From: '+12035550121', To: BIZ_NUMBER, CallSid: 'CA_FORGED' }, headers: { 'x-twilio-signature': 'nope' } });
   check('a forged voice webhook is rejected', forgedCall.status === 403);
   r = await voice('voice-inbound', { From: '+12035550121', CallSid: 'CA_VOICE_1' });

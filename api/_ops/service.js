@@ -1,3 +1,4 @@
+import {channelPauseState} from '../_channels/stops.js';
 // Nova Operations — the customer journey for a client business. Persists every step and every state
 // change; re-checks tenant scope on every object (every query carries organization_id).
 import { dbGet, dbOne, dbInsert, dbPatch, dbRpc, enc, nowIso, appBase } from '../_sales/core.js';
@@ -8,6 +9,7 @@ import * as R from './rules.js';
 import { sendSms, orgSettings } from './messaging.js';
 import { extractService } from './model.js';
 import { currentChannelTurn } from '../_channels/turnContext.js';
+import { CHANNEL_PROVIDERS } from '../_channels/providers.js';
 
 export const ERR = (status, message, extra = {}) => Object.assign(new Error(message), { status, expose: true, ...extra });
 const one = async (table, orgId, id, select = '*') => dbOne(`${table}?id=eq.${enc(id)}&organization_id=eq.${enc(orgId)}&select=${select}`);
@@ -156,10 +158,11 @@ export async function handleInboundTurn({ orgId, conversationId, messageId, now 
   if (!contact || contact.suppressed) return { skipped: 'contact_suppressed' };
   const c = await businessContext(orgId);
   if (c.wave.paused) return { skipped: 'organization_paused' };
+  if(conv.channel==='sms'){const pause=await channelPauseState(orgId,{provider:'sms'});if(pause.paused)return pause;}
   const services = await approvedServices(orgId);
   const rv = conv.engine_state === 'revive_followup' ? (conv.engine_context || {}) : null;
   let job = rv?.revive_job_id ? await resumeRevivedJob({ orgId, conv, rv }) : null;
-  if (!job) job = await openJobForConversation({ orgId, contact, conversation: conv, channel: ['form', 'instagram', 'facebook', 'whatsapp'].includes(conv.channel) ? conv.channel : 'sms', isTest: !!c.ops.is_test });
+  if (!job) job = await openJobForConversation({ orgId, contact, conversation: conv, channel: ['form', ...CHANNEL_PROVIDERS].includes(conv.channel) ? conv.channel : 'sms', isTest: !!c.ops.is_test });
   // Business-level switch (Install Systems): when Nova Agents is turned off for this business, a person answers.
   const agents = await dbOne(`ops_installed_modules?organization_id=eq.${enc(orgId)}&module_key=eq.agents_booking&select=status`).catch(() => null);
   if (agents?.status === 'disabled') {

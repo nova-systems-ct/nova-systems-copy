@@ -19,11 +19,12 @@ try {
  const {biz}=await setupTestBusiness({env,client,ownerToken:owner.token,name:'TEST Channel Business'});
  const handlers=await import('../api/_channels/service.js');
  const connection=(await q("insert into channel_connections(organization_id,provider,provider_account_id,label,status,verified_at,automation_enabled,token_ref) values($1,'instagram','10001','TEST Instagram','enabled',now(),true,'NOVA_CHANNEL_TOKEN_TEST') returning *",[biz]))[0];
+ await q('update channel_connections set credentials_assigned_by=$1,credentials_assigned_at=now() where id=$2',[owner.id,connection.id]);
  const at=new Date().toISOString();
  const event={provider:'instagram',account_id:'10001',sender_id:'20002',event_id:'mid.1',kind:'message',text:'Hello',at};
  const ingest=e=>q('select nova_channel_ingest($1) as r',[e]).then(x=>x[0].r);
  const runSaved=async info=>{
-  const [job]=await q("update jobs set status='leased',leased_by=$2,leased_until=now()+interval '2 minutes' where payload->>'message_id'=$1 and job_type='channel_conversation_turn' returning *",[info.message_id,`TEST-turn-${crypto.randomUUID()}`]);
+  const [job]=await q("update jobs set status='leased',leased_by=$2,leased_until=now()+interval '2 minutes' where payload->>'message_id'=$1 and job_type='channel_instagram_turn' returning *",[info.message_id,`TEST-turn-${crypto.randomUUID()}`]);
   assert(job);return handlers.runChannelTurn(job);
  };
  const duplicates=await Promise.all([ingest(event),ingest(event)]);
@@ -32,7 +33,7 @@ try {
  const {withChannelTurn}=await import('../api/_channels/turnContext.js');
  const {dbPatch}=await import('../api/_sales/core.js');
  await assert.rejects(()=>withChannelTurn({orgId:biz,conversationId:stored.conversation_id,token:crypto.randomUUID(),valid:true},()=>dbPatch('wave1_conversations',`id=eq.${stored.conversation_id}&organization_id=eq.${biz}`,{engine_state:'awaiting_time'})),'A stale turn must not write workflow state');
- assert.equal(Number((await q("select count(*) from jobs where job_type='channel_conversation_turn'"))[0].count),1);
+ assert.equal(Number((await q("select count(*) from jobs where job_type='channel_instagram_turn'"))[0].count),1);
  const person=(await q('select * from crm_contacts where id=$1',[stored.contact_id]))[0];
  assert.equal(person.phone_e164,null);assert.equal(person.sms_consent,false);assert.equal(person.email_consent,false);
  const run=await runSaved(stored);

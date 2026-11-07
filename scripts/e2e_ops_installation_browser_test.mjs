@@ -36,6 +36,21 @@ try {
   const account = (await env.sql('select mode,stripe_account_ref,live_enabled from ops_payment_accounts where organization_id=$1', [biz])).rows[0];
   assert.equal(account.stripe_account_ref, 'acct_BrowserTestOnly'); assert.equal(account.live_enabled, false);
   await page.goto(`${base}/dashboard/ops/install`);
+  await page.getByText('Connect business accounts', { exact: true }).click();
+  await page.getByRole('button', { name: 'Prepare a connection', exact: true }).click();
+  await page.getByLabel(/Messaging provider/).selectOption('android_rcs');
+  await page.getByLabel('Business account ID', { exact: true }).fill('browser-agent');
+  await page.getByLabel('Connection label', { exact: true }).fill('TEST Client Android');
+  await page.getByLabel('Server secret reference', { exact: true }).fill('NOVA_CHANNEL_TOKEN_BROWSER_RCS');
+  await page.getByLabel('Google brand ID', { exact: true }).fill('browser-brand');
+  await page.getByLabel('Webhook client-token secret reference', { exact: true }).fill('NOVA_CHANNEL_WEBHOOK_BROWSER_RCS');
+  await page.getByRole('button', { name: 'Save connection draft', exact: true }).click();
+  await page.getByText('TEST Client Android', { exact: true }).waitFor();
+  const connected = (await env.sql('select * from channel_connections where organization_id=$1', [biz])).rows;
+  assert.equal(connected.length,1); assert.equal(connected[0].provider,'android_rcs'); assert.equal(connected[0].outbound_enabled,false);
+  await page.reload(); await page.getByText('Connect business accounts', { exact: true }).click();
+  await page.getByText('TEST Client Android', { exact: true }).waitFor();
+
   await page.getByRole('button', { name: 'Choose Nova Agents: inquiries and booking', exact: true }).click();
   await page.getByText('Nova Agents: inquiries and booking chosen. Press Install Systems to install it.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Install Systems', exact: true }).click();
@@ -51,16 +66,17 @@ try {
   await page.getByText('Activation recorded after fresh checks. Messaging and live payments keep their separate controls.', { exact: true }).waitFor();
   const plans = (await env.sql('select version,status from ops_install_manifests where organization_id=$1 order by version', [biz])).rows;
   assert.deepEqual(plans.map(p => p.status), ['superseded', 'activated']);
-  fs.mkdirSync('docs/qa/install-safety-2026-11-06', { recursive: true });
+  fs.mkdirSync('docs/qa/channel-workers-2026-11-07', { recursive: true });
   for (const [name, width, height] of [['desktop', 1366, 1000], ['ipad', 820, 1180], ['phone', 390, 844]]) {
     await page.setViewportSize({ width, height });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), `${name} must fit without sideways scrolling`);
-    await page.screenshot({ path: `docs/qa/install-safety-2026-11-06/${name}.png`, fullPage: true });
+    await page.screenshot({ path: `docs/qa/channel-workers-2026-11-07/${name}.png`, fullPage: true });
   }
   assert.deepEqual(errors, []);
   assert.equal(providers.twilio.messages.length, 0); assert.equal(env.stubs.outbox.length, 0);
   assert(providers.stripe.requests.every(r => r.method === 'GET'), 'Setup never creates a checkout or charge');
   console.log('PASS — owner verifies a test-only payment destination, installs the booking worker, sees stale setup blocked, retests and activates; desktop/iPad/phone fit; no provider messages or charges. Local provider stand-ins only.');
-} catch (error) { console.error(error); process.exitCode = 1; }
+} catch (error) {
+  if(browser){const pages=browser.contexts().flatMap(c=>c.pages());if(pages[0]){console.error((await pages[0].locator('main').innerText().catch(()=>pages[0].locator('body').innerText())).slice(-7000));await pages[0].screenshot({path:'../channels-browser-failure.png',fullPage:true});}} console.error(error); process.exitCode = 1; }
 finally { if (browser) await browser.close(); if (harness) await harness.stop(); if (providers) await providers.stop(); }
 process.exit(process.exitCode ?? 0);

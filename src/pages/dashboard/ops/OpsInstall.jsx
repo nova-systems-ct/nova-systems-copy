@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useOutletContext, Link } from 'react-router-dom'
 import { api, useLoad, useAction, C, Card, Loading, ErrorBox, Badge, PageHeader, Notice, when } from './ui'
+import ChannelCenter from '../ChannelCenter'
 
 const STAGE = { 2: 'Business inputs', 3: 'Connections', 4: 'Agents and monitoring', 5: 'Modules', 6: 'Controlled test' }
 const MOD_STATUS = { selected: ['pending', 'Chosen, not installed yet'], installing: ['pending', 'Installing'], installed: ['ready', 'Installed'], blocked: ['blocked', 'Blocked'], failed: ['failed', 'Failed'], disabled: ['cancelled', 'Turned off'] }
@@ -73,7 +74,7 @@ function ModulesCard({ orgId, onChanged }) {
 // Install Systems: one place to see what will be installed (from the audit and current configuration), run it, see each
 // component's real result with the exact next action, and activate when every required component is done.
 export default function OpsInstall() {
-  const { orgId } = useOutletContext()
+  const { orgId, business } = useOutletContext()
   const d = useLoad(() => api('install', { org: orgId, query: { action: 'view' } }), [orgId])
   const act = useAction()
   const cur = d.data?.current
@@ -98,6 +99,7 @@ export default function OpsInstall() {
       <style>{`.ops-install-step { display: grid; grid-template-columns: minmax(0, .9fr) auto minmax(0, 1.5fr); gap: 12px; align-items: start; padding: 14px 0; border-bottom: 1px solid ${C.line}; font-size: 13px; overflow-wrap: anywhere; } @media (max-width: 680px) { .ops-install-step { grid-template-columns: minmax(0, 1fr); gap: 7px; } }`}</style>
       <ErrorBox error={d.error} onRetry={d.reload} />
       {act.view}
+      {business?.can_configure&&<details style={{margin:'16px 0',border:`1px solid ${C.line}`,padding:18,borderRadius:10}}><summary style={{cursor:'pointer',fontSize:17}}>Connect business accounts</summary><ChannelCenter /></details>}
       {d.loading ? <Loading /> : !d.error && (
         <>
           {needsAttention.length > 0 && <Card title="Finish the required setup" style={{ marginBottom: 16 }}>

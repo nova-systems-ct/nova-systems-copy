@@ -4,11 +4,13 @@ import {sendCampaignMessage} from './_ops/harvest.js';
 import {dbInsert,dbPatch} from './_sales/core.js';
 import {CHANNEL_HANDLERS} from './_channels/service.js';
 import {runHostedOperationsJob,finishOperationsJob,OPERATIONS_SCHEDULE} from './_hierarchy/operationsWorkers.js';
+const runInquiry=async job=>{const r=await handleInboundTurn({orgId:job.organization_id,conversationId:job.payload?.conversation_id,messageId:job.payload?.message_id});return r.skipped==='organization_paused'?{...r,paused:true}:r;};
 export const CORE_HANDLERS={
  nova_monitoring_review:runHostedOperationsJob,
  nova_reporting_snapshot:runHostedOperationsJob,
  ...CHANNEL_HANDLERS,
- ops_conversation_turn:async job=>{const r=await handleInboundTurn({orgId:job.organization_id,conversationId:job.payload?.conversation_id,messageId:job.payload?.message_id});return r.skipped==='organization_paused'?{...r,paused:true}:r;},
+ ops_conversation_turn:runInquiry,
+ ops_sms_turn:runInquiry,
  ops_followup_send:job=>sendFollowup({orgId:job.organization_id,followupId:job.payload?.followup_id,enqueue:row=>dbInsert('jobs',row,{onConflict:'idempotency_key'})}),
  ops_campaign_send:async job=>{
   const result=await sendCampaignMessage({orgId:job.organization_id,recipientId:job.payload?.recipient_id,enqueue:row=>dbInsert('jobs',row,{onConflict:'idempotency_key'})});

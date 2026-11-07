@@ -49,6 +49,7 @@
     "supabase/migrations/20261104134533_nova_execution_safety.sql",
     "supabase/migrations/20261105001057_nova_channel_engine.sql",
     "supabase/migrations/20261105152509_nova_operations_completion.sql",
+    "supabase/migrations/20261107134246_nova_channel_workers_and_messaging.sql",
     "supabase/zz-public-schema-lockdown-standalone.sql"
   ]
 }

@@ -7,6 +7,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const suites = [
+  'unit_channel_credentials_test', 'unit_rcs_connector_test',
+ 'unit_apple_messages_test',
+ 'unit_tiktok_messages_test',
   'unit_channel_engine_test', 'unit_core_queue_tick_test', 'unit_worker_advisory_test',
   'unit_ai_spend_dispatch_test', 'unit_report_delivery_parity_test', 'unit_install_email_status_test', 'unit_chat_lead_test', 'unit_role_reasoning_test', 'unit_spending_lock_test', 'unit_audit_recheck_service_test',
   'unit_wallet_api_test',

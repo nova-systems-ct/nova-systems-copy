@@ -54,7 +54,7 @@ export async function handleSmsInbound({ url, params, signature }, repo, env) {
   if (kind === 'opt_out' && repo.cancelQueuedForContact) await repo.cancelQueuedForContact(orgId, contact.id);
   if (kind === 'message' && inbound && repo.opsEnabled && await repo.opsEnabled(orgId)) {
     if (!conv.customer_initiated_at) await repo.updateConversation(orgId, conv.id, { customer_initiated_at: now });
-    await repo.enqueueJob({ job_type: 'ops_conversation_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: inbound.id }, idempotency_key: `ops_turn:${sid}` });
+    await repo.enqueueJob({ job_type: 'ops_sms_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: inbound.id }, idempotency_key: `ops_turn:${sid}` });
   }
   return twiml(200);
 }

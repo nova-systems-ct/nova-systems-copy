@@ -18,13 +18,16 @@ try {
  const {default:handler}=await import('../api/client.js'); const call=makeCaller(handler);
  let r=await call({resource:'hierarchy',op:'install-workforce',method:'POST',token:client.token,body:{}});
  assert.equal(r.status,403,'A client must not install Nova’s internal workforce');
+ await q("insert into workers(worker_type,display_name,status,capability_key) values('service_account','TEST paused legacy inbox','suspended','channel_inbox')");
  r=await call({resource:'hierarchy',op:'install-workforce',method:'POST',token:owner.token,body:{}});
  assert.equal(r.status,200,'Owner must be able to install the real workforce');
  assert.equal((await q('select display_name from ops_business_settings where organization_id=$1',[org]))[0]?.display_name,'TEST Nova Workforce','Installation must activate Operations on the existing Nova business rather than leave every section behind the client-business screen');
- let workers=await q('select * from workers where capability_key is not null');assert.equal(workers.length,13);
+ let workers=await q('select * from workers where capability_key is not null');assert.equal(workers.length,21);
  const by=k=>workers.find(w=>w.capability_key===k);
  assert.equal(by('cfo').manager_worker_id,by('ceo_twin').id);
  assert.equal(by('channel_inbox').manager_worker_id,by('coo').id);
+ assert.equal(by('instagram_inbox').status,'suspended','A split channel must inherit the old worker pause instead of silently resuming customer work');
+ assert.equal(by('rcs_inbox').status,'suspended');
  assert.equal(by('marketing_publisher').manager_worker_id,by('cmo').id);
  await q("update workers set status='suspended' where capability_key='demand_outreach'");
  const beforeIds=workers.map(w=>w.id).sort();
@@ -90,6 +93,6 @@ try {
  assert.equal(response.code,200);assert.equal(response.body.processed,true);assert.equal(response.body.job_id,monitorJob.id);
  assert.equal((await q('select status from jobs where id=$1',[monitorJob.id]))[0].status,'completed');
  assert.equal((await q("select count(*)::int as n from jobs where idempotency_key=$1",[`nova_monitoring_review:after:${monitorJob.id}`]))[0].n,1,'Signed hosted processing must save the result and exactly one successor together');
- console.log('PASS — owner-only idempotent 13-worker installation, real reporting lines, pause preservation, 13 playbooks, honest model status, scoped hosted monitoring/reporting and emergency pause');
+ console.log('PASS — owner-only idempotent 21-worker installation, real reporting lines, pause preservation, 21 playbooks, honest model status, scoped hosted monitoring/reporting and emergency pause');
 }catch(e){console.error(e);process.exitCode=1;}finally{await env.stop();}
 process.exit(process.exitCode??0);

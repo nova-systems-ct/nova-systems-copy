@@ -1,3 +1,4 @@
+import {CHANNEL_JOB_TYPES} from './providers.js';
 import crypto from 'node:crypto';
 import {dbOne,dbPatch,dbRpc,enc} from '../_sales/core.js';
 import {verifyMetaSignature,normalizeMetaEvents} from './meta.js';
@@ -33,11 +34,11 @@ export async function runChannelTurn(job){
  const ev=await dbOne(`channel_events?organization_id=eq.${enc(orgId)}&conversation_id=eq.${enc(conversationId)}&message_id=eq.${enc(job.payload?.message_id)}&select=id,status`);
  if(!ev||ev.status!=='queued')return {skipped:'already_processed_or_unavailable'};
  const thread=await dbOne(`channel_threads?organization_id=eq.${enc(orgId)}&conversation_id=eq.${enc(conversationId)}&select=connection_id`);
- const connection=thread&&await dbOne(`channel_connections?id=eq.${enc(thread.connection_id)}&organization_id=eq.${enc(orgId)}&select=status,automation_enabled`);
- if(!connection||connection.status!=='enabled'||!connection.automation_enabled)return {paused:true,reason:'connection_automation_paused'};
+ const connection=thread&&await dbOne(`channel_connections?id=eq.${enc(thread.connection_id)}&organization_id=eq.${enc(orgId)}&select=status,automation_enabled,credentials_assigned_by,credentials_assigned_at`);
+ if(!connection?.credentials_assigned_by||!connection?.credentials_assigned_at||connection.status!=='enabled'||!connection.automation_enabled)return {paused:true,reason:'connection_automation_paused'};
  const [settings,conversation]=await Promise.all([dbOne(`wave1_org_settings?organization_id=eq.${enc(orgId)}&select=paused,channels_paused`),dbOne(`wave1_conversations?id=eq.${enc(conversationId)}&organization_id=eq.${enc(orgId)}&select=staff_takeover,channel`)]);
  if(settings?.paused||conversation?.staff_takeover||settings?.channels_paused?.includes(conversation?.channel)||process.env.OPS_KILL_SWITCH==='true')return {paused:true,reason:'business_or_conversation_paused'};
- const paused=await channelPauseState(orgId);if(paused.paused)return paused;
+ const paused=await channelPauseState(orgId,{provider:conversation?.channel});if(paused.paused)return paused;
  if(!job.id||!job.leased_by)return {skipped:'live_job_lease_required'};
  const locked=await dbRpc('nova_channel_lock',{p_org:orgId,p_conversation:conversationId,p_token:token,p_release:false,p_message:job.payload?.message_id,p_job:job.id,p_worker:job.leased_by});
  if(!locked){const live=await dbOne(`channel_events?id=eq.${enc(ev.id)}&organization_id=eq.${enc(orgId)}&select=status`);return live?.status==='queued'?{deferred:true,reason:'waiting_for_earlier_turn_or_live_lease'}:{skipped:'late_event_requires_review'};}
@@ -66,4 +67,4 @@ export async function runChannelTurn(job){
   return result;
  }finally{finished=true;clearInterval(renew);await dbRpc('nova_channel_lock',{p_org:orgId,p_conversation:conversationId,p_token:token,p_release:true,p_message:null,p_job:null,p_worker:null});}
 }
-export const CHANNEL_HANDLERS={channel_conversation_turn:runChannelTurn,channel_comment_reply:sendApprovedComment};
+export const CHANNEL_HANDLERS={...Object.fromEntries(Object.values(CHANNEL_JOB_TYPES).map(type=>[type,runChannelTurn])),channel_conversation_turn:runChannelTurn,channel_comment_reply:sendApprovedComment};

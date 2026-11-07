@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+const T=await import('../api/_channels/tiktokMessages.js').catch(()=>({}));
+assert.equal(typeof T.normalizeTikTokMessages,'function','TikTok needs a supported inbound/outbound contract');
+const payload={results:[{sender:'u5NkbnslAgxpOelvH01Y+rs7Uw=',to:'-000pcMJDSDHK-UvK012b10KKXmCvWmVF8o',integrationType:'TIKTOK',receivedAt:'2026-11-06T21:00:00Z',messageId:'inbound-1',message:{type:'TEXT',text:'Can I book?',conversationId:'conversation-1'}}]};
+const [event]=T.normalizeTikTokMessages(payload,payload.results[0].to);assert.equal(event.sender_id,payload.results[0].sender);assert.equal(event.provider,'tiktok');assert.equal(event.text,'Can I book?');assert.equal(event.metadata.conversation_id,'conversation-1');
+assert.throws(()=>T.normalizeTikTokMessages(payload,'other-account'),/account/);
+assert.equal(T.tiktokMspEligible('US'),false);assert.equal(T.tiktokMspEligible('GB'),false);assert.equal(T.tiktokMspEligible('DE'),false);assert.equal(T.tiktokMspEligible('BR'),true);assert.equal(T.tiktokMspEligible(null),false);
+const request=T.tiktokMessageRequest({baseUrl:'https://tenant.api.infobip.com',accountId:payload.results[0].to,recipientId:event.sender_id,messageId:'62a508c2-25b0-4d78-9088-a478c36ff151',body:'Your times',token:'LOCAL',region:'BR'});
+assert.equal(request.url,'https://tenant.api.infobip.com/tiktok/1/messages');assert.equal(request.body.messages[0].content.type,'TEXT');assert.equal(request.body.messages[0].content.text,'Your times');assert.equal(request.body.messages[0].destinations[0].to,event.sender_id);assert.equal(request.body.messages[0].options.smsFailover,undefined);
+assert.throws(()=>T.tiktokMessageRequest({baseUrl:'https://tenant.api.infobip.com',accountId:payload.results[0].to,recipientId:event.sender_id,messageId:'62a508c2-25b0-4d78-9088-a478c36ff151',body:'x',token:'x',region:'US'}),/region/);
+console.log('PASS — TikTok owned-account normalization, opaque IDs, documented send contract, no SMS fallback and provider region restrictions');
