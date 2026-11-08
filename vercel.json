@@ -13,6 +13,10 @@
       "destination": "/sms-program/terms.html"
     },
     {
+      "source": "/service-texts/consent-proof-2026-11-08.jpg",
+      "destination": "/sms-program/consent-proof-2026-11-08.jpg"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

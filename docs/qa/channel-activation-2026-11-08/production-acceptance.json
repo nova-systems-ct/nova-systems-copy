@@ -1,0 +1,42 @@
+{
+  "date_utc": "2026-11-08",
+  "environment": "production",
+  "site": "https://nova-systems.app/service-request",
+  "release_commit": "7ee5a0b7db4771c23bba7668a255388d7d24e1e9",
+  "vercel_deployment": "dpl_CuxsVWPTBU1MBmoaJ9mDb1cjvWPh",
+  "deployment_state": "READY",
+  "database_project": "xizmgruvuazmummotzkp",
+  "checks": {
+    "home_talk_to_nova_navigation": "passed",
+    "public_privacy_and_sms_terms": "passed",
+    "unchecked_default": "passed",
+    "no_appointment_created": "passed",
+    "marketing_consent": false,
+    "single_reused_synthetic_contact": "cab3a61f-a0e6-4be5-b44d-13bea2146f1f",
+    "synthetic_receipts_marked_is_test": true,
+    "synthetic_crm_source": "test_service_request",
+    "synthetic_activities_outcome": "test_only"
+  },
+  "live_requests": [
+    {
+      "request_id": "8814a0d1-75ad-4287-9f6b-2f4abefdbc25",
+      "service_sms_consent": false,
+      "marketing_consent": false,
+      "appointment": null
+    },
+    {
+      "request_id": "c2a8e640-cb44-4ad6-b230-5c64d9b25e14",
+      "service_sms_consent": true,
+      "marketing_consent": false,
+      "appointment": null
+    }
+  ],
+  "provider_side_effects": {
+    "sms": 0,
+    "calls": 0,
+    "emails": 0,
+    "paid_model_requests": 0,
+    "payments": 0
+  },
+  "scope": "Real production browser, API and database saves. This is not proof of SMS delivery, carrier approval or a live AI call."
+}
