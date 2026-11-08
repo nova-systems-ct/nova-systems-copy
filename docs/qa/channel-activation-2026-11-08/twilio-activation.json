@@ -1,0 +1,23 @@
+{
+  "date_utc": "2026-11-08",
+  "campaign_sid": "CMd844e5f9104dd9b5b785509cd3fc785b",
+  "campaign_status": "In review",
+  "messaging_service_sid": "MGcfd121875758c03eb9a88db6fca26767",
+  "sender": "+18609626160",
+  "new_campaign_created": false,
+  "monthly_fee_usd_from_approval": 1.5,
+  "upfront_charge_usd": 0,
+  "auto_recharge_enabled": false,
+  "test_call": {
+    "sid": "CAc8ccebc268fa5b2e0d73eb37c1358f7f",
+    "status": "Completed",
+    "duration_seconds": 20,
+    "cost_usd": 0.0,
+    "recipient": "owner_verified_phone_ending_0504",
+    "free_units_before": 73,
+    "free_units_after": 72,
+    "scenario": "Twilio trial Play a File; separate from Nova AI receptionist"
+  },
+  "sms_sent": 0,
+  "carrier_approval_guaranteed": false
+}
