@@ -34,3 +34,6 @@ dist-ssr
 .vercel
 base44/.app.jsonc
 .testenv/
+*.p8
+*.client-secret.jwt
+supabase/.temp/

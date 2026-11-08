@@ -1,6 +1,7 @@
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone } from './_sanitize.js';
+import { handleServiceSmsRequest } from './_serviceSmsRequest.js';
 
 const VALID_NEEDS = [
   'Website', 'Social Media', 'AI Phone System', 'Branding & Identity',
@@ -16,6 +17,8 @@ export default async function handler(req, res) {
   if (setCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!rateLimit(req, res, 10, 60_000)) return;
+
+  if (req.body?.request_type === 'service_sms_request') return handleServiceSmsRequest(req, res);
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;

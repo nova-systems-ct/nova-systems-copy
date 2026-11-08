@@ -17,7 +17,8 @@ import { createStubs, signJwt, verifyJwt } from './stubs.mjs';
 import { splitSql } from './sqlsplit.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const require = createRequire(path.join(ROOT, '.testenv', 'package.json'));
+const RUNTIME = path.resolve(process.env.NOVA_TEST_RUNTIME || path.join(ROOT, '.testenv'));
+const require = createRequire(path.join(RUNTIME, 'package.json'));
 const EmbeddedPostgres = require('embedded-postgres').default;
 const pg = require('pg');
 export const JWT_SECRET = 'local-test-jwt-secret-please-do-not-use-anywhere-else-0123456789';
@@ -26,11 +27,11 @@ const freePort = () => new Promise((res) => { const s = net.createServer(); s.li
 const waitFor = async (fn, ms, what) => { const t0 = Date.now(); let last; while (Date.now() - t0 < ms) { try { if (await fn()) return; } catch (e) { last = e; } await new Promise((r) => setTimeout(r, 200)); } throw new Error(`timeout waiting for ${what}: ${last?.message || ''}`); };
 
 export async function startTestEnv({ migrations = [], publicBuckets = ['papers'], quiet = true } = {}) {
-  const pgExe = path.join(ROOT, '.testenv', 'bin', 'postgrest.exe');
+  const pgExe = path.join(RUNTIME, 'bin', process.platform === 'win32' ? 'postgrest.exe' : 'postgrest');
   if (!fs.existsSync(pgExe)) throw new Error('PostgREST binary missing: download postgrest v16.x for your OS into .testenv/bin (see docs/SALES_TEAM_INSTALLATION.md)');
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nova-testenv-'));
   const pgPort = await freePort();
-  const server = new EmbeddedPostgres({ databaseDir: dataDir, user: 'postgres', password: 'test', port: pgPort, persistent: false, initdbFlags: ['--encoding=UTF8', '--locale=C'], onLog: () => {}, onError: () => {} });
+  const server = new EmbeddedPostgres({ databaseDir: dataDir, user: 'postgres', password: 'test', port: pgPort, persistent: false, autoRehydrateSymlinks: true, initdbFlags: ['--encoding=UTF8', '--locale=C'], ...(process.platform !== 'win32' ? { postgresFlags: ['-h', '127.0.0.1', '-k', ''] } : {}), onLog: () => {}, onError: () => {} });
   await server.initialise(); await server.start();
   const pool = new pg.Pool({ host: '127.0.0.1', port: pgPort, user: 'postgres', password: 'test', database: 'postgres', max: 6 });
   const q = (sql, params) => pool.query(sql, params);
@@ -52,7 +53,7 @@ export async function startTestEnv({ migrations = [], publicBuckets = ['papers']
   const restPort = await freePort();
   const conf = path.join(dataDir, 'postgrest.conf');
   fs.writeFileSync(conf, [`db-uri = "postgres://authenticator:test@127.0.0.1:${pgPort}/postgres"`, 'db-schemas = "public"', 'db-anon-role = "anon"', `jwt-secret = "${JWT_SECRET}"`, `server-port = ${restPort}`, 'server-host = "127.0.0.1"', 'db-pool = 5'].join('\n'));
-  const libpq = path.join(ROOT, '.testenv', 'node_modules', '@embedded-postgres', 'windows-x64', 'native', 'bin');
+  const libpq = path.join(RUNTIME, 'node_modules', '@embedded-postgres', 'windows-x64', 'native', 'bin');
   const proc = spawn(pgExe, [conf], { env: { ...process.env, PATH: `${libpq}${path.delimiter}${process.env.PATH}` }, stdio: ['ignore', 'pipe', 'pipe'] });
   let restLog = ''; proc.stdout.on('data', (d) => (restLog += d)); proc.stderr.on('data', (d) => (restLog += d));
   await waitFor(async () => { const r = await fetch(`http://127.0.0.1:${restPort}/`); return r.status < 500; }, 60000, 'PostgREST').catch((e) => { throw new Error(`${e.message}\n${restLog.slice(-800)}`); });

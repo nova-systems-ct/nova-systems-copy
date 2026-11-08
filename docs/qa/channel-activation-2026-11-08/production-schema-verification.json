@@ -1,0 +1,18 @@
+{
+  "project": "xizmgruvuazmummotzkp",
+  "migration_version": "20261108172929",
+  "migration_name": "service_sms_intake",
+  "existing_records_preserved": {
+    "intake_requests": 0,
+    "nova_crm_contacts": 3,
+    "nova_crm_activities": 9
+  },
+  "new_receipts": 0,
+  "receipt_rls": true,
+  "anonymous_rpc_access": false,
+  "authenticated_client_rpc_access": false,
+  "server_rpc_access": true,
+  "security_definer": false,
+  "external_messages_sent": 0,
+  "money_spent_cents": 0
+}

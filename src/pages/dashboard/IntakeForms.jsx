@@ -108,8 +108,8 @@ export default function IntakeForms() {
                 <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{m.email}</p>
               </div>
               <div>
-                <p style={{ color: GOLD, fontSize: 12, fontWeight: 600 }}>{m.meeting_date}</p>
-                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{m.meeting_time}</p>
+                <p style={{ color: GOLD, fontSize: 12, fontWeight: 600 }}>{m.meeting_date || 'Not scheduled'}</p>
+                <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{m.meeting_time || 'Service request'}</p>
               </div>
               <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, lineHeight: 1.5 }}>{(m.needs || []).join(', ') || '—'}</p>
               <select value={m.status} onChange={(e) => updateMeetingStatus(m.id, e.target.value)}

@@ -79,13 +79,13 @@ export default function Navbar() {
           >
             <LogIn className="w-3.5 h-3.5" /> LOG IN
           </Link>
-          <Link
-            to="/request-audit"
+          <a
+            href="/service-request"
             className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold tracking-wider uppercase transition-opacity hover:opacity-85"
             style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
           >
-            BOOK AN AUDIT <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+            TALK TO NOVA <ArrowRight className="w-3.5 h-3.5" />
+          </a>
         </div>
 
         <button
@@ -123,14 +123,14 @@ export default function Navbar() {
               )}
             </Link>
           ))}
-          <Link
-            to="/request-audit"
+          <a
+            href="/service-request"
             onClick={() => setMobileOpen(false)}
             className="block text-center px-5 py-3 text-xs font-bold tracking-wider uppercase mt-1"
             style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
           >
-            BOOK AN AUDIT
-          </Link>
+            TALK TO NOVA
+          </a>
           <Link
             to="/login"
             onClick={() => setMobileOpen(false)}
