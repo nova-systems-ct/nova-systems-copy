@@ -136,10 +136,11 @@ export default function HeroSection() {
 
           <h1
             className="font-black text-white leading-[0.95]"
-            style={{ fontSize: "clamp(2.6rem, 5vw, 4.8rem)", letterSpacing: "-0.02em", maxWidth: 640 }}
+            style={{ fontSize: "clamp(2.6rem, 4.2vw, 4.5rem)", letterSpacing: "-0.02em", maxWidth: 560 }}
           >
             Less chasing.{" "}
             <span style={{
+              display: "block",
               background: GOLD_TEXT_GRADIENT,
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",

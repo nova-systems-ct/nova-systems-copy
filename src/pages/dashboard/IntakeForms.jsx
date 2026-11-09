@@ -10,7 +10,7 @@ const STATUS_COLORS = {
 }
 
 const MEETING_STATUSES = ['pending', 'confirmed', 'completed', 'no_show', 'rescheduled']
-const MEETING_STATUS_LABELS = { pending: 'Pending', confirmed: 'Confirmed', completed: 'Completed', no_show: 'No Show', rescheduled: 'Rescheduled' }
+const MEETING_STATUS_LABELS = { pending: 'Pending', confirmed: 'Confirmed', completed: 'Completed', no_show: 'No Show', rescheduled: 'Rescheduled', cancelled: 'Cancelled' }
 
 function toCsvValue(v) {
   const s = Array.isArray(v) ? v.join('; ') : String(v ?? '')
@@ -114,10 +114,10 @@ export default function IntakeForms() {
                 <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11 }}>{m.meeting_time || 'Service request'}</p>
               </div>
               <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, lineHeight: 1.5 }}>{(m.needs || []).join(', ') || '—'}</p>
-              <select value={m.status} onChange={(e) => updateMeetingStatus(m.id, e.target.value)}
+              {['worker_launch_web','test_worker_launch'].includes(m.referral_source) ? <span style={{color:GOLD,fontSize:11}}>{MEETING_STATUS_LABELS[m.status] || m.status} · Manage in Launch Desk</span> : <select value={m.status} onChange={(e) => updateMeetingStatus(m.id, e.target.value)}
                 style={{ fontSize: 11, fontWeight: 700, padding: '6px 10px', borderRadius: 8, background: '#151515', color: GOLD, border: `1px solid ${GOLD}40`, cursor: 'pointer' }}>
                 {MEETING_STATUSES.map(s => <option key={s} value={s} style={{ background: '#151515' }}>{MEETING_STATUS_LABELS[s]}</option>)}
-              </select>
+              </select>}
             </div>
           ))}
         </div>

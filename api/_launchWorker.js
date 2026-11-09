@@ -82,13 +82,13 @@ export async function handleLaunchAdmin(req, res) {
   if (!caller) return;
   const b = req.body || {};
   const action = req.method === 'GET' ? 'overview' : b.action;
-  if (!['overview', 'add_slot', 'withdraw_slot'].includes(action)) return res.status(400).json({ ok: false, error: 'Unknown calendar action.' });
+  if (!['overview', 'add_slot', 'withdraw_slot', 'cancel_request'].includes(action)) return res.status(400).json({ ok: false, error: 'Unknown calendar action.' });
   try {
     if (action === 'add_slot') {
       const start = Date.parse(b.starts_at), end = Date.parse(b.ends_at);
       if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 14400000) return res.status(422).json({ ok: false, error: ERRORS.invalid_slot });
     }
-    if (action === 'withdraw_slot' && (typeof b.id !== 'string' || !UUID.test(b.id))) return res.status(422).json({ ok: false, error: 'Invalid appointment slot.' });
+    if (['withdraw_slot', 'cancel_request'].includes(action) && (typeof b.id !== 'string' || !UUID.test(b.id))) return res.status(422).json({ ok: false, error: 'Invalid appointment slot.' });
     return answer(res, await launchRpc('nova_launch_owner', {
       p_actor: caller.id, p_action: action,
       p_payload: action === 'add_slot' ? { starts_at: b.starts_at, ends_at: b.ends_at, is_test: b.is_test === true } : { id: b.id },

@@ -13,3 +13,6 @@ create table public.role_permissions(role text not null,permission_id uuid refer
 insert into public.permissions(key) values('admin.view');
 insert into public.role_permissions(role,permission_id) select r.role,p.id from (values('nova_super_admin'),('nova_admin'),('nova_developer'))r(role) cross join public.permissions p;
 grant select on public.permissions,public.role_permissions to service_role;
+
+insert into public.permissions(key) values('intelligence.view');
+insert into public.role_permissions(role,permission_id) select 'nova_super_admin',id from public.permissions where key='intelligence.view';

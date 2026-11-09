@@ -9,3 +9,5 @@ PASS — browser: public opt-in/policies/confirmation, optional unchecked choice
 
 Lint: PASS
 Production build: PASS
+One-time ?new=1 reload recovery: PASS
+Owner-only cancellation and legacy status guard: PASS

@@ -14,13 +14,14 @@ assert.equal(fromEasternTime('2027-06-10T09:00'), '2027-06-10T13:00:00.000Z');
 assert.throws(() => fromEasternTime('2027-03-14T02:30'));
 assert.throws(() => fromEasternTime('2027-11-07T01:30'));
 const migration = process.env.LAUNCH_MIGRATION || 'supabase/migrations/20261109194341_launch_worker_booking.sql';
-const env = await startTestEnv({ migrations: ['scripts/testenv/serviceSmsLegacy.sql', 'scripts/testenv/launchWorkerLegacy.sql', 'supabase/migrations/20261108172929_service_sms_intake.sql', migration], publicBuckets: [] });
+const env = await startTestEnv({ migrations: ['scripts/testenv/serviceSmsLegacy.sql', 'scripts/testenv/launchWorkerLegacy.sql', 'supabase/migrations/20261108172929_service_sms_intake.sql', migration, 'supabase/migrations/20261109195329_launch_worker_owner_cancel.sql'], publicBuckets: [] });
 let server, browser, vite;
 try {
   assert.deepEqual(env.migrationErrors, []);
   Object.assign(process.env, env.appEnv, { NOVA_SPENDING_LOCK: 'locked' });
   const { handleLaunchPublic, handleLaunchAdmin } = await import('../api/_launchWorker.js');
   const handler = (await import('../api/book-meeting.js')).default;
+  const clientHandler = (await import('../api/client.js')).default;
   const q = async (sql, params = []) => (await env.sql(sql, params)).rows;
   const org = (await q("select id from organizations where kind='nova_internal' limit 1"))[0].id;
   const owner = await env.createUser({ email: 'launch-owner@example.invalid', role: 'nova_super_admin', orgId: org });
@@ -62,6 +63,8 @@ try {
   assert.equal((await q('select count(*)::int n from nova_tasks'))[0].n, 1);
   assert.equal((await q('select state,management_hash,steps,is_test from nova_worker_runs where request_id=$1', [winner.submission_id]))[0].steps.length, 5);
   assert.equal((await admin({ action: 'withdraw_slot', id: slot })).result.code, 'slot_not_available');
+  assert.equal((await call(clientHandler,{action:'update-status',id:winner.submission_id,status:'pending'},owner.token,'POST',{resource:'intake-requests'})).status,409);
+  assert.equal((await q('select status from intake_requests where id=$1',[winner.submission_id]))[0].status,'confirmed');
   const cancel = { request_type: 'launch_cancel', submission_id: winner.submission_id, management_token: winner.management_token };
   assert.equal((await invoke({ ...cancel, management_token: randomBytes(32).toString('hex') })).status, 404);
   assert.equal((await invoke(cancel)).result.state, 'cancelled'); assert.equal((await invoke(cancel)).result.duplicate, true);
@@ -71,6 +74,9 @@ try {
   const exact = (await q('select * from nova_service_sms_receipts where request_id=$1', [plain.submission_id]))[0];
   assert.equal(exact.disclosure, SERVICE_SMS_POLICY.text); assert.equal(exact.is_test, true); assert.equal(exact.marketing_consent, false);
   assert.equal((await q('select meeting_date from intake_requests where id=$1', [plain.submission_id]))[0].meeting_date, null);
+  assert.equal((await admin({action:'cancel_request',id:plain.submission_id},outsider.token)).status,403);
+  assert.equal((await admin({action:'cancel_request',id:plain.submission_id})).status,200);
+  assert.equal((await q('select state from nova_worker_runs where request_id=$1',[plain.submission_id]))[0].state,'cancelled');
   const optin = request('service-sms'); optin.service_sms_consent = true; assert.equal((await invoke(optin)).result.service_sms_consent, true);
   const noPhone = request('no-phone', slot); noPhone.phone = ''; assert.equal((await invoke(noPhone)).result.code, 'phone_required');
   assert.equal((await invoke({ ...request('bad-test'), email: 'real-person@example.com' })).status, 422);
@@ -108,7 +114,7 @@ try {
   browser = await chromium.launch({ executablePath: await packaged.executablePath(), args: packaged.args, headless: true });
   const context = await browser.newContext(); const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message));
   fs.mkdirSync('docs/qa/launch-worker-2026-11-09', { recursive: true });
-  await page.goto(base + '/service-request?test=1'); await page.getByText('Choose one of Nova’s published times.', { exact: true }).waitFor(); await page.waitForFunction(() => !document.getElementById('submit').disabled);
+  await page.goto(base + '/service-request?test=1&new=1'); await page.getByText('Choose one of Nova’s published times.', { exact: true }).waitFor(); await page.waitForFunction(() => !document.getElementById('submit').disabled);
   assert.equal(await page.getByRole('checkbox', { name: /Service texts \(optional\)/ }).isChecked(), false);
   for (const [name, width, height] of [['desktop', 1366, 1000], ['ipad', 820, 1180], ['phone', 390, 844]]) {
     await page.setViewportSize({ width, height }); assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
@@ -120,6 +126,7 @@ try {
   await page.locator('#slot-options input').first().check();
   await page.waitForFunction(() => !document.getElementById('submit').disabled); await page.getByRole('button', { name: 'Send request', exact: true }).click();
   await page.getByRole('heading', { name: 'Your call is booked.', exact: true }).waitFor();
+  assert.equal(new URL(page.url()).searchParams.has('new'),false,'A one-time new-request flag must not erase the receipt on reload');
   const refText = await page.locator('#reference').innerText(); const browserId = refText.split(': ').at(-1);
   assert.equal((await q('select state from nova_worker_runs where request_id=$1', [browserId]))[0].state, 'booked');
   assert.equal(await page.locator('#worker-steps li').count(), 5);

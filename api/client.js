@@ -290,15 +290,16 @@ async function handleIntakeRequests(req, res) {
     if (!VALID_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
     try {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_requests?id=eq.${encodeURIComponent(id)}`, {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/intake_requests?id=eq.${encodeURIComponent(id)}&or=(referral_source.is.null,referral_source.not.in.(worker_launch_web,test_worker_launch))`, {
         method: 'PATCH',
         headers: {
           apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json', Prefer: 'return=minimal',
+          'Content-Type': 'application/json', Prefer: 'return=representation',
         },
         body: JSON.stringify({ status }),
       });
       if (!r.ok) { console.error('[client:intake-requests] Update error:', r.status, await r.text()); return res.status(500).json({ error: 'Failed to update status' }); }
+      if (!(await r.json()).length) return res.status(409).json({ error: 'Worker requests must be managed in Nova Launch Desk.' });
       return res.status(200).json({ ok: true });
     } catch (err) {
       console.error('[client:intake-requests] Error:', err.message);

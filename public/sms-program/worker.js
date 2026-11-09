@@ -109,7 +109,10 @@ $('download-calendar').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 try {
-  if (new URLSearchParams(location.search).get('new') === '1') sessionStorage.removeItem(sessionKey);
+  if (new URLSearchParams(location.search).get('new') === '1') {
+    sessionStorage.removeItem(sessionKey);
+    const clean = new URL(location.href); clean.searchParams.delete('new'); history.replaceState(null, '', clean);
+  }
   const previous = JSON.parse(sessionStorage.getItem(sessionKey) || 'null');
   if (previous?.reference && previous.management_token && Array.isArray(previous.steps)) showReceipt(previous);
 } catch { /* Private browsing may disable session storage. */ }
