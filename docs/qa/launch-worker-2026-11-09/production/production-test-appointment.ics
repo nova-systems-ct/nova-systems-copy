@@ -1,0 +1,14 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Nova Systems//Booking//EN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:a62f6591-c5e9-4dcc-b6df-6fa7cb46acce@nova-systems.app
+DTSTAMP:20261109T195629Z
+DTSTART:20261110T190000Z
+DTEND:20261110T193000Z
+SUMMARY:TEST — Nova Systems introduction
+LOCATION:Phone appointment
+DESCRIPTION:Nova will call the number provided. Reference a62f6591-c5e9-4dcc-b6df-6fa7cb46acce.
+END:VEVENT
+END:VCALENDAR

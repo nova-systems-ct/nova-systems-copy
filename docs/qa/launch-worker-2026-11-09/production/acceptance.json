@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-09",
+  "code_commit": "cfd0436d36659b3898199f966b3a533cada14418",
+  "deployment": "dpl_83hjMiHwPZcbS9ewQbe4je9m1j2s",
+  "state": "READY",
+  "site": "https://nova-systems.app/",
+  "test_reference": "a62f6591-c5e9-4dcc-b6df-6fa7cb46acce",
+  "synthetic_test": true,
+  "browser_booking": "passed",
+  "reload_recovery": "passed",
+  "calendar_download": "passed",
+  "customer_cancellation": "passed",
+  "database_final": {
+    "run": "cancelled",
+    "meeting": "cancelled",
+    "task": "cancelled",
+    "steps": 6,
+    "receipt_is_test": true,
+    "service_sms_consent": false,
+    "marketing_consent": false,
+    "test_slot_available": true,
+    "live_available_slots": 0,
+    "owner_rpc_private": true
+  },
+  "first_test_reference": "be877903-56b3-41b2-9d13-ad50f8add1a0",
+  "first_test_owner_cancellation": "passed",
+  "twilio_current_status": "Sign-in not completed; November 8 In review remains last verified campaign status.",
+  "spending": 0
+}
