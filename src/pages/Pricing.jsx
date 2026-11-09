@@ -54,7 +54,7 @@ const plans = [
 ];
 
 const FAQS = [
-  { q: "Do you work with all business types?", a: "Yes, restaurants, barbershops, retail, medical, legal, and more." },
+  { q: "Do you work with all business types?", a: "We assess each business and its requirements before agreeing scope. Specialized or regulated workflows require a separate review; sensitive healthcare workflows are not currently supported." },
   { q: "Do you serve all of Connecticut?", a: "We're based in Waterbury and currently serve businesses from Waterbury to Fairfield County, with plans to expand statewide." },
   { q: "Is there a contract?", a: "It depends on the scope. Smaller services can run month-to-month with 30 days notice to cancel; larger builds and ongoing partnerships are outlined in a Service Agreement before work begins, so there are no surprises." },
   { q: "What if I need something not listed?", a: "We build custom solutions — book a meeting and we will scope it out." },
@@ -123,7 +123,7 @@ export default function Pricing() {
                     className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[9px] font-bold tracking-[0.2em] uppercase px-4 py-1 rounded-full whitespace-nowrap"
                     style={{ background: GOLD_GRADIENT, color: "#0a0800" }}
                   >
-                    MOST POPULAR
+                    SCOPE AGREED WITH YOU
                   </div>
                 )}
                 <p className="text-[10px] tracking-[0.25em] uppercase font-bold mb-1" style={{ color: GOLD }}>{plan.name}</p>

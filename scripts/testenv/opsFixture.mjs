@@ -37,7 +37,7 @@ export async function startProviderStandIns() {
   await Promise.all([new Promise((r) => twilioSrv.listen(0, '127.0.0.1', r)), new Promise((r) => stripeSrv.listen(0, '127.0.0.1', r))]);
   return {
     twilio, stripe,
-    env: { TWILIO_API_BASE: `http://127.0.0.1:${twilioSrv.address().port}`, STRIPE_API_BASE: `http://127.0.0.1:${stripeSrv.address().port}` },
+    env: { NOVA_SPENDING_LOCK: 'disabled', TWILIO_API_BASE: `http://127.0.0.1:${twilioSrv.address().port}`, STRIPE_API_BASE: `http://127.0.0.1:${stripeSrv.address().port}` },
     async stop() { await new Promise((r) => twilioSrv.close(r)); await new Promise((r) => stripeSrv.close(r)); },
   };
 }

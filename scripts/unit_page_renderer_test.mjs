@@ -7,7 +7,7 @@ let pass = 0, fail = 0;
 const check = (n, c, x = '') => { if (c) { pass++; console.log(`PASS — ${n}`); } else { fail++; console.log(`FAIL — ${n} ${x}`); } };
 
 const avail = await R.available();
-if (!avail.ok) { console.log(`SKIP — ${avail.reason}`); console.log('\n0 passed, 0 failed (renderer not installed here)'); process.exit(0); }
+if (!avail.ok) { console.log(`SKIP — ${avail.reason}`); console.log('\n0 passed, 0 failed (renderer not installed here)'); process.exit(3); }
 
 // a real listener on this computer: nothing the page does may ever connect to it
 let inbound = 0;

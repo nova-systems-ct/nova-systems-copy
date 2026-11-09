@@ -15,7 +15,7 @@ export default function OpsInbox() {
   }
   return (
     <>
-      <PageHeader title="Inbox" sub="Texts and calls, with what the assistant said and whether each message was actually sent." />
+      <PageHeader title="Inbox" sub="Connected conversations, with the assistant’s response and each message’s recorded sending status." />
       <ErrorBox error={list.error} onRetry={list.reload} />
       <div className="ops-side">
         <Card title="Conversations">

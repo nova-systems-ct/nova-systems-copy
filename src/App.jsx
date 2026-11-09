@@ -266,6 +266,7 @@ function App() {
                 <Route path="settings" element={<OpsSettings />} />
               </Route>
               <Route path="command" element={<RequirePermission permission="command.view"><Command /></RequirePermission>} />
+              <Route path="workforce" element={<Navigate to="/dashboard/command/workforce" replace />} />
               <Route path="command/workforce" element={<RequirePermission permission="command.view"><CommandWorkforce /></RequirePermission>} />
               <Route path="command/meetings" element={<RequirePermission permission="command.view"><CommandMeetings /></RequirePermission>} />
               <Route path="command/governance" element={<RequirePermission permission="command.view"><CommandGovernance /></RequirePermission>} />

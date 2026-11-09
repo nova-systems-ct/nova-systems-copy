@@ -110,7 +110,8 @@ try {
   check('customer texting first is recorded as customer-initiated (not marketing consent)', !!(await one('select customer_initiated_at from wave1_conversations where organization_id=$1', [biz])).customer_initiated_at && (await one('select sms_consent from crm_contacts where organization_id=$1 and phone_e164=$2', [biz, CUSTOMER])).sms_consent === false);
 
   // switch to the simulated provider (allowlisted test number only)
-  Object.assign(process.env, { WAVE1_SEND_ENABLED: 'true', TWILIO_ACCOUNT_SID: 'AC_SIMULATED_LOCAL', OPS_SEND_ALLOWLIST: `${CUSTOMER},+12035550198,+12035550197,+12035550111` });
+  // Only this isolated provider stand-in is unlocked; no real provider is reachable through setSenderForTests.
+  Object.assign(process.env, { NOVA_SPENDING_LOCK: 'disabled', WAVE1_SEND_ENABLED: 'true', TWILIO_ACCOUNT_SID: 'AC_SIMULATED_LOCAL', OPS_SEND_ALLOWLIST: `${CUSTOMER},+12035550198,+12035550197,+12035550111` });
   const t0 = Date.now();
   r = await sms(CUSTOMER, '2'); // menu is ordered by service key: 1) fleet 2) full_detail 3) interior_only
   await runDue();

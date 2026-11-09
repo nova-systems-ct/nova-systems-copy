@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { api, useLoad, useAction, C, Card, Field, Loading, ErrorBox, Empty, Badge, PageHeader, Notice, when } from './ui'
 
@@ -11,6 +11,10 @@ export default function OpsRewards() {
   const d = useLoad(() => api('loyalty', { org: orgId }), [orgId])
   const act = useAction()
   const [open, setOpen] = useState(null)
+  const [walletResponse,setWalletResult]=useState(null)
+  const walletResult=walletResponse?.orgId===orgId?walletResponse.pass:null
+  useEffect(()=>{setWalletResult(null);setOpen(null)},[orgId])
+  useEffect(()=>{setWalletResult(null)},[open])
   const go = (body, ok) => act.run(() => api('loyalty', { org: orgId, method: 'POST', body }), ok).then((r) => { d.reload(); return r })
   if (d.loading) return <Loading />
   if (d.error) return <ErrorBox error={d.error} onRetry={d.reload} />
@@ -21,7 +25,18 @@ export default function OpsRewards() {
     <>
       <PageHeader title="Rewards" sub="A points program the business approves. Customers earn on completed jobs; refunds reverse points; rewards are redeemed at the counter." />
       {act.view}
-      <Notice tone="warn">Apple Wallet passes: not available yet. {wallet.reason}.</Notice>
+      <Card title="Apple & Google Wallet">
+        <p style={{color:C.dim}}>Signed balance snapshots. Redemption always checks Nova’s live ledger. Automatic card updates and device acceptance are not yet verified.</p>
+        {['apple','google'].map(platform=><p key={platform} style={{fontSize:13}}><strong>{platform==='apple'?'Apple Wallet':'Google Wallet (Android)'}</strong> · {wallet.platforms?.[platform]?.reason||'Not configured'}</p>)}
+        {business.can_configure&&<div style={{marginTop:16}}>
+          <button className="ops-btn" disabled={act.busy||!wallet.platforms?.apple?.can_issue} onClick={()=>go({action:'wallet-setup-test'},'Test pass generated. Save it on an iPhone to check device acceptance.').then(r=>setWalletResult({orgId,pass:r?.pass||null}))}>Prepare Apple Wallet test pass</button>
+          <p style={{fontSize:12,color:C.dim}}>No rewards program or customer account needed. This clearly marked test has no cash or reward value. Save the pass in Wallet on an iPhone; an iPad can download it for transfer. Apple Pay checkout is a separate test.</p>
+        </div>}
+        {walletResult?.platform==='google'&&<a className="ops-btn" href={walletResult.url} target="_blank" rel="noreferrer">Continue to Google Wallet</a>}
+        {walletResult?.platform==='apple'&&<button className="ops-btn" onClick={()=>{
+          const bytes=Uint8Array.from(atob(walletResult.base64),c=>c.charCodeAt(0));const url=URL.createObjectURL(new Blob([bytes],{type:walletResult.mime_type}));const a=document.createElement('a');a.href=url;a.download=walletResult.file_name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+        }}>{walletResult.test_only?'Download Apple Wallet test pass':'Download signed Apple pass'}</button>}
+      </Card>
       <div className="ops-two">
         <Card title={live ? `${live.name} · ${live.status} (v${live.version})` : 'No approved program'}>
           {live ? <Rules r={live.rules} /> : <Empty>Points are not being earned. Create and approve a program to start.</Empty>}
@@ -44,7 +59,7 @@ export default function OpsRewards() {
           </tbody></table>
         )}
       </Card>
-      {open && <Account orgId={orgId} id={open} live={live} go={go} busy={act.busy} canConfigure={business.can_configure} />}
+      {open && <Account orgId={orgId} id={open} live={live} go={go} busy={act.busy} canConfigure={business.can_configure} wallet={wallet} onWallet={(platform)=>go({action:'wallet-pass',account_id:open,platform},'Signed snapshot prepared. Device save is not yet confirmed.').then(r=>setWalletResult({orgId,pass:r?.pass||null}))} />}
     </>
   )
 }
@@ -75,7 +90,7 @@ function NewProgram({ onCreate, busy }) {
   )
 }
 
-function Account({ orgId, id, live, go, busy, canConfigure }) {
+function Account({ orgId, id, live, go, busy, canConfigure, wallet, onWallet }) {
   const d = useLoad(() => api('loyalty', { org: orgId, query: { account_id: id } }), [orgId, id])
   const [adj, setAdj] = useState({ points: '', reason: '' })
   if (d.loading) return <Loading />
@@ -85,6 +100,7 @@ function Account({ orgId, id, live, go, busy, canConfigure }) {
   const reload = (p) => p.then((r) => { d.reload(); return r })
   return (
     <Card title={`${account.crm_contacts?.name || 'Customer'} · ${account.balance} points`} style={{ marginTop: 16 }}>
+      {canConfigure&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>{['apple','google'].map(platform=><button key={platform} className="ops-btn" disabled={busy||live?.status!=='approved'||!wallet.platforms?.[platform]?.can_issue} onClick={()=>onWallet(platform)}>Prepare {platform==='apple'?'Apple':'Google'} Wallet snapshot</button>)}</div>}
       <button className="ops-btn primary" disabled={busy || !enough} onClick={() => reload(go({ action: 'redeem', account_id: account.id, request_id: `ui-${newId()}` }, (x) => `Redeemed: ${x.reward}.`))}>Redeem {live?.rules?.reward_description || 'reward'}</button>
       {!enough && <span style={{ fontSize: 12, color: C.faint, marginLeft: 8 }}>{live?.status === 'approved' ? `Needs ${live.rules.reward_threshold} points.` : 'No approved program.'}</span>}
       <table className="ops-table" style={{ marginTop: 10 }}><thead><tr><th>When</th><th>What</th><th>Points</th><th>Balance</th></tr></thead><tbody>

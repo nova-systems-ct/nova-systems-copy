@@ -1,3 +1,4 @@
+import { REPORT_SECTION_NAMES } from '../lib/reportSections.js'
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Download, MessageSquare, ArrowRight, FileSearch, ListOrdered, BarChart3, Building2, Info } from 'lucide-react'
@@ -7,7 +8,7 @@ import { useSEO } from '@/hooks/useSEO'
 // Everything shown comes from the approved, hash-checked content. Counts are counts of what the report contains; a
 // financial figure appears only when the report itself contains a scenario, labelled as a scenario with its inputs.
 const C = { bg: '#0A0A0A', panel: '#0F0F0F', line: 'rgba(250,250,250,0.09)', text: '#FAFAFA', dim: 'rgba(250,250,250,0.64)', faint: 'rgba(250,250,250,0.42)', gold: '#C9A84C' }
-const NAMES = { executive_summary: 'Executive summary', business_identity: 'Business', findings: 'Findings', recommendations: 'Prioritized installation recommendation', estimates_and_assumptions: 'Financial scenarios and assumptions', scope_and_method: 'Scope, method and tests', competitor_benchmarks: 'Competitor benchmarks', software_review: 'Software review', evidence_reviewed: 'Evidence appendix', limitations: 'Limitations', next_steps: 'Next steps' }
+const NAMES = REPORT_SECTION_NAMES
 const ORDER = Object.keys(NAMES)
 const TABS = [['summary', 'Executive summary'], ['findings', 'Findings'], ['next', 'Next steps'], ['evidence', 'Evidence'], ['full', 'Full report']]
 const IMPACT = { verified: 'Measured from records', scenario: 'Scenario — depends on stated inputs', unknown: 'Impact not yet measurable', none: 'No financial impact claimed' }

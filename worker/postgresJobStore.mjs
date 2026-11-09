@@ -36,15 +36,21 @@ export function createPostgresJobStore({ url, serviceKey }) {
 
     // Lease renewal while a handler is still running, so a slow job is never reclaimed by a second worker.
     async renewLease(jobId, workerId, leaseSeconds = 60) {
-      const r = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}&status=eq.leased&leased_by=eq.${encodeURIComponent(workerId)}`, {
+      const r = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}&status=eq.leased&leased_by=eq.${encodeURIComponent(workerId)}&leased_until=gt.now`, {
         method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' },
         body: JSON.stringify({ leased_until: new Date(Date.now() + leaseSeconds * 1000).toISOString() }),
       });
       return r.ok ? (await r.json()).length > 0 : false;
     },
 
-    async complete(jobId, result) {
-      const r = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}`, {
+    async defer(jobId, workerId, seconds = 900, reason = 'Paused') {
+      const r = await fetch(`${url}/rest/v1/rpc/nova_defer_job`, { method: 'POST', headers, body: JSON.stringify({ p_job: jobId, p_worker: workerId, p_seconds: seconds, p_reason: reason }) });
+      if (!r.ok) throw new Error(`Failed to defer job: ${r.status}`);
+      return r.json();
+    },
+    async complete(jobId, result, workerId = null) {
+      const owner = `${workerId ? `&leased_by=eq.${encodeURIComponent(workerId)}` : ''}&leased_until=gt.now`;
+      const r = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}&status=eq.leased${owner}`, {
         method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' },
         body: JSON.stringify({ status: 'completed', result, completed_at: new Date().toISOString() }),
       });
@@ -53,18 +59,20 @@ export function createPostgresJobStore({ url, serviceKey }) {
       return rows[0];
     },
 
-    async fail(jobId, error) {
+    async fail(jobId, error, workerId = null) {
       // Read the job back to decide dead_letter vs. backoff retry using the SAME thresholds the
       // pure engine uses — re-implemented here rather than imported because this store talks to
       // Postgres, not an in-memory array, but the decision logic is identical by design and
       // covered by the shared behavioral contract scripts/unit_job_queue_test.mjs proves.
-      const getRes = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}&select=attempts,max_attempts`, { headers });
+      const owner = `${workerId ? `&leased_by=eq.${encodeURIComponent(workerId)}` : ''}&leased_until=gt.now`;
+      const getRes = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}&status=eq.leased${owner}&select=attempts,max_attempts`, { headers });
       const [job] = getRes.ok ? await getRes.json() : [];
+      if (!job) return null;
       const message = String(error?.message || error || 'Unknown error');
       const patch = job && job.attempts >= job.max_attempts
         ? { status: 'dead_letter', last_error: message }
         : { status: 'pending', last_error: message, leased_by: null, leased_until: null, scheduled_at: new Date(Date.now() + 30_000 * Math.pow(2, (job?.attempts || 1) - 1)).toISOString() };
-      const r = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}`, {
+      const r = await fetch(`${url}/rest/v1/jobs?id=eq.${encodeURIComponent(jobId)}&status=eq.leased${owner}`, {
         method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' },
         body: JSON.stringify(patch),
       });

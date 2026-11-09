@@ -4,6 +4,7 @@
 // A passing in-memory test proves LOGIC. It does not prove a Twilio webhook was received, a text
 // was delivered, or that any table exists in the real database.
 import { verifyTwilioSignature, normalizePhone, classifyInboundKeyword, evaluateSendEligibility, isMissedCallStatus, missedCallKey, validateFormSubmission, classifySendOutcome } from './_wave1.js';
+import { NOVA_SERVICE_SMS_POLICY } from '../shared/smsConsent.js';
 
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 const twiml = (status = 200) => ({ status, type: 'text/xml', body: EMPTY_TWIML });
@@ -33,7 +34,11 @@ export async function handleSmsInbound({ url, params, signature }, repo, env) {
   const isNew = await repo.recordSourceEvent('twilio_sms', sid, orgId, { kind: 'inbound_sms' });
   if (!isNew) return twiml(200);
 
-  const kind = classifyInboundKeyword(params.Body);
+  const bodyKind = classifyInboundKeyword(params.Body);
+  // Only trust provider keyword metadata after signature verification. Advanced
+  // Opt-Out can match localized/custom words; Twilio has already replied to
+  // them, so record the event without queuing a second bot reply. STOP wins.
+  const kind = bodyKind === 'opt_out' ? bodyKind : ['STOP', 'START', 'HELP'].includes(params.OptOutType) ? classifyInboundKeyword(params.OptOutType) : bodyKind;
   const now = new Date().toISOString();
   let contact = await repo.upsertContactByPhone(orgId, from, { name: 'Unknown (SMS)', source: 'inbound_sms' });
 
@@ -42,7 +47,7 @@ export async function handleSmsInbound({ url, params, signature }, repo, env) {
     // EXECUTION time (runMissedCallFollowup), so already-queued jobs are blocked too.
     contact = await repo.updateContact(orgId, contact.id, { suppressed: true, suppressed_at: now, suppression_source: 'sms_stop_keyword', sms_consent: false });
   } else if (kind === 'opt_in') {
-    contact = await repo.updateContact(orgId, contact.id, { suppressed: false, sms_consent: true, sms_consent_source: 'sms_start_keyword', sms_consent_at: now });
+    contact = await repo.updateContact(orgId, contact.id, { suppressed: false, sms_consent: contact.marketing_consent_scope !== 'service_request_only', sms_consent_source: 'sms_start_keyword', sms_consent_at: now });
   }
 
   const conv = await repo.upsertConversation(orgId, contact.id, 'sms');
@@ -54,7 +59,7 @@ export async function handleSmsInbound({ url, params, signature }, repo, env) {
   if (kind === 'opt_out' && repo.cancelQueuedForContact) await repo.cancelQueuedForContact(orgId, contact.id);
   if (kind === 'message' && inbound && repo.opsEnabled && await repo.opsEnabled(orgId)) {
     if (!conv.customer_initiated_at) await repo.updateConversation(orgId, conv.id, { customer_initiated_at: now });
-    await repo.enqueueJob({ job_type: 'ops_conversation_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: inbound.id }, idempotency_key: `ops_turn:${sid}` });
+    await repo.enqueueJob({ job_type: 'ops_sms_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: inbound.id }, idempotency_key: `ops_turn:${sid}` });
   }
   return twiml(200);
 }
@@ -171,37 +176,60 @@ export async function handleVoiceInbound({ url, params, signature }, repo, env) 
 }
 
 // ---------------------------------------------------------------- form intake (public)
-export async function handleFormIntake({ token, body, ip }, repo) {
+export async function handleFormIntake({ token, body, ip, serviceSmsPolicy }, repo) {
   if (!token) return { status: 400, body: { error: 'Missing form token' } };
   const settings = await repo.orgByFormToken(token);
   if (!settings) return { status: 404, body: { error: 'Unknown form' } }; // same answer for wrong/rotated tokens
   const orgId = settings.organization_id;
 
+  // Resolved from the actual business, so the legacy public form endpoint or
+  // a posted form token cannot bypass Nova's service-only disclosure.
+  if (settings.organizations?.kind === 'nova_internal') serviceSmsPolicy = NOVA_SERVICE_SMS_POLICY;
+
   const v = validateFormSubmission({ fields: body?.fields, honeypot: body?.website_url_confirm, renderedAtMs: Number(body?.rendered_at), submittedAtMs: Date.now() });
   if (!v.ok) return { status: 422, body: { ok: false, reason: v.reason } };
+  // Nova's service-only permission is deliberately separate from the legacy
+  // embedded form's explicit marketing checkbox. A phone field is neither.
+  const serviceConsent = !!serviceSmsPolicy && body?.fields?.service_sms_consent === true;
+  if (serviceConsent && (!v.contact.phone_e164 || body?.fields?.service_sms_consent_version !== serviceSmsPolicy.version)) {
+    return { status: 422, body: { ok: false, reason: !v.contact.phone_e164 ? 'phone_required_for_sms' : 'sms_consent_disclosure_mismatch' } };
+  }
+  const legacyConsent = !serviceSmsPolicy && v.contact.sms_consent;
+  const requestedSms = !!(v.contact.phone_e164 && (serviceConsent || legacyConsent));
 
   const submissionId = String(body?.submission_id || '').slice(0, 100);
+  if (serviceConsent && !submissionId) return { status: 422, body: { ok: false, reason: 'submission_id_required_for_sms_consent' } };
+  const now = new Date().toISOString();
   if (submissionId) {
-    const isNew = await repo.recordSourceEvent('web_form', `${orgId}:${submissionId}`, orgId, { kind: 'form' });
+    const isNew = await repo.recordSourceEvent('web_form', `${orgId}:${submissionId}`, orgId, {
+      kind: 'form',
+      ...(serviceSmsPolicy ? { sms_service_opt_in: { granted: serviceConsent, scope: 'service_request_only', version: serviceSmsPolicy.version, disclosure: serviceSmsPolicy.text, phone_e164: v.contact.phone_e164, recorded_at: now, source_path: serviceSmsPolicy.source_path, privacy_path: serviceSmsPolicy.privacy_path, terms_path: serviceSmsPolicy.terms_path } } : {}),
+    });
     if (!isNew) return { status: 200, body: { ok: true, duplicate: true } };
   }
-  const now = new Date().toISOString();
   const contact = v.contact.phone_e164
     ? await repo.upsertContactByPhone(orgId, v.contact.phone_e164, { name: v.contact.name, email: v.contact.email, source: 'web_form' })
     : await repo.createContact(orgId, { name: v.contact.name, email: v.contact.email, source: 'web_form' });
-  if (v.contact.sms_consent && v.contact.phone_e164) {
+  if (legacyConsent && v.contact.phone_e164) {
     await repo.updateContact(orgId, contact.id, { sms_consent: true, sms_consent_source: 'web_form_checkbox', sms_consent_at: now });
   }
-  // With a phone number the request continues by text, so it lives in the SMS conversation (one thread, one engine state).
-  const conv = await repo.upsertConversation(orgId, contact.id, v.contact.phone_e164 && body?.continue_on_web !== true ? 'sms' : 'form');
+  if (serviceConsent && !contact.sms_consent) {
+    // Keep carrier START/UNSTOP from broadening this particular permission into
+    // Revive/promotional eligibility. Do not erase an independently recorded
+    // marketing opt-in that this contact already had.
+    await repo.updateContact(orgId, contact.id, { marketing_consent_scope: 'service_request_only' });
+  }
+  // Only an explicit request to text can create a text conversation. A visitor
+  // continuing on the web never gets a parallel unsolicited SMS turn.
+  const onWeb = body?.continue_on_web === true;
+  const conv = await repo.upsertConversation(orgId, contact.id, requestedSms && !onWeb ? 'sms' : 'form');
   const formMsg = await repo.insertMessage(orgId, { conversation_id: conv.id, direction: 'inbound', body: String(body?.fields?.message || '').slice(0, 2000), status: 'received', provider: 'web_form', provider_sid: submissionId ? `${orgId}:${submissionId}` : null });
   // continue_on_web: the visitor is on the business's own page and continues there (no parallel text conversation).
-  const onWeb = body?.continue_on_web === true;
-  if (formMsg && v.contact.phone_e164 && !onWeb && repo.opsEnabled && await repo.opsEnabled(orgId)) {
+  if (formMsg && requestedSms) {
     await repo.updateConversation(orgId, conv.id, { customer_initiated_at: now, last_inbound_at: now });
-    await repo.enqueueJob({ job_type: 'ops_conversation_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: formMsg.id }, idempotency_key: `ops_turn:form:${formMsg.id}` });
   }
-  const continuesBySms = !!(formMsg && v.contact.phone_e164 && !onWeb && repo.opsEnabled && await repo.opsEnabled(orgId));
+  const continuesBySms = !!(formMsg && requestedSms && !onWeb && repo.opsEnabled && await repo.opsEnabled(orgId));
+  if (continuesBySms) await repo.enqueueJob({ job_type: 'ops_sms_turn', organization_id: orgId, payload: { conversation_id: conv.id, message_id: formMsg.id }, idempotency_key: `ops_turn:form:${formMsg.id}` });
   return { status: 200, body: { ok: true }, internal: { orgId, contactId: contact.id, conversationId: conv.id, message: String(body?.fields?.message || '').slice(0, 2000), hasPhone: !!v.contact.phone_e164, continuesBySms } };
 }
 
@@ -240,7 +268,7 @@ export async function runMissedCallFollowup(job, repo, sender, env) {
     await repo.insertMessage(orgId, { conversation_id, direction: 'outbound', automated: true, purpose: 'missed_call', status: 'blocked', blocked_reason: 'no_reviewed_template', idempotency_key: `${key}:exec` });
     return { sent: false, blocked: 'no_reviewed_template' };
   }
-  if (env.WAVE1_SEND_ENABLED !== 'true') {
+  if (env.WAVE1_SEND_ENABLED !== 'true' || env.NOVA_SPENDING_LOCK !== 'disabled') {
     // Live sends are OFF unless explicitly enabled. This is a dry run — NOT a sent message.
     await repo.insertMessage(orgId, { conversation_id, direction: 'outbound', body: template, automated: true, purpose: 'missed_call', status: 'blocked', blocked_reason: 'send_disabled_dry_run', idempotency_key: `${key}:exec` });
     return { sent: false, blocked: 'send_disabled_dry_run' };
@@ -271,6 +299,7 @@ export async function runMissedCallFollowup(job, repo, sender, env) {
 // ---------------------------------------------------------------- Twilio REST sender (production)
 export function createTwilioSender(env, fetchImpl = fetch) {
   return async ({ to, from, body }) => {
+    if (env.NOVA_SPENDING_LOCK !== 'disabled') return { httpStatus: 0, error: 'Spending is locked; no phone provider was contacted.' };
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10_000);
     try {

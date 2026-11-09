@@ -1,3 +1,4 @@
+import {CHANNEL_JOB_TYPES} from '../api/_channels/providers.js';
 // Nova's durable background worker — the always-on process described in
 // docs/RUNTIME_HOSTING_RECOMMENDATION.md. Polls the jobs table (supabase/durable-jobs-migration-
 // standalone.sql) and executes whatever handler is registered for each job's job_type.
@@ -29,6 +30,7 @@
 
 import path from 'node:path';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createLocalJobStore } from './localJobStore.mjs';
 import { createPostgresJobStore } from './postgresJobStore.mjs';
@@ -124,7 +126,7 @@ const handlers = {
     if (decision.action === 'wait' || decision.action === 'none') return decision;
     let result = decision;
     if (decision.action === 'send') {
-      const live = process.env.SEQUENCE_SEND_ENABLED === 'true' && process.env.RESEND_API_KEY;
+      const live = process.env.NOVA_SPENDING_LOCK === 'disabled' && process.env.SEQUENCE_SEND_ENABLED === 'true' && process.env.RESEND_API_KEY;
       if (live) {
         const r = await fetch('https://api.resend.com/emails', {
           method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': decision.idempotencyKey },
@@ -169,11 +171,37 @@ const handlers = {
 
   // ---- Nova Operations (api/_ops). All re-read live state; all idempotent per their keys. ----
   // Public-first audit research (api/_researchRun.js). Progress is written to audit_research_runs as it runs.
+  async audit_contact_observe(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { observeDiagnosticContact } = await import('../api/_auditTransport.js');
+    return observeDiagnosticContact(job);
+  },
+  async audit_contact_dispatch(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { dispatchDiagnosticContact } = await import('../api/_auditTransport.js');
+    return dispatchDiagnosticContact(job);
+  },
+  async audit_diagnostic_task(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { runDiagnosticTask } = await import('../api/_auditDiagnostic.js');
+    return runDiagnosticTask(job);
+  },
   async audit_research(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
     opsEnv(ctx); const { runResearch } = await import('../api/_researchRun.js');
     const out = await runResearch(job.payload?.run_id);
     return { run_id: job.payload?.run_id, summary: out.summary };
+  },
+  async channel_conversation_turn(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { runChannelTurn } = await import('../api/_channels/service.js');
+    const result = await runChannelTurn(job);
+    return result;
+  },
+  async channel_comment_reply(job, ctx) {
+    if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
+    opsEnv(ctx); const { sendApprovedComment } = await import('../api/_channels/delivery.js');
+    return sendApprovedComment(job);
   },
   async ops_conversation_turn(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
@@ -192,10 +220,13 @@ const handlers = {
   },
   // Executive roles (api/_hierarchy/roles.js): one durable task per run for one business; recurring for Nova's own
   // business (seeded below), on demand for others. A role whose worker is not registered and active does nothing.
+  async role_ceo_brief(job, ctx) { return runRole('role_ceo_brief', job, ctx); },
   async role_ea_brief(job, ctx) { return runRole('role_ea_brief', job, ctx); },
   async role_coo_check(job, ctx) { return runRole('role_coo_check', job, ctx); },
   async role_cfo_review(job, ctx) { return runRole('role_cfo_review', job, ctx); },
   async role_cmo_review(job, ctx) { return runRole('role_cmo_review', job, ctx); },
+  async nova_monitoring_review(job,ctx){if(ctx.mode!=='postgres')return {skipped:true};opsEnv(ctx);const {runHostedOperationsJob}=await import('../api/_hierarchy/operationsWorkers.js');return runHostedOperationsJob(job);},
+  async nova_reporting_snapshot(job,ctx){if(ctx.mode!=='postgres')return {skipped:true};opsEnv(ctx);const {runHostedOperationsJob}=await import('../api/_hierarchy/operationsWorkers.js');return runHostedOperationsJob(job);},
   // Every 5 minutes: release expired holds, verify referral outcomes, run health checks, page on open incidents.
   async ops_sentry_sweep(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
@@ -216,7 +247,8 @@ const handlers = {
   },
   async ops_scoreboard_tick(job, ctx) {
     if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
-    opsEnv(ctx); const { scoreboardTick } = await import('../api/_ops/reports.js');
+    opsEnv(ctx);
+    const { scoreboardTick } = await import('../api/_ops/reports.js');
     const out = await scoreboardTick();
     await scheduleNext(ctx, 'ops_scoreboard_tick', 60);
     return { orgs: out };
@@ -270,6 +302,9 @@ const handlers = {
   },
 };
 
+for(const type of Object.values(CHANNEL_JOB_TYPES)) handlers[type]=handlers.channel_conversation_turn;
+handlers.ops_sms_turn=handlers.ops_conversation_turn;
+
 function opsEnv(ctx) { process.env.SUPABASE_URL ||= ctx.url; process.env.SUPABASE_SERVICE_ROLE_KEY ||= ctx.serviceKey; }
 // Recurring jobs keep themselves alive: the next run is enqueued with a slot-based idempotency key, so any
 // number of workers or redeliveries create exactly one next run per slot.
@@ -281,12 +316,8 @@ async function scheduleNext(ctx, jobType, everyMinutes) {
 }
 async function runRole(type, job, ctx) {
   if (ctx.mode !== 'postgres') return { skipped: true, reason: 'requires the real database' };
-  opsEnv(ctx); const { runRoleTask, ROLE_OF_JOB, ROLES } = await import('../api/_hierarchy/roles.js');
-  const role = ROLE_OF_JOB[type];
-  const out = await runRoleTask(role, { orgId: job.organization_id, jobId: job.id });
-  const every = Number(job.payload?.every_minutes);
-  if (every && ctx.store) { const next = new Date(Date.now() + every * 60_000); const slot = Math.floor(next.getTime() / (every * 60_000)); await ctx.store.enqueue({ job_type: type, organization_id: job.organization_id, payload: { every_minutes: every }, scheduled_at: next.toISOString(), idempotency_key: `${type}:${job.organization_id}:${slot}` }); }
-  void ROLES; return out;
+  opsEnv(ctx); const { runExecutiveJob } = await import('../api/_executiveQueueTick.js');
+  return runExecutiveJob(job, { enqueue: row => ctx.store.enqueue(row) });
 }
 // Role runs for Nova's own business, for each role whose worker is registered and active.
 async function seedRoles(ctx) {
@@ -294,10 +325,18 @@ async function seedRoles(ctx) {
   const h = { apikey: ctx.serviceKey, Authorization: `Bearer ${ctx.serviceKey}` };
   try {
     const [org] = await (await fetch(`${ctx.url}/rest/v1/organizations?kind=eq.nova_internal&select=id&order=created_at.asc&limit=1`, { headers: h })).json();
-    const workers = await (await fetch(`${ctx.url}/rest/v1/workers?capability_key=in.(executive_assistant,coo,cfo,cmo)&status=in.(active,restricted)&select=capability_key`, { headers: h })).json();
+    const workers = await (await fetch(`${ctx.url}/rest/v1/workers?portfolio_entity_id=is.null&capability_key=in.(ceo_twin,executive_assistant,coo,cfo,cmo)&status=in.(active,restricted)&select=capability_key`, { headers: h })).json();
     if (!org) return;
     const { ROLES } = await import('../api/_hierarchy/roles.js');
-    for (const w of workers) { const def = ROLES[w.capability_key]; const slot = Math.floor(Date.now() / (def.every_minutes * 60_000)); await ctx.store.enqueue({ job_type: def.job_type, organization_id: org.id, payload: { every_minutes: def.every_minutes }, idempotency_key: `${def.job_type}:${org.id}:${slot}` }); }
+    const { executiveSlotKey } = await import('../api/_executiveQueueTick.js');
+    for (const w of workers) {
+      const def = ROLES[w.capability_key]; if (!def) continue;
+      const scheduleQuery = new URLSearchParams({ organization_id: `eq.${org.id}`, job_type: `eq.${def.job_type}`, status: 'in.(pending,leased)', or: '(payload->>recurring.eq.true,payload->>every_minutes.gt.0)', select: 'id', limit: '1' });
+      const pending = await (await fetch(`${ctx.url}/rest/v1/jobs?${scheduleQuery}`, { headers: h })).json();
+      if (!Array.isArray(pending)) throw new Error('Cannot verify existing executive schedule');
+      if (pending.length) continue;
+      await ctx.store.enqueue({ job_type: def.job_type, organization_id: org.id, payload: { recurring: true }, idempotency_key: executiveSlotKey(def.job_type,org.id,new Date()) });
+    }
   } catch (e) { console.error('[worker] role seeding failed:', e.message); }
 }
 export async function seedRecurring(ctx) {
@@ -333,25 +372,35 @@ async function claimableTypes(ctx) {
 }
 
 async function processOneJob(store, ctx) {
-  const job = await store.claimNext({ workerId: WORKER_ID, leaseSeconds: 60, jobTypes: await claimableTypes(ctx) });
+  const leaseOwner = `${WORKER_ID}:${crypto.randomUUID()}`;
+  const job = await store.claimNext({ workerId: leaseOwner, leaseSeconds: 60, jobTypes: await claimableTypes(ctx) });
   if (!job) return false;
   console.log(`[worker] claimed job ${job.id} (${job.job_type}), attempt ${job.attempts}/${job.max_attempts}`);
   const handler = handlers[job.job_type];
   if (!handler) {
-    await store.fail(job.id, new Error(`No handler registered for job_type '${job.job_type}'`));
+    await store.fail(job.id, new Error(`No handler registered for job_type '${job.job_type}'`), leaseOwner);
     console.error(`[worker] no handler for job_type '${job.job_type}' — marked for retry/dead-letter`);
     return true;
   }
   processed++; lastType = job.job_type;
-  const renew = store.renewLease ? setInterval(() => { store.renewLease(job.id, WORKER_ID, 60).catch(() => {}); heartbeat(ctx).catch(() => {}); }, 20_000) : null;
+  const renew = store.renewLease ? setInterval(() => { store.renewLease(job.id, leaseOwner, 60).catch(() => {}); heartbeat(ctx).catch(() => {}); }, 20_000) : null;
   try {
-    const result = await handler(job, ctx);
+    const {attachWorkerAdvisory}=await import('../api/_hierarchy/workerAdvisory.js');
+    const result = await attachWorkerAdvisory(job,await handler(job, ctx));
     if (renew) clearInterval(renew);
-    await store.complete(job.id, result);
+    if ([...Object.values(CHANNEL_JOB_TYPES),'channel_conversation_turn','channel_comment_reply','nova_monitoring_review','nova_reporting_snapshot','ops_sms_turn','ops_conversation_turn'].includes(job.job_type) && (result?.paused || result?.deferred)) {
+      if (!store.defer) throw new Error('This job store cannot retain paused channel work');
+      await store.defer(job.id, leaseOwner, result.deferred ? 5 : 900, result.reason || 'Channel work paused');
+      return true;
+    }
+    if(['nova_monitoring_review','nova_reporting_snapshot'].includes(job.job_type)){
+      const {finishOperationsJob}=await import('../api/_hierarchy/operationsWorkers.js');
+      if(!await finishOperationsJob(job,result,leaseOwner)){console.log(`[worker] lease changed before operations completion: ${job.id}`);return true;}
+    }else await store.complete(job.id, result, leaseOwner);
     console.log(`[worker] completed job ${job.id}:`, JSON.stringify(result));
   } catch (err) {
     if (renew) clearInterval(renew);
-    const after = await store.fail(job.id, err);
+    const after = await store.fail(job.id, err, leaseOwner);
     console.error(`[worker] job ${job.id} failed: ${err.message} — now ${after?.status || 'unknown'}`);
   }
   return true;

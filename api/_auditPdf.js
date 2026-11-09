@@ -111,13 +111,57 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
   if (m) {
     need(30);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...MUTED);
-    doc.text(t(`Measured in this research: ${m.pages_read} website page(s) read  -  ${m.checks} checks (${m.issues_observed} with an issue)  -  ${m.evidence_records} evidence records  -  ${m.competitors_compared} competitor website(s) compared`), M, y); y += 18;
+    para(`Measured in this research: ${m.pages_read} website page(s) read  -  ${m.checks} checks (${m.issues_observed} with an issue)  -  ${m.evidence_records} evidence records  -  ${m.competitors_compared} competitor website(s) compared`,{size:8.5,color:MUTED});
   }
   const fin = content.estimates_and_assumptions || {};
   para(fin.statement || 'Financial impact is unknown: no business records were supplied.', { size: 9.5, color: MUTED, gap: 10 });
+  // Older approved snapshots have additional typed sections. Keep their inputs/results intact in the same PDF
+  // used by owner download, client delivery and Vault; do not silently discard them during renderer upgrades.
+  const renderDetails = (value, prefix = '', depth = 0) => {
+    if (value == null || depth > 6) return;
+    if (typeof value !== 'object') { label(prefix || 'Observation', String(value)); return; }
+    if (Array.isArray(value)) { value.forEach((entry, i) => renderDetails(entry, `${prefix || 'Item'} ${i + 1}`, depth + 1)); return; }
+    for (const [key, entry] of Object.entries(value)) renderDetails(entry, `${prefix ? `${prefix} · ` : ''}${key.replace(/_/g, ' ')}`, depth + 1);
+  };
+  if (fin.scenarios?.length || fin.assumptions || fin.inputs) {
+    section(`${num()}  Financial scenarios`, 'Inputs, assumptions and estimated outcomes');
+    para('Scenarios depend on the stated inputs and assumptions. They are not measured revenue loss or a guarantee.', { size: 9, color: MUTED });
+    renderDetails(fin.scenarios, 'Scenario'); renderDetails(fin.assumptions, 'Assumption'); renderDetails(fin.inputs, 'Input');
+  }
+  if (content.scope_and_method) { section(`${num()}  Scope and method`, 'What this review covers'); renderDetails(content.scope_and_method); }
+  if (content.software_review?.length || (content.software_review && !Array.isArray(content.software_review))) { section(`${num()}  Existing systems`, 'Software and handoffs'); renderDetails(content.software_review, 'System'); }
+  if (content.competitor_benchmarks?.length) { section(`${num()}  Competitor evidence`, 'Recorded comparisons'); renderDetails(content.competitor_benchmarks, 'Comparison'); }
   // the three kinds of statement in this report, so none is read as another
   label('How to read this report', '"What we saw" is measured: each item names its public source and when it was read. "Likely effect" is Nova\'s inference and was not measured. What could not be checked is listed under Limitations and is never counted as a problem.');
 
+  const investigation = content.diagnostic_investigation;
+  if (investigation) {
+    section(`${num()}  Investigation`, 'What was actually tested');
+    para(`${investigation.duration_hours}-hour scope. ${investigation.completed} of ${investigation.total} checks completed; ${investigation.blocked} blocked. Status: ${investigation.state}.`, { size: 10 });
+    if (investigation.delivery_clock?.message) para(investigation.delivery_clock.message, { size: 9, color: MUTED });
+    para('A scheduled test is not a completed test. Public reports and reviews describe source claims, not automatically established facts.', { size: 9, color: MUTED });
+    for (const area of investigation.coverage || []) label(area.label, `${area.completed}/${area.total} completed - ${area.status}`);
+    for (const [index, task] of (investigation.tasks || []).entries()) {
+      label(`Check ${index + 1}: ${String(task.area || 'investigation').replace(/_/g, ' ')}`, `${task.status}${task.channel ? ` - ${task.channel}` : ''}${task.target ? ` - ${task.target}` : ''}`);
+      para(task.question, { size: 10 });
+      if (task.observation) para(task.observation, { size: 9 });
+      if (task.source) para(`Evidence: ${task.source}`, { size: 8.5, color: MUTED });
+      if (task.response_seconds != null) para(`Response: ${task.response_seconds} seconds${task.meaningful_response ? ' (recorded human/meaningful response)' : ' (acknowledgement only)'}.`, { size: 9 });
+      if (task.observed_until) para(`Observation window ended: ${task.observed_until}.`, { size: 9 });
+      if (task.exclusion_reason) para(`Excluded: ${task.exclusion_reason}`, { size: 9, color: MUTED });
+    }
+  }
+
+  const paths = Array.isArray(content.customer_paths) ? content.customer_paths : [];
+  if(paths.length){
+    section(`${num()}  Customer paths`, 'Can a customer take the next step?');
+    para('Read-only checks of linked destinations. A page opening does not confirm a completed booking, delivered inquiry or payment.',{size:9,color:MUTED});
+    for(const path of paths.slice(0,12)){
+      need(72);
+      label(`${path.result==='broken'?'Needs repair':path.result==='reachable'?'Page opens':'Not verified'}: ${String(path.label||'Customer link').slice(0,45)}`,`${path.target}\n${path.reason||''} · Observed ${path.checked_at||'time unknown'}`);
+    }
+    if(paths.length>12)para(`${paths.length-12} additional link checks are retained with the audit evidence.`,{size:9,color:MUTED});
+  }
   // 2. Findings
   section(`${num()}  Findings`, 'Priority findings');
   if (!findings.length) para('No findings are recorded in this version.', { color: MUTED });
@@ -126,8 +170,7 @@ export function renderAuditPdf({ content = {}, version, status, approvedAt, gene
     const top = y;
     doc.setFillColor(...(f.priority === 'high' ? INK : f.priority === 'medium' ? GOLD : RULE)); doc.rect(M, top - 10, 3, 14, 'F');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...MUTED);
-    doc.text(t(`${String(i + 1).padStart(2, '0')}  ${PRIORITY[f.priority] || 'Priority not set'}  -  ${TYPE[f.type] || f.type || ''}${f.confidence ? `  -  ${f.confidence} confidence` : ''}${f.review_status && f.review_status !== 'reviewed' ? '  -  PROPOSED, NOT YET REVIEWED' : ''}`).toUpperCase(), M + 12, top, { charSpace: 0.6 });
-    y = top + 18;
+    para(`${String(i + 1).padStart(2, '0')}  ${PRIORITY[f.priority] || 'Priority not set'}  -  ${TYPE[f.type] || f.type || ''}${f.confidence ? `  -  ${f.confidence} confidence` : ''}${f.review_status && f.review_status !== 'reviewed' ? '  -  PROPOSED, NOT YET REVIEWED' : ''}`.toUpperCase(),{size:7.5,color:MUTED,indent:12,gap:8});
     para(f.title, { size: 13, font: 'times', style: 'normal', indent: 12, gap: 4, lead: 1.3 });
     label('What we saw', f.observed, 12);
     if (f.recheck) label(f.recheck.status === 'still_observed' ? `Re-checked ${String(f.recheck.at || '').slice(0, 10)}: still observed` : `Not re-checked (${String(f.recheck.at || '').slice(0, 10)})`, f.recheck.note, 12);

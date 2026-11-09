@@ -34,7 +34,7 @@ function makeRepo() {
   return repo;
 }
 
-const ENV = { TWILIO_AUTH_TOKEN: 'tok', WAVE1_SEND_ENABLED: 'true' };
+const ENV = { TWILIO_AUTH_TOKEN: 'tok', WAVE1_SEND_ENABLED: 'true',NOVA_SPENDING_LOCK:'disabled' };
 const BASE = 'https://nova-systems.app/api/client?resource=wave1';
 const signed = (op, params) => ({ url: `${BASE}&op=${op}`, params, signature: twilioSignature(`${BASE}&op=${op}`, params, 'tok') });
 // A weekday noon in New York for settings that pass quiet hours: we control eligibility via timezone + clock.

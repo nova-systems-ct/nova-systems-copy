@@ -21,6 +21,25 @@ d = R.cfoDecision({ amountCents: 6000, balance: { balance_cents: 500000, as_of: 
 check('over the monthly budget the owner decides even under the per-expense limit', d.decision === 'needs_owner' && /monthly budget/.test(d.reasons.join(' ')), JSON.stringify(d));
 
 // COO: bounded, safe recovery of failed jobs
+const validBalance = { balance_cents: 500000, as_of: now.toISOString() };
+const policy = { auto_approve_cents: 10000, monthly_budget_cents: 10000 };
+d = R.cfoDecision({ amountCents: 6000, balance: validBalance, commitmentsCents: 6000, prefs: policy, now });
+check('approved commitments consume monthly budget before another expense is approved', d.decision === 'needs_owner' && d.recommendation === 'deny', JSON.stringify(d));
+for (const balance of [{ balance_cents: 500000, as_of: 'invalid' }, { balance_cents: 500000, as_of: '2026-11-01T12:00:00Z' }, { balance_cents: 'not-money', as_of: now.toISOString() }]) {
+  d = R.cfoDecision({ amountCents: 100, balance, prefs: policy, now });
+  check('invalid or future balance evidence cannot authorize spending', d.decision === 'needs_owner' && d.recommendation === 'unknown' && d.available_cents === null, JSON.stringify(d));
+}
+for (const amountCents of [NaN, -1, 1.5, Infinity]) {
+  d = R.cfoDecision({ amountCents, balance: validBalance, prefs: policy, now });
+  check('invalid monetary amounts cannot receive a policy approval', d.decision === 'needs_owner' && d.recommendation === 'deny', JSON.stringify(d));
+}
+d = R.cfoDecision({ amountCents: 100, balance: validBalance, prefs: { ...policy, spending_locked: true }, now });
+check('the no-spend instruction overrides an otherwise sufficient balance and budget', d.decision === 'needs_owner' && d.recommendation === 'deny' && /spending.*locked/i.test(d.reasons.join(' ')), JSON.stringify(d));
+d = R.cfoDecision({ amountCents: 8000, balance: { balance_cents: 10000, as_of: now.toISOString() }, debitsSinceBalanceCents: 8000, prefs: policy, now });
+check('recorded debits after the balance snapshot do not become available cash again', d.available_cents === 2000 && d.recommendation === 'deny', JSON.stringify(d));
+d = R.cfoDecision({ amountCents: 100, balance: { balance_cents: 500000, as_of: new Date(now - 1).toISOString() }, prefs: { ...policy, balance_freshness_days: 0 }, now });
+check('a zero-day freshness policy is respected rather than changed to seven days', d.decision === 'needs_owner' && d.recommendation === 'unknown', JSON.stringify(d));
+
 const job = (o) => ({ id: 'j', job_type: 'ops_sentry_sweep', status: 'failed', attempts: 2, max_attempts: 5, payload: {}, ...o });
 check('a failed, repeatable maintenance job may be put back in the queue', R.cooRetry(job(), { now }).retry === true);
 check('a job that sends messages is never retried by the COO (escalated instead)', R.cooRetry(job({ job_type: 'ops_followup_send' }), { now }).retry === false);

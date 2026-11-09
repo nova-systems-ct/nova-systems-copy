@@ -252,9 +252,9 @@ export default function DashboardHome() {
         </div>
         <div style={{ flex: 1, minWidth: 240 }}>
           <p style={{ color: '#fff', fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Google Search Console</p>
-          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>Connect Google Search Console to see your website traffic and keyword rankings.</p>
+          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>Google Search Console is not connected. Review the Integration Center for supported setup and access requirements.</p>
         </div>
-        <button style={{ padding: '10px 20px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, cursor: 'not-allowed', fontFamily: 'inherit' }} title="Coming soon">
+        <button style={{ padding: '10px 20px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }} onClick={() => navigate("/dashboard/integrations")} title="Review integration setup">
           Connect
         </button>
       </div>

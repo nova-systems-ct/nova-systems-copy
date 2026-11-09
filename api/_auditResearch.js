@@ -6,6 +6,15 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 
+// Access-denial and challenge responses cannot establish business content.
+export function pageAccessIssue(page) {
+  const status=Number(page?.status||0);
+  const title=String((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(page?.html||'')||[])[1]||'').replace(/<[^>]*>/g,'').trim();
+  if (/^(?:just a moment[.!\s]*|verify (?:that )?you are human[.!\s]*|checking your browser[.!\s]*|access denied[.!\s]*|security (?:check|verification)[.!\s]*)$/i.test(title)) return 'Access challenge or denial: business content was not available to Nova';
+  if ([401,403,429].includes(status)||status>=500) return `HTTP ${status}: business content was unavailable to Nova`;
+  return null;
+}
+
 const MAX_BYTES = 600_000;
 const MAX_REDIRECTS = 3;
 
@@ -38,38 +47,42 @@ export async function assertPublicHttpUrl(raw, lookup = (h) => dns.lookup(h, { a
 
 // Manual redirect handling so EVERY hop is re-validated (a public URL must not bounce us to an internal one).
 export async function fetchPublicPage(raw, { fetchImpl = fetch, lookup, timeoutMs = 6000, now = () => new Date() } = {}) {
-  let url = String(raw);
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const u = await assertPublicHttpUrl(url, lookup);
-    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    let r;
-    try { r = await fetchImpl(u.toString(), { redirect: 'manual', signal: ctrl.signal, headers: { 'User-Agent': 'NovaAuditResearch/1.0 (+public page review)', Accept: 'text/html,application/xhtml+xml' } }); }
-    finally { clearTimeout(timer); }
-    if ([301, 302, 303, 307, 308].includes(r.status)) {
-      const loc = r.headers.get('location'); if (!loc) throw new Error('Redirect without a location');
-      url = new URL(loc, u).toString(); continue;
+  const r = await fetchPublicResource(raw, { fetchImpl, lookup, timeoutMs, maxBytes: MAX_BYTES, truncate:true, accept: 'text/html,application/xhtml+xml' });
+  const html = /text\/html|application\/xhtml/i.test(r.contentType) ? r.body.toString('utf8') : '';
+  return { finalUrl:r.finalUrl,status:r.status,contentType:r.contentType,html,retrievedAt:now().toISOString(),truncated:!!r.truncated,...(!html?{note:'No readable HTML — nothing extracted'}:{}) };
+}
+
+async function readBoundedBody(response, maxBytes, truncate) {
+  const reader = response.body?.getReader();
+  if (!reader) return {body:Buffer.alloc(0),truncated:false};
+  const chunks = []; let bytes = 0;
+  try {
+    while (true) {
+      const {done,value} = await reader.read(); if (done) break;
+      if (bytes + value.byteLength > maxBytes) {
+        if (!truncate) throw new Error('Response too large');
+        chunks.push(Buffer.from(value).subarray(0,maxBytes-bytes));
+        return {body:Buffer.concat(chunks,maxBytes),truncated:true};
+      }
+      bytes += value.byteLength;
+      chunks.push(Buffer.from(value));
     }
-    const type = r.headers.get('content-type') || '';
-    if (!/text\/html|application\/xhtml/i.test(type)) return { finalUrl: u.toString(), status: r.status, contentType: type, html: '', retrievedAt: now().toISOString(), note: 'Not an HTML page — nothing extracted' };
-    const buf = Buffer.from(await r.arrayBuffer());
-    return { finalUrl: u.toString(), status: r.status, contentType: type, html: buf.subarray(0, MAX_BYTES).toString('utf8'), truncated: buf.length > MAX_BYTES, retrievedAt: now().toISOString() };
-  }
-  throw new Error('Too many redirects');
+    return {body:Buffer.concat(chunks,bytes),truncated:false};
+  } finally { await reader.cancel().catch(()=>{}); }
 }
 
 // The same guard for any GET a page renderer needs (scripts, data, styles): every hop re-validated, size and time
 // capped. Used so that a headless browser never reaches the network itself.
-export async function fetchPublicResource(raw, { fetchImpl = fetch, lookup, timeoutMs = 8000, maxBytes = 3_000_000, accept = '*/*' } = {}) {
+export async function fetchPublicResource(raw, { fetchImpl = fetch, lookup, timeoutMs = 8000, maxBytes = 3_000_000, truncate = false, accept = '*/*' } = {}) {
   let url = String(raw);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const u = await assertPublicHttpUrl(url, lookup);
     const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
       const r = await fetchImpl(u.toString(), { redirect: 'manual', signal: ctrl.signal, headers: { 'User-Agent': 'NovaAuditResearch/2.0 (+https://nova-systems.app)', Accept: accept } });
-      if ([301, 302, 303, 307, 308].includes(r.status)) { const loc = r.headers.get('location'); if (!loc) throw new Error('Redirect without a location'); url = new URL(loc, u).toString(); continue; }
-      const buf = Buffer.from(await r.arrayBuffer());
-      if (buf.length > maxBytes) throw new Error('Response too large');
-      return { finalUrl: u.toString(), status: r.status, contentType: r.headers.get('content-type') || 'application/octet-stream', body: buf };
+      if ([301, 302, 303, 307, 308].includes(r.status)) { const loc = r.headers.get('location'); await r.body?.cancel().catch(()=>{}); if (!loc) throw new Error('Redirect without a location'); url = new URL(loc, u).toString(); continue; }
+      const bounded = await readBoundedBody(r,maxBytes,truncate);
+      return { finalUrl: u.toString(), status: r.status, contentType: r.headers.get('content-type') || 'application/octet-stream', ...bounded };
     } finally { clearTimeout(timer); }
   }
   throw new Error('Too many redirects');
@@ -89,7 +102,10 @@ export function extractPublicSignals(html, finalUrl) {
   const tel = uniq([...h.matchAll(/href=["']tel:([+\d\-().\s%]{7,25})["']/gi)].map((m) => clean(m[1].replace(/%20/g, ' ').replace(/%2B/gi, '+'), 25))).slice(0, 5);
   const mailto = uniq([...h.matchAll(/href=["']mailto:([^"'?\s]{3,100})/gi)].map((m) => clean(m[1], 100))).slice(0, 5);
   const forms = [...h.matchAll(/<form\b[\s\S]*?<\/form>/gi)].map((m) => m[0]);
-  const formInfo = forms.slice(0, 10).map((f) => ({ fields: (f.match(/<(input|textarea|select)\b/gi) || []).length, asksPhone: /type=["']tel["']|name=["'][^"']*phone/i.test(f), asksEmail: /type=["']email["']|name=["'][^"']*email/i.test(f) }));
+  const formInfo = forms.slice(0, 10).map((f) => {
+    const controls = (f.match(/<(?:input|textarea|select)\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi)||[]).filter(tag=>!/(?:\s(?:hidden|disabled)(?:\s|=|\/?>))|(?:\stype\s*=\s*["']?(?:hidden|submit|button|reset|image)[\s"'>])/i.test(tag));
+    return { fields:controls.length,required_fields:controls.filter(tag=>/\srequired(?:\s|=|\/?>)/i.test(tag)).length,asksPhone:controls.some(tag=>/type=["']tel["']|name=["'][^"']*phone/i.test(tag)),asksEmail:controls.some(tag=>/type=["']email["']|name=["'][^"']*email/i.test(tag)),measurement:'Enabled controls in inspected HTML; CSS visibility, conditional steps and custom validation not verified' };
+  });
   const ld = [];
   for (const m of h.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
     try { const j = JSON.parse(m[1]); for (const n of (Array.isArray(j) ? j : j['@graph'] || [j])) if (n && /LocalBusiness|Organization|Restaurant|Store|Dentist|Physician|Attorney|HomeAndConstructionBusiness|ProfessionalService/i.test(JSON.stringify(n['@type'] || ''))) ld.push({ type: clean(JSON.stringify(n['@type']), 60), name: clean(n.name, 120), telephone: clean(n.telephone, 30), address: clean(typeof n.address === 'object' ? [n.address?.streetAddress, n.address?.addressLocality, n.address?.addressRegion].filter(Boolean).join(', ') : n.address, 200), hasHours: !!n.openingHours || !!n.openingHoursSpecification }); } catch { /* malformed JSON-LD: ignore */ }

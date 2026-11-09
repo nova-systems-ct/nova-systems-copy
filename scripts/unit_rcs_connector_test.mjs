@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+const R = await import('../api/_channels/rcs.js').catch(() => ({}));
+assert.equal(typeof R.verifyRcsEnvelope, 'function', 'Android RCS needs a real authenticated inbound adapter');
+const event = { agentId: 'agent-123', senderPhoneNumber: '+12035550100', messageId: 'message-123', text: 'I need an appointment', sendTime: '2026-11-06T20:00:00Z' };
+const body = Buffer.from(JSON.stringify(event));
+const envelope = { message: { data: body.toString('base64') } };
+const signature = crypto.createHmac('sha512', 'test-client-token').update(body).digest('base64');
+assert.deepEqual(R.verifyRcsEnvelope(envelope, signature, 'test-client-token'), event);
+assert.equal(R.verifyRcsEnvelope(envelope, signature, 'wrong-token'), null);
+assert.equal(R.verifyRcsEnvelope(envelope, signature, ''), null);
+assert.equal(R.verifyRcsEnvelope({ message: { data: '!' } }, signature, 'test-client-token'), null);
+assert.deepEqual(R.normalizeRcsEvent(event), { provider: 'android_rcs', account_id: 'agent-123', sender_id: '+12035550100', event_id: 'message-123', kind: 'message', text: 'I need an appointment', at: event.sendTime });
+assert.equal(R.normalizeRcsEvent({ ...event, senderPhoneNumber: 'not-a-phone' }), null);
+assert.equal(R.normalizeRcsEvent({ ...event, messageId: '' }), null);
+const request = R.rcsMessageRequest({ agentId: 'agent-123', recipientId: '+12035550100', messageId: '62a508c2-25b0-4d78-9088-a478c36ff151', body: 'Your available times', accessToken: 'LOCAL-TEST-TOKEN' });
+const url = new URL(request.url);
+assert.equal(url.origin, 'https://rcsbusinessmessaging.googleapis.com');
+assert.equal(url.pathname, '/v1/phones/%2B12035550100/agentMessages');
+assert.equal(url.searchParams.get('agentId'), 'agent-123');
+assert.deepEqual(request.body.contentMessage, { text: 'Your available times' });
+assert.equal(request.headers.Authorization, 'Bearer LOCAL-TEST-TOKEN');
+assert.throws(() => R.rcsMessageRequest({ agentId: '../other', recipientId: '+12035550100', messageId: 'invalid', body: 'x', accessToken: 'x' }));
+console.log('14 passed — RCS signatures, source identifiers, customer-event normalization and documented send contract');
+
+const keys=crypto.generateKeyPairSync('rsa',{modulusLength:2048});
+const credentials=JSON.stringify({client_email:'unit@rcs.iam.gserviceaccount.com',private_key:keys.privateKey.export({type:'pkcs8',format:'pem'})});
+let exchanges=0;
+const oauth=async(url,init)=>{
+ assert.equal(url,'https://oauth2.googleapis.com/token'); assert.equal(init.redirect,'error');
+ const jwt=init.body.get('assertion'), [h,p,sig]=jwt.split('.'), claims=JSON.parse(Buffer.from(p,'base64url'));
+ assert.equal(claims.aud,'https://oauth2.googleapis.com/token'); assert.equal(claims.exp-claims.iat,3600);
+ assert(crypto.verify('RSA-SHA256',Buffer.from(`${h}.${p}`),keys.publicKey,Buffer.from(sig,'base64url')));
+ exchanges++; return Response.json({access_token:`LOCAL-${exchanges}`,expires_in:3600});
+};
+assert.equal(await R.rcsAccessToken(credentials,{fetchImpl:oauth,now:10000000}),'LOCAL-1');
+assert.equal(await R.rcsAccessToken(credentials,{fetchImpl:oauth,now:10005000}),'LOCAL-1');assert.equal(exchanges,1);
+assert.equal(await R.rcsAccessToken(credentials,{fetchImpl:oauth,now:10005000,scope:'businesscommunications'}),'LOCAL-2');
+await assert.rejects(()=>R.rcsAccessToken(credentials,{fetchImpl:oauth,scope:'drive'}),/Unsupported/);
+await assert.rejects(()=>R.rcsAccessToken('{}',{fetchImpl:oauth}),/Invalid/);assert.equal(exchanges,2);
+console.log('PASS — Google JWT is signed and scoped, token cache is scoped, invalid scopes/keys cause no network call');
+
+const unsubscribe={agentId:'agent-123',senderPhoneNumber:'+12035550100',eventId:'opt-out-1',eventType:'UNSUBSCRIBE',sendTime:event.sendTime};
+assert.equal(R.normalizeRcsEvent(unsubscribe)?.text,'STOP','The native RCS unsubscribe button must suppress messages, not be discarded as a typing/read receipt');
+assert.equal(R.normalizeRcsEvent({...unsubscribe,eventId:'opt-in-2',eventType:'SUBSCRIBE'})?.text,'START');
+assert.equal(R.normalizeRcsEvent({...unsubscribe,eventType:'READ'}),null);
+console.log('PASS — native RCS subscribe/unsubscribe events honor opt-out without inventing marketing consent');

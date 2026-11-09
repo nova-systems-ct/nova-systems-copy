@@ -1,3 +1,5 @@
+> **Current release — 4 November 2026:** see [free-first execution and hosted receipts](NOVA_FREE_FIRST_EXECUTION_2026-11-04.md), [worker playbooks](NOVA_WORKER_OPERATING_PLAYBOOKS.md) and [application status](NOVA_FREE_FIRST_APPLICATION_PACKETS_2026-11-04.md). The older entries below are historical; production `main` remains unchanged.
+
 # Nova Product Build — State Checkpoint
 
 Last updated: 2026-09-24, commit pending (post-Marketing-Automation). Written per the master
@@ -334,3 +336,7 @@ Authoritative detail: `docs/NOVA_PILOT_REQUIREMENTS.md`, `NOVA_PILOT_ACCEPTANCE_
 **Verification commands:** `npm run verify:local` (16 suites, no DB/network); `scripts/ui_smoke_mocked.mjs` (mocked backend).
 
 **Exact next task:** owner actions A–F in `NOVA_PILOT_OWNER_ACTIONS.md`; then run e2e scripts and the Journey J installation on a test organization.
+
+## Current continuation — full diagnostic rebuild, 2026-11-02
+
+Supersedes older next-task statements for this work. Owner requested implementation of the real audit before the demo. See `docs/NOVA_DIAGNOSTIC_REBUILD_2026-11-02.md` for code, source/transport limits, scheduler configuration, checks and the exact staging acceptance record. No paid sending is enabled. Do not equate injected-provider tests, a cron definition or a PDF layout fixture with a live multi-day audit. Apple submissions remain separate.

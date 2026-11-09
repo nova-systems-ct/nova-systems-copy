@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+const A=await import('../api/_channels/appleMessages.js').catch(()=>({}));
+assert.equal(typeof A.normalizeAppleMessages,'function','Apple needs a documented messaging-provider adapter, not a generic iMessage claim');
+const raw={results:[{event:'MO',channel:'APPLE_MB',sender:'opaque-user-123',destination:'owned-apple-business',messageId:'inbound-1',receivedAt:'2026-11-06T21:00:00Z',content:[{type:'TEXT',text:'Book an appointment'}]}]};
+assert.deepEqual(A.normalizeAppleMessages(raw,'owned-apple-business'),[{provider:'apple_messages',account_id:'owned-apple-business',sender_id:'opaque-user-123',event_id:'inbound-1',kind:'message',text:'Book an appointment',at:raw.results[0].receivedAt}]);
+assert.throws(()=>A.normalizeAppleMessages(raw,'other-business'),/account/i);
+assert.deepEqual(A.normalizeAppleMessages({results:[{...raw.results[0],event:'SEEN'}]},'owned-apple-business'),[]);
+const header='Basic '+Buffer.from('nova:local-only-webhook-secret-at-least-32-chars').toString('base64');
+assert.equal(A.verifyAppleWebhook(header,'local-only-webhook-secret-at-least-32-chars'),true);
+assert.equal(A.verifyAppleWebhook(header,'wrong'),false);assert.equal(A.verifyAppleWebhook('', ''),false);
+const r=A.appleMessageRequest({baseUrl:'https://tenant.api.infobip.com',accountId:'owned-apple-business',recipientId:'opaque-user-123',messageId:'62a508c2-25b0-4d78-9088-a478c36ff151',body:'Your available times',token:'LOCAL-ONLY'});
+assert.equal(r.url,'https://tenant.api.infobip.com/messages-api/1/messages');
+assert.deepEqual(r.body.messages[0],{channel:'APPLE_MB',sender:'owned-apple-business',destinations:[{to:'opaque-user-123',messageId:'62a508c2-25b0-4d78-9088-a478c36ff151'}],content:{body:{type:'TEXT',text:'Your available times'}}});
+assert.throws(()=>A.appleMessageRequest({baseUrl:'https://127.0.0.1',accountId:'owned-apple-business',recipientId:'x',messageId:'x',body:'x',token:'x'}));
+assert.throws(()=>A.appleMessageRequest({baseUrl:'https://tenant.api.infobip.com.evil.test',accountId:'owned-apple-business',recipientId:'x',messageId:'x',body:'x',token:'x'}));
+console.log('PASS — documented Apple MSP contract, authenticated callback, exact account binding, receipt exclusion and fixed provider domain');

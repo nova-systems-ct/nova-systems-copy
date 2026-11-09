@@ -11,7 +11,7 @@ import { requireStaff } from './_auth.js';
 import { dbGet, dbOne, dbInsert, dbPatch, enc, nowIso, appBase, notify } from './_sales/core.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { rateLimit } from './_rateLimit.js';
-import { fetchPublicPage, assertPublicHttpUrl } from './_auditResearch.js';
+import { fetchPublicPage, assertPublicHttpUrl, pageAccessIssue } from './_auditResearch.js';
 import * as R from './_ops/rules.js';
 import * as S from './_ops/service.js';
 
@@ -47,6 +47,8 @@ export async function runQuickScan(website, { fetchImpl = fetch, lookup, now = (
   let home;
   try { fetches++; home = await fetchPublicPage(n.url, { fetchImpl, lookup, timeoutMs, now }); }
   catch (e) { return done('unavailable', { limitation: `The website could not be reached from Nova (${/abort/i.test(e.name || e.message) ? 'it did not answer in time' : e.message}). Nothing was assumed about it.`, checks: [{ key: 'home', label: 'Home page loads', url: n.url, checked_at: now().toISOString(), result: 'unknown', observation: 'The page could not be fetched.' }] }); }
+  const accessIssue=pageAccessIssue(home);
+  if(accessIssue)return done('unavailable',{limitation:`${accessIssue}. No missing-content or customer-impact finding was made.`,checks:[{key:'home',label:'Home page content',url:home.finalUrl,checked_at:home.retrievedAt,result:'unknown',observation:accessIssue}]});
   const at = home.retrievedAt;
   const add = (c) => checks.push({ checked_at: at, ...c });
   add({ key: 'home', label: 'Home page loads', url: home.finalUrl, result: home.status >= 400 ? 'issue' : 'ok', observation: `The page answered with HTTP ${home.status}.`, ...(home.status >= 400 ? { why: 'Visitors who reach this address see an error instead of the business.', confirm: 'Whether this is the address customers actually use.', next: 'Fix the page or redirect it to the working site.', strength: 90 } : {}) });
@@ -69,12 +71,16 @@ export async function runQuickScan(website, { fetchImpl = fetch, lookup, now = (
     let u; try { u = new URL(a.href, home.finalUrl); } catch { continue; }
     if (!/^https?:$/.test(u.protocol)) continue;
     const same = u.hostname.replace(/^www\./, '') === new URL(home.finalUrl).hostname.replace(/^www\./, '');
+    const scopePath = new URL(website).pathname.replace(/\/+$/, '') || '/';
+    if (same && scopePath !== '/' && u.pathname !== scopePath && !u.pathname.startsWith(`${scopePath}/`)) continue;
     if ((same && (CONTACT_LINK.test(u.pathname) || CONTACT_LINK.test(a.text))) || BOOKING_HOSTS.test(u.hostname)) { u.hash = ''; if (!candidates.some((c) => c.url === u.toString()) && u.toString() !== home.finalUrl) candidates.push({ url: u.toString(), text: a.text || u.pathname }); }
   }
   add({ key: 'inquiry_path', label: 'A visible way to get in touch', url: home.finalUrl, result: (tels.length || hasForm || hasMail || hasBookingTool || candidates.length) ? 'ok' : 'issue', observation: (tels.length || hasForm || hasMail || hasBookingTool || candidates.length) ? `Found on the home page: ${[tels.length && 'click-to-call link', hasForm && 'a form', hasMail && 'an email link', hasBookingTool && 'an online-booking tool', candidates.length && `${candidates.length} contact/booking link(s)`].filter(Boolean).join(', ')}.` : 'No click-to-call link, form, email link, booking tool or contact link was found in the home page HTML.', ...((tels.length || hasForm || hasMail || hasBookingTool || candidates.length) ? {} : { why: 'A visitor ready to buy may not find how to reach the business.', confirm: 'The site may load its contact options with scripts this quick check does not run.', next: 'Make one clear contact or booking option visible on the home page.', strength: 50 }) });
   // Follow up to (MAX_FETCHES - 1) contact/booking links and check that they work.
   for (const c of candidates.slice(0, MAX_FETCHES - 1)) {
     let r; try { fetches++; r = await fetchPublicPage(c.url, { fetchImpl, lookup, timeoutMs, now }); } catch (e) { add({ key: 'link', label: `"${c.text}" link works`, url: c.url, checked_at: now().toISOString(), result: 'unknown', observation: `The link could not be checked (${e.message}).` }); continue; }
+    const issue=pageAccessIssue(r);
+    if(issue){checks.push({key:'link',label:`\"${c.text}\" link content`,url:c.url,checked_at:r.retrievedAt,result:'unknown',observation:issue});continue;}
     const broken = r.status >= 400;
     add({ key: 'link', label: `"${c.text}" link works`, url: c.url, checked_at: r.retrievedAt, result: broken ? 'issue' : 'ok', observation: broken ? `The "${c.text}" link on the home page leads to a page that answered HTTP ${r.status}.` : `The "${c.text}" link opened a page (HTTP ${r.status}).`, ...(broken ? { why: 'People who try to contact or book through this link reach an error instead.', confirm: 'Whether the link is still used, and where it should go.', next: 'Fix or replace the link, then test the full contact path.', strength: 100 } : {}) });
   }

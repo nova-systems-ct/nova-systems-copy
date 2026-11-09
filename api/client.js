@@ -1,3 +1,4 @@
+import { findingSourceRevision } from './_auditSnapshot.js';
 import { guardedModelCall } from './_aiSpend.js';
 import { storageGet } from './_sales/core.js';
 import { handleAuditWorkspace, WORKSPACE_OPS } from './_auditWorkspace.js';
@@ -2248,7 +2249,9 @@ async function handleAuditReports(req, res, caller) {
     const existingRes = await sbSelect(`audit_reports?case_id=eq.${encodeURIComponent(caseId)}&order=version.desc&limit=1`);
     const existingRows = existingRes.ok ? await existingRes.json() : [];
     const nextVersion = (existingRows[0]?.version || 0) + 1;
-    const content = b.content && typeof b.content === 'object' ? b.content : {};
+    const source = await sbSelect(`audit_findings?case_id=eq.${encodeURIComponent(caseId)}&select=*`);
+    if (!source.ok) return res.status(503).json({ error: 'Finding sources could not be checked. Try again.' });
+    const content = { ...(b.content && typeof b.content === 'object' ? b.content : {}), source_findings_revision: findingSourceRevision(await source.json()) };
     const r = await sbWrite('audit_reports', 'POST', { case_id: caseId, version: nextVersion, status: 'draft', content, content_sha256: contentHash(content) });
     if (!r.ok) { console.error('[client:audit reports] create-draft error:', await r.text()); return res.status(500).json({ error: 'Failed to create report draft' }); }
     const rows = await r.json();
@@ -2256,6 +2259,7 @@ async function handleAuditReports(req, res, caller) {
   }
 
   if (action === 'approve') {
+    if (!(caller?.roles || []).includes('nova_super_admin')) return res.status(403).json({ error: 'Only the Nova owner can approve an audit report.' });
     const id = sanitize(b.id, 100);
     if (!id) return res.status(400).json({ error: 'id is required' });
     const reportRes = await sbSelect(`audit_reports?id=eq.${encodeURIComponent(id)}&case_id=eq.${encodeURIComponent(caseId)}&limit=1`);
@@ -2274,9 +2278,11 @@ async function handleAuditReports(req, res, caller) {
     // Approval readiness: required sections, no prohibited claims, and every finding reviewed with
     // the evidence/confidence/estimate discipline the audit standard requires.
     const fr = await sbSelect(`audit_findings?case_id=eq.${encodeURIComponent(caseId)}&select=*,audit_finding_evidence(evidence_id)`);
+    if (!fr.ok) return res.status(503).json({ error: 'The current findings could not be checked. No report was approved.' });
     const findings = (fr.ok ? await fr.json() : []).map((f) => ({ ...f, evidence_count: (f.audit_finding_evidence || []).length }));
     const readiness = validateReportForApproval(reportRows[0].content, findings.filter((f) => f.review_status !== 'rejected'));
     if (!readiness.ready) return res.status(422).json({ error: 'Report is not ready for approval', problems: readiness.problems });
+    if (reportRows[0].content.source_findings_revision !== findingSourceRevision(findings)) return res.status(409).json({ error: 'The findings changed or this draft predates source tracking. Draft the report again before approval.' });
     const r = await sbWrite(`audit_reports?id=eq.${encodeURIComponent(id)}&status=eq.draft`, 'PATCH', { status: 'approved', approved_by: caller.id, approved_at: new Date().toISOString(), approved_content_sha256: contentHash(reportRows[0].content) });
     if (!r.ok) { console.error('[client:audit reports] approve error:', await r.text()); return res.status(500).json({ error: 'Failed to approve report' }); }
     const rows = await r.json();

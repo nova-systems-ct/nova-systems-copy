@@ -1,0 +1,18 @@
+{
+  "runtime_source": "ce12ecd0e202bab2a3edab0a314b0b8786b86aaf",
+  "render_deploy": "dep-dbnr2jtg1s2s73deuv8g",
+  "render_status": "live",
+  "finished_at": "2026-11-07T23:17:43.927252Z",
+  "public_request_url": "https://nova-staging-demo.onrender.com/book",
+  "test_contact_id": "8b0bbdcc-4ee2-4a2c-ab33-8f98fd9ee86b",
+  "test_request_id": "8bbf4876-5651-4d5d-9236-f204f7c34025",
+  "request_is_test": true,
+  "sms_consent": false,
+  "phone_present": false,
+  "email_notification_status": "dry_run",
+  "outbound_messages": 0,
+  "booking_available": false,
+  "appointment_created": false,
+  "money_spent_cents": 0,
+  "customer_private_link_saved": false
+}

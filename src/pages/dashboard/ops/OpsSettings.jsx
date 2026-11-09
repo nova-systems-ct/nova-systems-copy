@@ -19,7 +19,7 @@ export default function OpsSettings() {
           <Prices orgId={orgId} can={can} />
           <Templates orgId={orgId} can={can} />
           <div className="ops-two">
-            <Payments orgId={orgId} can={can} />
+            <Payments key={orgId} orgId={orgId} can={can} />
             <Voice data={s.data} orgId={orgId} can={can} onSaved={s.reload} />
           </div>
           <div className="ops-two">
@@ -138,15 +138,27 @@ function Templates({ orgId, can }) {
 function Payments({ orgId, can }) {
   const a = useLoad(() => api('payment-account', { org: orgId }), [orgId])
   const act = useAction()
-  const set = (mode) => act.run(() => api('payment-account', { org: orgId, method: 'POST', body: { mode } }), 'Saved.').then(a.reload)
+  const [accountId, setAccountId] = useState('')
+  const set = (mode) => act.run(() => api('payment-account', { org: orgId, method: 'POST', body: { mode, ...(mode === 'client_connected_account' ? { stripe_account_ref: accountId.trim() } : {}) } }), mode === 'client_connected_account' ? 'Connection verified for testing. Live payments remain disabled.' : 'Saved.').then((result) => { if (result) a.reload() })
   return (
     <Card title="Deposits">
+      <ErrorBox error={a.error} onRetry={a.reload} />
       {a.loading ? <Loading /> : (
         <>
           <p style={{ fontSize: 13 }}>Mode: <Badge value={a.data?.mode === 'not_configured' ? 'blocked' : 'partial'} label={(a.data?.mode || 'not_configured').replace(/_/g, ' ')} /></p>
           <p style={{ fontSize: 12, color: C.dim }}>Who receives the money: {a.data?.funds_recipient || 'nobody — online deposits are off'}</p>
-          <p style={{ fontSize: 12, color: C.faint }}>Live payments are disabled in this version. Paying a business's own Stripe account requires a connection that is not built yet; Nova does not hold client funds by default.</p>
-          {can && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="ops-btn" onClick={() => set('nova_test_platform')} disabled={act.busy}>Use Nova TEST mode (test businesses only)</button><button className="ops-btn danger" onClick={() => set('not_configured')} disabled={act.busy}>Turn deposits off</button></div>}
+          <p style={{ fontSize: 12, color: C.faint }}>Verify an existing business-owned Stripe connection for testing. This does not open a Stripe account, enable live payments or charge anyone. Nova does not receive the customer's deposit.</p>
+          {a.data?.stripe_account_ref && <p style={{ fontSize: 12, color: C.dim }}>Saved account: {a.data.stripe_account_ref}</p>}
+          {can && <>
+            <Field label="Connected Stripe account ID" id="pay-account" hint="Use the acct_… ID of an account already connected to Nova. Never enter an API key.">
+              <input id="pay-account" className="ops-input" value={accountId} onChange={e => setAccountId(e.target.value)} placeholder="acct_…" autoComplete="off" spellCheck={false} />
+            </Field>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="ops-btn primary" onClick={() => set('client_connected_account')} disabled={act.busy || !/^acct_[A-Za-z0-9]+$/.test(accountId.trim())}>Verify test connection</button>
+              <button className="ops-btn" onClick={() => set('nova_test_platform')} disabled={act.busy}>Use Nova TEST mode (test businesses only)</button>
+              <button className="ops-btn danger" onClick={() => set('not_configured')} disabled={act.busy}>Turn deposits off</button>
+            </div>
+          </>}
           {act.view}
         </>
       )}
