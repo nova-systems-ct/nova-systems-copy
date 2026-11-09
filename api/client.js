@@ -4,6 +4,7 @@ import { sanitize, sanitizeEmail } from './_sanitize.js';
 import { uploadToVault, signVaultUrl } from './_vaultStorage.js';
 import { requireStaff } from './_auth.js';
 import { handleWave1 } from './_wave1Api.js';
+import { handleLaunchAdmin } from './_launchWorker.js';
 import { salesDispatch, SALES_RESOURCES } from './_sales/index.js';
 import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
 import { normalizePhone } from './_wave1.js';
@@ -4129,6 +4130,8 @@ export default async function handler(req, res) {
   if (SALES_RESOURCES.has(resource)) return salesDispatch(resource, op, req, res);
 
   switch (resource) {
+    case 'launch':
+      return handleLaunchAdmin(req, res);
     case 'wave1':
       return handleWave1(req, res, op, { requireStaff, requireOrgAccess, sanitize, rateLimit });
 

@@ -136,23 +136,23 @@ export default function HeroSection() {
 
           <h1
             className="font-black text-white leading-[0.95]"
-            style={{ fontSize: "clamp(2.3rem, 5.2vw, 5.2rem)", letterSpacing: "-0.02em", maxWidth: 640 }}
+            style={{ fontSize: "clamp(2.6rem, 5vw, 4.8rem)", letterSpacing: "-0.02em", maxWidth: 640 }}
           >
-            Your Business Is Losing{" "}
+            Less chasing.{" "}
             <span style={{
               background: GOLD_TEXT_GRADIENT,
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
-            }}>Opportunities You Can't See.</span>
+            }}>More getting it done.</span>
           </h1>
 
           <p className="text-white/55 mt-6 leading-relaxed" style={{ fontSize: "clamp(0.95rem, 1.2vw, 1.1rem)", maxWidth: 460 }}>
-            Nova investigates your business to find where customers, revenue, opportunities, trust, or time may be slipping away — then helps you fix what actually matters.
+            Customer requests, appointment booking and follow-up, organized into one workflow. Start with the system your business needs.
           </p>
 
           <div className="flex flex-wrap items-center gap-4 mt-10">
-            <Link
-              to="/welcome"
+            <a
+              href="/service-request"
               className="inline-flex items-center gap-3 font-bold uppercase tracking-widest transition-opacity hover:opacity-85"
               style={{
                 background: GOLD_GRADIENT,
@@ -162,14 +162,14 @@ export default function HeroSection() {
                 padding: "18px 32px",
               }}
             >
-              START YOUR BUSINESS DIAGNOSTIC <ChevronRight className="w-4 h-4" />
-            </Link>
+              OPEN THE BOOKING ASSISTANT <ChevronRight className="w-4 h-4" />
+            </a>
             <Link
-              to="/#process"
+              to="/#workflow"
               className="inline-flex items-center gap-2 font-bold uppercase tracking-widest transition-colors hover:text-white"
               style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, padding: "18px 8px" }}
             >
-              See How Nova Works <ChevronRight className="w-3.5 h-3.5" />
+              See the workflow <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
         </div>

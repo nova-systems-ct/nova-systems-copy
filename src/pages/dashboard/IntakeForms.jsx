@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ClipboardList, Loader2, ExternalLink, Download, Calendar } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
+import LaunchDesk from '../../components/LaunchDesk'
 
 const GOLD = '#C9A84C'
 const STATUS_COLORS = {
@@ -65,15 +66,16 @@ export default function IntakeForms() {
   }
 
   return (
-    <div style={{ padding: '40px 48px 80px', maxWidth: 1200 }}>
+    <div style={{ padding: 'clamp(20px, 4vw, 40px) clamp(16px, 4vw, 48px) 80px', maxWidth: 1200 }}>
+      <LaunchDesk />
 
       {/* Strategy meeting requests (from public /welcome form) */}
       <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>Public Intake</p>
-          <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Strategy Meeting Requests</h1>
+          <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Requests & Appointments</h1>
           <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, marginTop: 4 }}>
-            Submissions from the /welcome form. {meetings.length} total.
+            Requests received by Nova. {meetings.length} total.
           </p>
         </div>
         <button onClick={() => exportMeetingsCsv(meetings)} disabled={meetings.length === 0}

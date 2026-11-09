@@ -11,7 +11,7 @@ import {SERVICE_SMS_POLICY} from '../public/sms-program/policy.js';
 import {validateServiceRequest} from '../api/_serviceSmsRequest.js';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const migration='supabase/migrations/20261108172929_service_sms_intake.sql';
-const env=await startTestEnv({migrations:['scripts/testenv/serviceSmsLegacy.sql',migration],publicBuckets:[]});
+const env=await startTestEnv({migrations:['scripts/testenv/serviceSmsLegacy.sql','scripts/testenv/launchWorkerLegacy.sql',migration,'supabase/migrations/20261109194341_launch_worker_booking.sql'],publicBuckets:[]});
 let server,browser;
 try {
   assert.deepEqual(env.migrationErrors,[]);
@@ -61,7 +61,7 @@ try {
     try{
       const u=new URL(req.url,'http://localhost');
       if(u.pathname==='/api/book-meeting'){
-        const chunks=[];for await(const c of req)chunks.push(c);req.body=JSON.parse(Buffer.concat(chunks).toString());req.query={};
+        const chunks=[];for await(const c of req)chunks.push(c);req.body=JSON.parse(Buffer.concat(chunks).toString()||'{}');req.query=Object.fromEntries(u.searchParams);
         const out={setHeader:(k,v)=>res.setHeader(k,v),status(n){res.statusCode=n;return out},json(v){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(v));return out},end(){res.end();return out}};
         return handler(req,out);
       }
@@ -75,7 +75,7 @@ try {
   const base=`http://127.0.0.1:${server.address().port}`;
   browser=await chromium.launch({executablePath:await packaged.executablePath(),args:packaged.args,headless:true});
   const context=await browser.newContext();const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  fs.mkdirSync('docs/qa/service-sms-web-2026-11-08',{recursive:true});
+  fs.mkdirSync('docs/qa/service-sms-regression-2026-11-09',{recursive:true});
   await page.goto(base+'/service-request');const checkbox=page.getByRole('checkbox',{name:/Service texts \(optional\)/});
   assert.equal(await checkbox.isChecked(),false);assert.equal(await checkbox.getAttribute('required'),null);
   assert.equal(await page.locator('#disclosure').innerText(),SERVICE_SMS_POLICY.text);
@@ -83,18 +83,19 @@ try {
   await page.waitForFunction(()=>!document.querySelector('#submit').disabled);
   for(const [name,width,height]of [['desktop',1366,1000],['ipad',820,1180],['phone',390,844]]){
     await page.setViewportSize({width,height});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
-    await page.screenshot({path:`docs/qa/service-sms-web-2026-11-08/${name}.png`,fullPage:true});
+    await page.screenshot({path:`docs/qa/service-sms-regression-2026-11-09/${name}.jpg`,fullPage:true});
   }
   const fill=async suffix=>{await page.getByLabel('Your name',{exact:true}).fill('TEST Browser '+suffix);await page.getByLabel('Business name',{exact:true}).fill('TEST Nova');await page.getByLabel('Email',{exact:true}).fill(`browser-${suffix}@example.invalid`);await page.getByLabel('Phone (optional)',{exact:true}).fill('+12035550194');};
   await fill('no-sms');
   const post=page.waitForResponse(r=>r.url().endsWith('/api/book-meeting')&&r.request().method()==='POST');
   await page.getByRole('button',{name:'Send request',exact:true}).click();const saved=await post;assert.equal(saved.status(),200);const payload=await saved.json();assert.equal(payload.service_sms_consent,false);
   await page.getByRole('heading',{name:'Your request is saved.',exact:true}).waitFor();
-  await page.screenshot({path:'docs/qa/service-sms-web-2026-11-08/request-saved.png',fullPage:true});
-  await page.goto(base+'/service-request');await fill('sms');await checkbox.check();
+  await page.screenshot({path:'docs/qa/service-sms-regression-2026-11-09/request-saved.jpg',fullPage:true});
+  await page.goto(base+'/service-request?new=1');await fill('sms');await checkbox.check();
   // The real timing guard is retained; policy-page navigation gives the user reading time.
   const policy=await page.context().newPage();await policy.goto(base+'/service-texts/privacy');assert.match(await policy.locator('main').innerText(),/not sold or shared/);await policy.goto(base+'/service-texts/terms');assert.match(await policy.locator('main').innerText(),/not a condition of purchase/);await policy.close();
   await page.getByLabel('What would you like help with?',{exact:true}).fill('TEST Please help connect customer messaging to my systems.');
+  await page.waitForFunction(()=>!document.querySelector('#submit').disabled);
   const opted=page.waitForResponse(r=>r.url().endsWith('/api/book-meeting')&&r.request().method()==='POST');await page.getByRole('button',{name:'Send request',exact:true}).click();const granted=await opted;assert.equal(granted.status(),200);assert.equal((await granted.json()).service_sms_consent,true);
   await page.getByRole('heading',{name:'Your request is saved.',exact:true}).waitFor();
   assert.deepEqual(errors,[]);assert.equal(env.stubs.emailRequests.length,0,'The service request must never contact the email provider');assert.equal(env.stubs.outbox.length,0);

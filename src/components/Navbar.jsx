@@ -4,24 +4,16 @@ import { Menu, X, LogIn, ArrowRight } from "lucide-react";
 import novaLogo from "@/assets/nova logo.png";
 import { NAVY, GOLD, GOLD_BRIGHT, GOLD_GRADIENT } from "@/lib/theme";
 
-// Mapped to real, existing routes only — no dedicated "Case Studies" page exists separately from
-// Portfolio, so that label points at the closest real destination rather than a new page or a "#"
-// placeholder. "Services" and "Why Nova" are in-page anchors on the homepage itself (see
-// ServiceGrid, id="services", and WhyNovaSection, id="why-nova") since that content lives there,
-// not on a separate route. Wave One isn't repeated in the primary nav (spec's exact 7-item list
-// is Home/Services/Solutions/Why Nova/Case Studies/Pricing/About) — it stays fully reachable via
-// the ServiceGrid card, the dedicated WaveOneFeature section, and the footer.
+// Navigation points to live sections and the existing company page.
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
   const navLinks = [
     { label: "Home", path: "/" },
-    { label: "Services", path: "/#services" },
-    { label: "Solutions", path: "/solutions" },
-    { label: "Why Nova", path: "/#why-nova" },
-    { label: "Case Studies", path: "/portfolio" },
-    { label: "Pricing", path: "/pricing" },
+    { label: "What we build", path: "/#services" },
+    { label: "How it works", path: "/#workflow" },
+    { label: "Start a pilot", path: "/#pilot" },
     { label: "About", path: "/company" },
   ];
 
@@ -90,6 +82,8 @@ export default function Navbar() {
 
         <button
           className="lg:hidden text-white/70"
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileOpen}
           onClick={() => setMobileOpen(!mobileOpen)}
         >
           {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}

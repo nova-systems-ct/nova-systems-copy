@@ -29,7 +29,7 @@ const EmployeeDashboard = lazy(() => import('./pages/EmployeeDashboard'));
 const Insights = lazy(() => import('./pages/Insights'));
 const InsightPost = lazy(() => import('./pages/InsightPost'));
 const PublicPortfolio = lazy(() => import('./pages/Portfolio'));
-const Welcome = lazy(() => import('./pages/Welcome'));
+const Welcome = lazy(() => import('./pages/BookingEntry'));
 const Intake = lazy(() => import('./pages/Intake'));
 const Terms = lazy(() => import('./pages/Terms'));
 const Privacy = lazy(() => import('./pages/Privacy'));
