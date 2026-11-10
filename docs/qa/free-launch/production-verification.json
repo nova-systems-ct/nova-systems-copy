@@ -1,0 +1,55 @@
+{
+  "deployment": "dpl_BprqHwRHF3JVY8w22GjxHHybRqf1",
+  "commit": "e11800e1ced489b28a8fa3b08abcb18aca4f3885",
+  "ready": true,
+  "site": "https://nova-systems.app/",
+  "customer_test_page": "https://nova-systems.app/service-request?test=1",
+  "request_id": "443f2712-b4c6-4a3f-8396-8980ee0c972e",
+  "is_test": true,
+  "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+  "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+  "browser_execution": "actual_production_browser_worker_wasm",
+  "model_draft": "I need assistance in organizing customer inquiries and managing appointments for my plumbing business.",
+  "booking_before_cancel": {
+    "state": "booked",
+    "starts_at": "2026-11-10T19:00:00Z",
+    "request_saved": true,
+    "crm_saved": true,
+    "consent_saved": "service_sms_not_authorized",
+    "follow_up_task": "pending",
+    "completed_action_receipts": 5
+  },
+  "draft_storage": {
+    "reviewed_intake_draft_saved": true,
+    "crm_activity_count": 1,
+    "verification_method": "production_database_owner_RPC_with_authorized_synthetic_request",
+    "owner_UI_authentication_in_production_verified": false
+  },
+  "after_cancel": {
+    "request": "cancelled",
+    "meeting": "cancelled",
+    "follow_up_task": "cancelled",
+    "slot": "available",
+    "draft_retained": 1
+  },
+  "no_outbound_messages": true,
+  "no_paid_model_inference": true,
+  "no_purchases": true,
+  "published_live_times": 0,
+  "provider_check": {
+    "checked_at": "2026-11-10T02:44:54.996Z",
+    "twilio_credentials_http_status": 401,
+    "twilio_campaign_status": "unverified_due_to_rejected_credentials",
+    "apple_login_enabled": false,
+    "google_login_enabled": false,
+    "resend_credentials_accepted": true,
+    "email_sending_domain_verified": true,
+    "email_delivery_verified": false
+  },
+  "remaining": [
+    "Publish real owner availability.",
+    "Reconnect the intended existing Twilio account to Nova production.",
+    "Complete provider configuration and acceptance tests for Apple/Google sign-in, Apple Messages/Wallet, Google Wallet, Instagram and TikTok messaging.",
+    "A conversational telephone AI receptionist is not deployed. Paid dispatch remains locked under the $0 instruction."
+  ]
+}

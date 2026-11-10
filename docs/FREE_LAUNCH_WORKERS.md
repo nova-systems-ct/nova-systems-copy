@@ -33,3 +33,11 @@ Applied migration `20261110021301_local_worker_drafts.sql` only after the local 
 Model candidates are never booking authority. Unsupported prices, times, dates, action claims or placeholders trigger a visibly labelled verified template. A booked request’s appointment response always uses its saved time. Complete sentences are retained rather than showing a truncated final fragment. Template saves carry an explicit template label in the saved body; they are not represented as model-authored text.
 
 Migration `20261110023037_worker_model_metadata.sql` updates the recorded attempted-model defaults to the final Qwen model. The earlier smallest-model candidate was evaluated and replaced; no live customer draft used that candidate.
+
+## Deployed production acceptance — November 9 Eastern
+
+Release e11800e1ced489b28a8fa3b08abcb18aca4f3885, deployment dpl_BprqHwRHF3JVY8w22GjxHHybRqf1, reached READY on the existing production project. The cloud browser downloaded the actual pinned public weights, generated a draft in the production browser Worker and copied it into a real test-mode request. The production API booked November 10 at 2 PM Eastern and saved the CRM contact/activity, exact no-SMS choice and pending follow-up task. Private owner-RPC draft storage was verified directly through the database with the reviewed synthetic draft; this does not claim an authenticated owner-UI production session.
+
+Synthetic reference: 443f2712-b4c6-4a3f-8396-8980ee0c972e. Cancellation through the production page cancelled the request, meeting and follow-up task and reopened the test slot. One private reviewed draft and its CRM activity remain as test evidence. No external message, call or payment was sent. Screenshots and selected machine-readable results are in docs/qa/free-launch/.
+
+The repeated production read-only provider check at 2026-11-10T02:44:54.996Z returned the same Twilio 401, Apple/Google providers disabled and accepted email credentials with a verified sending domain. Email delivery remains untested. There are zero published live appointment times; the owner must publish genuine availability in Launch Desk. Requests without a time continue to work. The full multi-channel launch is therefore not verified ready.
