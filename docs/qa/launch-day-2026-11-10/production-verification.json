@@ -1,0 +1,35 @@
+{
+  "release_commit": "532ac603ff32e84f99daf9b804cc512bf1ff5dba",
+  "deployment": "dpl_G3mdGp7ZkTJoaRwtmWXuc9ni9o2J",
+  "deployment_state": "READY",
+  "production_url": "https://nova-systems.app/",
+  "real_production_browser_ai_generation": true,
+  "browser_model_candidate": "I need a system that can collect customer requests and organize them into appointment booking records for easy retrieval and analysis.",
+  "request_reference": "278a08a5-8844-4caf-b6b9-4a86891c7e56",
+  "is_test": true,
+  "before_cancel": {
+    "state": "booked",
+    "appointment": "2026-11-10T19:00:00Z",
+    "crm_contact_and_activity_saved": true,
+    "reviewed_ai_text_saved": true,
+    "service_sms_permission": false,
+    "follow_up_task": "pending"
+  },
+  "after_cancel": {
+    "request": "cancelled",
+    "meeting": "cancelled",
+    "follow_up_task": "cancelled",
+    "test_slot": "available"
+  },
+  "provider_check_at": "2026-11-10T12:42:50.148Z",
+  "twilio_credentials_http_status": 401,
+  "twilio_campaign_status": "unverified_due_to_rejected_credentials",
+  "apple_signin_enabled": false,
+  "google_signin_enabled": false,
+  "email_credentials_valid": true,
+  "email_domain_verified": true,
+  "email_delivery_verified": false,
+  "paid_dispatch_enabled": false,
+  "published_live_times": 0,
+  "upstream_channel_delivery_verified": false
+}

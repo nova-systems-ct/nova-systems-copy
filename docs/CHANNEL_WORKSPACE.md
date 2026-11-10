@@ -67,3 +67,9 @@ Primary contracts checked on November 10:
 - CM Apple envelope: https://developers.cm.com/messaging/docs/apple-messages-for-business
 - CM header authentication and acceptance receipt: https://developers.cm.com/messaging/docs/integration
 - CM inbound envelope: https://developers.cm.com/messaging/docs/incoming-messages
+
+## Published production check
+
+Release 532ac603ff32e84f99daf9b804cc512bf1ff5dba reached READY as deployment dpl_G3mdGp7ZkTJoaRwtmWXuc9ni9o2J. The actual production browser generated a model response through the deployed shared worker assets, copied the reviewed output into a reserved test request, booked the November 10 2 PM Eastern test appointment and displayed all five completion receipts. Test reference 278a08a5-8844-4caf-b6b9-4a86891c7e56 was then cancelled through the page; the database confirmed request/meeting/task cancellation and the test slot reopening.
+
+The new production build's read-only provider check at 2026-11-10T12:42:50.148Z still returned Twilio HTTP 401, Apple/Google sign-in disabled and accepted email credentials with a verified domain. No live upstream channel delivery was verified. There are zero published live appointment times. No purchase, new paid resource, paid model call or platform message was made. The owner can use Conversations → Start a practice conversation to test the private workflow and Launch Desk to publish genuine availability.
