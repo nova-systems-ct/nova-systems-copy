@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "fixture_provider_delivery": false,
+  "owner_isolation": true,
+  "cfo_caps": true,
+  "audit_persistence": true,
+  "private_photo": true,
+  "crm_bridge": true,
+  "reschedule": true,
+  "voice_practice": true,
+  "paid_provider_calls": 0
+}

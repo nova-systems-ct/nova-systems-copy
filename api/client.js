@@ -7,6 +7,8 @@ import { requireStaff } from './_auth.js';
 import { handleWave1 } from './_wave1Api.js';
 import { handleLaunchAdmin } from './_launchWorker.js';
 import { handleChannelAdmin } from './_channelWorkspace.js';
+import { handleCompanyAdmin } from './_companyOperations.js';
+import { handleUnifiedTwilio } from './_unifiedTwilio.js';
 import { salesDispatch, SALES_RESOURCES } from './_sales/index.js';
 import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
 import { normalizePhone } from './_wave1.js';
@@ -4318,6 +4320,12 @@ export default async function handler(req, res) {
       if (op === 'adapters') return handleMarketingAdapters(req, res, caller);
       return res.status(400).json({ error: `Unknown marketing op: ${op}` });
     }
+
+    case 'company':
+      if(['twilio-message','twilio-status','voice-agent'].includes(op)){
+        try{return await handleUnifiedTwilio(req,res,op)}catch{return res.status(502).json({error:'The phone or message action could not be confirmed. Contact the owner.'})}
+      }
+      return handleCompanyAdmin(req,res);
 
     case 'voice': {
       const caller = await requireStaff(req, res);

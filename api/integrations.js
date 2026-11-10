@@ -2,6 +2,7 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { launchRpc } from './_launchWorker.js';
 import { checkLaunchConnections } from './_connectionChecks.js';
+import { runtimeProviderEnv } from './_providerVault.js';
 import { requireStaff } from './_auth.js';
 
 // Integration Center backend — reports connection status for every external provider this
@@ -194,7 +195,7 @@ export default async function handler(req, res) {
     try {
       const owner=await launchRpc('nova_launch_owner',{p_actor:caller.id,p_action:'overview'});
       if(!owner.ok) return res.status(403).json({error:'Only the Nova account owner can check launch connections.'});
-      return res.status(200).json(await checkLaunchConnections());
+      return res.status(200).json(await checkLaunchConnections(await runtimeProviderEnv()));
     } catch { return res.status(502).json({error:'Owner verification could not be completed.'}); }
   }
   return res.status(400).json({ error: `Unknown op: ${op}` });

@@ -1,5 +1,35 @@
 [
   {
+    "role": "voice",
+    "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+    "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+    "execution": "actual_local_cpu_inference",
+    "model_candidate": "Hello! I'm Nova Systems and I can assist you with your business needs. Could you please provide me with more details on your current business setup? What specific features do you need for your business to capture inquiries effectively?",
+    "text": "Hello!  I'm Nova Systems and I can assist you with your business needs.  Could you please provide me with more details on your current business setup?",
+    "output_mode": "language_model_draft",
+    "review_note": "Review the generated draft before using it. No action was dispatched."
+  },
+  {
+    "role": "whatsapp",
+    "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+    "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+    "execution": "actual_local_cpu_inference",
+    "model_candidate": "Hello! I'm here to assist you with your inquiry about the Elm Street Plumbing business. Could you please provide me with some details so I can better understand what you're looking for?",
+    "text": "Hello!  I'm here to assist you with your inquiry about the Elm Street Plumbing business.  Could you please provide me with some details so I can better understand what you're looking for?",
+    "output_mode": "language_model_draft",
+    "review_note": "Review the generated draft before using it. No action was dispatched."
+  },
+  {
+    "role": "sms",
+    "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+    "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+    "execution": "actual_local_cpu_inference",
+    "model_candidate": "Could you please provide more details on your specific needs? What kind of business software do you require for capturing inquiries when calls are missed? Also, what level of detail would you like to know about the capture process?",
+    "text": "Could you please provide more details on your specific needs?  What kind of business software do you require for capturing inquiries when calls are missed?  Also, what level of detail would you like to know about the capture process?",
+    "output_mode": "language_model_draft",
+    "review_note": "Review the generated draft before using it. No action was dispatched."
+  },
+  {
     "role": "instagram",
     "model": "onnx-community/Qwen2.5-0.5B-Instruct",
     "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",

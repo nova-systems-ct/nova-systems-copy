@@ -1,0 +1,44 @@
+import {requireStaff} from './_auth.js';
+import {rateLimit} from './_rateLimit.js';
+import {launchRpc} from './_launchWorker.js';
+import {channelConfiguration} from './_channelProviders.js';
+import {billableDispatchEnabled} from './_spendingPolicy.js';
+import {uploadToVault} from './_vaultStorage.js';
+import {handleProviderSetup} from './_providerVault.js';
+
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const errors={owner_required:'Only the Nova owner can manage company operations.',invalid_budget:'Provide a service, purpose and an optional positive USD spending cap.',budget_changed:'The budget has changed or cannot be approved. Refresh and review the current request.',budget_not_found:'This budget request is unavailable.',request_conflict:'This request reference was already used with different content.',case_not_found:'This audit is unavailable in your organization.',invalid_evidence:'Check the observation, source, confidence and checklist.',evidence_required:'Add an observation and source before marking evidence complete.',slot_unavailable:'That appointment time is unavailable. Refresh and choose another.',request_not_active:'Only an active future booking can be rescheduled.',practice_limit:'Start a new practice call to continue.',invalid_message:'Enter a message of 1 to 2,000 characters.'};
+export const COMPANY_WORKERS=Object.freeze([
+ {key:'atlas',name:'Atlas',role:'Intake & CRM',goal:'Capture the customer’s request, create their CRM record and assign the next action.',model:'Transactional workflow + optional on-device Qwen',tool:'Save request and reserve a published appointment',playbook:['Identify the business and service need.','Record the exact communication permission.','Reserve only a real available time.','Create a linked CRM activity and follow-up task.']},
+ {key:'mira',name:'Mira',role:'Instagram sales',goal:'Turn an authorized customer conversation into a useful discovery and booking.',model:'Qwen on-device; hosted inference requires a CFO budget',tool:'Instagram reply or private practice receipt',playbook:['Answer the customer’s actual comment or message.','Ask one question about the workflow they need help with.','Explain a relevant Nova service without invented results or prices.','Offer the real booking page. Respect the response window and opt-out.']},
+ {key:'kai',name:'Kai',role:'TikTok sales',goal:'Qualify inbound TikTok inquiries and arrange the next step.',model:'Qwen on-device; hosted inference requires a CFO budget',tool:'TikTok Business Messaging reply',playbook:['Use the authorized business account and verified conversation.','Ask what is getting lost between inquiry and booking.','Help the person describe the system they need.','Offer discovery; never invent account permissions or a delivery receipt.']},
+ {key:'ellis',name:'Ellis',role:'Apple Messages',goal:'Help customers through an approved Apple business messaging channel.',model:'Qwen on-device; hosted inference requires a CFO budget',tool:'Approved MSP reply and CRM receipt',playbook:['Use the customer-initiated business thread.','Collect the minimum details needed for the next step.','Offer available booking choices.','Escalate private, uncertain or unsupported requests to the owner.']},
+ {key:'aria',name:'Aria',role:'Phone reception',goal:'Listen, qualify, record the call and help arrange a real appointment.',model:'Hosted LLM after CFO approval; on-device practice is free',tool:'Signed Twilio speech turns + CRM task',playbook:['Identify yourself as Nova’s AI assistant.','Ask the caller’s service need and business name.','Keep each spoken turn short; do not invent a quote.','Offer a callback or published time and record the agreed next step.']},
+ {key:'harvest',name:'Harvest',role:'Sales committee',goal:'Prepare customer-specific follow-ups and assign real CRM review tasks.',model:'Versioned workflow; optional on-device LLM refinement',tool:'CRM drafts, activities and follow-up tasks',playbook:['Work from a real inquiry in the Nova organization.','Draft a relevant opener and one qualification question.','Keep contact permission separate from interest.','Record draft versus sent honestly and escalate paid delivery to CFO.']},
+ {key:'growth',name:'Growth',role:'Marketing committee',goal:'Prepare truthful launch copy and a concrete publication task.',model:'Versioned workflow; optional on-device LLM refinement',tool:'Persisted campaign brief and review task',playbook:['Describe only working, verified customer flows.','Use a clear problem, service and booking call to action.','Do not invent testimonials, returns, prices or client numbers.','Obtain owner review and a CFO decision before any paid campaign.']},
+ {key:'cfo',name:'CFO',role:'Budget control',goal:'Review every proposed cost and request Isaac’s decision before spending.',model:'Deterministic financial policy; no spending authority',tool:'Private budget request, cap, approval and expiry ledger',playbook:['Require the vendor, service, purpose and quote or explicit proposed cap.','Mark unknown cost as quote required.','Escalate the exact amount to Isaac.','An approval is limited to its service, cap and expiry; it never changes dispatch settings.']},
+]);
+export async function handleCompanyAdmin(req,res){
+ res.setHeader('Cache-Control','no-store');if(!['GET','POST'].includes(req.method))return res.status(405).json({error:'Method not allowed.'});
+ const caller=await requireStaff(req,res,'admin.view');if(!caller)return;if(!rateLimit(req,res,50,60000))return;
+ if(req.query?.op==='connections')return handleProviderSetup(req,res,caller);
+ const b=req.body||{},action=req.method==='GET'?(req.query?.op==='audit_field'?'audit_field':'overview'):b.action,payload=req.method==='GET'?req.query:b;
+ if(!['overview','request_budget','approve_budget','reject_budget','revoke_budget','run_committee','auto_reply','audit_field','save_audit_field','audit_photo','reschedule','voice_practice'].includes(action))return res.status(400).json({error:'Unknown company action.'});
+ if(['approve_budget','reject_budget','revoke_budget'].includes(action)&&!UUID.test(b.id||''))return res.status(422).json({error:'Choose a budget request.'});
+ if(['audit_field','save_audit_field','audit_photo'].includes(action)&&!UUID.test(payload.case_id||''))return res.status(422).json({error:'Choose an audit.'});
+ if(action==='run_committee'&&!UUID.test(b.run_id||''))return res.status(422).json({error:'A unique committee run reference is required.'});
+ if(action==='reschedule'&&(!UUID.test(b.request_id||'')||!UUID.test(b.slot_id||'')))return res.status(422).json({error:'Choose a booking and an available time.'});
+ if(action==='save_audit_field'&&(!Array.isArray(b.steps)||b.steps.length!==3||b.steps.some(s=>typeof s!=='boolean')))return res.status(422).json({error:errors.invalid_evidence});
+ if(action==='request_budget'&&(b.max_cost_cents!=null&&(!Number.isInteger(b.max_cost_cents)||b.max_cost_cents<1)))return res.status(422).json({error:errors.invalid_budget});
+ try{
+  if(action==='audit_photo'){
+   const access=await launchRpc('nova_company_owner',{p_actor:caller.id,p_action:'audit_field',p_payload:{case_id:b.case_id}});if(!access.ok)return res.status(access.code==='owner_required'?403:404).json({error:'This audit is unavailable.'});
+   const match=typeof b.file_base64==='string'&&b.file_base64.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);if(!match)return res.status(422).json({error:'Choose a JPEG, PNG or WebP photo.'});
+   const bytes=Buffer.from(match[2],'base64'),mime=match[1],valid=mime==='image/jpeg'?bytes[0]===255&&bytes[1]===216:mime==='image/png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):bytes.subarray(0,4).toString()==='RIFF'&&bytes.subarray(8,12).toString()==='WEBP';
+   if(!valid||bytes.length>3*1024*1024||bytes.length<16)return res.status(422).json({error:'Choose a valid photo smaller than 3 MB.'});
+   const result=await uploadToVault(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{base64:match[2],fileName:String(b.file_name||'audit-photo').slice(0,150),mimeType:mime,category:'audit-evidence',clientId:null,clientName:access.business?.name||'Audit '+b.case_id,docType:'Audit evidence',status:'Active',source:'audit_assessment'});
+   return res.status(200).json({ok:true,path:result.path,private:true});
+  }
+  const d=await launchRpc('nova_company_owner',{p_actor:caller.id,p_action:action,p_payload:payload});if(!d.ok)return res.status(d.code==='owner_required'?403:409).json({...d,error:errors[d.code]||'This action could not be completed.'});return res.status(200).json({...d,workers:COMPANY_WORKERS,channels:channelConfiguration(),billable_dispatch_enabled:billableDispatchEnabled(),provider_delivery_verified:false})}
+ catch{return res.status(502).json({ok:false,error:'Company records could not be confirmed. Refresh before retrying.'})}
+}

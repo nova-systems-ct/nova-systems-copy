@@ -1,6 +1,18 @@
 {
   "rewrites": [
     {
+      "source": "/webhooks/twilio-message",
+      "destination": "/api/client?resource=company&op=twilio-message"
+    },
+    {
+      "source": "/webhooks/twilio-status",
+      "destination": "/api/client?resource=company&op=twilio-status"
+    },
+    {
+      "source": "/webhooks/voice-agent",
+      "destination": "/api/client?resource=company&op=voice-agent"
+    },
+    {
       "source": "/webhooks/apple-messages",
       "destination": "/api/stripe?action=channel-webhook&channel=apple_messages"
     },
@@ -75,5 +87,13 @@
         }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "api/client.js": {
+      "maxDuration": 60
+    },
+    "api/stripe.js": {
+      "maxDuration": 60
+    }
+  }
 }
