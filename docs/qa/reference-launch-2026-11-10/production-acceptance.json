@@ -1,0 +1,26 @@
+{
+  "source_commit": "cc99f3e562eadd36d0fabb9317237ebb0cc57ec0",
+  "deployment_id": "dpl_7Z1M98GWpWNQBmMhM4UXt3yt1UM4",
+  "domain": "https://nova-systems.app",
+  "ready": true,
+  "production_browser_test": {
+    "synthetic_only": true,
+    "booking_reserved": true,
+    "crm_link_confirmed_by_database": true,
+    "follow_up_task_created": true,
+    "sms_consent": false,
+    "email_consent": false,
+    "receipt_recovered_after_reload": true,
+    "customer_cancellation_confirmed": true,
+    "test_task_cancelled": true,
+    "test_time_released": true
+  },
+  "company_api_unauthenticated_status": 401,
+  "unsigned_twilio_route_statuses": {"sms":403,"delivery":403,"voice":403},
+  "paid_reservations": 0,
+  "automatic_replies_enabled": false,
+  "live_provider_delivery_verified": false,
+  "twilio_read_only_check_status": 401,
+  "apple_login_enabled": false,
+  "google_login_enabled": false
+}

@@ -17,6 +17,16 @@ This release implements the supplied black-and-gold reference across the public 
 
 The owner-authorized launch committee was run in the real Nova organization. It saved one marketing brief and its review task, and routed provider costs to quote-required CFO requests. There were no eligible live inbound inquiries for follow-up drafting. No campaign was published and no external message was sent.
 
+## Live deployment verification
+
+Production deployment `dpl_7Z1M98GWpWNQBmMhM4UXt3yt1UM4` is READY at https://nova-systems.app, source commit `cc99f3e562eadd36d0fabb9317237ebb0cc57ec0`. `production-home.jpg` and `production-login.jpg` are actual cloud-browser screenshots of that domain. The other dashboard/audit screenshots use the authenticated disposable test environment described above.
+
+An actual production-browser TEST booking reserved a private test time, created its linked CRM contact and pending task, and recovered its receipt after reload. SQL independently confirmed `is_test=true`, `state=booked`, `crm_linked=true`, and both SMS/email consent false. The customer cancellation UI then cancelled the test request and task and released the time. `production-booking-test.jpg` shows the saved test receipt before cleanup; no real call was made or scheduled for staff.
+
+Live unauthenticated company API requests returned 401; unsigned POSTs to all three new Twilio routes returned 403. Production runtime error/fatal logs for this release were empty during the smoke-test window.
+
+The deployment's read-only connection check at 23:39 UTC found Twilio credentials rejected with HTTP 401, Apple and Google login disabled, and the Resend sending domain verified. No email delivery was attempted. Instagram's available marketing connector was also not authenticated. These observations are not live channel-delivery passes.
+
 ## Remaining live dependencies
 
 - Twilio credentials, business sender and carrier registration must be verified before a live SMS or phone test. Voice uses signed speech-turn webhooks, qualification and CRM/callback tasks; it does not itself confirm calendar bookings.
