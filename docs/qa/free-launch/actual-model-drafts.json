@@ -1,5 +1,35 @@
 [
   {
+    "role": "instagram",
+    "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+    "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+    "execution": "actual_local_cpu_inference",
+    "model_candidate": "Could you please provide more details on your current business needs? What specific features do you require from your business software to handle missed calls efficiently?",
+    "text": "Could you please provide more details on your current business needs?  What specific features do you require from your business software to handle missed calls efficiently?",
+    "output_mode": "language_model_draft",
+    "review_note": "Review the generated draft before using it. No action was dispatched."
+  },
+  {
+    "role": "tiktok",
+    "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+    "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+    "execution": "actual_local_cpu_inference",
+    "model_candidate": "Hello! I'm here to assist you with your inquiry. Could you please provide me with more details on your current situation? What kind of business services do you offer? And how can we connect you to our platform specifically?",
+    "text": "Hello!  I'm here to assist you with your inquiry.  Could you please provide me with more details on your current situation?",
+    "output_mode": "language_model_draft",
+    "review_note": "Review the generated draft before using it. No action was dispatched."
+  },
+  {
+    "role": "apple_messages",
+    "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+    "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+    "execution": "actual_local_cpu_inference",
+    "model_candidate": "Hello, I'm here to assist you with your inquiry about business software that captures inquiries when calls are missed. Would you like to schedule an appointment?",
+    "text": "Hello, I'm here to assist you with your inquiry about business software that captures inquiries when calls are missed.  Would you like to schedule an appointment?",
+    "output_mode": "language_model_draft",
+    "review_note": "Review the generated draft before using it. No action was dispatched."
+  },
+  {
     "role": "intake",
     "model": "onnx-community/Qwen2.5-0.5B-Instruct",
     "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",

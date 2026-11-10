@@ -1,0 +1,1 @@
+PASS — all three documented outbound envelopes; strict provider receipts, accepted versus delivered, missing/failed/uncertain results, account binding and default spending locks. HTTP responses are fixtures; no provider contacted.

@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/webhooks/apple-messages",
+      "destination": "/api/stripe?action=channel-webhook&channel=apple_messages"
+    },
+    {
+      "source": "/webhooks/instagram",
+      "destination": "/api/stripe?action=channel-webhook&channel=instagram"
+    },
+    {
       "source": "/service-request",
       "destination": "/sms-program/index.html"
     },

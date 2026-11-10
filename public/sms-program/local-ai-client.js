@@ -11,7 +11,7 @@ export function createLocalAI(onStatus=()=>{}){
    if(d.type==='ready')onStatus('Writing on your device…');
    if(d.type==='result'){const p=pending;pending=null;const safe=protectDraft(p.agent,p.input,d.text,p.facts);onStatus(safe.output_mode==='verified_template'?'Verified template ready · model details held':'Draft ready · on-device model');p.resolve({...d,...safe});}
    if(d.type==='error'){const p=pending;pending=null;onStatus('Could not run on-device AI');p.reject(new Error(d.message));}
-  };worker.onerror=()=>{const p=pending;pending=null;worker?.terminate();worker=null;onStatus('Could not run on-device AI');p?.reject(new Error('On-device AI could not load. The booking form remains available.'));};}
+  };worker.onerror=()=>{const p=pending;pending=null;worker?.terminate();worker=null;onStatus('Could not run on-device AI');p?.reject(new Error('On-device AI could not load. You can continue without AI.'));};}
   const id=crypto.randomUUID();pending={id,resolve,reject,agent,input,facts};onStatus('Loading on-device AI…');worker.postMessage({id,action:'generate',agent,input});
  });
  return {run,stop};

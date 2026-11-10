@@ -135,12 +135,13 @@ export default function HeroSection() {
           </p>
 
           <h1
-            className="font-black text-white leading-[0.95]"
-            style={{ fontSize: "clamp(2.6rem, 4.2vw, 4.5rem)", letterSpacing: "-0.02em", maxWidth: 560 }}
+            className="text-white leading-[1.04]"
+            style={{ fontWeight:500,fontSize: "clamp(2.6rem, 4.2vw, 4.5rem)", letterSpacing: "-0.035em", maxWidth: 560 }}
           >
             Less chasing.{" "}
             <span style={{
               display: "block",
+              fontFamily:"Georgia, 'Times New Roman', serif",fontStyle:'italic',fontWeight:400,marginTop:8,
               background: GOLD_TEXT_GRADIENT,
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",

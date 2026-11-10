@@ -1,6 +1,9 @@
 // Model words are never booking authority. These checks run before displaying/saving a candidate.
 const UNSUPPORTED_FACT=/(?:\$\s*\d|\b(?:USD|dollars?|guarantee|complimentary)\b|\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b(?:today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|\b\d{4}-\d{2}-\d{2}\b|\[(?:date|time|customer|business owner|name)[^\]]*\]|https?:\/\/|\b(?:i(?:'ve| have)|we(?:'ve| have))\s+(?:sent|booked|confirmed|scheduled|charged|completed)\b)/i;
 const templates={
+ instagram:()=> 'Thanks for messaging Nova Systems. Which part of handling customer inquiries or appointments would you like help with first?',
+ tiktok:()=> 'Thanks for reaching out to Nova Systems. What happens to a new customer inquiry when your team is busy?',
+ apple_messages:()=> 'Thanks for contacting Nova Systems. Tell us which part of your business workflow you would like help with, or ask for a human to speak with the team.',
  intake:input=>'Request for Nova Systems: '+input.trim().slice(0,1800),
  scheduling:()=> 'Thanks for reaching out to Nova Systems. Which day and time would suit you for a phone introduction?',
  follow_up:()=> 'Thanks for reaching out to Nova Systems about improving your business systems. Which part of handling customer requests or booking appointments would you like us to work through first?',

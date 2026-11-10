@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard, BrainCircuit, TrendingUp, PlayCircle, Building2, ShieldCheck,
-  LogOut, Menu, X, ChevronsUpDown, Check, Users, CalendarCheck,
+  LogOut, Menu, X, ChevronsUpDown, Check, Users, CalendarCheck, MessagesSquare, Plug,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuthGuard } from '../../hooks/useAuthGuard'
 import { useOrg } from '../../lib/OrgContext'
+import './DashboardShell.css';
 
 const NAVY = '#0A0A0A'
 const GOLD = '#C9A84C'
@@ -31,7 +32,9 @@ const ROLE_LABELS = {
 // <RequirePermission> so direct navigation can't bypass this.
 const NAV = [
   { to: '/dashboard',              label: 'Overview',     icon: LayoutDashboard, exact: true, permission: 'overview.view' },
+  { to: '/dashboard/conversations', label: 'Conversations', icon: MessagesSquare, exact:true, permission:'admin.view' },
   { to: '/dashboard/intake-forms', label:'Launch Desk', icon:CalendarCheck, exact:true, permission:'intelligence.view' },
+  { to: '/dashboard/integrations', label: 'Connections', icon: Plug, exact:true, permission:'admin.view' },
   { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit,    match: ['/dashboard/intelligence', '/dashboard/audit'], permission: 'intelligence.view' },
   { to: '/dashboard/growth',       label: 'Growth',        icon: TrendingUp,      match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/sales', '/dashboard/pilots', '/dashboard/pilot-console', '/dashboard/leads', '/dashboard/zion', '/dashboard/marketing'], permission: 'growth.view' },
   { to: '/dashboard/execution',    label: 'Execution',     icon: PlayCircle,      match: ['/dashboard/execution', '/dashboard/tasks'], permission: 'execution.view' },
@@ -166,12 +169,12 @@ export default function DashboardLayout() {
                   padding: '9px 12px', borderRadius: 7,
                   marginBottom: 1, textDecoration: 'none',
                   background: on ? `${GOLD}10` : 'transparent',
-                  color: on ? '#fff' : 'rgba(255,255,255,0.35)',
+                  color: on ? '#fff' : 'rgba(255,255,255,0.58)',
                   fontSize: 13, fontWeight: on ? 500 : 400,
                   transition: 'all 0.12s',
                 }}
                 onMouseEnter={e => { if (!on) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)' } }}
-                onMouseLeave={e => { if (!on) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.35)' } }}
+                onMouseLeave={e => { if (!on) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.58)' } }}
               >
                 <Icon style={{ width: 14, height: 14, flexShrink: 0, color: on ? GOLD : 'inherit' }} />
                 {item.label}
@@ -209,12 +212,12 @@ export default function DashboardLayout() {
     <div style={{ display: 'flex', minHeight: '100vh', background: NAVY, fontFamily: "'Inter',system-ui,sans-serif", color: '#fff' }}>
 
       {/* Desktop sidebar */}
-      <aside style={{ width: 210, flexShrink: 0, background: 'rgba(255,255,255,0.02)', borderRight: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="hidden md:flex">
+      <aside style={{ width: 210, flexShrink: 0, background: 'rgba(255,255,255,0.02)', borderRight: '1px solid rgba(255,255,255,0.07)', position: 'sticky', top: 0, height: '100vh', flexDirection: 'column', overflow: 'hidden' }} className="nova-dashboard-sidebar">
         <Sidebar />
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, background: 'rgba(10,10,10,0.96)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="nova-dashboard-mobile-bar" style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50, background: 'rgba(10,10,10,0.96)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '14px 16px', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>{orgName}</span>
         <button
           onClick={() => setOpen(o => !o)}
@@ -229,14 +232,14 @@ export default function DashboardLayout() {
       {/* Mobile drawer */}
       {open && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.6)' }} onClick={() => setOpen(false)}>
-          <aside style={{ width: 240, height: '100%', background: NAVY, borderRight: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+          <aside aria-label="Mobile navigation" style={{ width: 240, height: '100%', paddingTop:58,background: NAVY, borderRight: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
             <Sidebar />
           </aside>
         </div>
       )}
 
       {/* Content */}
-      <main style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }} className="pt-14 md:pt-0">
+      <main style={{ flex: 1, minWidth: 0, overflowX: 'hidden' }} className="nova-dashboard-main">
         <Outlet />
       </main>
     </div>

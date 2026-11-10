@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Target, DollarSign, FileText, Receipt, HandCoins, Search, Newspaper, LayoutGrid, ClipboardCheck, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useOrg } from '../../lib/OrgContext'
+import OwnerCommandCenter from '../../components/OwnerCommandCenter';
 
 const HEALTH_ROUTES = ['/', '/welcome', '/intake', '/login']
 
@@ -73,7 +74,11 @@ function MetricCard({ icon: Icon, label, value, sub, onClick }) {
 // (Isaac's own test submission), 0 intake submissions, 1 contract (explicitly a QA test row),
 // 0 invoices, 0 tasks, 0 referrals — genuinely sparse, not artificially emptied. Every number
 // here is either a real query result or an honest zero; nothing is fabricated.
-export default function DashboardHome() {
+export default function DashboardHome(){
+  const {currentOrg,currentMembership}=useOrg();
+  return currentOrg?.kind==='nova_internal'&&currentMembership?.role==='nova_super_admin'?<OwnerCommandCenter/>:<LegacyDashboardHome/>;
+}
+function LegacyDashboardHome() {
   const navigate = useNavigate()
   const { currentOrg, hasPermission } = useOrg()
   const routeHealth = useRouteHealth()

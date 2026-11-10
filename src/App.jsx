@@ -45,6 +45,7 @@ const WavesForm = lazy(() => import('./pages/WavesForm'));
 // CRM Dashboard
 const DashboardRoot = lazy(() => import('./components/dashboard/DashboardRoot'));
 const DashboardHome = lazy(() => import('./pages/dashboard/DashboardHome'));
+const MessagingWorkspace = lazy(() => import('./pages/dashboard/MessagingWorkspace'));
 const Intelligence = lazy(() => import('./pages/dashboard/Intelligence'));
 const Growth = lazy(() => import('./pages/dashboard/Growth'));
 const Execution = lazy(() => import('./pages/dashboard/Execution'));
@@ -178,6 +179,7 @@ function App() {
             {/* CRM Dashboard — nested routes */}
             <Route path="/dashboard" element={<DashboardRoot />}>
               <Route index element={<DashboardIndex home={<DashboardHome />} />} />
+              <Route path="conversations" element={<RequirePermission permission="admin.view"><MessagingWorkspace /></RequirePermission>} />
               <Route path="sales-team" element={<SalesTeamLayout />}>
                 <Route path="overview" element={<STOverview />} />
                 <Route path="hiring" element={<RequirePermission permission="sales.hiring"><STHiring /></RequirePermission>} />

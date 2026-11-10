@@ -320,6 +320,13 @@ async function handleVerifyPayment(req, res, b) {
 }
 
 export default async function handler(req, res) {
+  if (req.query?.action === 'channel-webhook') {
+    const { handleChannelWebhook } = await import('./_channelWorkspace.js');
+    if(req.method==='GET') return handleChannelWebhook(req,res,Buffer.alloc(0));
+    const chunks=[];let size=0;
+    for await (const chunk of req) { size+=chunk.length;if(size>524288)return res.status(413).json({error:'Webhook payload too large.'});chunks.push(chunk); }
+    return handleChannelWebhook(req,res,Buffer.concat(chunks));
+  }
   // Stripe calls this directly (server-to-server) with a signature header —
   // route it to the webhook handler before anything else touches the body.
   if (req.headers['stripe-signature']) {

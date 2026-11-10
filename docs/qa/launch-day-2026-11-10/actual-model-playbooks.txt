@@ -1,0 +1,6 @@
+PASS — actual local model generated a instagram draft.
+PASS — actual local model generated a tiktok draft.
+PASS — actual local model generated a apple_messages draft.
+PASS — actual local model generated a intake draft.
+PASS — actual local model generated a scheduling draft.
+PASS — actual local model generated a follow_up draft.

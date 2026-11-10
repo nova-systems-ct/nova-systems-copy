@@ -1,0 +1,33 @@
+{
+  "local_channel_acceptance_exit_code": 0,
+  "real_postgres_and_postgrest": true,
+  "actual_authenticated_browser": true,
+  "actual_browser_model_workers": [
+    "Mira / Instagram",
+    "Kai / TikTok",
+    "Ellis / Apple Messages"
+  ],
+  "model_id": "onnx-community/Qwen2.5-0.5B-Instruct",
+  "model_revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+  "actual_native_model_playbooks": 6,
+  "provider_http_in_local_tests": "explicit fixtures; no live provider message sent",
+  "production_private_practice": {
+    "instagram": "test_recorded",
+    "tiktok": "test_recorded",
+    "apple_messages": "test_recorded",
+    "source": "actual native model output; saved with owner RPC through the production database connector; no authenticated production owner-browser session claimed"
+  },
+  "production_migration": "20261110121400_channel_workspace",
+  "new_tables_private": true,
+  "new_functions_security_invoker": true,
+  "new_functions_public_execute": false,
+  "domain": "https://nova-systems.app/",
+  "domain_verified_on_existing_vercel_project": true,
+  "new_purchases": 0,
+  "new_paid_resources": 0,
+  "paid_model_inference_calls": 0,
+  "external_message_dispatches": 0,
+  "live_channel_delivery_verified": false,
+  "telephone_llm_receptionist_deployed": false,
+  "remaining": "provider authorization/review/credentials and genuine owner appointment availability"
+}
