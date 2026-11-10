@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plug, CheckCircle2, XCircle, AlertTriangle, Circle, Loader2, RefreshCw } from 'lucide-react'
+import ConnectionLaunchPanel from '../../components/ConnectionLaunchPanel';
 import { authedFetch } from '../../lib/apiAuth'
 
 const GOLD = '#C9A84C'
@@ -17,12 +18,12 @@ const GOLD = '#C9A84C'
 // "Tested" only ever comes from an explicit click — this page never calls a provider
 // automatically, so opening it can't burn quota or trigger rate limits on its own.
 const STATUS_META = {
-  not_connected: { label: 'Not Connected', color: '#f87171', Icon: XCircle },
-  disconnected: { label: 'Disconnected', color: '#f87171', Icon: XCircle },
-  connected: { label: 'Connected', color: '#C9A84C', Icon: Circle },
-  tested: { label: 'Tested', color: '#4ade80', Icon: CheckCircle2 },
-  degraded: { label: 'Degraded', color: '#fb923c', Icon: AlertTriangle },
-  authorization_required: { label: 'Authorization Required', color: '#fbbf24', Icon: AlertTriangle },
+  not_connected: { label: 'Not Connected', color: '#b7aa8e', Icon: XCircle },
+  disconnected: { label: 'Disconnected', color: '#b7aa8e', Icon: XCircle },
+  connected: { label: 'Credentials configured', color: '#C9A84C', Icon: Circle },
+  tested: { label: 'API reachable', color: '#e0c476', Icon: CheckCircle2 },
+  degraded: { label: 'Degraded', color: '#d4bb78', Icon: AlertTriangle },
+  authorization_required: { label: 'Authorization Required', color: '#d4bb78', Icon: AlertTriangle },
 }
 
 export default function Integrations() {
@@ -61,7 +62,8 @@ export default function Integrations() {
   }
 
   return (
-    <div style={{ padding: '40px 48px 80px', maxWidth: 1100 }}>
+    <div style={{ padding: 'clamp(20px,4vw,40px) clamp(16px,4vw,48px) 80px', maxWidth: 1100 }}>
+      <ConnectionLaunchPanel />
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, gap: 16, flexWrap: 'wrap' }}>
         <div>
           <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>Admin</p>
@@ -72,8 +74,8 @@ export default function Integrations() {
         </button>
       </div>
       <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13, maxWidth: 640, marginBottom: 32, lineHeight: 1.5 }}>
-        Live status for every external provider this platform actually connects to. "Connected" means the credential
-        is present — click "Test Connection" for a real, on-demand check against that provider's own API. No
+        Configuration for the providers used by this platform. "Credentials configured" means the credential
+        is present — click "Check API access" for a real, on-demand check against that provider's own API. No
         credential value is ever shown here. Nothing on this page runs automatically against a provider.
       </p>
 
@@ -113,15 +115,16 @@ export default function Integrations() {
                       style={{ padding: '7px 14px', background: 'transparent', border: `1px solid ${GOLD}55`, borderRadius: 7, color: GOLD, fontSize: 11, fontWeight: 700, cursor: testing[p.key] ? 'default' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}
                     >
                       {testing[p.key] ? <Loader2 style={{ width: 11, height: 11, animation: 'spin 1s linear infinite' }} /> : null}
-                      Test Connection
+                      Check API access
                     </button>
                   </div>
                 </div>
 
+                <details style={{marginTop:14}}><summary style={{fontSize:11,color:'#a89c83',cursor:'pointer'}}>Configuration details</summary>
                 <div style={{ display: 'flex', gap: 14, marginTop: 14, flexWrap: 'wrap' }}>
                   {p.envVars.map((v) => (
                     <span key={v.name} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.set ? '#4ade80' : '#f87171', flexShrink: 0 }} />
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: v.set ? '#e0c476' : '#b7aa8e', flexShrink: 0 }} />
                       {v.name}
                     </span>
                   ))}
@@ -132,11 +135,12 @@ export default function Integrations() {
                 </p>
 
                 {p.resetNote && (
-                  <p style={{ color: '#fb923c', fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
+                  <p style={{ color: '#d4bb78', fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>
                     {p.resetNote}
                   </p>
                 )}
 
+                </details>
                 {live && (
                   <p style={{ color: meta.color, fontSize: 11, marginTop: 8, fontWeight: 600 }}>
                     {live.detail} — tested {new Date(live.tested_at).toLocaleTimeString()}

@@ -37,3 +37,6 @@ base44/.app.jsonc
 *.p8
 *.client-secret.jwt
 supabase/.temp/
+
+# Generated from pinned npm runtime during build
+public/ai-runtime/

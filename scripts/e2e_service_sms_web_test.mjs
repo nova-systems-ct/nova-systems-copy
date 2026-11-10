@@ -11,7 +11,7 @@ import {SERVICE_SMS_POLICY} from '../public/sms-program/policy.js';
 import {validateServiceRequest} from '../api/_serviceSmsRequest.js';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const migration='supabase/migrations/20261108172929_service_sms_intake.sql';
-const env=await startTestEnv({migrations:['scripts/testenv/serviceSmsLegacy.sql','scripts/testenv/launchWorkerLegacy.sql',migration,'supabase/migrations/20261109194341_launch_worker_booking.sql','supabase/migrations/20261109195329_launch_worker_owner_cancel.sql'],publicBuckets:[]});
+const env=await startTestEnv({migrations:['scripts/testenv/serviceSmsLegacy.sql','scripts/testenv/launchWorkerLegacy.sql',migration,'supabase/migrations/20261109194341_launch_worker_booking.sql','supabase/migrations/20261109195329_launch_worker_owner_cancel.sql','supabase/migrations/20261110021301_local_worker_drafts.sql','supabase/migrations/20261110023037_worker_model_metadata.sql'],publicBuckets:[]});
 let server,browser;
 try {
   assert.deepEqual(env.migrationErrors,[]);

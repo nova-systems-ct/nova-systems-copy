@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import {requireBillableDispatch} from './_spendingPolicy.js';
 
 // Twilio request validation — https://www.twilio.com/docs/usage/security#validating-requests
 // Signs the full webhook URL + sorted form params with the auth token (HMAC-SHA1)
@@ -32,6 +33,7 @@ export function twiml(inner) {
 // Minimal Twilio REST client using raw fetch, matching this codebase's existing
 // pattern (see api/_stripe.js) rather than pulling in the Twilio SDK.
 export async function twilioRequest(accountSid, authToken, method, path, body) {
+  if(!['GET','HEAD'].includes(method.toUpperCase()))requireBillableDispatch();
   const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/${path}`;
   const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
   const opts = {

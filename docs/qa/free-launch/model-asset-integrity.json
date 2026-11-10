@@ -1,0 +1,30 @@
+{
+  "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+  "assets": [
+    {
+      "file": "config.json",
+      "verified": true,
+      "bytes": 678
+    },
+    {
+      "file": "generation_config.json",
+      "verified": true,
+      "bytes": 242
+    },
+    {
+      "file": "onnx/model_q4.onnx",
+      "verified": true,
+      "bytes": 786156820
+    },
+    {
+      "file": "tokenizer.json",
+      "verified": true,
+      "bytes": 7031673
+    },
+    {
+      "file": "tokenizer_config.json",
+      "verified": true,
+      "bytes": 7849
+    }
+  ]
+}

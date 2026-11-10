@@ -1,0 +1,3 @@
+[service-request] Request could not be stored.
+PASS — real PostgreSQL/PostgREST: no implicit SMS or marketing; exact receipt; contact reuse; retries/races; no fake booking; anonymous/client denial; atomic rollback
+PASS — browser: public opt-in/policies/confirmation, optional unchecked choice, exact disclosure, both real saves, desktop/iPad/phone; zero provider emails

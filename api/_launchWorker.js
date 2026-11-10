@@ -9,6 +9,7 @@ export const LAUNCH_SERVICES = Object.freeze({
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TOKEN = /^[0-9a-f]{64}$/;
 const ERRORS = {
+  invalid_draft:'Review the draft before saving.',request_not_active:'Choose an active request. Cancelled requests cannot receive new drafts.',draft_conflict:'This draft reference is already in use. Create a new draft.',
   slot_unavailable: 'That time is no longer available. Please choose another time or send your request without an appointment.',
   phone_required: 'Enter a phone number for your phone appointment, or send your request without booking a time.',
   request_conflict: 'This request reference is already in use. Reload this page before sending a new request.',
@@ -82,16 +83,17 @@ export async function handleLaunchAdmin(req, res) {
   if (!caller) return;
   const b = req.body || {};
   const action = req.method === 'GET' ? 'overview' : b.action;
-  if (!['overview', 'add_slot', 'withdraw_slot', 'cancel_request'].includes(action)) return res.status(400).json({ ok: false, error: 'Unknown calendar action.' });
+  if (!['overview', 'add_slot', 'withdraw_slot', 'cancel_request', 'save_draft'].includes(action)) return res.status(400).json({ ok: false, error: 'Unknown calendar action.' });
   try {
     if (action === 'add_slot') {
       const start = Date.parse(b.starts_at), end = Date.parse(b.ends_at);
       if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 14400000) return res.status(422).json({ ok: false, error: ERRORS.invalid_slot });
     }
-    if (['withdraw_slot', 'cancel_request'].includes(action) && (typeof b.id !== 'string' || !UUID.test(b.id))) return res.status(422).json({ ok: false, error: 'Invalid appointment slot.' });
+    if (['withdraw_slot', 'cancel_request', 'save_draft'].includes(action) && (typeof b.id !== 'string' || !UUID.test(b.id))) return res.status(422).json({ ok: false, error: 'Invalid appointment slot.' });
+    if(action==='save_draft' && (typeof b.draft_id!=='string'||!UUID.test(b.draft_id)||!['intake','scheduling','follow_up'].includes(b.agent_key)||typeof b.body!=='string'||b.body.trim().length<5||b.body.length>4000))return res.status(422).json({ok:false,error:'Review a draft of 5 to 4,000 characters before saving.'});
     return answer(res, await launchRpc('nova_launch_owner', {
       p_actor: caller.id, p_action: action,
-      p_payload: action === 'add_slot' ? { starts_at: b.starts_at, ends_at: b.ends_at, is_test: b.is_test === true } : { id: b.id },
+      p_payload: action === 'add_slot' ? { starts_at: b.starts_at, ends_at: b.ends_at, is_test: b.is_test === true } : action==='save_draft'?{id:b.id,draft_id:b.draft_id,agent_key:b.agent_key,body:b.body.trim()}:{ id: b.id },
     }));
   } catch (e) { return unavailable(res, e); }
 }

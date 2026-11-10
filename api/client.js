@@ -1,3 +1,4 @@
+import { billableDispatchEnabled } from './_spendingPolicy.js';
 import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail } from './_sanitize.js';
@@ -1082,6 +1083,7 @@ async function handleDocuments(req, res) {
   ].filter(Boolean).join('\n');
 
   try {
+    if(!billableDispatchEnabled())return res.status(423).json({error:'Paid model calls are paused under the $0 launch policy. Use the on-device workers in Launch Desk.'});
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {

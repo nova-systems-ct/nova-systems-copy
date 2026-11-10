@@ -14,7 +14,7 @@ assert.equal(fromEasternTime('2027-06-10T09:00'), '2027-06-10T13:00:00.000Z');
 assert.throws(() => fromEasternTime('2027-03-14T02:30'));
 assert.throws(() => fromEasternTime('2027-11-07T01:30'));
 const migration = process.env.LAUNCH_MIGRATION || 'supabase/migrations/20261109194341_launch_worker_booking.sql';
-const env = await startTestEnv({ migrations: ['scripts/testenv/serviceSmsLegacy.sql', 'scripts/testenv/launchWorkerLegacy.sql', 'supabase/migrations/20261108172929_service_sms_intake.sql', migration, 'supabase/migrations/20261109195329_launch_worker_owner_cancel.sql'], publicBuckets: [] });
+const env = await startTestEnv({ migrations: ['scripts/testenv/serviceSmsLegacy.sql', 'scripts/testenv/launchWorkerLegacy.sql', 'supabase/migrations/20261108172929_service_sms_intake.sql', migration, 'supabase/migrations/20261109195329_launch_worker_owner_cancel.sql','supabase/migrations/20261110021301_local_worker_drafts.sql','supabase/migrations/20261110023037_worker_model_metadata.sql'], publicBuckets: [] });
 let server, browser, vite;
 try {
   assert.deepEqual(env.migrationErrors, []);
@@ -65,11 +65,19 @@ try {
   assert.equal((await admin({ action: 'withdraw_slot', id: slot })).result.code, 'slot_not_available');
   assert.equal((await call(clientHandler,{action:'update-status',id:winner.submission_id,status:'pending'},owner.token,'POST',{resource:'intake-requests'})).status,409);
   assert.equal((await q('select status from intake_requests where id=$1',[winner.submission_id]))[0].status,'confirmed');
+  const draftId=randomUUID();const draftBody={action:'save_draft',id:winner.submission_id,draft_id:draftId,agent_key:'follow_up',body:'TEST Reviewed on-device draft. What request do you need help with?'};
+  assert.equal((await admin(draftBody,outsider.token)).status,403);
+  assert.equal((await admin(draftBody)).status,200);assert.equal((await admin(draftBody)).status,200);
+  assert.equal((await q('select count(*)::int n from nova_worker_drafts where id=$1',[draftId]))[0].n,1);
+  assert.equal((await q("select count(*)::int n from nova_crm_activities where engine='local_ai_follow_up'"))[0].n,1);
+  assert.equal((await admin({...draftBody,body:'An altered draft should not replace the receipt.'})).result.code,'draft_conflict');
+  assert.equal((await admin({...draftBody,draft_id:randomUUID(),id:randomUUID()})).result.code,'request_not_active');
   const cancel = { request_type: 'launch_cancel', submission_id: winner.submission_id, management_token: winner.management_token };
   assert.equal((await invoke({ ...cancel, management_token: randomBytes(32).toString('hex') })).status, 404);
   assert.equal((await invoke(cancel)).result.state, 'cancelled'); assert.equal((await invoke(cancel)).result.duplicate, true);
   assert.equal((await q('select status,request_id from nova_booking_slots where id=$1', [slot]))[0].status, 'available');
   assert.equal((await q('select status from nova_book_meetings limit 1'))[0].status, 'cancelled');
+  assert.equal((await admin({...draftBody,draft_id:randomUUID()})).result.code,'request_not_active');
   const plain = request('no-appointment'); const p = await invoke(plain); assert.equal(p.result.state, 'request_ready'); assert.equal(p.result.booking, null);
   const exact = (await q('select * from nova_service_sms_receipts where request_id=$1', [plain.submission_id]))[0];
   assert.equal(exact.disclosure, SERVICE_SMS_POLICY.text); assert.equal(exact.is_test, true); assert.equal(exact.marketing_consent, false);
@@ -88,17 +96,18 @@ try {
   assert.equal((await q('select status from nova_booking_slots where id=$1', [rollSlot]))[0].status, 'available');
   await q('drop trigger fail_launch_task on nova_tasks; drop function public.fail_launch_task();');
   for (const token of [null, outsider.token]) {
-    for (const table of ['nova_booking_slots', 'nova_worker_runs']) {
+    for (const table of ['nova_booking_slots', 'nova_worker_runs','nova_worker_drafts']) {
       const r = await env.rest(token, table + '?select=*'); assert(r.status >= 400 || r.data.length === 0);
     }
     assert((await env.rest(token, 'rpc/nova_launch_owner', { method: 'POST', body: { p_actor: owner.id, p_action: 'overview' } })).status >= 400);
     assert((await env.rest(token, 'rpc/nova_launch_request', { method: 'POST', body: { p_request: {}, p_management_hash: 'a'.repeat(64), p_service: 'booking' } })).status >= 400);
   }
   console.log('PASS — actual PostgreSQL/PostgREST: owner-only scheduling, no overlaps/double bookings, idempotency, token binding, test/live separation, cancellation, private ledger and complete rollback');
-  const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png' };
+  const mime = { '.html': 'text/html', '.js': 'text/javascript','.mjs':'text/javascript','.wasm':'application/wasm', '.css': 'text/css', '.png': 'image/png' };
   server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
+      res.setHeader('Content-Security-Policy',JSON.parse(fs.readFileSync('vercel.json','utf8')).headers[0].headers.find(h=>h.key==='Content-Security-Policy').value);
       if (url.pathname === '/api/book-meeting') {
         const chunks = []; for await (const c of req) chunks.push(c);
         req.body = JSON.parse(Buffer.concat(chunks).toString() || '{}'); req.query = Object.fromEntries(url.searchParams);
@@ -106,13 +115,31 @@ try {
         return handler(req, out);
       }
       const route = { '/service-request': '/sms-program/index.html', '/service-texts/privacy': '/sms-program/privacy.html', '/service-texts/terms': '/sms-program/terms.html' }[url.pathname] || url.pathname;
+      if(route.startsWith('/__model_assets/')){
+        const asset=route.slice('/__model_assets/'.length);const prefix='onnx-community/Qwen2.5-0.5B-Instruct/resolve/22942cb7d7ba4cc81bb4673549ca4d4614469b5e/';
+        if(!asset.startsWith(prefix)||asset.includes('..')||!['GET','HEAD'].includes(req.method)){res.statusCode=404;return res.end();}
+        if(process.env.NOVA_MODEL_CACHE){const file=path.join(process.env.NOVA_MODEL_CACHE,asset.slice(prefix.length));if(fs.existsSync(file)){res.setHeader('Content-Type',file.endsWith('.json')?'application/json':'application/octet-stream');res.setHeader('Content-Length',fs.statSync(file).size);return req.method==='HEAD'?res.end():fs.createReadStream(file).pipe(res);}}
+        const upstream=await fetch('https://huggingface.co/'+asset,{method:req.method,signal:AbortSignal.timeout(90000)});res.statusCode=upstream.status;
+        res.setHeader('Content-Type',upstream.headers.get('content-type')||'application/octet-stream');return res.end(req.method==='HEAD'?undefined:Buffer.from(await upstream.arrayBuffer()));
+      }
+      if ((route.startsWith('/ai-runtime/')||route.startsWith('/assets/'))&&!route.includes('..')) {const file=path.resolve('dist'+route);res.setHeader('Content-Type',mime[path.extname(file)]||'application/octet-stream');return res.end(fs.readFileSync(file));}
       if (!route.startsWith('/sms-program/') || route.includes('..')) { res.statusCode = 404; return res.end(); }
       const file = path.resolve('public' + route); res.setHeader('Content-Type', mime[path.extname(file)] || 'application/octet-stream'); res.end(fs.readFileSync(file));
     } catch { res.statusCode = 500; res.end('Test server error'); }
   });
   await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: await packaged.executablePath(), args: packaged.args, headless: true });
-  const context = await browser.newContext(); const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message));
+  const context = await browser.newContext();context.on('requestfailed',r=>{const u=new URL(r.url());console.log('[asset-failed]',u.origin+u.pathname,r.failure()?.errorText)}); const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message));page.on('console',m=>{if(m.type()==='error')console.log('[browser-error]',m.text().slice(0,250));});
+  if(process.env.NOVA_LOCAL_AI_ACCEPTANCE==='1'){
+    // Headless Chromium has no direct external egress in this test host. Transport only the exact
+    // public model/runtime assets through Node's approved egress; inference still runs in the browser Worker.
+    await context.route('https://**',async route=>{
+      const u=new URL(route.request().url());const allowed=['cdn.jsdelivr.net','huggingface.co','cas-bridge.xethub.hf.co','cdn-lfs.huggingface.co','cdn-lfs-us-1.hf.co'];
+      if(!allowed.includes(u.hostname)||route.request().method()!=='GET'){console.log('[asset-blocked]',u.origin+u.pathname);return route.abort();}
+      try{const r=await fetch(u,{signal:AbortSignal.timeout(90000)});console.log('[asset-read]',u.origin+u.pathname,r.status);await route.fulfill({status:r.status,headers:{'content-type':r.headers.get('content-type')||'application/octet-stream','access-control-allow-origin':'*'},body:Buffer.from(await r.arrayBuffer())});}
+      catch{await route.abort();}
+    });
+  }
   fs.mkdirSync('docs/qa/launch-worker-2026-11-09', { recursive: true });
   await page.goto(base + '/service-request?test=1&new=1'); await page.getByText('Choose one of Nova’s published times.', { exact: true }).waitFor(); await page.waitForFunction(() => !document.getElementById('submit').disabled);
   assert.equal(await page.getByRole('checkbox', { name: /Service texts \(optional\)/ }).isChecked(), false);
@@ -121,6 +148,20 @@ try {
     await page.screenshot({ path: `docs/qa/launch-worker-2026-11-09/${name}.jpg`, fullPage: true });
   }
   await page.setViewportSize({ width: 1366, height: 1000 });
+  if(process.env.NOVA_LOCAL_AI_ACCEPTANCE==='1'){
+    await page.locator('#local-ai-helper summary').click();
+    await page.getByLabel('Describe what your business needs',{exact:true}).fill('TEST I run a plumbing business and miss calls while on jobs. I want a better way to collect customer requests.');
+    const aiCalls=[];page.on('request',r=>{if(!r.url().startsWith(base))aiCalls.push({method:r.method(),url:r.url().split('?')[0],body:r.postData()});});
+    await page.getByRole('button',{name:'Create an on-device draft',exact:true}).click();
+    const progress=setInterval(async()=>{try{console.log('[local-ai-progress]',await page.locator('#local-ai-status').innerText());}catch{}},15000);
+    try{await Promise.race([page.locator('#local-ai-use').waitFor({state:'visible',timeout:180000}),page.waitForFunction(()=>document.getElementById('local-ai-error').textContent.trim().length>0,null,{timeout:180000}).then(async()=>{throw Error(await page.locator('#local-ai-error').innerText());})]);}finally{clearInterval(progress);}
+    assert((await page.locator('#local-ai-output').inputValue()).length>20);
+    assert(aiCalls.every(r=>r.method==='GET'&&!r.body),'Model loading must never transmit a customer prompt');
+    await page.screenshot({path:'docs/qa/launch-worker-2026-11-09/local-ai-browser.jpg',fullPage:true});
+    await page.getByRole('button',{name:'Use draft in my request',exact:true}).click();
+    assert.match(await page.locator('#message').inputValue(),/Reviewed planning draft/);
+    console.log('PASS — actual on-device LLM in browser Worker with production CSP: generated a real draft, no prompt uploaded, reviewed draft copied into real booking form');
+  }
   await page.getByLabel('Your name', { exact: true }).fill('TEST Browser'); await page.getByLabel('Business name', { exact: true }).fill('TEST Nova');
   await page.getByLabel('Email', { exact: true }).fill('browser-booking@example.invalid'); await page.getByLabel('Phone (optional)', { exact: true }).fill('+12035550195');
   await page.locator('#slot-options input').first().check();

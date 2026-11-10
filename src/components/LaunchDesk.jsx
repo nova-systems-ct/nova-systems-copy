@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { authedFetch } from '../lib/apiAuth';
 import { fromEasternTime, formatEasternTime } from '../lib/novaBookingTime';
 import './LaunchDesk.css';
+import LocalWorkers from './LocalWorkers';
 
 export default function LaunchDesk() {
   const [data, setData] = useState(null);
@@ -55,6 +56,7 @@ export default function LaunchDesk() {
       <div className="launch-runs-heading"><h3>Worker completion receipts</h3><div><label className="launch-check"><input type="checkbox" checked={showTests} onChange={e => setShowTests(e.target.checked)} />Show test records</label><button type="button" className="launch-text-btn" onClick={load}>Refresh</button></div></div>
       {!runs.length && <p className="launch-empty">No live worker runs yet. Share the customer assistant to receive your first request.</p>}
       <div className="launch-run-list">{runs.map(r => <article key={r.request_id} className="launch-run"><div className="launch-run-top"><div><span className="launch-eyebrow">{r.is_test ? 'TEST RUN' : 'CUSTOMER REQUEST'}</span><h4>{r.business_name}</h4><p>{r.name} · <a href={'mailto:' + r.email}>{r.email}</a>{r.phone && <> · <a href={'tel:' + r.phone}>{r.phone}</a></>}</p></div><span className={'launch-state ' + (r.state === 'booked' ? 'is-booked' : '')}>{r.state === 'booked' ? 'Appointment booked' : r.state === 'cancelled' ? 'Cancelled' : 'Ready for follow-up'}</span></div>{r.notes && <p className="launch-request-note">{r.notes}</p>}<ul>{r.steps.map((s, i) => <li key={i} className={s.status === 'completed' ? 'is-complete' : ''}>{s.label}</li>)}</ul><p className="launch-small">{r.starts_at && r.state === 'booked' ? formatEasternTime(r.starts_at) + ' · ' : ''}Follow-up task: {r.follow_up_status}. No outbound message was sent by this workflow.</p>{r.state !== 'cancelled' && <button className="launch-text-btn" type="button" disabled={busy} onClick={() => mutate({action:'cancel_request',id:r.request_id})}>Cancel request</button>}<details><summary>Saved reference</summary><p className="launch-reference">{r.request_id}</p></details></article>)}</div>
+      <LocalWorkers runs={showTests?data.runs:data.runs.filter(r=>!r.is_test)} drafts={data.drafts||[]} onSaved={setData}/>
       <p className="launch-small">This worker follows a defined intake and booking workflow. Paid language-model, text-message and phone dispatch are not activated here.</p>
     </>}
   </section>;

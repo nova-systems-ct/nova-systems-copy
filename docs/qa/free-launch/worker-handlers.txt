@@ -1,0 +1,51 @@
+PASS — An unsigned/forged webhook is rejected (403) and stores NOTHING
+PASS — With no auth token configured the webhook fails CLOSED (503), not open
+PASS — Inbound SMS creates ONE contact, ONE conversation, ONE message linked together
+PASS — DUPLICATE WEBHOOK: replaying the same MessageSid changes nothing
+PASS — A reply marks the conversation so automated follow-up will stop
+PASS — ISOLATION: the same caller texting Org B's number becomes a SEPARATE contact in Org B; Org A is untouched
+PASS — A message to a number no organization owns is acknowledged and recorded nowhere
+PASS — MISSED CALL: an eligible missed call enqueues exactly ONE follow-up job (duplicate callbacks do not add more)
+PASS — A completed (answered) call enqueues nothing
+PASS — OPT-OUT: STOP stores suppression on the contact
+PASS — OPT-OUT: an already-queued job is BLOCKED at execution time — the provider is never called
+PASS — The block is recorded for the operator view with its reason
+PASS — SEND: a consented, eligible missed call sends once and records provider_accepted (NOT "delivered")
+PASS — REDELIVERED JOB: the same missed call is never texted twice (idempotency guard, checked before any rate rule)
+PASS — ...and STILL never twice when the min-gap and daily limits are switched off
+PASS — HANDOFF: staff takeover between enqueue and execution blocks the automated text
+PASS — NO CONSENT: an unknown caller's missed call is NOT texted — a number existing is not consent (blocked + recorded, no job)
+PASS — DRY RUN: with live sends disabled nothing reaches the provider and the row says so (not "sent")
+PASS — $0 LOCK: an otherwise eligible send is blocked before any provider claim or call
+PASS — No reviewed template → blocked; the system never invents message copy
+PASS — AMBIGUOUS OUTCOME: a provider timeout is recorded as ambiguous and NOT auto-retried
+PASS — A provider rejection is recorded as failed (visible), not silently dropped
+PASS — Rate limiting throws so the durable queue retries with backoff
+PASS — FORM: a valid submission creates a contact + conversation + message in the RIGHT org
+PASS — FORM: providing a phone does NOT grant SMS consent
+PASS — FORM: a double-submit is de-duplicated
+PASS — FORM: the explicit checkbox records consent WITH source and timestamp
+PASS — FORM: a wrong token is a 404 and writes nothing
+PASS — FORM: honeypot spam is rejected
+PASS — FORM: Org B's token cannot write into Org A
+PASS — QUIET HOURS: a missed call at night is SCHEDULED for when quiet hours end, not dropped and not sent now
+PASS — QUIET HOURS: if the job runs while still quiet it defers again (bounded) and sends nothing
+PASS — QUIET HOURS: deferral is capped — after 3 it is recorded as blocked instead of looping forever
+PASS — STATUS: a delivered callback moves provider_accepted to delivered
+PASS — STATUS: a late/out-of-order "sent" cannot downgrade delivered
+PASS — STATUS: a duplicate callback is a no-op
+PASS — STATUS: a forged status callback is rejected and changes nothing
+PASS — STATUS ISOLATION: Org B's number cannot update Org A's message
+PASS — STATUS: a reconciled ambiguous send takes the provider outcome
+PASS — STATUS: carrier opt-out (21610) suppresses the contact so no later automation can text them
+PASS — An opted-out contact replying "Yes" is NOT re-subscribed and gets no consent
+PASS — START (carrier-standard) does re-subscribe, with source recorded
+PASS — VOICE: a forged voice webhook is rejected
+PASS — VOICE: the call is forwarded to the escalation contact with a ring timeout and a result callback
+PASS — VOICE: forwarding alone creates no missed-call job
+PASS — VOICE: a forwarded leg that was ANSWERED is not a missed call
+PASS — VOICE: parent "completed" + DialCallStatus no-answer IS a missed call (one follow-up job)
+PASS — VOICE: with no one to ring it says so honestly, hangs up, and still records the missed call
+PASS — VOICE: a number no organization owns is not forwarded anywhere
+
+49/49 handler checks passed (in-memory simulator — no provider contacted, no database touched)

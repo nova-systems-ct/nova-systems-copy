@@ -97,14 +97,7 @@ const PROVIDERS = {
     envVars: ['GOOGLE_API_KEY'],
     breaksIfMissing: 'Nothing — unused today.',
     resetNote: 'Cleared 2026-09-20 — exposed in this session\'s own chat transcript and still needs provider-side revocation in Google Cloud Console (clearing the local value alone does not revoke it). Unused in code, so safe to delete outright rather than rotate. See the URGENT section of docs/credential-rotation-plan.md.',
-    test: async (env) => {
-      const key = env.GOOGLE_API_KEY;
-      if (!key) return { ok: false, detail: 'Not configured' };
-      const r = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=test&key=${key}`);
-      const data = await r.json().catch(() => ({}));
-      const ok = data.status && data.status !== 'REQUEST_DENIED' && data.status !== 'INVALID_REQUEST';
-      return { ok, detail: ok ? 'Connected — key accepted' : `Provider status: ${data.status || r.status}` };
-    },
+    test: async () => ({ok:false,detail:'Maps lookups are paused under the $0 launch policy. Apple and Google sign-in are configured separately.'}),
   },
   elevenlabs: {
     label: 'ElevenLabs',

@@ -18,6 +18,8 @@ function persist() { try { sessionStorage.setItem(sessionKey, JSON.stringify(rec
 function showReceipt(saved) {
   receipt = saved;
   form.hidden = true;
+  const helper=$('local-ai-helper');if(helper)helper.hidden=true;
+  window.dispatchEvent(new Event('nova-request-saved'));
   $('confirmation').hidden = false;
   const booked = saved.state === 'booked' && saved.booking;
   const cancelled = saved.state === 'cancelled';

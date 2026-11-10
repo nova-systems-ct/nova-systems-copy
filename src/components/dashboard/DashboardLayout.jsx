@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   LayoutDashboard, BrainCircuit, TrendingUp, PlayCircle, Building2, ShieldCheck,
-  LogOut, Menu, X, ChevronsUpDown, Check, Users,
+  LogOut, Menu, X, ChevronsUpDown, Check, Users, CalendarCheck,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuthGuard } from '../../hooks/useAuthGuard'
@@ -31,7 +31,8 @@ const ROLE_LABELS = {
 // <RequirePermission> so direct navigation can't bypass this.
 const NAV = [
   { to: '/dashboard',              label: 'Overview',     icon: LayoutDashboard, exact: true, permission: 'overview.view' },
-  { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit,    match: ['/dashboard/intelligence', '/dashboard/intake-forms', '/dashboard/audit'], permission: 'intelligence.view' },
+  { to: '/dashboard/intake-forms', label:'Launch Desk', icon:CalendarCheck, exact:true, permission:'intelligence.view' },
+  { to: '/dashboard/intelligence', label: 'Intelligence', icon: BrainCircuit,    match: ['/dashboard/intelligence', '/dashboard/audit'], permission: 'intelligence.view' },
   { to: '/dashboard/growth',       label: 'Growth',        icon: TrendingUp,      match: ['/dashboard/growth', '/dashboard/referrals', '/dashboard/wave-one', '/dashboard/blog', '/dashboard/portfolio', '/dashboard/newsletter', '/dashboard/academy', '/dashboard/crm', '/dashboard/sales', '/dashboard/pilots', '/dashboard/pilot-console', '/dashboard/leads', '/dashboard/zion', '/dashboard/marketing'], permission: 'growth.view' },
   { to: '/dashboard/execution',    label: 'Execution',     icon: PlayCircle,      match: ['/dashboard/execution', '/dashboard/tasks'], permission: 'execution.view' },
   { to: '/dashboard/companies',    label: 'Companies',     icon: Building2,       match: ['/dashboard/companies', '/dashboard/crystal'], permission: 'companies.view' },

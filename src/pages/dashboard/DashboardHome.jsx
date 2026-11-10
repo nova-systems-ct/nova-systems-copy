@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import './DashboardLaunch.css';
+import { Link, useNavigate } from 'react-router-dom'
 import { Target, DollarSign, FileText, Receipt, HandCoins, Search, Newspaper, LayoutGrid, ClipboardCheck, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useOrg } from '../../lib/OrgContext'
@@ -74,7 +75,7 @@ function MetricCard({ icon: Icon, label, value, sub, onClick }) {
 // here is either a real query result or an honest zero; nothing is fabricated.
 export default function DashboardHome() {
   const navigate = useNavigate()
-  const { currentOrg } = useOrg()
+  const { currentOrg, hasPermission } = useOrg()
   const routeHealth = useRouteHealth()
   const [loading, setLoading] = useState(true)
   const [dataError, setDataError] = useState(false)
@@ -139,7 +140,7 @@ export default function DashboardHome() {
   // it must never render under a different organization.
   if (currentOrg && currentOrg.kind !== 'nova_internal') {
     return (
-      <div style={{ padding: '48px 52px 80px', maxWidth: 1200 }}>
+      <div style={{ padding: 'clamp(22px,4vw,48px) clamp(16px,4vw,52px) 80px', maxWidth: 1200 }}>
         <div style={{ marginBottom: 48 }}>
           <h1 style={{ color: '#fff', fontSize: 34, fontWeight: 800, letterSpacing: '-0.025em', marginBottom: 6 }}>{greeting()}.</h1>
           <p style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14 }}>{fmtDate()}</p>
@@ -152,7 +153,7 @@ export default function DashboardHome() {
   }
 
   return (
-    <div style={{ padding: '48px 52px 80px', maxWidth: 1200 }}>
+    <div style={{ padding: 'clamp(22px,4vw,48px) clamp(16px,4vw,52px) 80px', maxWidth: 1200 }}>
 
       {/* Header */}
       <div style={{ marginBottom: 48 }}>
@@ -162,10 +163,12 @@ export default function DashboardHome() {
         <p style={{ color: 'rgba(255,255,255,0.22)', fontSize: 14 }}>{fmtDate()}</p>
       </div>
 
+      <section className="dashboard-launch-bar"><div><p>YOUR NEXT ACTION</p><h2>Customer work,<br/><em>in one place.</em></h2><span>Manage requests, publish available times and work through the next response with Nova’s on-device assistants.</span></div><div>{hasPermission('intelligence.view')&&<Link to="/dashboard/intake-forms">Open Launch Desk →</Link>}{hasPermission('admin.view')&&<Link to="/dashboard/integrations" className="dashboard-launch-secondary">Manage connections →</Link>}<a href="/service-request" className="dashboard-launch-secondary" target="_blank" rel="noreferrer">Open customer page →</a></div></section>
+
       {dataError && (
         <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: '16px 20px', marginBottom: 24 }}>
           <p style={{ color: '#f87171', fontSize: 13 }}>
-            Some data couldn't load — this usually means the Stage 5 database migration hasn't been run yet. Showing what's available.
+            Some dashboard data couldn't load. Refresh the page or open your saved requests in Launch Desk.
           </p>
         </div>
       )}

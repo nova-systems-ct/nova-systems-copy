@@ -1,0 +1,5 @@
+[launch-worker] Transaction could not be confirmed
+PASS — actual PostgreSQL/PostgREST: owner-only scheduling, no overlaps/double bookings, idempotency, token binding, test/live separation, cancellation, private ledger and complete rollback
+[asset-failed] https://fonts.googleapis.com/css2 net::ERR_EMPTY_RESPONSE
+PASS — real owner browser session: publish Eastern appointment, verified UTC database time, inspect test receipts, withdraw available time; owner/home desktop and phone layout, working mobile navigation
+PASS — real browser → API → database: appointment reserved, five action receipts, calendar download, reload recovery, customer cancellation; desktop/iPad/phone fit; no outbound messages, paid AI, payments or browser errors

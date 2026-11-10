@@ -1,0 +1,32 @@
+[
+  {
+    "role": "intake",
+    "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+    "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+    "execution": "actual_local_cpu_inference",
+    "model_candidate": "I am an Elm Street Plumbing business owner looking for a reliable business system that can capture inquiries when calls are missed during my job.",
+    "text": "I am an Elm Street Plumbing business owner looking for a reliable business system that can capture inquiries when calls are missed during my job.",
+    "output_mode": "language_model_draft",
+    "review_note": "Review the generated draft before using it. No action was dispatched."
+  },
+  {
+    "role": "scheduling",
+    "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+    "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+    "execution": "actual_local_cpu_inference",
+    "model_candidate": "We can introduce you to our Business Software Solutions team at [Date] at 10 AM for a complimentary consultation to discuss your specific needs and requirements.",
+    "text": "Thanks for reaching out to Nova Systems. Which day and time would suit you for a phone introduction?",
+    "output_mode": "verified_template",
+    "review_note": "The model draft contained unsupported details. A labelled template is shown instead."
+  },
+  {
+    "role": "follow_up",
+    "model": "onnx-community/Qwen2.5-0.5B-Instruct",
+    "revision": "22942cb7d7ba4cc81bb4673549ca4d4614469b5e",
+    "execution": "actual_local_cpu_inference",
+    "model_candidate": "Hello [Business Owner],\n\nThank you for your interest in our innovative business management solution. We understand the challenges of managing multiple jobs simultaneously, which is why we've designed our platform specifically for capturing and analyzing these requests.\n\nCould you please provide more details on your specific needs? Are there any particular features or functionalities you're looking for within this solution?\n\nOnce I have a clear understanding of your requirements, I",
+    "text": "Thanks for reaching out to Nova Systems about improving your business systems. Which part of handling customer requests or booking appointments would you like us to work through first?",
+    "output_mode": "verified_template",
+    "review_note": "The model draft contained unsupported details. A labelled template is shown instead."
+  }
+]

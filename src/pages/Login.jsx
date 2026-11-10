@@ -4,6 +4,7 @@ import { ArrowRight, Bot, Globe, Palette, Workflow } from "lucide-react";
 import loginVideo from "@/assets/video 2.mp4";
 import { useSEO } from "@/hooks/useSEO";
 import { supabase } from "@/lib/supabaseClient";
+import { availableSocialProviders, socialReturnUrl } from '@/lib/socialLogin';
 import { safeReturnTo } from "@/lib/returnTo";
 
 const GOLD = "#C9A84C";
@@ -14,7 +15,7 @@ const GOLD_GRADIENT = `linear-gradient(135deg, ${GOLD_DARK} 0%, ${GOLD} 35%, ${G
 // used exactly as supplied (no re-encoding).
 
 const features = [
-  { icon: Bot, label: "AI ECOSYSTEMS", sub: "Automated workflows and phone agents, live." },
+  { icon: Bot, label: "AI ECOSYSTEMS", sub: "Customer requests, appointments and follow-up." },
   { icon: Globe, label: "WEB INFRASTRUCTURE", sub: "Sites, portals, and platforms built to convert." },
   { icon: Palette, label: "BRAND AND IDENTITY", sub: "Every asset, from digital to physical." },
   { icon: Workflow, label: "FULL OPERATIONS", sub: "CRM, contracts, and cloud infrastructure." },
@@ -41,6 +42,8 @@ export default function Login() {
     return () => mq.removeEventListener?.("change", onChange);
   }, []);
 
+  const [socialProviders,setSocialProviders]=useState({apple:false,google:false});
+  useEffect(()=>{let active=true;availableSocialProviders(import.meta.env.VITE_SUPABASE_URL,import.meta.env.VITE_SUPABASE_ANON_KEY).then(p=>{if(active)setSocialProviders(p);});return()=>{active=false;};},[]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -109,6 +112,13 @@ export default function Login() {
     setError("Invalid email or password. Please try again.");
   };
 
+  const handleSocial = async provider => {
+    if(!socialProviders[provider]||!supabase||loading)return;
+    setError('');setInfo('');setLoading(true);
+    try {const {error:e}=await supabase.auth.signInWithOAuth({provider,options:{redirectTo:socialReturnUrl(window.location.origin,destination)}});if(e)throw e;}
+    catch{setError('Provider sign-in could not be started. Use your existing email and password.');setLoading(false);}
+  };
+
   const handleForgotPassword = async () => {
     setError("");
     setInfo("");
@@ -159,9 +169,9 @@ export default function Login() {
         <div className="relative" style={{ zIndex: 10 }}>
           <p className="text-[9px] tracking-[0.35em] uppercase mb-5" style={{ color: GOLD }}>OPERATIONAL COMMAND</p>
           <h1 className="font-black text-white leading-[0.9] mb-7" style={{ fontSize: "clamp(2.8rem,5vw,4.5rem)", letterSpacing: "-0.02em" }}>
-            ELITE<br />
+            YOUR BUSINESS.<br />
             <span style={{ background: `linear-gradient(90deg,${GOLD} 0%,${GOLD_BRIGHT} 50%,${GOLD} 100%)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              INFRASTRUCTURE.
+              IN ONE PLACE.
             </span>
           </h1>
           <p className="text-sm mb-10" style={{ color: "rgba(255,255,255,0.4)", maxWidth: 320 }}>
@@ -223,14 +233,15 @@ export default function Login() {
             </div>
           )}
 
+          {(socialProviders.apple||socialProviders.google)&&<div className="space-y-3 mb-6" aria-label="Provider sign-in">{['apple','google'].filter(p=>socialProviders[p]).map(p=><button key={p} type="button" onClick={()=>handleSocial(p)} disabled={loading} className="w-full py-3 rounded-lg text-sm font-semibold" style={{color:'#f0ebdf',background:'#ffffff06',border:'1px solid #c9a84c60'}}>Continue with {p==='apple'?'Apple':'Google'}</button>)}</div>}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-[10px] font-bold tracking-[0.15em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Email</label>
-              <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+              <label htmlFor="nova-login-email" className="block text-[10px] font-bold tracking-[0.15em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Email</label>
+              <input id="nova-login-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
             </div>
             <div>
-              <label className="block text-[10px] font-bold tracking-[0.15em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Password</label>
-              <input type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
+              <label htmlFor="nova-login-password" className="block text-[10px] font-bold tracking-[0.15em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Password</label>
+              <input id="nova-login-password" type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
             </div>
             <button
               type="submit"

@@ -1,3 +1,4 @@
+import {billableDispatchEnabled} from './_spendingPolicy.js';
 // Wave One webhook + follow-up orchestration. Talks to storage ONLY through a `repo` interface:
 //   - createPostgrestRepo(): production (service-role PostgREST) — used by api/client.js and the worker.
 //   - the in-memory repo in scripts/unit_wave1_handlers_test.mjs — proves these code paths run.
@@ -231,6 +232,11 @@ export async function runMissedCallFollowup(job, repo, sender, env) {
     return { sent: false, blocked: 'send_disabled_dry_run' };
   }
 
+  if(!billableDispatchEnabled(env)){
+    await repo.insertMessage(orgId,{conversation_id,direction:'outbound',body:template,automated:true,purpose:'missed_call',status:'blocked',blocked_reason:'spending_locked',idempotency_key:`${key}:exec`});
+    return {sent:false,blocked:'spending_locked'};
+  }
+
   // Claim the send BEFORE calling the provider (idempotency row). A redelivered job hits the unique key and stops.
   const claimed = await repo.insertMessage(orgId, { conversation_id, direction: 'outbound', body: template, automated: true, purpose: 'missed_call', status: 'queued', provider: 'twilio', idempotency_key: `${key}:send` });
   if (!claimed) return { sent: false, skipped: 'already_attempted' };
@@ -259,6 +265,7 @@ export function createTwilioSender(env, fetchImpl = fetch) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 10_000);
     try {
+      if(!billableDispatchEnabled(env))return {httpStatus:423,error:'spending_locked'};
       const r = await fetchImpl(`https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`, {
         method: 'POST', signal: ctrl.signal,
         headers: { Authorization: 'Basic ' + Buffer.from(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' },

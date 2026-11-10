@@ -34,7 +34,8 @@ function makeRepo() {
   return repo;
 }
 
-const ENV = { TWILIO_AUTH_TOKEN: 'tok', WAVE1_SEND_ENABLED: 'true' };
+// Explicit fake-sender budget opt-in applies only to this in-memory simulator.
+const ENV = { TWILIO_AUTH_TOKEN: 'tok', WAVE1_SEND_ENABLED: 'true', NOVA_SPENDING_LOCK:'disabled', NOVA_BILLABLE_DISPATCH_ENABLED:'true' };
 const BASE = 'https://nova-systems.app/api/client?resource=wave1';
 const signed = (op, params) => ({ url: `${BASE}&op=${op}`, params, signature: twilioSignature(`${BASE}&op=${op}`, params, 'tok') });
 // A weekday noon in New York for settings that pass quiet hours: we control eligibility via timezone + clock.
@@ -130,6 +131,8 @@ const settingsFor = (org, num, extra = {}) => ({ organization_id: org, sms_numbe
   let called = 0;
   const dry = await mk({ WAVE1_SEND_ENABLED: 'false' }, {}, async () => { called += 1; return { httpStatus: 201 }; });
   log('DRY RUN: with live sends disabled nothing reaches the provider and the row says so (not "sent")', called === 0 && dry.out.blocked === 'send_disabled_dry_run' && dry.repo.s.msgs.at(-1).status === 'blocked');
+  const budget=await mk({NOVA_SPENDING_LOCK:'locked'}, {}, async()=>{called++;return {httpStatus:201}});
+  log('$0 LOCK: an otherwise eligible send is blocked before any provider claim or call',budget.out.blocked==='spending_locked'&&called===0&&!budget.repo.s.msgs.some(m=>m.status==='queued'));
   const noTpl = await mk({}, { templates: {} }, async () => ({ httpStatus: 201 }));
   log('No reviewed template → blocked; the system never invents message copy', noTpl.out.blocked === 'no_reviewed_template');
   const amb = await mk({}, {}, async () => { throw new Error('ETIMEDOUT'); });
