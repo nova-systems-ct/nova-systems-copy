@@ -48,6 +48,8 @@ const DashboardHome = lazy(() => import('./pages/dashboard/DashboardHome'));
 const MessagingWorkspace = lazy(() => import('./pages/dashboard/MessagingWorkspace'));
 const NovaCalendar = lazy(() => import('./pages/dashboard/NovaCalendar'));
 const CompanyWorkers = lazy(() => import('./pages/dashboard/CompanyWorkers'));
+const ExecutiveTeam = lazy(() => import('./pages/dashboard/ExecutiveTeam'));
+const WalletPass = lazy(() => import('./pages/WalletPass'));
 const CfoDesk = lazy(() => import('./pages/dashboard/CfoDesk'));
 const AuditFieldWorkspace = lazy(() => import('./pages/dashboard/AuditFieldWorkspace'));
 const Intelligence = lazy(() => import('./pages/dashboard/Intelligence'));
@@ -136,6 +138,7 @@ function App() {
                 existing "Request a Nova Audit" link/bookmark site-wide keeps working. */}
             <Route path="/request-audit" element={<Navigate to="/welcome" replace />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/wallet" element={<WalletPass />} />
             <Route path="/client-login" element={<ClientLogin />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/reset-password" element={<ResetPassword />} />
@@ -186,6 +189,7 @@ function App() {
               <Route path="conversations" element={<RequirePermission permission="admin.view"><MessagingWorkspace /></RequirePermission>} />
               <Route path="calendar" element={<RequirePermission permission="admin.view"><NovaCalendar /></RequirePermission>} />
               <Route path="workers" element={<RequirePermission permission="admin.view"><CompanyWorkers /></RequirePermission>} />
+              <Route path="team-room" element={<RequirePermission permission="admin.view"><ExecutiveTeam /></RequirePermission>} />
               <Route path="cfo" element={<RequirePermission permission="admin.view"><CfoDesk /></RequirePermission>} />
               <Route path="audit/:id/field" element={<RequirePermission permission="intelligence.view"><AuditFieldWorkspace /></RequirePermission>} />
               <Route path="sales-team" element={<SalesTeamLayout />}>

@@ -5,6 +5,7 @@ import {channelConfiguration} from './_channelProviders.js';
 import {billableDispatchEnabled} from './_spendingPolicy.js';
 import {uploadToVault} from './_vaultStorage.js';
 import {handleProviderSetup} from './_providerVault.js';
+import {handleExecutiveTeam} from './_executiveTeam.js';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const errors={owner_required:'Only the Nova owner can manage company operations.',invalid_budget:'Provide a service, purpose and an optional positive USD spending cap.',budget_changed:'The budget has changed or cannot be approved. Refresh and review the current request.',budget_not_found:'This budget request is unavailable.',request_conflict:'This request reference was already used with different content.',case_not_found:'This audit is unavailable in your organization.',invalid_evidence:'Check the observation, source, confidence and checklist.',evidence_required:'Add an observation and source before marking evidence complete.',slot_unavailable:'That appointment time is unavailable. Refresh and choose another.',request_not_active:'Only an active future booking can be rescheduled.',practice_limit:'Start a new practice call to continue.',invalid_message:'Enter a message of 1 to 2,000 characters.'};
@@ -22,6 +23,7 @@ export async function handleCompanyAdmin(req,res){
  res.setHeader('Cache-Control','no-store');if(!['GET','POST'].includes(req.method))return res.status(405).json({error:'Method not allowed.'});
  const caller=await requireStaff(req,res,'admin.view');if(!caller)return;if(!rateLimit(req,res,50,60000))return;
  if(req.query?.op==='connections')return handleProviderSetup(req,res,caller);
+ if(req.query?.op==='team')return handleExecutiveTeam(req,res,caller);
  const b=req.body||{},action=req.method==='GET'?(req.query?.op==='audit_field'?'audit_field':'overview'):b.action,payload=req.method==='GET'?req.query:b;
  if(!['overview','request_budget','approve_budget','reject_budget','revoke_budget','run_committee','auto_reply','audit_field','save_audit_field','audit_photo','reschedule','voice_practice'].includes(action))return res.status(400).json({error:'Unknown company action.'});
  if(['approve_budget','reject_budget','revoke_budget'].includes(action)&&!UUID.test(b.id||''))return res.status(422).json({error:'Choose a budget request.'});

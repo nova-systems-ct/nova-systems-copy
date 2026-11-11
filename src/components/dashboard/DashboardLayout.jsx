@@ -13,6 +13,7 @@ const NAV=[
  {to:'/dashboard/leads',label:'Leads',icon:Users,permission:'growth.view'},
  {to:'/dashboard/calendar',label:'Calendar',icon:CalendarDays,permission:'admin.view'},
  {to:'/dashboard/workers',label:'Workers',icon:Bot,permission:'admin.view'},
+ {to:'/dashboard/team-room',label:'Company HQ',icon:Network,permission:'admin.view',ownerOnly:true},
  {to:'/dashboard/conversations',label:'Conversations',icon:MessagesSquare,permission:'admin.view'},
  {to:'/dashboard/intake-forms',label:'Bookings',icon:BriefcaseBusiness,permission:'intelligence.view'},
  {to:'/dashboard/crm',label:'Clients',icon:Building2,permission:'growth.view'},
@@ -26,7 +27,7 @@ export default function DashboardLayout(){
  const [open,setOpen]=useState(false),[search,setSearch]=useState(''),[commands,setCommands]=useState(false),[more,setMore]=useState(false);const searchRef=useRef(null);
  useEffect(()=>{const key=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setCommands(true)}if(e.key==='Escape'){setCommands(false);setOpen(false)}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[]);
  useEffect(()=>setOpen(false),[loc.pathname]);
- const permitted=item=>Array.isArray(item.permission)?item.permission.some(hasPermission):hasPermission(item.permission),nav=NAV.filter(permitted),tools=TOOLS.filter(permitted),name=user?.user_metadata?.full_name||user?.email?.split('@')[0]||'Your account',role=currentMembership?.role==='nova_super_admin'?'Owner':(currentMembership?.role||'Member').replaceAll('_',' ');
+ const permitted=item=>(!item.ownerOnly||currentMembership?.role==='nova_super_admin')&&(Array.isArray(item.permission)?item.permission.some(hasPermission):hasPermission(item.permission)),nav=NAV.filter(permitted),tools=TOOLS.filter(permitted),name=user?.user_metadata?.full_name||user?.email?.split('@')[0]||'Your account',role=currentMembership?.role==='nova_super_admin'?'Owner':(currentMembership?.role||'Member').replaceAll('_',' ');
  async function logout(){try{await supabase?.auth.signOut()}catch{}navigate('/login')}
  if(checking||loading)return <div className="nova-login-loading" role="status"><NovaBrand/><span>Opening your workspace…</span></div>;
  if(noAccess)return <div className="nova-login-loading"><NovaBrand/><p>This account has no organization access. Contact Nova to arrange access.</p><button className="luxe-outline" onClick={logout}>Sign out</button></div>;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { BookOpen, Lightbulb, FileCheck2, Plus, Loader2, CheckCircle2, XCircle, Clock, Video, AlertTriangle, CalendarDays, Send, BarChart3, DollarSign, IdCard } from 'lucide-react'
 import { authedFetch } from '../../lib/apiAuth'
 
@@ -20,6 +21,7 @@ export default function ZionStudio() {
       <div style={{ marginBottom: 28 }}>
         <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 6 }}>Zion Studio</p>
         <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}>Journal to Video</h1>
+        <Link to="/dashboard/team-room" style={{ color: GOLD, fontSize: 13 }}>Open campaign scripts and video previews in Company HQ →</Link>
         <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 13, marginTop: 6 }}>Real events only. Nothing here is published without your approval.</p>
       </div>
 

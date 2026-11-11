@@ -1,6 +1,5 @@
-import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import HeroSection from '@/components/home/HeroSection';
+import HeroSection,{NovaHomeNavigation} from '@/components/home/HeroSection';
 import { useSEO } from '@/hooks/useSEO';
 import './HomeLaunch.css';
 
@@ -17,11 +16,20 @@ const questions = [
 ];
 export default function Home() {
   useSEO({ title: 'Nova Systems — Customer Work, Connected', description: 'Business systems for customer requests, appointment booking and follow-up. Start with one useful workflow. Based in Waterbury, Connecticut.' });
-  return <div className="nova-home"><Navbar /><main className="pt-16"><HeroSection />
-    <div className="nova-value-line"><span>BUILT AROUND THE WORK</span><p>Clear requests. Real appointment times. A next step you can track.</p></div>
+  return <div className="nova-home"><NovaHomeNavigation/><main><HeroSection />
     <section id="services" className="nova-home-section"><div className="nova-section-heading"><p className="nova-kicker">LESS FRICTION. MORE FOLLOW-THROUGH.</p><h2>Make the everyday<br /><em>work better.</em></h2><p>Nova helps connect the customer-facing work that too often gets scattered across calls, inboxes and calendars.</p></div><div className="nova-services-grid">{services.map(s => <article className="nova-service-card" key={s.no}><div className="nova-card-number">{s.no}<span>→</span></div><p className="nova-kicker">{s.tag}</p><h3>{s.title}</h3><p>{s.body}</p></article>)}</div></section>
     <section id="workflow" className="nova-workflow-section"><div className="nova-home-section"><div className="nova-section-heading"><p className="nova-kicker">TRY THE NEXT STEP</p><h2>One request.<br /><em>A clear way forward.</em></h2><p>Use Nova’s customer assistant to send your request and arrange a conversation about your business.</p><a className="nova-home-button" href="/service-request">Open the booking assistant <span>→</span></a></div><ol className="nova-workflow-list"><li><span>01</span><div><h3>Tell us what needs attention</h3><p>Choose the system you want to improve and share the details that matter.</p></div></li><li><span>02</span><div><h3>Choose your next step</h3><p>Book a published phone appointment or ask Nova to arrange a time with you.</p></div></li><li><span>03</span><div><h3>See what was completed</h3><p>Get a saved request reference, your appointment result and a clear record of the next action.</p></div></li></ol></div></section>
     <section id="pilot" className="nova-home-section nova-pilot"><div><p className="nova-kicker">FOR BUSINESSES READY TO SIMPLIFY</p><h2>Start with one<br /><em>real task.</em></h2><p>A useful system starts with a specific job. Tell us where customers or your team get stuck, and we’ll work through the right scope with you.</p></div><div className="nova-pilot-card"><span className="nova-pilot-dot" /> <p className="nova-kicker">NOVA SYSTEMS · CONNECTICUT</p><h3>Your workflow.<br />Built around your business.</h3><p>Customer intake, appointments and follow-up—starting with the next step you need.</p><a className="nova-home-button" href="/service-request">Tell Nova what you need <span>→</span></a><a className="nova-pilot-contact" href="mailto:isaac@nova-systems.app">isaac@nova-systems.app</a></div></section>
+    <section id="industries" className="nova-home-section">
+      <div className="nova-section-heading"><p className="nova-kicker">INDUSTRIES</p><h2>Systems for<br/><em>the work you do.</em></h2></div>
+      <div className="nova-services-grid">
+        {[
+          ['Home services','Route service requests and give the crew one place to check follow-up.'],
+          ['Auto repair','Collect vehicle details and connect repair inquiries to the appointment queue.'],
+          ['Professional services','Organize inquiries, consultations and the next action for each client.'],
+        ].map(([title,body])=><article className="nova-service-card" key={title}><h3>{title}</h3><p>{body}</p></article>)}
+      </div>
+    </section>
     <section id="faq" className="nova-home-section nova-faq"><div><p className="nova-kicker">BEFORE WE GET STARTED</p><h2>A few<br /><em>good questions.</em></h2></div><div>{questions.map(([q,a]) => <details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}</div></section>
   </main><Footer /></div>;
 }

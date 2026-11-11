@@ -1,3 +1,126 @@
-.nova-reference-hero{min-height:760px;min-height:calc(100svh - 75px);position:relative;background:radial-gradient(ellipse at 85% 20%,#74502820,transparent 65%),#080909;color:#f5f5f2;overflow:hidden;border-bottom:1px solid #b28c4544;display:flex;align-items:center}.nova-reference-hero-copy{position:relative;z-index:1;padding:70px max(5vw,25px) 45px;max-width:900px;width:65%}.nova-reference-hero-kicker{display:flex;align-items:center;gap:20px;color:#d9b76c;font-size:11px;letter-spacing:.38em;margin:0 0 50px}.nova-reference-hero-kicker span{width:50px;height:1px;background:linear-gradient(90deg,#bb954d,transparent)}.nova-reference-hero-values{font-size:8px;letter-spacing:.32em;line-height:1.9;color:#aaa69b;margin:0 0 22px}.nova-reference-hero h1{font-family:Inter,Arial,sans-serif;font-size:clamp(52px,6.4vw,98px);line-height:1.01;font-weight:620;letter-spacing:-.052em;margin:0 0 28px}.nova-reference-hero-motto{font-size:10px;letter-spacing:.33em;line-height:2.1;color:#c4bfae;border-top:1px solid #b38c4548;padding-top:22px;max-width:350px;margin:0 0 25px}.nova-reference-hero-description{font-size:14px;line-height:1.9;color:#a9a69c;max-width:420px;margin:0 0 30px}.nova-reference-hero-art{position:absolute;right:-2%;top:-13%;bottom:-10%;width:50%;opacity:.86;mask-image:linear-gradient(90deg,transparent,#000 18%);border-left:1px solid #d1a85f24}.nova-reference-hero-art .nova-architecture{width:100%;height:100%}.nova-reference-hero-actions{display:flex;align-items:center;gap:30px}.nova-reference-hero-actions .luxe-button{min-width:200px;min-height:49px;font-size:12px;justify-content:space-between}.nova-reference-hero-secondary{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#c3bca9;text-decoration:none;display:flex;gap:10px;align-items:center}.nova-reference-hero-foot{display:flex;gap:12px;align-items:center;color:#8f897b;font-size:8px;letter-spacing:.25em;margin-top:65px}.nova-reference-hero-foot>span{height:2px;width:35px;background:linear-gradient(90deg,#d3ac62,transparent)}
-@media(max-width:1000px){.nova-reference-hero{min-height:740px}.nova-reference-hero-copy{width:75%;padding-top:60px}.nova-reference-hero-art{width:55%;right:-16%;opacity:.57}.nova-reference-hero-kicker{margin-bottom:40px}.nova-reference-hero h1{font-size:74px}}
-@media(max-width:650px){.nova-reference-hero{min-height:820px;align-items:flex-start}.nova-reference-hero-copy{width:100%;padding:45px 24px 100px}.nova-reference-hero-kicker{margin-bottom:35px;font-size:9px}.nova-reference-hero-values{font-size:7px;line-height:1.9}.nova-reference-hero h1{font-size:58px;line-height:1.05;max-width:330px}.nova-reference-hero-description{font-size:12px;max-width:295px;line-height:1.9}.nova-reference-hero-motto{font-size:8px;max-width:265px}.nova-reference-hero-art{top:42%;right:-38%;bottom:-18%;width:100%;opacity:.28;mask-image:linear-gradient(180deg,transparent,#000 60%)}.nova-reference-hero-actions{gap:16px;flex-wrap:wrap}.nova-reference-hero-actions .luxe-button{min-width:180px;font-size:12px}.nova-reference-hero-secondary{font-size:9px}.nova-reference-hero-foot{margin-top:43px;font-size:7px}}
+.nova-home {
+  --nova-serif: "Instrument Serif", "Times New Roman", serif;
+  --nova-reference-gold: #e5bf6b;
+  --nova-reference-inset: clamp(24px, 4.15vw, 72px);
+}
+.nova-reference-nav {
+  position: sticky;
+  z-index: 50;
+  top: 0;
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  padding: 14px var(--nova-reference-inset);
+  background: #090909f7;
+  border-bottom: 1px solid var(--nova-reference-gold);
+  color: #f6f0e5;
+}
+.nova-reference-brand {color: var(--nova-reference-gold); text-decoration: none;}
+.nova-reference-brand .nova-brand {display:inline-flex;align-items:center;flex-direction:row;gap:15px;color:var(--nova-reference-gold);font-family:Inter,Arial,sans-serif;}
+.nova-reference-brand .nova-brand-words {display:flex;align-items:flex-start;flex-direction:column;gap:4px;line-height:1;}
+.nova-reference-brand svg {width: 49px; height: 54px;}
+.nova-reference-brand .nova-brand-words strong {font-size: 28px; font-weight:600; letter-spacing:.22em;}
+.nova-reference-brand .nova-brand-words small {font-size: 11px; font-weight:500; letter-spacing:.47em;}
+.nova-reference-nav-links,.nova-reference-nav-actions {display:flex; align-items:center; gap:clamp(18px,2.4vw,39px);}
+.nova-reference-nav a,.nova-reference-nav summary {text-decoration:none;color:inherit;font-family:var(--nova-serif);font-size:20px;}
+.nova-reference-nav a:hover,.nova-reference-nav summary:hover {color:var(--nova-reference-gold);}
+.nova-reference-nav-actions>a:first-child,.nova-reference-nav summary {display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.nova-reference-nav summary {cursor:pointer;list-style:none;}
+.nova-reference-nav details {position:relative;}
+.nova-industry-menu {position:absolute;top:32px;left:-15px;min-width:195px;padding:12px 16px;background:#10100e;border:1px solid #a58349;border-radius:4px;}
+.nova-industry-menu a {display:block;padding:8px 0;white-space:nowrap;}
+.nova-reference-menu,.nova-reference-mobile-signin {display:none!important;}
+.nova-reference-outline {
+  display:inline-flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:21px;
+  padding-left:24px;
+  text-decoration:none;
+  color:var(--nova-reference-gold)!important;
+  border:1px solid #c3a15d;
+  border-radius:4px;
+  background:#100d0880;
+  font-family:var(--nova-serif);
+  font-size:25px;
+  min-height:62px;
+}
+.nova-reference-outline span {display:grid;place-items:center;align-self:stretch;width:51px;border-left:1px solid #c3a15d;}
+.nova-reference-outline:hover {background:#d5a94824;}
+.nova-reference-nav .nova-reference-outline {font-size:20px;min-height:49px;padding-left:18px;gap:18px;}
+.nova-reference-nav .nova-reference-outline span {width:45px;}
+.nova-reference-hero {
+  position:relative;
+  isolation:isolate;
+  min-height:clamp(555px,42vw,700px);
+  display:flex;
+  align-items:center;
+  border-bottom:1px solid #c7a760;
+  background:radial-gradient(ellipse at 39% 40%,#15110d,#090909 60%);
+  overflow:hidden;
+}
+.nova-reference-scene {position:absolute;inset:0 0 0 39%;clip-path:polygon(35% 0,100% 0,100% 100%,0 100%);background:#edc875;}
+.nova-reference-scene img {position:absolute;inset:0 0 0 2px;width:100%;height:100%;object-fit:cover;object-position:center;clip-path:polygon(35% 0,100% 0,100% 100%,0 100%);}
+.nova-reference-scene::after {content:"";position:absolute;inset:0;background:linear-gradient(180deg,#0000000c 60%,#0008),linear-gradient(90deg,#f6b53a21,transparent 35%);}
+.nova-reference-hero-copy {position:relative;width:min(58%,950px);padding:65px 0 59px var(--nova-reference-inset);}
+.nova-reference-eyebrow {font-size:11px;font-weight:650;color:var(--nova-reference-gold);text-transform:uppercase;letter-spacing:.34em;margin:0 0 21px;}
+.nova-reference-hero h1 {font-family:var(--nova-serif);font-size:clamp(60px,6.9vw,116px);font-weight:400;letter-spacing:-.045em;line-height:.94;margin:0;color:#f8f3e9;}
+.nova-reference-hero h1 em {color:var(--nova-reference-gold);font-style:normal;}
+.nova-reference-hero-description {margin:34px 0;color:#cbc6bb;font-size:clamp(16px,1.7vw,27px);line-height:1.35;}
+.nova-reference-hero-description span {display:block;}
+.nova-reference-hero-actions {display:flex;align-items:center;gap:clamp(16px,2.4vw,39px);flex-wrap:wrap;}
+.nova-reference-hero-secondary {display:inline-flex;align-items:center;gap:13px;color:#f5ead6;font-family:var(--nova-serif);font-size:20px;text-decoration:none;border-bottom:1px solid #94846c;padding:7px 0;}
+.nova-reference-time {color:#aaa69d;font-size:13px;line-height:1.55;margin:27px 0 0;}
+.nova-reference-carousel {position:absolute;bottom:24px;right:var(--nova-reference-inset);display:flex;align-items:center;gap:15px;color:#f2ebdd;font-size:13px;}
+.nova-reference-carousel button {background:#090909aa;border:1px solid #e2cfab77;color:inherit;width:39px;height:39px;border-radius:50%;display:grid;place-items:center;cursor:pointer;}
+.nova-reference-carousel button:hover {border-color:#e5bf6b;color:#e5bf6b;}
+.nova-reference-progress {height:2px;width:75px;background:#e5dac75c;}
+.nova-reference-progress>span {height:100%;display:block;background:#ffe8a0;}
+.nova-reference-pillars {display:grid;grid-template-columns:repeat(3,1fr);padding:40px var(--nova-reference-inset) 45px;border-bottom:1px solid #d5b96c29;}
+.nova-reference-pillars>a {color:#bcb7ac;text-decoration:none;padding:8px clamp(20px,3.3vw,52px);border-left:1px solid #a3875260;}
+.nova-reference-pillars>a:first-child {border-left:0;padding-left:0;}
+.nova-reference-pillars>a:last-child {padding-right:0;}
+.nova-home .nova-reference-pillars h2 {display:flex;align-items:center;justify-content:space-between;gap:13px;font-family:var(--nova-serif);font-weight:400;font-size:clamp(24px,2.8vw,46px);margin:10px 0 13px;letter-spacing:-.028em;}
+.nova-reference-pillars h2 svg {color:var(--nova-reference-gold);flex:none;}
+.nova-reference-pillars .nova-reference-eyebrow {margin-bottom:12px;}
+.nova-reference-pillars a>p:last-child {font-size:15px;line-height:1.6;}
+@media(max-width:1110px) {
+  .nova-reference-nav {gap:16px;}
+  .nova-reference-nav-links,.nova-reference-nav-actions {gap:18px;}
+  .nova-reference-nav a,.nova-reference-nav summary {font-size:17px;}
+  .nova-reference-nav .nova-reference-outline {min-height:44px;font-size:17px;gap:12px;}
+  .nova-reference-hero h1 {font-size:clamp(58px,7.8vw,88px);}
+}
+@media(max-width:860px) {
+  .nova-reference-nav {min-height:70px;}
+  .nova-reference-brand svg {width:39px;height:44px;}
+  .nova-reference-brand .nova-brand-words strong {font-size:21px;}
+  .nova-reference-brand .nova-brand-words small {font-size:9px;}
+  .nova-reference-menu {display:grid!important;place-items:center;margin-left:auto;border:0;background:none;color:#f1e5ca;padding:10px;}
+  .nova-reference-nav-actions,.nova-reference-nav-links {display:none;}
+  .nova-reference-nav-links.is-open {display:flex;flex-direction:column;align-items:stretch;position:absolute;top:100%;left:0;right:0;padding:22px var(--nova-reference-inset);border-bottom:1px solid #c9a84c70;background:#10100e;}
+  .nova-reference-nav-links a,.nova-reference-nav-links summary {font-size:21px;}
+  .nova-reference-mobile-signin {display:flex!important;align-items:center;gap:6px;}
+  .nova-industry-menu {position:static;margin-top:12px;}
+}
+@media(max-width:650px) {
+  .nova-reference-hero {min-height:640px;align-items:flex-start;}
+  .nova-reference-hero-copy {width:100%;padding:49px var(--nova-reference-inset) 92px;}
+  .nova-reference-hero h1 {font-size:clamp(46px,10vw,66px);}
+  .nova-reference-scene {inset:32% 0 0 0;clip-path:none;background:transparent;opacity:.57;}
+  .nova-reference-scene img {inset:0;clip-path:none;}
+  .nova-reference-scene::after {background:linear-gradient(180deg,#090909,transparent 42%,#090909df);}
+  .nova-reference-hero-description {font-size:17px;margin:26px 0;}
+  .nova-reference-hero-actions {gap:13px;}
+  .nova-reference-outline {min-height:52px;font-size:21px;padding-left:17px;}
+  .nova-reference-outline span {width:44px;}
+  .nova-reference-hero-secondary {font-size:18px;}
+  .nova-reference-time {max-width:310px;margin-top:22px;}
+  .nova-reference-carousel {bottom:20px;}
+  .nova-reference-pillars {grid-template-columns:1fr;padding-top:0;padding-bottom:0;}
+  .nova-reference-pillars>a {border:0;border-bottom:1px solid #a3875245;padding:25px 0;}
+  .nova-reference-pillars>a:last-child {border-bottom:0;}
+  .nova-home .nova-reference-pillars h2 {font-size:33px;}
+}
