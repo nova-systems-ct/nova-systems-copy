@@ -30,7 +30,7 @@ const hashPw = (pw) => { const salt = crypto.randomBytes(8).toString('hex'); ret
 const checkPw = (pw, stored) => { const [, salt, h] = String(stored || '').split('$'); return !!h && crypto.timingSafeEqual(Buffer.from(crypto.scryptSync(pw, salt, 32).toString('hex')), Buffer.from(h)); };
 
 export function createStubs({ pool, jwtSecret, postgrestPort, publicBuckets = [] }) {
-  const state = { outbox: [], magicLinks: new Map(), objects: new Map(), signed: new Map(), failEmails: false, emailRequests: [], invites: [] };
+  const state = { outbox: [], magicLinks: new Map(), objects: new Map(), signed: new Map(), failEmails: false, emailRequests: [], invites: [],authRequests:[] };
   const json = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(body)); };
   const readBody = (req) => new Promise((r) => { const c = []; req.on('data', (d) => c.push(d)); req.on('end', () => r(Buffer.concat(c))); });
   const userOut = (u) => ({ id: u.id, email: u.email, user_metadata: u.raw_user_meta_data || {}, app_metadata: u.raw_app_meta_data || {}, email_confirmed_at: u.email_confirmed_at, banned_until: u.banned_until, created_at: u.created_at });
@@ -46,6 +46,18 @@ export function createStubs({ pool, jwtSecret, postgrestPort, publicBuckets = []
       const { payload } = roleOf(req); if (!payload?.sub) return json(res, 401, { message: 'invalid JWT' });
       const u = await findUserById(payload.sub); if (!u) return json(res, 401, { message: 'user not found' });
       return json(res, 200, userOut(u));
+    }
+    if(path==='/user'&&req.method==='PUT'){
+      const {payload}=roleOf(req);const u=payload?.sub&&await findUserById(payload.sub),b=j();
+      if(!u)return json(res,401,{message:'invalid JWT'});
+      if(typeof b.password!=='string'||b.password.length<8)return json(res,422,{message:'Password is too short'});
+      await pool.query('update auth.users set encrypted_password=$1 where id=$2',[hashPw(b.password),u.id]);
+      return json(res,200,userOut(u));
+    }
+    if(['/otp','/recover'].includes(path)&&req.method==='POST'){
+      const b=j();state.authRequests.push({type:path==='/recover'?'recovery':'magiclink',email:b.email,create_user:b.create_user,redirect_to:url.searchParams.get('redirect_to')});
+      if(path==='/otp'&&b.create_user!==false)return json(res,422,{message:'Acceptance requires existing-user-only access'});
+      return json(res,200,{});
     }
     if (path === '/token' && req.method === 'POST' && url.searchParams.get('grant_type') === 'password') {
       const { email, password } = j(); const u = email && (await findUserByEmail(email));

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link,useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { safeReturnTo } from "@/lib/returnTo";
 import { useSEO } from "@/hooks/useSEO";
@@ -26,7 +26,10 @@ export default function ResetPassword() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [verified,setVerified]=useState(false);
+  const [checking,setChecking]=useState(true);
   const destination = safeReturnTo(searchParams.get("returnTo"));
+  useEffect(()=>{let active=true;if(!supabase){setChecking(false);return;}supabase.auth.getUser().then(({data,error})=>{if(active){setVerified(!error&&Boolean(data?.user));setChecking(false)}}).catch(()=>{if(active)setChecking(false)});return()=>{active=false}},[]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,19 +42,19 @@ export default function ResetPassword() {
       setError("Passwords do not match.");
       return;
     }
-    if (!supabase) {
-      setError("Not configured. Contact hello@nova-systems.app.");
+    if (!supabase||!verified) {
+      setError("Open the newest password-reset email link before setting a password.");
       return;
     }
 
     setLoading(true);
-    const { error: updateErr } = await supabase.auth.updateUser({ password });
-    setLoading(false);
-    if (updateErr) {
-      setError("Could not update your password. Please request a new reset link.");
-      return;
-    }
-    navigate(destination, { replace: true });
+    try{
+      const { error: updateErr } = await supabase.auth.updateUser({ password });
+      if(updateErr)throw updateErr;
+      try{sessionStorage.removeItem('nova_password_recovery')}catch{/* Optional routing hint. */}
+      navigate(destination, { replace: true });
+    }catch{setError("Could not update your password. Please request a new reset link.")}
+    finally{setLoading(false)}
   };
 
   return (
@@ -63,7 +66,7 @@ export default function ResetPassword() {
             <text x="16" y="23" textAnchor="middle" fontFamily="'Arial Black',Arial,sans-serif" fontWeight="900" fontSize="18" fill={GOLD}>N</text>
           </svg>
           <p className="mt-4 text-xs font-bold tracking-[0.3em] uppercase" style={{ color: GOLD }}>NOVA SYSTEMS</p>
-          <p className="text-sm text-white mt-1">Set a new password</p>
+          <h1 className="text-sm text-white mt-1">Set a new password</h1>
         </div>
 
         <div className="rounded-xl p-8" style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -72,14 +75,14 @@ export default function ResetPassword() {
               {error}
             </div>
           )}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {checking?<p role="status">Checking your recovery session…</p>:!verified?<div><p className="text-sm text-white">Open the newest password-reset email link first.</p><Link className="text-sm" style={{color:GOLD}} to="/login">Return to sign in</Link></div>:<form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-[10px] font-bold tracking-[0.15em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>New password</label>
-              <input type="password" required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
+              <input aria-label="New password" type="password" required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} style={inputStyle} />
             </div>
             <div>
               <label className="block text-[10px] font-bold tracking-[0.15em] uppercase mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Confirm password</label>
-              <input type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} style={inputStyle} />
+              <input aria-label="Confirm password" type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} style={inputStyle} />
             </div>
             <button
               type="submit"
@@ -89,7 +92,7 @@ export default function ResetPassword() {
             >
               {loading ? "Saving…" : "Save New Password"}
             </button>
-          </form>
+          </form>}
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { safeReturnTo } from "@/lib/returnTo";
 import { useSEO } from "@/hooks/useSEO";
+import {isRecoveryReturn} from '@/lib/authFlow';
 
 const GOLD = "#C9A84C";
 
@@ -24,37 +25,38 @@ export default function AuthCallback() {
       return;
     }
     let settled = false;
+    let recoveryReturn=isRecoveryReturn(window.location.search,window.location.hash);
+    try{recoveryReturn=recoveryReturn||sessionStorage.getItem('nova_password_recovery')==='1'}catch{/* Routing still uses the verified callback above. */}
+    const fragment=new URLSearchParams(window.location.hash.replace(/^#/,''));
+    if(searchParams.get('error')||fragment.get('error')){setStatus('error');return;}
+    const finish=(session,recovery=false)=>{
+      if(settled||!session)return;
+      settled=true;
+      navigate(recovery||recoveryReturn?`/reset-password?returnTo=${encodeURIComponent(destination)}`:destination,{replace:true});
+    };
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       if (settled) return;
-      if (event === "PASSWORD_RECOVERY") {
-        settled = true;
-        navigate(`/reset-password?returnTo=${encodeURIComponent(destination)}`, { replace: true });
-      } else if (session) {
-        settled = true;
-        navigate(destination, { replace: true });
-      }
+      finish(session,event==='PASSWORD_RECOVERY');
     });
 
     // Covers the case where the session was already established synchronously by the time this
     // effect runs (detectSessionInUrl can resolve before the listener above attaches).
     supabase.auth.getSession().then(({ data }) => {
       if (settled) return;
-      if (data?.session) {
-        settled = true;
-        navigate(destination, { replace: true });
-      }
-    });
+      finish(data?.session);
+    }).catch(()=>{if(!settled)setStatus('error')});
 
     const timeout = setTimeout(() => {
       if (!settled) setStatus("error");
     }, 8000);
 
     return () => {
+      settled=true;
       clearTimeout(timeout);
       subscription?.subscription?.unsubscribe();
     };
-  }, []);
+  }, [destination,navigate,searchParams]);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "#0A0A0A" }}>
