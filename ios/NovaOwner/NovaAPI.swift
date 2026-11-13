@@ -8,6 +8,8 @@ struct NovaAPIError: LocalizedError {
 }
 
 struct NovaAPI {
+    private struct Failure: Decodable { let error: String? }
+
     static let site = URL(string: "https://nova-systems.app")!
     let auth: AuthClient
 
@@ -50,7 +52,6 @@ struct NovaAPI {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         if !(200..<300).contains(http.statusCode) {
-            struct Failure: Decodable { let error: String? }
             let message = (try? JSONDecoder().decode(Failure.self, from: data))?.error
             throw NovaAPIError(status: http.statusCode, message: message ?? "Nova could not confirm this action. Try refreshing.")
         }
