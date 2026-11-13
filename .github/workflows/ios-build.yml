@@ -1,0 +1,49 @@
+name: Nova iOS build
+
+on:
+  push:
+    branches: [main, 'codex/nova-owner-ios-*']
+    paths:
+      - 'ios/**'
+      - 'src/lib/executivePlaybooks.js'
+      - 'public/wallet/nova-setup-test.pkpass'
+      - '.github/workflows/ios-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nova-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check the bundled pass and playbooks
+        run: |
+          unzip -t public/wallet/nova-setup-test.pkpass
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import {executiveRoles,executiveOrder} from './src/lib/executivePlaybooks.js';
+          const bundle=JSON.parse(fs.readFileSync('ios/NovaOwner/Resources/ExecutivePlaybooks.json','utf8'));
+          assert.deepEqual(bundle,{sequence:executiveOrder,roles:Object.entries(executiveRoles).map(([key,role])=>({key,...role}))});
+          NODE
+      - name: Build the unsigned simulator app
+        run: |
+          xcodebuild -version
+          xcodebuild -project ios/NovaOwner.xcodeproj -scheme NovaOwner \
+            -configuration Debug -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/NovaBuild" CODE_SIGNING_ALLOWED=NO build
+          app="$RUNNER_TEMP/NovaBuild/Build/Products/Debug-iphonesimulator/NovaOwner.app"
+          test -f "$app/nova-setup-test.pkpass"
+          cmp public/wallet/nova-setup-test.pkpass "$app/nova-setup-test.pkpass"
+          test -f "$app/ExecutivePlaybooks.json"
+          /usr/libexec/PlistBuddy -c 'Print :NovaSupabaseKey' "$app/Info.plist" | grep -q '^sb_publishable_'

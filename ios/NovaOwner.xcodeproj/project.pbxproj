@@ -1,0 +1,111 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+		A00000000000000000000001 /* NovaOwner project */ = {
+			isa = PBXProject;
+			attributes = { LastSwiftUpdateCheck = 2600; LastUpgradeCheck = 2600; };
+			buildConfigurationList = A0000000000000000000000A /* Project configurations */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = A00000000000000000000002 /* Main group */;
+			packageReferences = (A0000000000000000000000E /* supabase-swift */);
+			productRefGroup = A00000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A00000000000000000000005 /* NovaOwner */);
+		};
+		A00000000000000000000002 /* Main group */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000003 /* NovaOwner */,
+				A00000000000000000000023 /* Wallet setup pass */,
+				A00000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A00000000000000000000003 /* NovaOwner */ = {
+			isa = PBXGroup;
+			path = NovaOwner;
+			children = (
+				A00000000000000000000010 /* NovaOwnerApp.swift */,
+				A00000000000000000000011 /* NovaAPI.swift */,
+				A00000000000000000000012 /* TeamModels.swift */,
+				A00000000000000000000013 /* OwnerStore.swift */,
+				A00000000000000000000014 /* TeamView.swift */,
+				A00000000000000000000015 /* OperationsView.swift */,
+				A00000000000000000000021 /* Assets.xcassets */,
+				A00000000000000000000022 /* ExecutivePlaybooks.json */,
+			);
+			sourceTree = "<group>";
+		};
+		A00000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			children = (A00000000000000000000006 /* NovaOwner.app */);
+			sourceTree = "<group>";
+		};
+		A00000000000000000000005 /* NovaOwner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A0000000000000000000000B /* Target configurations */;
+			buildPhases = (
+				A00000000000000000000007 /* Sources */,
+				A00000000000000000000008 /* Frameworks */,
+				A00000000000000000000009 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = NovaOwner;
+			packageProductDependencies = (A0000000000000000000000F /* Auth */);
+			productName = NovaOwner;
+			productReference = A00000000000000000000006 /* NovaOwner.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A00000000000000000000006 /* NovaOwner.app */ = { isa = PBXFileReference; explicitFileType = wrapper.application; path = NovaOwner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (A00000000000000000000016, A00000000000000000000017, A00000000000000000000018, A00000000000000000000019, A0000000000000000000001A, A0000000000000000000001B);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A00000000000000000000008 /* Frameworks */ = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000020); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000009 /* Resources */ = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000024, A00000000000000000000025, A00000000000000000000026); runOnlyForDeploymentPostprocessing = 0; };
+		A0000000000000000000000A /* Project configurations */ = { isa = XCConfigurationList; buildConfigurations = (A0000000000000000000000C, A0000000000000000000000D); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A0000000000000000000000B /* Target configurations */ = { isa = XCConfigurationList; buildConfigurations = (A0000000000000000000001C, A0000000000000000000001D); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A0000000000000000000000C /* Debug project */ = { isa = XCBuildConfiguration; buildSettings = { SDKROOT = iphoneos; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; }; name = Debug; };
+		A0000000000000000000000D /* Release project */ = { isa = XCBuildConfiguration; buildSettings = { SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; }; name = Release; };
+		A0000000000000000000000E /* supabase-swift */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = { kind = exactVersion; version = 2.55.6; };
+		};
+		A0000000000000000000000F /* Auth */ = { isa = XCSwiftPackageProductDependency; package = A0000000000000000000000E; productName = Auth; };
+		A00000000000000000000010 /* NovaOwnerApp.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovaOwnerApp.swift; sourceTree = "<group>"; };
+		A00000000000000000000011 /* NovaAPI.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovaAPI.swift; sourceTree = "<group>"; };
+		A00000000000000000000012 /* TeamModels.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamModels.swift; sourceTree = "<group>"; };
+		A00000000000000000000013 /* OwnerStore.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OwnerStore.swift; sourceTree = "<group>"; };
+		A00000000000000000000014 /* TeamView.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeamView.swift; sourceTree = "<group>"; };
+		A00000000000000000000015 /* OperationsView.swift */ = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationsView.swift; sourceTree = "<group>"; };
+		A00000000000000000000016 = { isa = PBXBuildFile; fileRef = A00000000000000000000010; };
+		A00000000000000000000017 = { isa = PBXBuildFile; fileRef = A00000000000000000000011; };
+		A00000000000000000000018 = { isa = PBXBuildFile; fileRef = A00000000000000000000012; };
+		A00000000000000000000019 = { isa = PBXBuildFile; fileRef = A00000000000000000000013; };
+		A0000000000000000000001A = { isa = PBXBuildFile; fileRef = A00000000000000000000014; };
+		A0000000000000000000001B = { isa = PBXBuildFile; fileRef = A00000000000000000000015; };
+		A0000000000000000000001C = { isa = XCBuildConfiguration; baseConfigurationReference = A00000000000000000000027; buildSettings = { ENABLE_PREVIEWS = YES; }; name = Debug; };
+		A0000000000000000000001D = { isa = XCBuildConfiguration; baseConfigurationReference = A00000000000000000000027; buildSettings = {}; name = Release; };
+		A00000000000000000000020 = { isa = PBXBuildFile; productRef = A0000000000000000000000F; };
+		A00000000000000000000021 /* Assets.xcassets */ = { isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A00000000000000000000022 /* ExecutivePlaybooks.json */ = { isa = PBXFileReference; lastKnownFileType = text.json; path = Resources/ExecutivePlaybooks.json; sourceTree = "<group>"; };
+		A00000000000000000000023 /* Wallet setup pass */ = { isa = PBXFileReference; lastKnownFileType = file; name = "nova-setup-test.pkpass"; path = "../public/wallet/nova-setup-test.pkpass"; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000024 = { isa = PBXBuildFile; fileRef = A00000000000000000000021; };
+		A00000000000000000000025 = { isa = PBXBuildFile; fileRef = A00000000000000000000022; };
+		A00000000000000000000026 = { isa = PBXBuildFile; fileRef = A00000000000000000000023; };
+		A00000000000000000000027 /* NovaOwner.xcconfig */ = { isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = NovaOwner.xcconfig; sourceTree = SOURCE_ROOT; };
+	};
+	rootObject = A00000000000000000000001 /* NovaOwner project */;
+}
