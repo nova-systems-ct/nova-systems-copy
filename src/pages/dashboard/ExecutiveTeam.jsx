@@ -9,7 +9,7 @@ import './ExecutiveTeam.css';
 
 const endpoint='/api/client?resource=company&op=team';
 const names={owner:'Isaac Nova',...Object.fromEntries(Object.entries(executiveRoles).map(([key,role])=>[key,role.name]))};
-const channelStatus={connection_required:'Connection needed',dispatch_paused:'Dispatch paused',configured_unverified:'Delivery unverified'};
+const channelStatus={connection_required:'Connection needed',dispatch_paused:'Dispatch paused',not_checked_in_database_worker:'Open Connections to verify',configured_unverified:'Delivery unverified'};
 const stageLabels={ready:'Ready',in_progress:'In progress',review:'Ready for review'};
 
 async function teamRequest({body,missionId,signal}={}) {
@@ -150,6 +150,22 @@ export default function ExecutiveTeam(){
     return ()=>{controller.abort();worker.current?.terminate();worker.current=null;};
   },[load]);
 
+  useEffect(()=>{
+    if(data?.background?.status!=='queued')return;
+    const controller=new AbortController();
+    const timer=setInterval(async()=>{
+      try{const next=await teamRequest({missionId:mission.id,signal:controller.signal});if(!controller.signal.aborted)setData(next);}
+      catch(error){if(!controller.signal.aborted)setError(error.message);}
+    },5000);
+    return()=>{clearInterval(timer);controller.abort();};
+  },[data?.background?.status,mission?.id]);
+
+  async function pauseBackground(){
+    setBusy(true);setError('');
+    try{setData(await teamRequest({body:{action:'pause',mission_id:mission.id},signal:lifetime.current.signal}));}
+    catch(error){setError(error.message);}finally{setBusy(false);}
+  }
+
   async function run(current){
     const signal=lifetime.current.signal;
     pause.current=false;
@@ -163,6 +179,11 @@ export default function ExecutiveTeam(){
         }
         current=await teamRequest({body:{action:'start',mission_id:startKey.current.id,objective:cleanObjective,focus},signal});
         setData(current);setObjective('');startKey.current=null;
+      }
+      if(!modelEnabled){
+        current=await teamRequest({body:{action:'enqueue',mission_id:current.mission.id},signal});
+        setData(current);setNotice('Saved to the background queue. The server continues this workflow after you close the page.');
+        return;
       }
       while(current.mission.next_step<executiveOrder.length&&!pause.current&&!signal.aborted){
         const step=current.mission.next_step;
@@ -207,7 +228,7 @@ export default function ExecutiveTeam(){
   return <div className="luxe-page executive-page">
     <section className="luxe-heading executive-heading">
       <div><h1>Company <em>HQ</em></h1><p>Assign the work. Follow each handoff.</p></div>
-      <Link className="luxe-outline" to="/dashboard/cfo"><Wallet size={16}/>CFO & budgets</Link>
+      <div className="luxe-actions"><Link className="luxe-outline" to="/dashboard/marketing"><Clapperboard size={16}/>Content studio</Link><Link className="luxe-outline" to="/dashboard/cfo"><Wallet size={16}/>CFO & budgets</Link></div>
     </section>
     {error&&<div className="luxe-alert" role="alert">{error} <button type="button" className="luxe-link" disabled={busy} onClick={()=>load(mission?.id)}>Reload saved work</button></div>}
     {notice&&<p className="luxe-alert" role="status">{notice}</p>}
@@ -225,13 +246,16 @@ export default function ExecutiveTeam(){
           <label>Objective<textarea value={objective} onChange={event=>setObjective(event.target.value)} minLength={8} maxLength={1000} required placeholder="Prepare a Nova Audit campaign for local service businesses." disabled={busy}/></label>
           <label>Focus<select aria-label="Focus" value={focus} onChange={event=>setFocus(event.target.value)} disabled={busy}><option value="audit">Nova Audit</option><option value="agents">Nova Agents</option><option value="demand">Nova Demand</option></select></label>
           <label className="executive-model-choice"><input type="checkbox" checked={localAI} onChange={event=>setLocalAI(event.target.checked)} disabled={busy}/><span><Cpu size={15}/> Generate proposals on this device<small>Each role uses its own playbook with a shared Qwen model. First use downloads about 750 MB.</small></span></label>
-          <button type="submit" className="luxe-button" disabled={busy||!data||objective.trim().length<8}><Play size={15}/>Start mission</button>
+          <button type="submit" className="luxe-button" disabled={busy||!data||objective.trim().length<8}><Play size={15}/>{localAI?'Start on this device':'Run in background'}</button>
+          <p className="executive-model-status">Background work uses saved workflow rules and the existing database. On-device AI requires this page to stay open. Neither makes paid provider calls.</p>
         </form>
         {data?.missions.length>0&&<div className="executive-mission">
           <label>Saved mission<select aria-label="Saved mission" value={mission?.id||''} disabled={busy} onChange={event=>load(event.target.value)}>{data.missions.map(item=><option key={item.id} value={item.id}>{item.objective.slice(0,90)}</option>)}</select></label>
           {mission&&<><div className="executive-progress"><span>{stageLabels[mission.state]}</span><span>{mission.next_step} of {executiveOrder.length} steps</span></div>
             <progress value={mission.next_step} max={executiveOrder.length} aria-label="Mission progress"/>
-            <div className="luxe-actions">{working?<button type="button" className="luxe-outline" onClick={()=>{pause.current=true;setNotice('Pausing after this handoff is saved.');}}><Pause size={15}/>Pause after this step</button>:mission.state!=='review'&&<button type="button" className="luxe-outline" disabled={busy} onClick={()=>run(data)}><Play size={15}/>Resume mission</button>}</div></>}
+            {data.background&&<p className="executive-model-status">Server queue: {data.background.status}{data.background.last_error?` · ${data.background.last_error}`:''}{data.background.last_run_at?` · Last run ${new Date(data.background.last_run_at).toLocaleString()}`:''}</p>}
+            {data.background?.status==='queued'&&<button type="button" className="luxe-outline" disabled={busy} onClick={pauseBackground}><Pause size={15}/>Pause queued work</button>}
+            <div className="luxe-actions">{working?<button type="button" className="luxe-outline" onClick={()=>{pause.current=true;setNotice('Pausing after this handoff is saved.');}}><Pause size={15}/>Pause after this step</button>:mission.state!=='review'&&<button type="button" className="luxe-outline" disabled={busy||data?.background?.status==='queued'} onClick={()=>run(data)}><Play size={15}/>Resume mission</button>}</div></>}
         </div>}
         {modelStatus&&<p className="executive-model-status" role="status">{modelStatus}</p>}
       </section>

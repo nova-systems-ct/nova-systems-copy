@@ -69,6 +69,17 @@ check('non-HTML content is not parsed', pdf.html === '');
 const huge = await fetchPublicPage('https://good.example.com/', { lookup: pub, fetchImpl: async () => resp(200, { 'content-type': 'text/html' }, 'a'.repeat(700_000)) });
 check('oversized pages are truncated and flagged', huge.truncated === true && huge.html.length <= 600_000);
 
+// The streaming guard must stop reading before a large or stalled body consumes resources.
+let cancelled=false,reads=0;
+const streamed=await fetchPublicPage('https://good.example.com/',{lookup:pub,fetchImpl:async()=>new Response(new ReadableStream({pull(controller){reads++;controller.enqueue(new Uint8Array(350_000).fill(97));},cancel(){cancelled=true;}}),{headers:{'content-type':'text/html'}})});
+check('streaming response is bounded and cancelled',streamed.html.length===600_000&&streamed.truncated&&cancelled&&reads<=3);
+const stalled=await rejects(fetchPublicPage('https://good.example.com/',{lookup:pub,timeoutMs:15,fetchImpl:async(_url,{signal})=>new Response(new ReadableStream({start(controller){signal.addEventListener('abort',()=>controller.error(new Error('body timed out')),{once:true});}}),{headers:{'content-type':'text/html'}})}));
+check('timeout covers a stalled response body',stalled==='body timed out');
+const challenge=await fetchPublicPage('https://good.example.com/',{lookup:pub,fetchImpl:async()=>new Response('<title>Just a moment...</title><div id="cf-chl-widget">Verify you are human</div>',{headers:{'content-type':'text/html'}})});
+check('access challenge is not audited as a customer website',challenge.html===''&&/challenge/.test(challenge.note));
+const shell=signalsToEvidence(extractPublicSignals('<html><title>Nova</title><div id="root"></div><script src="/app.js"></script></html>','https://nova.example/'),'2026-11-14');
+check('SPA shell records a review limitation, not missing customer tools',shell.length===1&&shell[0].confidence==='low'&&/rendered-browser/.test(shell[0].observation)&&!shell[0].observation.includes('No tel:'));
+
 // ---- extraction
 const page = `<html><head><title>Ace Plumbing &amp; Heating</title><meta name="description" content="24/7 plumbers in Waterbury">
 <meta name="viewport" content="width=device-width">

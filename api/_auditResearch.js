@@ -43,16 +43,24 @@ export async function fetchPublicPage(raw, { fetchImpl = fetch, lookup, timeoutM
     const u = await assertPublicHttpUrl(url, lookup);
     const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     let r;
-    try { r = await fetchImpl(u.toString(), { redirect: 'manual', signal: ctrl.signal, headers: { 'User-Agent': 'NovaAuditResearch/1.0 (+public page review)', Accept: 'text/html,application/xhtml+xml' } }); }
-    finally { clearTimeout(timer); }
+    try {
+    r = await fetchImpl(u.toString(), { redirect: 'manual', signal: ctrl.signal, headers: { 'User-Agent': 'NovaAuditResearch/1.0 (+public page review)', Accept: 'text/html,application/xhtml+xml' } });
     if ([301, 302, 303, 307, 308].includes(r.status)) {
       const loc = r.headers.get('location'); if (!loc) throw new Error('Redirect without a location');
-      url = new URL(loc, u).toString(); continue;
+      await r.body?.cancel();url = new URL(loc, u).toString(); continue;
     }
     const type = r.headers.get('content-type') || '';
-    if (!/text\/html|application\/xhtml/i.test(type)) return { finalUrl: u.toString(), status: r.status, contentType: type, html: '', retrievedAt: now().toISOString(), note: 'Not an HTML page — nothing extracted' };
-    const buf = Buffer.from(await r.arrayBuffer());
-    return { finalUrl: u.toString(), status: r.status, contentType: type, html: buf.subarray(0, MAX_BYTES).toString('utf8'), truncated: buf.length > MAX_BYTES, retrievedAt: now().toISOString() };
+    if (!/text\/html|application\/xhtml/i.test(type)){await r.body?.cancel();return { finalUrl: u.toString(), status: r.status, contentType: type, html: '', retrievedAt: now().toISOString(), note: 'Not an HTML page — nothing extracted' };}
+    const chunks=[];let length=0,truncated=false;
+    if(r.body?.getReader){
+      const reader=r.body.getReader();
+      try{while(true){const {done,value}=await reader.read();if(done)break;const remaining=MAX_BYTES-length;chunks.push(Buffer.from(value.subarray(0,remaining)));length+=Math.min(value.length,remaining);if(value.length>remaining||length===MAX_BYTES){truncated=true;await reader.cancel();break;}}}
+      finally{reader.releaseLock();}
+    }else{const bytes=Buffer.from(await r.arrayBuffer());chunks.push(bytes.subarray(0,MAX_BYTES));truncated=bytes.length>MAX_BYTES;}
+    const html=Buffer.concat(chunks).toString('utf8');
+    const challenge=/<title[^>]*>\s*(just a moment|attention required|access denied)|cf-chl-|challenges\.cloudflare\.com|verify (you are|you're) human/i.test(html);
+    return { finalUrl: u.toString(), status: r.status, contentType: type, html:challenge?'':html, truncated,retrievedAt:now().toISOString(),...(challenge?{note:'The site returned an access challenge. Its customer journey was not available for review.'}:{}) };
+    }finally{clearTimeout(timer);}
   }
   throw new Error('Too many redirects');
 }
@@ -77,7 +85,10 @@ export function extractPublicSignals(html, finalUrl) {
     try { const j = JSON.parse(m[1]); for (const n of (Array.isArray(j) ? j : j['@graph'] || [j])) if (n && /LocalBusiness|Organization|Restaurant|Store|Dentist|Physician|Attorney|HomeAndConstructionBusiness|ProfessionalService/i.test(JSON.stringify(n['@type'] || ''))) ld.push({ type: clean(JSON.stringify(n['@type']), 60), name: clean(n.name, 120), telephone: clean(n.telephone, 30), address: clean(typeof n.address === 'object' ? [n.address?.streetAddress, n.address?.addressLocality, n.address?.addressRegion].filter(Boolean).join(', ') : n.address, 200), hasHours: !!n.openingHours || !!n.openingHoursSpecification }); } catch { /* malformed JSON-LD: ignore */ }
   }
   const social = {}; for (const [name, re] of SOCIAL) { const found = uniq([...h.matchAll(re)].map((m) => clean(m[0], 120))).slice(0, 3); if (found.length) social[name] = found; }
+  const visible=h.replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi,' ').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  const scriptShell=visible.length<160&&/<(?:div|main)[^>]+id=["'](?:root|app|__next)["']/i.test(h)&&/<script\b/i.test(h);
   return {
+    scriptShell,
     url: finalUrl, https: /^https:/i.test(finalUrl), title, description: desc,
     hasViewportMeta: /<meta[^>]+name=["']viewport["']/i.test(h),
     clickToCallNumbers: tel, mailtoAddresses: mailto, forms: formInfo,
@@ -94,6 +105,7 @@ export function signalsToEvidence(s, retrievedAt) {
   const src = `Public web page ${s.url} (retrieved ${retrievedAt})`;
   const mk = (observation, confidence, extra = {}) => ({ source: src, method: 'automated_public_page_fetch', observation: observation.slice(0, 3000), source_quality: 'medium', confidence, privacy_level: 'internal', ...extra });
   const out = [];
+  if(s.scriptShell)return [mk('The server returned a JavaScript application shell. The visible customer experience needs a rendered-browser review. Phone links, forms and booking availability cannot be judged from this response.','low',{source_quality:'low'})];
   out.push(mk(`Page title: "${s.title || '(none found)'}". Meta description: "${s.description || '(none found)'}". Served over ${s.https ? 'HTTPS' : 'plain HTTP'}. Mobile viewport meta tag ${s.hasViewportMeta ? 'present' : 'not found'}.`, 'high'));
   out.push(s.clickToCallNumbers.length ? mk(`Click-to-call phone link(s) found in the page HTML: ${s.clickToCallNumbers.join(', ')}.`, 'high') : mk('No tel: click-to-call link was found in this page\'s HTML. Limitation: a number may still be shown as plain text, in an image, or on another page.', 'low'));
   out.push(s.forms.length ? mk(`${s.forms.length} form(s) found in the page HTML; ${s.forms.filter((f) => f.asksPhone).length} ask for a phone number and ${s.forms.filter((f) => f.asksEmail).length} ask for an email.`, 'high') : mk('No <form> element was found in this page\'s HTML. Limitation: a form may be embedded by script/iframe, or exist on another page (e.g. /contact).', 'low'));

@@ -18,8 +18,8 @@ export async function handleExecutiveTeam(req,res,caller) {
   const body=req.body||{};
   const action=req.method==='GET'?'overview':body.action;
   const missionId=req.method==='GET'?req.query?.mission_id:body.mission_id;
-  if(!['overview','start','advance','assign'].includes(action))return res.status(400).json({error:'Unknown executive action.'});
-  if((missionId&&!uuid.test(missionId))||(['start','advance'].includes(action)&&!missionId))return res.status(422).json({error:'Choose a valid mission.'});
+  if(!['overview','start','advance','assign','enqueue','pause'].includes(action))return res.status(400).json({error:'Unknown executive action.'});
+  if((missionId&&!uuid.test(missionId))||(['start','advance','enqueue','pause'].includes(action)&&!missionId))return res.status(422).json({error:'Choose a valid mission.'});
   if(action==='advance'&&(!Number.isInteger(body.expected_step)||body.expected_step<0||body.expected_step>6))return res.status(422).json({error:messages.step_changed});
   if(action==='assign'&&!uuid.test(body.task_id||''))return res.status(422).json({error:messages.task_not_available});
 
@@ -46,7 +46,7 @@ export async function handleExecutiveTeam(req,res,caller) {
       delivery_verified:false,
     }));
     if(action==='advance'&&body.expected_step===2)payload.channel_readiness=channels;
-    const result=await launchRpc('nova_team_owner',{p_actor:caller.id,p_action:action,p_payload:payload});
+    const result=await launchRpc(['overview','enqueue','pause'].includes(action)?'nova_team_background':'nova_team_owner',{p_actor:caller.id,p_action:action,p_payload:payload});
     if(!result.ok){
       const status=result.code==='owner_required'?403:result.code==='mission_not_found'?404:409;
       return res.status(status).json({error:messages[result.code]||'The action could not be completed.',code:result.code});

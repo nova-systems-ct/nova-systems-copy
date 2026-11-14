@@ -89,7 +89,7 @@ const Installations = lazy(() => import('./pages/dashboard/Installations'));
 const InstallationDetail = lazy(() => import('./pages/dashboard/InstallationDetail'));
 const Crystal = lazy(() => import('./pages/dashboard/Crystal'));
 const CrystalJobDetail = lazy(() => import('./pages/dashboard/CrystalJobDetail'));
-const Marketing = lazy(() => import('./pages/dashboard/Marketing'));
+const Marketing = lazy(() => import('./pages/dashboard/MarketingStudio'));
 const RequirePermission = lazy(() => import('./components/dashboard/RequirePermission'));
 // Sales Team platform: public application/invitation/proposal pages, the representative workspace, and Nova HQ → Sales Team
 const SalesApply = lazy(() => import('./pages/sales/SalesApply'));

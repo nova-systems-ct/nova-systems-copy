@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { safeReturnTo } from "../lib/returnTo";
+import {withTimeout} from '../lib/sessionTimeout';
 
 // Checks for a real Supabase session — not a localStorage flag, which anyone can set from
 // devtools. `checking` lets callers avoid flashing protected content before the check resolves.
@@ -22,7 +23,7 @@ export function useAuthGuard() {
         return;
       }
       try {
-        const { data } = await supabase.auth.getSession();
+        const { data } = await withTimeout(supabase.auth.getSession());
         if (!active) return;
         if (!data?.session) goToLogin();
         else setChecking(false);

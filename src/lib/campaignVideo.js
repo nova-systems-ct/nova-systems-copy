@@ -4,23 +4,17 @@ function loadImage(src) {
   return image.decode().then(()=>image);
 }
 
-function writeWrapped(ctx,text,x,y,maxWidth,lineHeight) {
-  let line='';
-  for(const word of text.split(' ')){
+function wrapLines(ctx,text,maxWidth) {
+  const lines=[];let line='';
+  for(const word of String(text).split(/\s+/)){
     const next=line?line+' '+word:word;
-    if(line&&ctx.measureText(next).width>maxWidth){
-      ctx.fillText(line,x,y);
-      y+=lineHeight;
-      line=word;
-    }else{
-      line=next;
-    }
+    if(line&&ctx.measureText(next).width>maxWidth){lines.push(line);line=word;}else line=next;
   }
-  ctx.fillText(line,x,y);
-  return y+lineHeight;
+  if(line)lines.push(line);
+  return lines;
 }
 
-export async function renderCampaignVideo(scenes,onProgress=()=>{},signal) {
+export async function renderCampaignVideo(scenes,onProgress=()=>{},signal,brand='NOVA SYSTEMS') {
   const formats=['video/webm;codecs=vp8','video/mp4'];
   const mime=typeof MediaRecorder==='undefined'?null:formats.find(format=>MediaRecorder.isTypeSupported(format));
   if(!mime||!HTMLCanvasElement.prototype.captureStream)throw Error('This browser cannot render a video preview. Try a current desktop browser.');
@@ -75,18 +69,21 @@ export async function renderCampaignVideo(scenes,onProgress=()=>{},signal) {
         ctx.textAlign='center';
         ctx.fillStyle='#efcb80';
         ctx.font='600 27px system-ui';
-        ctx.fillText('N O V A   S Y S T E M S',360,152);
+        ctx.fillText(brand.slice(0,36).toUpperCase(),360,152);
         ctx.fillStyle='#fff8e9';
-        ctx.font='64px Georgia, serif';
-        const nextY=writeWrapped(ctx,scene.text,360,570,540,78);
+        let fontSize=64,lines;
+        do{ctx.font=`${fontSize}px Georgia, serif`;lines=wrapLines(ctx,scene.text,540);if(lines.length*fontSize*1.18<=450)break;fontSize-=2;}while(fontSize>32);
+        const lineHeight=fontSize*1.18;
+        const textTop=420+Math.max(0,(470-lines.length*lineHeight)/2);
+        lines.forEach((line,i)=>ctx.fillText(line,360,textTop+i*lineHeight));
         if(scene.detail){
-          ctx.fillStyle='#e7bf73';
-          ctx.font='29px system-ui';
-          ctx.fillText(scene.detail,360,nextY+30);
+          ctx.fillStyle='#e7bf73';ctx.font='24px system-ui';
+          const detailTop=textTop+lines.length*lineHeight+28;
+          wrapLines(ctx,scene.detail,540).forEach((line,i)=>ctx.fillText(line,360,detailTop+i*30));
         }
         ctx.fillStyle='#ebd6ae';
         ctx.font='23px system-ui';
-        ctx.fillText('AUDIT  ·  SYSTEMS  ·  OPPORTUNITY',360,1150);
+        ctx.fillText('THE WORK. THE PROGRESS. THE NEXT STEP.',360,1150);
         onProgress(Math.min(100,Math.floor(elapsed/duration*100)));
         if(elapsed>=duration){recorder.stop();return;}
         frame=requestAnimationFrame(draw);

@@ -5,7 +5,7 @@ import {startTestEnv} from './testenv/env.mjs';
 import {SERVICE_SMS_POLICY} from '../public/sms-program/policy.js';
 import {easternInputToISO} from '../src/lib/easternTime.js';
 const migration=process.env.COMPANY_MIGRATION||'supabase/migrations/20261110231405_launch_company_operations.sql';
-const env=await startTestEnv({migrations:['scripts/testenv/serviceSmsLegacy.sql','scripts/testenv/launchWorkerLegacy.sql','scripts/testenv/companyOperationsLegacy.sql','supabase/migrations/20261108172929_service_sms_intake.sql','supabase/migrations/20261109194341_launch_worker_booking.sql','supabase/migrations/20261109195329_launch_worker_owner_cancel.sql','supabase/migrations/20261110021301_local_worker_drafts.sql','supabase/migrations/20261110023037_worker_model_metadata.sql','supabase/migrations/20261110121400_channel_workspace.sql',migration,process.env.UNIFIED_MIGRATION||'supabase/migrations/20261110233543_launch_unified_messaging_voice.sql','scripts/testenv/executiveMarketingLegacy.sql','supabase/migrations/20261111194253_nova_executive_team.sql'],publicBuckets:[]});
+const env=await startTestEnv({migrations:['scripts/testenv/serviceSmsLegacy.sql','scripts/testenv/launchWorkerLegacy.sql','scripts/testenv/companyOperationsLegacy.sql','supabase/migrations/20261108172929_service_sms_intake.sql','supabase/migrations/20261109194341_launch_worker_booking.sql','supabase/migrations/20261109195329_launch_worker_owner_cancel.sql','supabase/migrations/20261110021301_local_worker_drafts.sql','supabase/migrations/20261110023037_worker_model_metadata.sql','supabase/migrations/20261110121400_channel_workspace.sql',migration,process.env.UNIFIED_MIGRATION||'supabase/migrations/20261110233543_launch_unified_messaging_voice.sql','scripts/testenv/executiveMarketingLegacy.sql','supabase/migrations/20261111194253_nova_executive_team.sql','supabase/migrations/20261114001055_launch_recovery_studio.sql'],publicBuckets:[]});
 try{
  assert.deepEqual(env.migrationErrors,[]);
  Object.assign(process.env,env.appEnv,{NOVA_SPENDING_LOCK:'locked',NOVA_BILLABLE_DISPATCH_ENABLED:'false'});
@@ -43,6 +43,8 @@ try{
  const {testUnifiedOperations}=await import('./testenv/unifiedOperations.mjs');await testUnifiedOperations({env,owner,company,call,op,q});
  const {testExecutiveTeam}=await import('./testenv/executiveTeam.mjs');
  await testExecutiveTeam({env,owner,admin,external,client,call,q,org});
+ const {testStudioRecovery}=await import('./testenv/studioRecovery.mjs');
+ await testStudioRecovery({env,owner,admin,external,client,call,q,org});
  if(process.env.NOVA_COMPANY_BROWSER==='1'){
   const {runCompanyBrowser}=await import('./testenv/companyBrowser.mjs');await runCompanyBrowser({env,owner,org,caseId});
  }

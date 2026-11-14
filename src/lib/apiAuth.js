@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient'
+import {withTimeout} from './sessionTimeout'
 
 // Attaches the caller's real Supabase session token to requests against api/client.js resources
 // that now require staff auth server-side (see api/_auth.js) — a plain fetch() with no
@@ -7,10 +8,11 @@ import { supabase } from './supabaseClient'
 export async function authedFetch(url, options = {}) {
   let token = null
   if (supabase) {
-    const { data } = await supabase.auth.getSession()
+    const { data } = await withTimeout(supabase.auth.getSession())
     token = data?.session?.access_token || null
   }
   const headers = { ...(options.headers || {}) }
   if (token) headers['Authorization'] = `Bearer ${token}`
-  return fetch(url, { ...options, headers })
+  const timeout=AbortSignal.timeout(45000)
+  return fetch(url, { ...options, headers,signal:options.signal?AbortSignal.any([options.signal,timeout]):timeout })
 }
