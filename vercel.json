@@ -21,6 +21,10 @@
       "destination": "/api/stripe?action=channel-webhook&channel=instagram"
     },
     {
+      "source": "/start",
+      "destination": "/start/index.html"
+    },
+    {
       "source": "/service-request",
       "destination": "/sms-program/index.html"
     },

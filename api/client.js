@@ -10,6 +10,7 @@ import { handleChannelAdmin } from './_channelWorkspace.js';
 import { handleCompanyAdmin } from './_companyOperations.js';
 import { handleUnifiedTwilio } from './_unifiedTwilio.js';
 import { handleAgentAdmin } from './_businessAgent.js';
+import { handleJourney } from './_journey.js';
 import { salesDispatch, SALES_RESOURCES } from './_sales/index.js';
 import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
 import { normalizePhone } from './_wave1.js';
@@ -4335,6 +4336,12 @@ export default async function handler(req, res) {
       if (!caller) return;
       return handleAgentAdmin(req, res, op, { requireOrgAccess, sanitize, rateLimit });
     }
+
+    // The customer journey (front desk → contracts → accounting → finance). Customer steps use a
+    // private link token; staff steps are checked against the caller's permission in that
+    // organization inside the handler.
+    case 'journey':
+      return handleJourney(req, res, op, { requireStaff, requireOrgAccess, sanitize, sanitizeEmail, rateLimit });
 
     case 'voice': {
       const caller = await requireStaff(req, res);

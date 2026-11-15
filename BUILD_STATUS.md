@@ -13,7 +13,9 @@ Updated 2026-11-14 against `Nova_Master_Build_Prompt.md`. Statuses: VERIFIED LIV
 | A | Source and database compatible | WAITING FOR ACCESS | Database is ahead of deployed main per handoff; not inspected | Compare migration history before any deploy |
 | B | Customer care: text to a business number answered as that business | VERIFIED LOCALLY | same test, 31 checks | Needs Twilio access, budget approval, migration applied |
 | B | Web request → saved request → reserved appointment | BUILT BUT UNVERIFIED | Existing flow; not re-run here | Run the PostgREST end-to-end suite |
-| B | Full chain to agreement, payment, fulfilment, owner report | NOT BUILT | — | Build after the request flow is re-verified |
+| B | Full chain: inquiry → quote → agreement → deposit → appointment → completion → balance → owner report, as four agents | VERIFIED LOCALLY | `scripts/unit_journey_test.mjs` (54 checks); headless browser run of `/start` against the real handler | Apply `customer-journey-migration-standalone.sql` to staging; run one journey with Nova as the business |
+| B | Comment or like → owner-approved offer → discount on the quote | VERIFIED LOCALLY (fixtures) | same test | No social account connected; message recorded as not sent |
+| B | Online payment and outbound messages inside the journey | NOT BUILT | `AGENT_PLAYBOOKS.md` | — |
 | C | Service-business positioning on the homepage | VERIFIED LOCALLY | headless browser run, `TEST_RESULTS.md` | Deploy; Contact, Pricing, Footer and other pages still use older wording |
 | C | Service catalog with honest availability and a working request action | VERIFIED LOCALLY | `scripts/unit_service_catalog_test.mjs`, `/services` | Submit one real request per service on staging |
 | C | Owner dashboard that answers "what is happening" | NOT BUILT this session | — | — |

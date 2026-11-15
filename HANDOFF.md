@@ -12,10 +12,12 @@
 1. Close open invoice, email and upload endpoints.
 2. Add the per-business messaging agent (SMS slice).
 3. Reposition the site as a service business with an eight-service catalog.
+4. Add the customer journey: four agents from first contact to closed job, the `/start` customer page, and `AGENT_PLAYBOOKS.md`.
 
 ## Migrations
 
 - New and NOT applied anywhere: `supabase/business-agents-migration-standalone.sql`. Run after `voice-agent-migration-standalone.sql`. Safe to re-run.
+- New and NOT applied anywhere: `supabase/customer-journey-migration-standalone.sql`. Run after `crm-order-audit-migration-standalone.sql` and `voice-agent-migration-standalone.sql`. Safe to re-run.
 - Already in production (do not reapply): `20261114001055_launch_recovery_studio.sql`, `20261114001136_executive_background_scheduler.sql`.
 
 ## Read next
