@@ -334,3 +334,19 @@ Authoritative detail: `docs/NOVA_PILOT_REQUIREMENTS.md`, `NOVA_PILOT_ACCEPTANCE_
 **Verification commands:** `npm run verify:local` (16 suites, no DB/network); `scripts/ui_smoke_mocked.mjs` (mocked backend).
 
 **Exact next task:** owner actions A–F in `NOVA_PILOT_OWNER_ACTIONS.md`; then run e2e scripts and the Journey J installation on a test organization.
+
+## Update 2026-11-13 — Security fixes and the per-business agent (first slice)
+
+Status of everything below: **locally verified only**. Nothing is pushed, deployed or applied to a database; this session has no push access to the repository.
+
+**Direction change (Isaac, 2026-11-13):** the audit is now the sales hook. The product Nova sells first is a call and messaging agent that answers AS the client business. Nova's own sales agent stays, as one agent among many.
+
+**Closed endpoints** (`scripts/unit_security_endpoints_test.mjs`, 14 checks): invoice and onboarding charges take their amount from the server; invoice checkout and `notify?action=send-invoice` require a staff session; the Stripe webhook marks an invoice paid only when the payment covers the full total; the public intake upload accepts only images, PDF, .docx, .xlsx, CSV and text with a server-set content type; `/set-password` and `/employee-dashboard` are removed. Still open: `nova-intake-files` is a public bucket (owner action), rate limiting is in-memory.
+
+**Per-business agent, SMS slice** (`api/_businessAgent.js`, `supabase/business-agents-migration-standalone.sql`, `scripts/unit_business_agent_test.mjs`, 31 checks): one `business_agents` row per client organization with its own number, facts, tone and monthly cap; conversations in `business_agent_threads` / `business_agent_messages`. `/webhooks/twilio-message` routes a text to a client's number to that client's agent after the existing signature check. Replies are written from the business's own facts plus its approved `voice_knowledge_base` answers and `voice_configurations` hours. Nothing is sent unless the global spending switch is on, the agent is active, a monthly cap is set and not used up, and the customer has not opted out; otherwise the message is saved and flagged for a human. Staff API: `/api/client?resource=agents` with a per-organization permission check on every read and write. The migration was applied twice to a throwaway local PostgreSQL 16 and its unique and check constraints were exercised there.
+
+**Not built yet:** the dashboard screen to create and edit an agent; real-time voice for client businesses (provider chosen: ElevenLabs Agents, on its free minutes, adapter not written); owner alerts by text; the monthly proof report; Instagram and web chat per business; Apple Messages for Business and RCS.
+
+**Exact next task:** read the ElevenLabs Agents API documentation, then write the voice adapter and its booking tools on top of the existing `voice_calendar_slots` hold/confirm flow.
+
+**Owner actions added:** connect the Claude GitHub App to `nova-systems-ct` (or apply the patch by hand); run `supabase/business-agents-migration-standalone.sql` after `voice-agent-migration-standalone.sql`; repair the Twilio credentials; make `nova-intake-files` private.

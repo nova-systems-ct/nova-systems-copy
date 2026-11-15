@@ -3,6 +3,7 @@ import {runtimeProviderEnv} from './_providerVault.js';
 import {launchRpc} from './_launchWorker.js';
 import {billableDispatchEnabled} from './_spendingPolicy.js';
 import {scheduleInboundSalesWorker,generateSalesReply,requireCostBudget} from './_autonomousSales.js';
+import {findAgentByNumber,handleBusinessSms} from './_businessAgent.js';
 const base='https://nova-systems.app';
 const escape=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
 const xml=(res,inside)=>{res.setHeader('Content-Type','text/xml');return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response>'+inside+'</Response>')};
@@ -12,6 +13,10 @@ export async function handleUnifiedTwilio(req,res,op){
  if(!env.TWILIO_AUTH_TOKEN||!env.TWILIO_ACCOUNT_SID)return res.status(503).json({error:'The business phone account is not configured.'});
  if(p.AccountSid!==env.TWILIO_ACCOUNT_SID||!verifyTwilioSignature({url:base+path,params:p,signature:req.headers['x-twilio-signature'],authToken:env.TWILIO_AUTH_TOKEN}))return res.status(403).json({error:'Invalid provider signature.'});
  if(op==='voice-agent')return voice(req,res,p,turn,env);
+ // A text to a client business's number is answered as that business (api/_businessAgent.js). The signature and account were
+ // verified above. Nova's own number never takes this branch, and a number that belongs to no business falls through to the
+ // sender check below and is refused as before.
+ if(op==='twilio-message'&&typeof p.To==='string'&&!p.To.startsWith('whatsapp:')&&p.To!==env.TWILIO_PHONE_NUMBER){const agent=await findAgentByNumber(p.To);if(agent)return handleBusinessSms(req,res,p,env,agent)}
  const channel=String(op==='twilio-status'?p.From:p.To).startsWith('whatsapp:')?'whatsapp':'sms',account=channel==='whatsapp'?env.TWILIO_WHATSAPP_FROM:env.TWILIO_PHONE_NUMBER;
  if(String(op==='twilio-status'?p.From:p.To)!==account)return res.status(403).json({error:'The business sender does not match.'});
  if(op==='twilio-status'){

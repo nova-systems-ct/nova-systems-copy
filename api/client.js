@@ -9,6 +9,7 @@ import { handleLaunchAdmin } from './_launchWorker.js';
 import { handleChannelAdmin } from './_channelWorkspace.js';
 import { handleCompanyAdmin } from './_companyOperations.js';
 import { handleUnifiedTwilio } from './_unifiedTwilio.js';
+import { handleAgentAdmin } from './_businessAgent.js';
 import { salesDispatch, SALES_RESOURCES } from './_sales/index.js';
 import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
 import { normalizePhone } from './_wave1.js';
@@ -4326,6 +4327,14 @@ export default async function handler(req, res) {
         try{return await handleUnifiedTwilio(req,res,op)}catch{return res.status(502).json({error:'The phone or message action could not be confirmed. Contact the owner.'})}
       }
       return handleCompanyAdmin(req,res);
+
+    // The per-business call and messaging agent. Every read and write is checked against the
+    // caller's permission in THAT organization inside the handler, not just a staff session.
+    case 'agents': {
+      const caller = await requireStaff(req, res);
+      if (!caller) return;
+      return handleAgentAdmin(req, res, op, { requireOrgAccess, sanitize, rateLimit });
+    }
 
     case 'voice': {
       const caller = await requireStaff(req, res);
