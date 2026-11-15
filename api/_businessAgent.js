@@ -15,6 +15,8 @@
 import { normalizePhone, classifyInboundKeyword } from './_wave1.js';
 import { billableDispatchEnabled } from './_spendingPolicy.js';
 import { twilioRequest } from './_twilio.js';
+import { restDb } from './_journey.js';
+import { converse } from './_conversation.js';
 
 // Planning estimate for one answered text (carrier segment + model call). Used only to stop a
 // business from running past its cap; it is not a bill. Revisit once real invoices exist.
@@ -168,8 +170,20 @@ export async function handleBusinessSms(req, res, p, env, agent) {
   const blocked = await replyBlockedReason(agent, thread, env);
   if (blocked) return hold(blocked);
 
-  let text;
+  let text, model = env.NOVA_AUTOMATION_MODEL;
+  // A business that has published services is answered by the journey workers: fixed rules, no
+  // model call, so the reply can only state prices, times and terms that are on file.
   try {
+    const out = await converse(restDb(), { orgId: agent.organization_id, channel: 'sms', customerKey: from, phone: from, messageId: sid, text: body, timezone: agent.timezone || 'America/New_York' });
+    if (out.journey_id) {
+      if (out.handed_to_person) await write(`business_agent_threads?id=eq.${q(thread.id)}`, 'PATCH', { needs_human: true });
+      if (!out.reply) return emptyTwiml(res);
+      text = out.reply; model = 'journey_rules';
+    }
+  } catch {
+    return hold('reply_could_not_be_written');
+  }
+  if (!text) try {
     const [knowledge, configs, history] = await Promise.all([
       select(`voice_knowledge_base?organization_id=eq.${q(agent.organization_id)}&status=eq.approved&select=question,answer,status&limit=60`),
       select(`voice_configurations?organization_id=eq.${q(agent.organization_id)}&select=business_hours,timezone,emergency_script&limit=1`),
@@ -183,8 +197,8 @@ export async function handleBusinessSms(req, res, p, env, agent) {
   try {
     const sent = await twilioRequest(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN, 'POST', 'Messages.json', { From: agent.phone_number, To: from, Body: text });
     const failed = ['failed', 'undelivered'].includes(sent.status);
-    await write('business_agent_messages', 'POST', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'outbound', body: text, provider_sid: sent.sid || null, state: failed ? 'failed' : 'sent', model: env.NOVA_AUTOMATION_MODEL });
-    if (!failed) await write(`business_agent_threads?id=eq.${q(thread.id)}`, 'PATCH', { last_outbound_at: new Date().toISOString(), needs_human: false });
+    await write('business_agent_messages', 'POST', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'outbound', body: text, provider_sid: sent.sid || null, state: failed ? 'failed' : 'sent', model });
+    if (!failed) await write(`business_agent_threads?id=eq.${q(thread.id)}`, 'PATCH', { last_outbound_at: new Date().toISOString(), ...(model === 'journey_rules' ? {} : { needs_human: false }) });
     else await write(`business_agent_threads?id=eq.${q(thread.id)}`, 'PATCH', { needs_human: true });
   } catch {
     return hold('carrier_did_not_accept');

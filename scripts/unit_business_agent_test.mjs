@@ -10,7 +10,7 @@ const UNLOCKED = { NOVA_SPENDING_LOCK: 'disabled', NOVA_BILLABLE_DISPATCH_ENABLE
 
 let db, outbound;
 function reset() {
-  db = { business_agents: [], business_agent_threads: [], business_agent_messages: [], voice_knowledge_base: [], voice_configurations: [] };
+  db = { business_agents: [], business_agent_threads: [], business_agent_messages: [], voice_knowledge_base: [], voice_configurations: [], journeys: [], journey_events: [], journey_documents: [], business_services: [], business_offers: [], crm_contacts: [], crm_deals: [], voice_calendar_slots: [] };
   outbound = [];
 }
 const match = (row, params) => [...params].every(([k, v]) => {
@@ -172,6 +172,20 @@ r = await admin('POST', { organization_id: ORG_B, business_name: 'Bright Smile D
 check('saving without re-confirming SMS turns it off rather than inheriting it', r.statusCode === 200 && db.business_agents[1].sms_enabled === false && db.business_agents[1].monthly_spend_cap_cents === null);
 r = await admin('GET', { organization_id: ORG_A }, true, 'threads');
 check('the conversation list returns only that organization\'s threads', r.statusCode === 200 && r.body.threads.every((t) => t.organization_id === ORG_A));
+
+// ---- a business with published services is answered by the journey workers, not a model
+seed();
+db.business_services.push({ id: crypto.randomUUID(), organization_id: ORG_A, name: 'Drain cleaning', keywords: ['drain', 'clog'], price_cents: 12000, price_approved: true, deposit_cents: null, terms_text: null, terms_approved: false, active: true, created_at: '2026-11-01T00:00:00Z' });
+r = await text(NUM_A, 'my drain is clogged');
+check('the reply is the quote from the approved price, sent from the business number', carrier().length === 1 && carrier()[0].body.From === NUM_A && /\$120\.00/.test(carrier()[0].body.Body));
+check('no model was called to write it', model().length === 0 && msgs((m) => m.direction === 'outbound')[0].model === 'journey_rules');
+check('the customer now has a journey in that business only', db.journeys.length === 1 && db.journeys[0].organization_id === ORG_A && db.journeys[0].source_channel === 'sms');
+r = await text(NUM_B, 'my drain is clogged');
+check('another business without services still uses its own assistant', model().length === 1 && model()[0].body.system.includes('Bright Smile Dental') && db.journeys.length === 1);
+seed();
+delete db.journeys;
+r = await text(NUM_A, 'hello');
+check('if the journey records cannot be read, nothing is sent and a person is flagged', carrier().length === 0 && model().length === 0 && db.business_agent_threads[0].needs_human === true && msgs((m) => m.state === 'held').length === 1);
 
 console.log(`\n${pass}/${pass + fail} business agent checks passed (in-memory stand-in — no database, model or carrier contacted, nothing sent)`);
 process.exit(fail ? 1 : 0);

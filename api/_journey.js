@@ -46,6 +46,7 @@ export function restDb() {
 
 // Records one step. The idempotency key makes a repeated step a no-op; returns false if it was
 // already recorded.
+export const recordStep = (db, j, e) => record(db, j, e);
 async function record(db, j, e) {
   try {
     await db.insert('journey_events', { organization_id: j.organization_id, journey_id: j.id, agent: e.agent, handed_to: e.handed_to || null, action: e.action, status: e.status || 'done', detail: e.detail || {}, idempotency_key: `${j.id}:${e.key || e.action}` });
