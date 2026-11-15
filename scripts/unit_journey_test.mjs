@@ -208,6 +208,14 @@ const check = (name, ok) => { ok ? pass++ : fail++; console.log(`${ok ? 'ok  ' :
   check('a deposit larger than the price is refused', r.code === 400);
   r = await call('POST', 'save-offer', { organization_id: NOVA, code: 'big', percent_off: 150, trigger_type: 'manual' }, deps(true, true));
   check('an impossible discount is refused', r.code === 400);
+  await db.insert('organizations', { id: NOVA, name: 'Nova Systems' });
+  await db.insert('business_offers', { organization_id: NOVA, trigger_type: 'web_visit', channel: null, code: 'FRIDAY', description: 'Black Friday: 10% off your first month', percent_off: 10, approved: true, active: true, expires_at: '2026-12-01T05:00:00Z' });
+  await db.insert('business_offers', { organization_id: NOVA, trigger_type: 'web_visit', channel: null, code: 'SECRET', description: 'Unapproved', percent_off: 50, approved: false, active: true, expires_at: null });
+  r = await call('POST', 'business', { organization_id: NOVA });
+  check('the public page gets the business name, its services and only the approved public offer', r.code === 200 && r.body.business.name === 'Nova Systems' && r.body.business.services.length >= 2 && r.body.business.offer?.code === 'FRIDAY');
+  check('the public page never receives prices, unapproved offers or other offers', !/price|cents|SECRET|THANKS5|DRAFT10/.test(JSON.stringify(r.body)));
+  r = await call('POST', 'business', { organization_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' });
+  check('a business with no services has no public page', r.code === 404);
   r = await call('GET', 'list', { organization_id: NOVA }, deps(true, true));
   check('the owner\'s list never includes customer link secrets', r.code === 200 && r.body.journeys.length > 0 && !JSON.stringify(r.body).includes('customer_token_hash'));
 }

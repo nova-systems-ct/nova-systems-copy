@@ -372,11 +372,12 @@ export async function receivables(db, orgId, now = new Date()) {
 
 // ---- HTTP: /api/client?resource=journey ----------------------------------------------------
 // Customer ops (no login; rate-limited; every op after `start` needs the private link token):
+//   POST op=business (what the public page shows: name, services, current public offer)
 //   POST op=start | status | choose-service | accept | choose-time | cancel
 // Staff ops (staff session + permission in THAT organization):
 //   GET  op=list | detail | receivables
 //   POST op=save-service | save-offer | record-payment | complete | pause | resume
-export const JOURNEY_CUSTOMER_OPS = new Set(['start', 'status', 'choose-service', 'accept', 'choose-time', 'cancel']);
+export const JOURNEY_CUSTOMER_OPS = new Set(['business', 'start', 'status', 'choose-service', 'accept', 'choose-time', 'cancel']);
 
 export async function handleJourney(req, res, op, { requireStaff, requireOrgAccess, sanitize, sanitizeEmail, rateLimit }) {
   res.setHeader('Cache-Control', 'no-store');
@@ -386,6 +387,18 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     if (JOURNEY_CUSTOMER_OPS.has(op)) {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       if (!rateLimit(req, res, op === 'start' ? 8 : 40, 60_000)) return;
+      if (op === 'business') {
+        const orgId = sanitize(b.organization_id, 100);
+        if (!UUID_RE.test(orgId)) return res.status(400).json({ error: 'This link is not valid.' });
+        const services = await db.select('business_services', { organization_id: orgId, active: true });
+        if (!services.length) return res.status(404).json({ error: 'This business is not taking requests here yet.' });
+        const agent = await one(db, 'business_agents', { organization_id: orgId });
+        const org = agent ? null : await one(db, 'organizations', { id: orgId });
+        // Only an offer the owner approved AND marked for website visitors is shown publicly.
+        const promo = (await db.select('business_offers', { organization_id: orgId, trigger_type: 'web_visit' })).find((o) => offerUsable(o, new Date()));
+        // Prices are deliberately not listed here: the customer sees a price only on their own quote.
+        return res.status(200).json({ ok: true, business: { name: agent?.business_name || org?.name || 'This business', services: services.map((x) => ({ name: x.name, description: x.description || '' })), offer: promo ? { code: promo.code, description: promo.description, percent_off: promo.percent_off, expires_at: promo.expires_at || null } : null } });
+      }
       if (op === 'start') {
         const orgId = sanitize(b.organization_id, 100), eventId = sanitize(b.submission_id, 100);
         if (!UUID_RE.test(orgId) || !UUID_RE.test(eventId)) return res.status(400).json({ error: 'This request link is not valid.' });

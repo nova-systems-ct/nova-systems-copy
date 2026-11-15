@@ -28,7 +28,7 @@ async function send(op, body) {
 const act = async (op, body) => { const data = await send(op, body); if (data?.next) render(data.next); };
 
 function render(next) {
-  $('start').hidden = true;
+  $('start').hidden = true; $('services').hidden = true;
   const box = $('step'); box.replaceChildren(); box.hidden = false;
   box.append(el('p', next.message));
   const choice = (label, small, onClick) => { const b = el('button', label, 'choice'); b.type = 'button'; if (small) b.append(el('small', small)); b.addEventListener('click', onClick); box.append(b); };
@@ -53,6 +53,22 @@ if (!UUID.test(org)) {
   showError('This link is missing the business it belongs to. Ask the business for their link.');
 } else {
   try { session = JSON.parse(sessionStorage.getItem(key) || 'null'); } catch { session = null; }
+  // Who the customer is dealing with, what they offer, and any offer the owner made public.
+  fetch('/api/client?resource=journey&op=business', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ organization_id: org }) })
+    .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+    .then(({ ok, d }) => {
+      if (!ok) { showError(d.error || 'This business is not taking requests here yet.'); $('start').hidden = true; return; }
+      const biz = d.business;
+      $('business').textContent = biz.name; document.title = `Get started | ${biz.name}`;
+      const list = $('services'); list.replaceChildren();
+      for (const svc of biz.services) { const li = el('li'); li.append(el('strong', svc.name)); if (svc.description) li.append(el('span', svc.description)); list.append(li); }
+      list.hidden = !biz.services.length || !$('step').hidden;
+      if (biz.offer) {
+        const ends = biz.offer.expires_at ? ` Ends ${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(biz.offer.expires_at))}.` : '';
+        $('promo').textContent = `${biz.offer.description}. Code ${biz.offer.code} is added to your request.${ends}`; $('promo').hidden = false;
+        if (!$('offer').value) $('offer').value = biz.offer.code;
+      }
+    }).catch(() => { /* the form still works without the header details */ });
   if (params.get('code')) $('offer').value = params.get('code').slice(0, 40);
   const submission = crypto.randomUUID();
   $('start').addEventListener('submit', async (event) => {

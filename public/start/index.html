@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Get started | Powered by Nova Systems</title><meta name="robots" content="noindex">
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#090909;color:#f3f0e8;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+:root{color-scheme:dark}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:#090909;color:#f3f0e8;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:640px;margin:0 auto;padding:56px 22px 80px}h1{font:400 clamp(34px,7vw,52px)/1.05 Georgia,serif;letter-spacing:-.03em;margin:10px 0 18px}h1 em{color:#d5b96c}
 .eyebrow{font-size:11px;font-weight:800;letter-spacing:.2em;color:#d5b96c;text-transform:uppercase;margin:0}
 .panel{border:1px solid #ffffff22;border-radius:12px;padding:24px;margin-top:24px;background:#ffffff05}
@@ -11,9 +11,10 @@ button{font:inherit;font-weight:800;font-size:14px;padding:14px 18px;border-radi
 button.choice{display:block;width:100%;text-align:left;background:none;color:inherit;border:1px solid #ffffff33;font-weight:600;margin-top:10px}button.choice:hover{border-color:#d5b96c}
 button.quiet{background:none;color:#aaa292;border:1px solid #ffffff22;font-weight:600}button:disabled{opacity:.55;cursor:wait}
 pre{white-space:pre-wrap;font:inherit;background:#111;border-radius:7px;padding:16px;margin:14px 0 0;border:1px solid #ffffff18}
-.note{font-size:13px;color:#aaa292}.error{color:#ff9d8a;font-weight:600}.hp{position:absolute;left:-9999px}small{display:block;color:#aaa292;font-weight:400}
-</style><script type="module" src="/start/start.js?v=20261114"></script></head>
-<body><main><p class="eyebrow">Your request, handled</p><h1>Tell us what you need.<br><em>We’ll take it from here.</em></h1>
+.promo{border:1px solid #d5b96c;border-radius:10px;padding:14px 16px;color:#f3e3b0;font-weight:700}.services{list-style:none;padding:0;margin:22px 0 0;display:grid;gap:10px}.services li{border-left:2px solid #d5b96c;padding:2px 0 2px 14px}.services strong{display:block}.services span{font-size:14px;color:#aaa292}.note{font-size:13px;color:#aaa292}.error{color:#ff9d8a;font-weight:600}.hp{position:absolute;left:-9999px}small{display:block;color:#aaa292;font-weight:400}
+</style><script type="module" src="/start/start.js?v=20261114b"></script></head>
+<body><main><p class="eyebrow" id="business">Your request, handled</p><h1>Tell us what you need.<br><em>We’ll take it from here.</em></h1>
+<p id="promo" class="promo" hidden></p><ul id="services" class="services" hidden></ul>
 <p class="note">You are dealing with an automated assistant. Anything it cannot handle goes to a person at the business.</p>
 <form id="start" class="panel" hidden><label for="name">Your name</label><input id="name" name="name" autocomplete="name" maxlength="100" required>
 <label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254">
