@@ -8,6 +8,22 @@ const renderedAt = Date.now();
 const reference = crypto.randomUUID();
 const managementToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
 const formatTime = value => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(value));
+// /services links here as /service-request?service=<catalog key>. The form's existing choices are
+// the only values the saved request accepts, so each catalog service selects the closest one and
+// its own name goes into the customer's note, where the customer can see and edit it.
+// Keep in step with src/lib/serviceCatalog.js (scripts/unit_service_catalog_test.mjs checks it).
+export const REQUESTED_SERVICES = {
+  'customer-care': ['messages', 'Customer care'], 'scheduling': ['booking', 'Scheduling'],
+  'sales-support': ['follow_up', 'Sales support'], 'marketing': ['systems', 'Marketing'],
+  'daily-operations': ['systems', 'Daily operations'], 'administration': ['systems', 'Administration'],
+  'finance-support': ['systems', 'Finance support'], 'business-improvement': ['not_sure', 'Business improvement'],
+};
+const requestedService = Object.hasOwn(REQUESTED_SERVICES, new URLSearchParams(location.search).get('service') || '')
+  ? REQUESTED_SERVICES[new URLSearchParams(location.search).get('service')] : null;
+if (requestedService && form) {
+  $('service').value = requestedService[0];
+  if (!$('message').value) $('message').value = `Service requested: ${requestedService[1]}.\n`;
+}
 let busy = false;
 let receipt = null;
 $('disclosure').textContent = SERVICE_SMS_POLICY.text;

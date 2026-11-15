@@ -6,21 +6,21 @@ import './HeroReference.css';
 
 const slides=[
   {
-    eyebrow:'The Nova Standard',
-    title:'Find what’s lost.',
-    emphasis:'Build what’s next.',
-    lines:['Your business, examined.','The right systems, put to work.','Results you can follow.'],
-    cta:'Begin your Nova Audit',
+    eyebrow:'Nova Systems',
+    title:'The work behind your business.',
+    emphasis:'Handled.',
+    lines:['Customers answered.','Appointments organized.','Follow-up done, and you can see it.'],
+    cta:'Tell us what needs handling',
   },
   {
-    eyebrow:'Agents & Revive',
-    title:'Capture the inquiry.',
-    emphasis:'Carry it forward.',
+    eyebrow:'Customer care and scheduling',
+    title:'Every customer answered.',
+    emphasis:'Every visit on the calendar.',
     lines:['Give customers a clear next step.','Keep booking and follow-up together.','See the work as it happens.'],
-    cta:'Explore Nova’s systems',
+    cta:'Request customer care',
   },
   {
-    eyebrow:'Nova Demand',
+    eyebrow:'Marketing',
     title:'Reach the right people.',
     emphasis:'Follow the result.',
     lines:['Start with a defined audience.','Prepare the message and the next action.','Track what each opportunity becomes.'],
@@ -39,14 +39,14 @@ export function NovaHomeNavigation() {
         {open?<X size={24}/>:<Menu size={24}/>}
       </button>
       <div className={'nova-reference-nav-links'+(open?' is-open':'')}>
-        <a href="#services" onClick={()=>setOpen(false)}>The Nova Audit</a>
-        <a href="#workflow" onClick={()=>setOpen(false)}>Our Systems</a>
+        <Link to="/services" onClick={()=>setOpen(false)}>Services</Link>
+        <a href="/#workflow" onClick={()=>setOpen(false)}>How it works</a>
         <details>
           <summary>Industries <ChevronDown size={13}/></summary>
           <div className="nova-industry-menu">
-            <a href="#industries" onClick={()=>setOpen(false)}>Home services</a>
-            <a href="#industries" onClick={()=>setOpen(false)}>Auto repair</a>
-            <a href="#industries" onClick={()=>setOpen(false)}>Professional services</a>
+            <a href="/#industries" onClick={()=>setOpen(false)}>Home services</a>
+            <a href="/#industries" onClick={()=>setOpen(false)}>Auto repair</a>
+            <a href="/#industries" onClick={()=>setOpen(false)}>Professional services</a>
           </div>
         </details>
         <Link to="/insights" onClick={()=>setOpen(false)}>Journal</Link>
@@ -54,7 +54,7 @@ export function NovaHomeNavigation() {
       </div>
       <div className="nova-reference-nav-actions">
         <Link to="/login">Sign in <ArrowUpRight size={13}/></Link>
-        <a className="nova-reference-outline" href="/service-request">Experience Nova <span><ArrowRight size={18}/></span></a>
+        <a className="nova-reference-outline" href="/service-request">Request a service <span><ArrowRight size={18}/></span></a>
       </div>
     </nav>
   );
@@ -76,7 +76,7 @@ export default function HeroSection() {
           <p className="nova-reference-hero-description">{slide.lines.map(line=><span key={line}>{line}</span>)}</p>
           <div className="nova-reference-hero-actions">
             <a className="nova-reference-outline" href="/service-request">{slide.cta}<span><ArrowRight size={19}/></span></a>
-            <a className="nova-reference-hero-secondary" href="#workflow">Discover the experience <ArrowRight size={16}/></a>
+            <a className="nova-reference-hero-secondary" href="#services">See the services <ArrowRight size={16}/></a>
           </div>
           <p className="nova-reference-time">Online and in person · 48–72 hours after scope and inputs are confirmed.</p>
         </div>

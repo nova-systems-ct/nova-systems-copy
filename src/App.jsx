@@ -12,7 +12,7 @@ import Home from './pages/Home';
 // it) should only ever download Home's code, not the CRM dashboard, AI agent builder, and
 // employee/admin tooling bundled in behind it. Home stays a static import since it's the page
 // almost every real visit and every audit run actually hits.
-const Solutions = lazy(() => import('./pages/Solutions'));
+const Services = lazy(() => import('./pages/Services'));
 const BusinessDiagnostic = lazy(() => import('./pages/BusinessDiagnostic'));
 const Contact = lazy(() => import('./pages/Contact'));
 const Pricing = lazy(() => import('./pages/Pricing'));
@@ -127,7 +127,9 @@ function App() {
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/solutions" element={<Solutions />} />
+            <Route path="/services" element={<Services />} />
+            {/* /solutions is an older URL that is still linked from outside; it now shows the service catalog. */}
+            <Route path="/solutions" element={<Services />} />
             <Route path="/business-diagnostic" element={<BusinessDiagnostic />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/pricing" element={<Pricing />} />
