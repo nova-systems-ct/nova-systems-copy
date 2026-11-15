@@ -1,0 +1,30 @@
+.desk .luxe-tabs button{display:inline-flex;align-items:center;gap:6px}
+.desk-link{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.desk-link code{display:block;margin-top:6px;font-size:12px;word-break:break-all;opacity:.85}
+.desk-link p,.desk-row p,.desk-note{margin:4px 0 0;font-size:13px;opacity:.75;line-height:1.5}
+.desk-todo ul{margin:8px 0;padding:0;list-style:none;display:grid;gap:6px}
+.desk-todo li{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.desk-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.desk-row>div{flex:1;min-width:0}
+.desk-row-button{width:100%;background:none;border:0;border-bottom:1px solid rgba(255,255,255,.08);color:inherit;text-align:left;cursor:pointer;font:inherit}
+.desk-row-button:focus-visible{outline:2px solid #c9a961;outline-offset:2px}
+.desk-pack{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:18px}
+.desk-pack label{display:grid;gap:6px;font-size:13px;flex:1;min-width:200px}
+.desk-pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.desk-check{display:flex!important;flex-direction:row!important;align-items:flex-start;gap:10px;font-size:14px}
+.desk-check input{width:auto;margin-top:3px}
+.desk-detail{padding:14px 0 20px;display:grid;gap:12px;justify-items:start}
+.desk-detail pre,.desk-report{white-space:pre-wrap;font:inherit;font-size:13px;line-height:1.6;margin:8px 0;opacity:.9}
+.desk-quote{font-style:italic;opacity:.85;margin:0}
+.desk-events{margin:0;padding-left:18px;font-size:13px;display:grid;gap:4px}
+.desk-events span{opacity:.6}
+.desk-inline{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.desk-inline label{display:grid;gap:6px;font-size:13px}
+.desk-list{margin:6px 0 14px;padding-left:18px;font-size:14px;display:grid;gap:4px}
+.desk h3{font-size:15px;margin:18px 0 4px}
+@media(max-width:640px){.desk-pair{grid-template-columns:1fr}.desk-row{flex-wrap:wrap}}
+.desk input:not([type=checkbox]),.desk select,.desk textarea{box-sizing:border-box;width:100%;max-width:100%;background:rgba(255,255,255,.03);border:1px solid rgba(201,169,97,.28);border-radius:10px;color:inherit;font:inherit;font-size:14px;padding:10px 12px}
+.desk select option{color:#111}
+.desk input:focus-visible,.desk select:focus-visible,.desk textarea:focus-visible{outline:2px solid #c9a961;outline-offset:1px}
+.desk-pair label,.desk-inline label{min-width:0}
+.desk-inline label{flex:1;min-width:160px}

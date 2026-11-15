@@ -218,6 +218,18 @@ const check = (name, ok) => { ok ? pass++ : fail++; console.log(`${ok ? 'ok  ' :
   check('a business with no services has no public page', r.code === 404);
   r = await call('GET', 'list', { organization_id: NOVA }, deps(true, true));
   check('the owner\'s list never includes customer link secrets', r.code === 200 && r.body.journeys.length > 0 && !JSON.stringify(r.body).includes('customer_token_hash'));
+  check('the owner sees each customer by name', r.body.journeys.every((j) => typeof j.customer_name === 'string' && j.customer_name.length > 0) && r.body.journeys.some((j) => j.customer_name !== 'Customer'));
+  const OTHER2 = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const stranger = await db.insert('crm_contacts', { organization_id: OTHER2, name: 'Someone Elses Customer', email: 'else@example.invalid' });
+  const mine = db.t.journeys.find((j) => j.organization_id === NOVA);
+  const keep = mine.contact_id; mine.contact_id = stranger.id;
+  r = await call('GET', 'list', { organization_id: NOVA }, deps(true, true));
+  check('a contact from another business is never named', !JSON.stringify(r.body).includes('Someone Elses Customer'));
+  r = await call('GET', 'detail', { organization_id: NOVA, journey_id: mine.id }, deps(true, true));
+  check('nor shown in the detail view', r.code === 200 && r.body.customer === null);
+  mine.contact_id = keep;
+  r = await call('GET', 'detail', { organization_id: NOVA, journey_id: mine.id }, deps(true, true));
+  check('the detail view gives the customer\'s own contact details', r.code === 200 && !!r.body.customer?.name);
 }
 
 console.log(`\n${pass}/${pass + fail} customer journey checks passed (in-memory store, test prices — no database, payment provider or channel contacted)`);

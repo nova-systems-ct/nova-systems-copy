@@ -445,9 +445,12 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
         const j = UUID_RE.test(jid) ? await one(db, 'journeys', { id: jid, organization_id: orgId }) : null;
         if (!j) return res.status(404).json({ error: 'Not found' });
         const { customer_token_hash: _hidden, ...safe } = j;
-        return res.status(200).json({ journey: safe, events: await db.select('journey_events', { journey_id: j.id }), documents: await db.select('journey_documents', { journey_id: j.id }) });
+        const who = await one(db, 'crm_contacts', { id: j.contact_id, organization_id: orgId });
+        return res.status(200).json({ journey: safe, customer: who ? { name: who.name || null, email: who.email || null, phone: who.phone || null } : null, events: await db.select('journey_events', { journey_id: j.id }), documents: await db.select('journey_documents', { journey_id: j.id }) });
       }
-      const journeys = (await db.select('journeys', { organization_id: orgId }, { order: 'updated_at.desc', limit: 200 })).map(({ customer_token_hash: _hidden, ...safe }) => safe);
+      // Names come only from this organization's own contacts, so one business never sees another's customers.
+      const people = new Map((await db.select('crm_contacts', { organization_id: orgId }, { order: 'created_at.desc', limit: 1000 })).map((c) => [c.id, c.name || c.email || c.phone || 'Customer']));
+      const journeys = (await db.select('journeys', { organization_id: orgId }, { order: 'updated_at.desc', limit: 200 })).map(({ customer_token_hash: _hidden, ...safe }) => ({ ...safe, customer_name: people.get(safe.contact_id) || 'Customer' }));
       return res.status(200).json({ journeys, services: await db.select('business_services', { organization_id: orgId }), offers: await db.select('business_offers', { organization_id: orgId }) });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
