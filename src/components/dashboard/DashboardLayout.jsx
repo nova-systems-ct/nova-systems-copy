@@ -13,6 +13,7 @@ const NAV=[
  {to:'/dashboard/leads',label:'Leads',icon:Users,permission:'growth.view'},
  {to:'/dashboard/calendar',label:'Calendar',icon:CalendarDays,permission:'admin.view'},
  {to:'/dashboard/business',label:'Business desk',icon:BriefcaseBusiness,permission:'growth.view'},
+ {to:'/dashboard/registrations',label:'New businesses',icon:Building2,permission:'admin.view'},
  {to:'/dashboard/workers',label:'Workers',icon:Bot,permission:'admin.view'},
  {to:'/dashboard/team-room',label:'Company HQ',icon:Network,permission:'admin.view',ownerOnly:true},
  {to:'/dashboard/conversations',label:'Conversations',icon:MessagesSquare,permission:'admin.view'},

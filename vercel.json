@@ -25,6 +25,10 @@
       "destination": "/start/index.html"
     },
     {
+      "source": "/register",
+      "destination": "/register/index.html"
+    },
+    {
       "source": "/service-request",
       "destination": "/sms-program/index.html"
     },

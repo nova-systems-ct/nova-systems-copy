@@ -219,7 +219,7 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
     const orgId = sanitize(b.organization_id, 100);
     if (!UUID_RE.test(orgId)) return res.status(400).json({ error: 'organization_id is required' });
     // Consequential: turns on a customer-facing agent and sets a spending cap.
-    if (!(await requireOrgAccess(req, res, orgId, 'admin.view'))) return;
+    if (!(await requireOrgAccess(req, res, orgId, 'business.manage'))) return;
 
     const business_name = sanitize(b.business_name, 200);
     if (!business_name) return res.status(400).json({ error: 'business_name is required' });

@@ -93,6 +93,7 @@ DECLARE
     'pilots',
     'products',
     'revive_outreach',
+    'business_registrations',
     'sales_activation_approvals',
     'sales_audit_log',
     'sales_commission_entries',

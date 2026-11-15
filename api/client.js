@@ -11,6 +11,7 @@ import { handleCompanyAdmin } from './_companyOperations.js';
 import { handleUnifiedTwilio } from './_unifiedTwilio.js';
 import { handleAgentAdmin } from './_businessAgent.js';
 import { handleJourney } from './_journey.js';
+import { handleRegistration } from './_registration.js';
 import { salesDispatch, SALES_RESOURCES } from './_sales/index.js';
 import { handleCrmSales, DEAL_STAGES, TERMINAL_STAGES, checkDealStageChange } from './_crmSales.js';
 import { normalizePhone } from './_wave1.js';
@@ -4375,6 +4376,11 @@ export default async function handler(req, res) {
     // organization inside the handler.
     case 'journey':
       return handleJourney(req, res, op, { requireStaff, requireOrgAccess, sanitize, sanitizeEmail, rateLimit });
+
+    // Business registration. op=request is public; everything else is Nova administrators only,
+    // checked inside the handler.
+    case 'register':
+      return handleRegistration(req, res, op, { requireStaff, requireOrgAccess, sanitize, sanitizeEmail, rateLimit });
 
     case 'voice': {
       const caller = await requireStaff(req, res);

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Register your business | Nova Systems</title><meta name="description" content="Ask Nova Systems to set up the systems that answer, quote, book and bill for your business.">
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:#090909;color:#f3f0e8;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:640px;margin:0 auto;padding:56px 22px 80px}h1{font:400 clamp(34px,7vw,52px)/1.05 Georgia,serif;letter-spacing:-.03em;margin:10px 0 18px}h1 em{color:#d5b96c}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.2em;color:#d5b96c;text-transform:uppercase;margin:0}.eyebrow a{color:inherit;text-decoration:none}
+.panel{border:1px solid #ffffff22;border-radius:12px;padding:24px;margin-top:24px;background:#ffffff05}
+label{display:block;font-size:13px;font-weight:700;margin:14px 0 6px}input,textarea,select{width:100%;padding:12px;border-radius:7px;border:1px solid #ffffff33;background:#111;color:inherit;font:inherit}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid #d5b96c;outline-offset:2px}
+button{font:inherit;font-weight:800;font-size:14px;padding:14px 18px;border-radius:7px;border:0;background:#d6b96a;color:#111;cursor:pointer;margin-top:16px}button:disabled{opacity:.55;cursor:wait}
+.agree{display:flex;gap:10px;align-items:flex-start;font-weight:500;font-size:14px;margin-top:18px}.agree input{width:auto;margin-top:5px}
+ol{padding-left:20px;margin:18px 0 0}ol li{margin:6px 0}.note{font-size:13px;color:#aaa292}.error{color:#ff9d8a;font-weight:600}.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+</style><script type="module" src="/register/register.js?v=20261114"></script></head>
+<body><main><p class="eyebrow"><a href="/">Nova Systems</a></p><h1>Register your business.<br><em>We’ll set up the rest.</em></h1>
+<ol><li>Tell us about your business below.</li><li>A person at Nova reviews it and sets up your account.</li><li>You get an email to sign in, set your prices, and share your request page with customers.</li></ol>
+<form id="reg" class="panel"><label for="business_name">Business name</label><input id="business_name" name="business_name" autocomplete="organization" maxlength="200" required>
+<label for="industry_pack">Type of business</label><select id="industry_pack" name="industry_pack"><option value="">Something else</option><option value="lawn_care">Lawn care</option><option value="car_detailing">Car detailing</option><option value="window_cleaning">Window cleaning</option><option value="barbershop">Barbershop</option><option value="home_services">Home services (plumbing, heating and cooling)</option><option value="auto_repair">Auto repair</option><option value="marketing_agency">Marketing</option></select>
+<label for="contact_name">Your name</label><input id="contact_name" name="contact_name" autocomplete="name" maxlength="100" required>
+<label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required><p class="note">Your sign-in link is sent here once your account is set up.</p>
+<label for="phone">Phone (optional)</label><input id="phone" name="phone" type="tel" autocomplete="tel" maxlength="40">
+<label for="message">What takes up most of your time? (optional)</label><textarea id="message" name="message" rows="3" maxlength="2000"></textarea>
+<label class="agree" for="agree"><input id="agree" name="agree" type="checkbox" required>Nova Systems may contact me by email or phone about this request.</label>
+<div class="hp" aria-hidden="true"><label for="wc">Leave this field empty</label><input id="wc" name="website_url_confirm" tabindex="-1" autocomplete="off"></div>
+<button type="submit" id="send">Send my registration</button><p class="note">Sending this does not create an account or charge anything.</p></form>
+<section id="done" class="panel" role="status" hidden><h2 style="margin-top:0">Got it.</h2><p>Your registration is with the Nova team. When your account is set up, a sign-in email goes to the address you entered.</p></section>
+<p id="error" class="error" role="alert" hidden></p>
+<noscript><p class="error">Enable JavaScript to register here.</p></noscript></main></body></html>

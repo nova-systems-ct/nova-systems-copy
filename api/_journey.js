@@ -457,8 +457,9 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     if (!rateLimit(req, res, 30, 60_000)) return;
     const orgId = sanitize(b.organization_id, 100);
     if (!UUID_RE.test(orgId)) return res.status(400).json({ error: 'organization_id is required' });
-    // Prices, discounts, agreement wording and money: owner-level permission in that organization.
-    if (!(await requireOrgAccess(req, res, orgId, op === 'complete' ? 'growth.view' : 'admin.view'))) return;
+    // Prices, discounts, agreement wording and money: the owner-level permission (business.manage)
+    // in that organization. Client owners hold it; admin.view stays Nova-only.
+    if (!(await requireOrgAccess(req, res, orgId, op === 'complete' ? 'growth.view' : 'business.manage'))) return;
 
     // Prepares come-back messages. No channel is connected yet, so canSend is empty and every
     // message is saved as not sent with its reason. Sending is wired in when a channel is live.
