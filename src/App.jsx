@@ -23,9 +23,7 @@ const AuthCallback = lazy(() => import('./pages/AuthCallback'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Careers = lazy(() => import('./pages/Careers'));
 const ApplicantLogin = lazy(() => import('./pages/ApplicantLogin'));
-const SetPassword = lazy(() => import('./pages/SetPassword'));
 const ApplicationStatus = lazy(() => import('./pages/ApplicationStatus'));
-const EmployeeDashboard = lazy(() => import('./pages/EmployeeDashboard'));
 const Insights = lazy(() => import('./pages/Insights'));
 const InsightPost = lazy(() => import('./pages/InsightPost'));
 const PublicPortfolio = lazy(() => import('./pages/Portfolio'));
@@ -144,9 +142,7 @@ function App() {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/careers" element={<Careers />} />
             <Route path="/applicant-login" element={<ApplicantLogin />} />
-            <Route path="/set-password" element={<SetPassword />} />
             <Route path="/application-status" element={<ApplicationStatus />} />
-            <Route path="/employee-dashboard" element={<EmployeeDashboard />} />
             <Route path="/insights" element={<Insights />} />
             <Route path="/insights/:slug" element={<InsightPost />} />
             <Route path="/portfolio" element={<PublicPortfolio />} />

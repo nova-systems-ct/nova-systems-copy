@@ -4,6 +4,7 @@ import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizeUrl } from './_sanitize.js';
 import { stripeRequest } from './_stripe.js';
 import { handleStripeEvent as handleSalesStripeEvent } from './_sales/payments.js';
+import { requireStaff } from './_auth.js';
 
 // Combined Stripe endpoint — actions: checkout-session, payment-intent,
 // verify-payment (?action=...), plus the raw-body webhook (auto-detected via
@@ -56,6 +57,76 @@ async function supabasePatch(SUPABASE_URL, SUPABASE_KEY, table, filter, patch) {
   });
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Server-side copy of the /onboard plans (src/pages/Onboard.jsx TIERS). The browser used to send
+// the amount itself, so anyone could pay $1 against a client_id and have the webhook mark that
+// client Paid/Active. The price now comes from here; change both places together.
+const ONBOARD_TIER_PRICES = {
+  'Tier 1 — Website Only': 500,
+  'Tier 2 — Social Media Only': 1500,
+  'Tier 3 — Website + Social Media': 2500,
+  'Tier 4 — Full System + AI Agent': 3500,
+  'Tier 5 — Everything': 5000,
+  'Partner Program': 1000,
+};
+
+// The invoice's own total, in cents, read from the database. Returns null when it cannot be read.
+async function invoiceTotalCents(invoiceId) {
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY || !UUID_RE.test(invoiceId || '')) return null;
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/client_invoices?id=eq.${encodeURIComponent(invoiceId)}&select=total&limit=1`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    });
+    if (!r.ok) return null;
+    const rows = await r.json();
+    const cents = Math.round(Number(rows[0]?.total) * 100);
+    return Number.isInteger(cents) && cents > 0 ? cents : null;
+  } catch {
+    return null;
+  }
+}
+
+// Marks an invoice Paid only when Stripe reports at least the invoice's full total in USD.
+// A short payment (or an unreadable invoice) leaves the invoice untouched and is logged.
+async function markInvoicePaidIfCovered(SUPABASE_URL, SUPABASE_KEY, invoiceId, paidCents, currency) {
+  const owed = await invoiceTotalCents(invoiceId);
+  if (!owed || String(currency || '').toLowerCase() !== 'usd' || !Number.isInteger(paidCents) || paidCents < owed) {
+    console.error('[stripe webhook] Payment does not cover invoice — not marking paid', { invoiceId, paidCents, owed });
+    return false;
+  }
+  const r = await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'client_invoices', `id=eq.${encodeURIComponent(invoiceId)}`, {
+    status: 'Paid', paid_at: new Date().toISOString(),
+  });
+  return r.ok;
+}
+
+// Decides what a checkout or payment intent may charge. Anything linked to an invoice or a client
+// record takes its amount from the server, never from the request body.
+async function resolveCharge(req, res, b) {
+  const client_id = sanitize(b.client_id, 100);
+  const invoice_id = sanitize(b.invoice_id, 100);
+  const tier_name = sanitize(b.tier_name, 100);
+  if (invoice_id) {
+    if (!UUID_RE.test(invoice_id)) { res.status(400).json({ error: 'Invalid invoice reference' }); return null; }
+    if (!(await requireStaff(req, res, 'admin.view'))) return null;
+    const cents = await invoiceTotalCents(invoice_id);
+    if (!cents) { res.status(404).json({ error: 'Invoice not found, or it has no total yet' }); return null; }
+    return { cents, client_id: UUID_RE.test(client_id) ? client_id : '', invoice_id, tier_name };
+  }
+  if (client_id) {
+    if (!UUID_RE.test(client_id)) { res.status(400).json({ error: 'Invalid client reference' }); return null; }
+    const price = ONBOARD_TIER_PRICES[tier_name];
+    if (!price) { res.status(400).json({ error: 'Unknown plan' }); return null; }
+    return { cents: price * 100, client_id, invoice_id: '', tier_name };
+  }
+  const amount = Number(b.tier_price ?? b.amount);
+  if (!amount || amount <= 0) { res.status(400).json({ error: 'A valid amount is required' }); return null; }
+  return { cents: Math.round(amount * 100), client_id: '', invoice_id: '', tier_name };
+}
+
 async function handleWebhook(req, res, rawBody) {
   const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
   const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -98,12 +169,12 @@ async function handleWebhook(req, res, rawBody) {
       const invoiceId = session.metadata?.invoice_id;
       const clientId = session.metadata?.client_id;
 
+      let invoicePaid = false;
       if (invoiceId) {
-        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'client_invoices', `id=eq.${invoiceId}`, {
-          status: 'Paid', paid_at: new Date().toISOString(),
-        });
-      } else if (clientId) {
-        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'clients', `id=eq.${clientId}`, {
+        invoicePaid = session.payment_status === 'paid'
+          && await markInvoicePaidIfCovered(SUPABASE_URL, SUPABASE_KEY, invoiceId, session.amount_total, session.currency);
+      } else if (clientId && UUID_RE.test(clientId) && session.payment_status === 'paid') {
+        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'clients', `id=eq.${encodeURIComponent(clientId)}`, {
           payment_status: 'Paid', status: 'Active', first_payment_date: new Date().toISOString(),
         });
       }
@@ -121,7 +192,7 @@ async function handleWebhook(req, res, rawBody) {
         }).catch(() => {});
       }
 
-      if (RESEND_KEY && invoiceId) {
+      if (RESEND_KEY && invoicePaid) {
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
@@ -141,11 +212,9 @@ async function handleWebhook(req, res, rawBody) {
       const clientId = intent.metadata?.client_id;
 
       if (invoiceId) {
-        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'client_invoices', `id=eq.${invoiceId}`, {
-          status: 'Paid', paid_at: new Date().toISOString(),
-        });
-      } else if (clientId) {
-        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'clients', `id=eq.${clientId}`, {
+        await markInvoicePaidIfCovered(SUPABASE_URL, SUPABASE_KEY, invoiceId, intent.amount_received, intent.currency);
+      } else if (clientId && UUID_RE.test(clientId)) {
+        await supabasePatch(SUPABASE_URL, SUPABASE_KEY, 'clients', `id=eq.${encodeURIComponent(clientId)}`, {
           payment_status: 'Paid', status: 'Active', first_payment_date: new Date().toISOString(),
         });
       }
@@ -168,11 +237,10 @@ async function handleCheckoutSession(req, res, b) {
     return res.status(500).json({ error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY to enable payments.' });
   }
 
-  const amount        = Number(b.tier_price ?? b.amount);
+  const charge = await resolveCharge(req, res, b);
+  if (!charge) return;
+  const { cents, client_id, invoice_id, tier_name } = charge;
   const client_email   = sanitizeEmail(b.client_email || '');
-  const tier_name       = sanitize(b.tier_name, 100);
-  const client_id        = sanitize(b.client_id, 100);
-  const invoice_id       = sanitize(b.invoice_id, 100);
   const description       = sanitize(b.description, 200) || (tier_name ? `Nova Systems — ${tier_name} (first month)` : 'Nova Systems Invoice');
 
   const origin = req.headers.origin || 'https://nova-systems.app';
@@ -180,8 +248,6 @@ async function handleCheckoutSession(req, res, b) {
     || `${origin}/onboard/success?session_id={CHECKOUT_SESSION_ID}&client_id=${encodeURIComponent(client_id)}`;
   const cancel_url = (() => { try { return sanitizeUrl(b.cancel_url || ''); } catch { return ''; } })()
     || `${origin}/onboard?step=6`;
-
-  if (!amount || amount <= 0) return res.status(400).json({ error: 'A valid amount is required' });
 
   try {
     const session = await stripeRequest(STRIPE_SECRET_KEY, 'POST', 'checkout/sessions', {
@@ -193,7 +259,7 @@ async function handleCheckoutSession(req, res, b) {
         quantity: 1,
         price_data: {
           currency: 'usd',
-          unit_amount: Math.round(amount * 100),
+          unit_amount: cents,
           product_data: { name: description },
         },
       }],
@@ -217,18 +283,15 @@ async function handlePaymentIntent(req, res, b) {
     return res.status(500).json({ error: 'Stripe is not configured yet. Add STRIPE_SECRET_KEY to enable payments.' });
   }
 
-  const amount        = Number(b.amount);
+  const charge = await resolveCharge(req, res, b);
+  if (!charge) return;
+  const { cents, client_id, invoice_id, tier_name } = charge;
   const client_email   = sanitizeEmail(b.client_email || '');
-  const tier_name       = sanitize(b.tier_name, 100);
-  const client_id        = sanitize(b.client_id, 100);
-  const invoice_id       = sanitize(b.invoice_id, 100);
   const description       = sanitize(b.description, 200) || (tier_name ? `Nova Systems — ${tier_name}` : 'Nova Systems Payment');
-
-  if (!amount || amount <= 0) return res.status(400).json({ error: 'A valid amount is required' });
 
   try {
     const intent = await stripeRequest(STRIPE_SECRET_KEY, 'POST', 'payment_intents', {
-      amount: Math.round(amount * 100),
+      amount: cents,
       currency: 'usd',
       description,
       receipt_email: client_email || undefined,

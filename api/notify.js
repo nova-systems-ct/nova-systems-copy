@@ -402,7 +402,11 @@ export default async function handler(req, res) {
     case 'client-message':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleClientMessage(req, res);
-    case 'send-invoice':      return handleSendInvoice(req, res);
+    case 'send-invoice':
+      // Staff only: the caller chooses the recipient, the pay link and the attachment, so an open
+      // endpoint here let anyone send mail as Nova (same class of bug as client-message above).
+      if (!(await requireStaff(req, res, 'admin.view'))) return;
+      return handleSendInvoice(req, res);
     case 'list':
       if (!(await requireStaff(req, res, 'admin.view'))) return;
       return handleList(req, res);

@@ -267,12 +267,33 @@ async function handleSubmit(req, res) {
   return res.status(200).json({ ok: true, id: submissionId });
 }
 
+const startsWith = (buf, bytes) => bytes.every((v, i) => buf[i] === v);
+const looksLikeText = (buf) => !buf.subarray(0, 4096).includes(0) && !/<\s*(script|html|svg|iframe)/i.test(buf.subarray(0, 4096).toString('utf8'));
+const UPLOAD_TYPES = {
+  png:  ['image/png', (b) => startsWith(b, [0x89, 0x50, 0x4e, 0x47])],
+  jpg:  ['image/jpeg', (b) => startsWith(b, [0xff, 0xd8, 0xff])],
+  jpeg: ['image/jpeg', (b) => startsWith(b, [0xff, 0xd8, 0xff])],
+  gif:  ['image/gif', (b) => startsWith(b, [0x47, 0x49, 0x46, 0x38])],
+  webp: ['image/webp', (b) => startsWith(b, [0x52, 0x49, 0x46, 0x46]) && b.subarray(8, 12).toString('latin1') === 'WEBP'],
+  pdf:  ['application/pdf', (b) => startsWith(b, [0x25, 0x50, 0x44, 0x46])],
+  docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', (b) => startsWith(b, [0x50, 0x4b])],
+  xlsx: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', (b) => startsWith(b, [0x50, 0x4b])],
+  csv:  ['text/csv', looksLikeText],
+  txt:  ['text/plain', looksLikeText],
+};
+// Returns the content type to store, or '' when the extension is not allowed or the bytes disagree.
+export function uploadContentType(filename, buffer) {
+  const ext = String(filename).toLowerCase().split('.').pop();
+  const entry = Object.hasOwn(UPLOAD_TYPES, ext) ? UPLOAD_TYPES[ext] : null;
+  return entry && buffer.length > 0 && entry[1](buffer) ? entry[0] : '';
+}
+
 // Stores one base64-encoded document (logo, price list, photo, etc.) from
 // section 16 into the nova-intake-files storage bucket (public read — these
 // are business collateral, not sensitive records) and returns its public URL.
 async function handleUploadFile(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!rateLimit(req, res, 30, 60_000)) return;
+  if (!rateLimit(req, res, 12, 60_000)) return;
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -281,7 +302,6 @@ async function handleUploadFile(req, res) {
   const b = req.body || {};
   const category = (sanitize(b.category, 50).replace(/[^a-z0-9_-]/gi, '') || 'other');
   const filename = (sanitize(b.filename, 200).replace(/[^a-z0-9._-]/gi, '_') || `file-${Date.now()}`);
-  const content_type = sanitize(b.content_type, 100) || 'application/octet-stream';
   const email = sanitizeEmail(b.email) || 'anonymous';
   const file_base64 = typeof b.file_base64 === 'string' ? b.file_base64 : '';
 
@@ -289,6 +309,14 @@ async function handleUploadFile(req, res) {
 
   const buffer = Buffer.from(file_base64.replace(/^data:[^;]+;base64,/, ''), 'base64');
   if (buffer.length > MAX_UPLOAD_BYTES) return res.status(400).json({ error: 'File is too large. Please keep files under 4MB.' });
+
+  // This form is public, and the bucket is public-read, so the server decides what a file is. The
+  // stored content type comes from the extension allowlist below, never from the request, and the
+  // first bytes must match it. That keeps HTML, SVG and scripts off Nova's storage domain.
+  const content_type = uploadContentType(filename, buffer);
+  if (!content_type) {
+    return res.status(415).json({ error: 'That file type is not accepted. Upload an image (PNG, JPG, WEBP, GIF), a PDF, a Word or Excel file, or a CSV or text file.' });
+  }
 
   const emailSlug = email.replace(/[^a-z0-9]/gi, '_');
   const path = `${emailSlug}/${category}/${Date.now()}-${filename}`;

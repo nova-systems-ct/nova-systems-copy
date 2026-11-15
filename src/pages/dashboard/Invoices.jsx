@@ -134,7 +134,7 @@ export default function Invoices() {
 
       let pay_link = ''
       try {
-        const cs = await fetch('/api/stripe?action=checkout-session', {
+        const cs = await authedFetch('/api/stripe?action=checkout-session', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ amount: total, client_email: form.client_email, description: `Invoice ${invoice_number} — Nova Systems`, invoice_id: invoiceId, client_id: form.client_id }),
         })
@@ -164,7 +164,7 @@ export default function Invoices() {
 
       if (form.client_email) {
         try {
-          const notifyRes = await fetch('/api/notify?action=send-invoice', {
+          const notifyRes = await authedFetch('/api/notify?action=send-invoice', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ client_email: form.client_email, client_name: form.client_name, invoice_number, total, due_date: form.due_date, pay_link, pdf_base64: pdfDataUri }),
           })
