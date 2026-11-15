@@ -14,6 +14,7 @@
 3. Reposition the site as a service business with an eight-service catalog.
 4. Add the customer journey: four agents from first contact to closed job, the `/start` customer page, and `AGENT_PLAYBOOKS.md`.
 5. Add Nova Audit customer-style tests, Nova Revive, Nova Proof and industry packs.
+6. Make intake uploads private; allow the staging database in the browser security policy.
 
 ## Migrations
 
@@ -30,8 +31,8 @@
 
 1. GitHub: install the Claude GitHub App on `nova-systems-ct`, or apply the patch by hand.
 2. Twilio: sign in so the credentials and campaign status can be checked. Do not resubmit the campaign.
-3. Supabase: make the `nova-intake-files` bucket private.
-4. Confirm the Vercel plan.
+3. Supabase: the `nova-intake-files` bucket does not exist in staging or production (checked 2026-11-14), so intake uploads currently fail. Create it as a PRIVATE bucket. The code now stores files under unguessable paths and opens them only through the staff-only `business-intake?action=file-url` link, which expires after five minutes.
+4. Vercel plan is Hobby (confirmed 2026-11-14). Vercel limits Hobby to non-commercial use; moving to a paid plan is an owner decision and a cost.
 
 ## First next action
 

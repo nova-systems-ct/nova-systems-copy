@@ -25,7 +25,7 @@ globalThis.fetch = async (url, opts = {}) => {
 
 const { default: stripe } = await import('../api/stripe.js');
 const { default: notify } = await import('../api/notify.js');
-const { uploadContentType } = await import('../api/business-intake.js');
+const { uploadContentType, default: intake } = await import('../api/business-intake.js');
 
 function call(handler, { query = {}, headers = {}, body, raw = true, method = 'POST' }) {
   const text = typeof body === 'string' ? body : JSON.stringify(body ?? {});
@@ -86,6 +86,16 @@ check('HTML renamed to .png is refused', uploadContentType('page.png', Buffer.fr
 check('a script inside a .txt is refused', uploadContentType('note.txt', Buffer.from('<script>alert(1)</script>')) === '');
 check('plain text is accepted', uploadContentType('prices.csv', Buffer.from('item,price\nA,10\n')) === 'text/csv');
 check('an SVG is refused', uploadContentType('logo.svg', Buffer.from('<svg/>')) === '');
+
+calls = [];
+r = await call(intake, { query: { action: 'upload-file' }, raw: false, body: { filename: 'logo.png', category: 'logo', email: 'owner@example.com', file_base64: png.toString('base64') } });
+check('an uploaded file is stored under an unguessable private path, with no public link returned', r.status === 200 && !/object\/public/.test(JSON.stringify(r.data)) && /^nova-intake-files\/owner_example_com\/logo\/\d+-[0-9a-f]{16}-logo\.png$/.test(r.data.url));
+calls = [];
+r = await call(intake, { query: { action: 'file-url' }, raw: false, body: { path: r.data.path } });
+check('opening an uploaded file needs a staff session', r.status === 401 && !calls.some((c) => c.url.includes('/object/sign/')));
+const vercel = JSON.parse((await import('node:fs')).readFileSync('vercel.json', 'utf8'));
+const csp = vercel.headers.flatMap((h) => h.headers).find((h) => h.key === 'Content-Security-Policy').value;
+check('the browser security policy allows the staging database as well as production, and nothing else new', /connect-src[^;]*xizmgruvuazmummotzkp\.supabase\.co[^;]*ubjnddxmdaxnbpzcmxnc\.supabase\.co/.test(csp) && (csp.match(/supabase\.co/g) || []).length % 2 === 0);
 
 console.log(`\n${pass}/${pass + fail} security endpoint checks passed (stand-in fetch — no provider contacted, no database touched)`);
 process.exit(fail ? 1 : 0);

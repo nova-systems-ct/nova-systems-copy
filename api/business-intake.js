@@ -2,6 +2,8 @@ import { setCors } from './_cors.js';
 import { rateLimit } from './_rateLimit.js';
 import { sanitize, sanitizeEmail, sanitizePhone } from './_sanitize.js';
 import { twilioRequest } from './_twilio.js';
+import { requireStaff } from './_auth.js';
+import { randomBytes } from 'node:crypto';
 
 // /intake — the 20-step Nova Business Intelligence Assessment — two actions:
 //   submit       POST (?action=submit)      saves the full assessment, links back to the
@@ -267,6 +269,26 @@ async function handleSubmit(req, res) {
   return res.status(200).json({ ok: true, id: submissionId });
 }
 
+// Staff only: a short-lived link to one uploaded intake file. POST { path } (the `path`, or the
+// `url` reference with its `nova-intake-files/` prefix, returned by upload-file).
+const INTAKE_PATH_RE = /^[a-z0-9_]{1,200}\/[a-z0-9_-]{1,50}\/\d{10,16}-[0-9a-f]{16}-[A-Za-z0-9._-]{1,200}$/i;
+async function handleFileUrl(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!(await requireStaff(req, res, 'admin.view'))) return;
+  if (!rateLimit(req, res, 60, 60_000)) return;
+  const SUPABASE_URL = process.env.SUPABASE_URL, SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return res.status(500).json({ error: 'File storage is not configured yet' });
+  const path = sanitize((req.body || {}).path, 500).replace(/^nova-intake-files\//, '');
+  if (!INTAKE_PATH_RE.test(path) || path.includes('..')) return res.status(400).json({ error: 'That is not an intake file reference.' });
+  const r = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/nova-intake-files/${path}`, {
+    method: 'POST', headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 300 }),
+  });
+  if (!r.ok) return res.status(404).json({ error: 'That file could not be opened.' });
+  const signed = (await r.json()).signedURL;
+  if (!signed) return res.status(502).json({ error: 'That file could not be opened.' });
+  return res.status(200).json({ ok: true, url: `${SUPABASE_URL}/storage/v1${signed}`, expires_in_seconds: 300 });
+}
+
 const startsWith = (buf, bytes) => bytes.every((v, i) => buf[i] === v);
 const looksLikeText = (buf) => !buf.subarray(0, 4096).includes(0) && !/<\s*(script|html|svg|iframe)/i.test(buf.subarray(0, 4096).toString('utf8'));
 const UPLOAD_TYPES = {
@@ -289,7 +311,7 @@ export function uploadContentType(filename, buffer) {
 }
 
 // Stores one base64-encoded document (logo, price list, photo, etc.) from
-// section 16 into the nova-intake-files storage bucket (public read — these
+// section 16 into the nova-intake-files storage bucket (PRIVATE as of 2026-11-14 — these
 // are business collateral, not sensitive records) and returns its public URL.
 async function handleUploadFile(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -319,14 +341,16 @@ async function handleUploadFile(req, res) {
   }
 
   const emailSlug = email.replace(/[^a-z0-9]/gi, '_');
-  const path = `${emailSlug}/${category}/${Date.now()}-${filename}`;
+  // The bucket is PRIVATE. The random part makes the path unguessable; files are opened only
+  // through the staff-only `file-url` action below, which returns a link that expires in minutes.
+  const path = `${emailSlug}/${category}/${Date.now()}-${randomBytes(8).toString('hex')}-${filename}`;
 
   try {
     const uploadRes = await fetch(`${SUPABASE_URL}/storage/v1/object/nova-intake-files/${path}`, {
       method: 'POST',
       headers: {
         apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': content_type, 'x-upsert': 'true',
+        'Content-Type': content_type,
       },
       body: buffer,
     });
@@ -334,7 +358,8 @@ async function handleUploadFile(req, res) {
       console.error('[business-intake:upload-file] Supabase storage error:', uploadRes.status, await uploadRes.text());
       return res.status(500).json({ error: 'Upload failed. Please try again.' });
     }
-    return res.status(200).json({ ok: true, url: `${SUPABASE_URL}/storage/v1/object/public/nova-intake-files/${path}` });
+    // `url` is a storage reference, not a web address: nothing here is publicly readable.
+    return res.status(200).json({ ok: true, url: `nova-intake-files/${path}`, path });
   } catch (err) {
     console.error('[business-intake:upload-file] Error:', err.message);
     return res.status(500).json({ error: 'Upload failed. Please try again.' });
@@ -349,6 +374,7 @@ export default async function handler(req, res) {
   switch (action) {
     case 'submit': return handleSubmit(req, res);
     case 'upload-file': return handleUploadFile(req, res);
+    case 'file-url': return handleFileUrl(req, res);
     default:
       return res.status(400).json({ error: `Unknown action: ${action}` });
   }
