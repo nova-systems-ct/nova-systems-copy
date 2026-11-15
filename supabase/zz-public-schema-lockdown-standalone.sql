@@ -92,6 +92,7 @@ DECLARE
     'pilot_permissions',
     'pilots',
     'products',
+    'revive_outreach',
     'sales_activation_approvals',
     'sales_audit_log',
     'sales_commission_entries',

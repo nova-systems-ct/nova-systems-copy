@@ -17,6 +17,7 @@ import { normalizePhone } from './_wave1.js';
 import { computeCaseClockStatus } from './_auditClock.js';
 import { validateFinding, validateReportForApproval, contentHash, checkStatusTransition } from './_auditRules.js';
 import { fetchPublicPage, extractPublicSignals, signalsToEvidence } from './_auditResearch.js';
+import { detectPaidTools, paidToolsEvidence, customerTestToEvidence, leakEstimate } from './_auditTests.js';
 import * as liAdapter from './_socialAdapters/linkedin.js';
 import * as ytAdapter from './_socialAdapters/youtube.js';
 import * as metaAdapter from './_socialAdapters/meta.js';
@@ -2002,10 +2003,41 @@ async function handleAuditResearch(req, res, caller) {
   catch (err) { return res.status(400).json({ error: `Could not research that URL: ${err.message}` }); }
   if (page.status >= 400) return res.status(422).json({ error: `The page returned HTTP ${page.status}; nothing was recorded` });
   if (!page.html) return res.status(422).json({ error: page.note || 'No HTML content to analyse' });
-  const records = signalsToEvidence(extractPublicSignals(page.html, page.finalUrl), page.retrievedAt).map((e) => ({ ...e, case_id: caseId, author: `automated public-page review (run by ${caller.email})` }));
+  const found = signalsToEvidence(extractPublicSignals(page.html, page.finalUrl), page.retrievedAt);
+  // Paid tools the page loads (ads, tracking, chat, reviews). Recorded as "loaded", never as "working" or "wasted".
+  const toolsRecord = paidToolsEvidence(detectPaidTools(page.html), page.finalUrl, page.retrievedAt);
+  if (toolsRecord) found.push(toolsRecord);
+  const records = found.map((e) => ({ ...e, case_id: caseId, author: `automated public-page review (run by ${caller.email})` }));
   const r = await sbWrite('audit_evidence', 'POST', records);
   if (!r.ok) { console.error('[client:audit research] evidence write error:', await r.text()); return res.status(500).json({ error: 'Failed to save evidence' }); }
   return res.status(200).json({ ok: true, page: { url: page.finalUrl, retrieved_at: page.retrievedAt, truncated: page.truncated === true }, evidence: await r.json() });
+}
+
+// A customer-style test a person ran (a call, a form, a message), saved as first-hand evidence.
+// POST {organization_id, case_id, kind, performed_at, performed_by, target, responded, response_time, notes}
+// POST {…, op2: 'estimate', inquiries_per_week, avg_job_cents, close_rate_pct} returns a dollar RANGE
+// from the tests already saved on the case plus the owner's three numbers. It saves nothing: the
+// reviewer adds it as an estimate finding, which the existing rules require a range and assumptions for.
+async function handleAuditCustomerTest(req, res, caller) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!rateLimit(req, res, 30, 60_000)) return;
+  const b = req.body || {};
+  const orgId = sanitize(b.organization_id, 100);
+  if (!(await requireOrgAccess(req, res, orgId, 'intelligence.view'))) return;
+  const caseId = sanitize(b.case_id, 100);
+  if (!caseId || !(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
+  if (b.op2 === 'estimate') {
+    const r = await sbSelect(`audit_evidence?case_id=eq.${encodeURIComponent(caseId)}&method=like.customer_style_test:*&select=observation`);
+    if (!r.ok) return res.status(500).json({ error: 'Failed to load the tests on this case' });
+    const tests = await r.json();
+    const out = leakEstimate({ inquiriesPerWeek: b.inquiries_per_week, avgJobCents: b.avg_job_cents, closeRatePct: b.close_rate_pct, testsRun: tests.length, testsUnanswered: tests.filter((t) => / No response was received/.test(t.observation)).length });
+    return res.status(out.refused ? 422 : 200).json(out.refused ? { error: out.refused } : { ok: true, estimate: out });
+  }
+  const built = customerTestToEvidence({ kind: sanitize(b.kind, 40), performed_at: sanitize(b.performed_at, 40), performed_by: sanitize(b.performed_by, 120) || caller.email, target: sanitize(b.target, 200), responded: b.responded, response_time: b.response_time, notes: sanitize(b.notes, 1500) });
+  if (built.error) return res.status(400).json({ error: built.error });
+  const w = await sbWrite('audit_evidence', 'POST', { ...built.record, case_id: caseId, author: caller.email });
+  if (!w.ok) { console.error('[client:audit customer-test] write error:', await w.text()); return res.status(500).json({ error: 'Failed to save the test' }); }
+  return res.status(200).json({ ok: true, evidence: (await w.json())[0], summary: built.summary });
 }
 
 async function handleAuditFindings(req, res, caller) {
@@ -4241,6 +4273,7 @@ export default async function handler(req, res) {
       if (op === 'evidence') return handleAuditEvidence(req, res, caller);
       if (op === 'findings') return handleAuditFindings(req, res, caller);
       if (op === 'research') return handleAuditResearch(req, res, caller);
+      if (op === 'customer-test') return handleAuditCustomerTest(req, res, caller);
       if (op === 'recommendations') return handleAuditRecommendations(req, res);
       if (op === 'reports') return handleAuditReports(req, res, caller);
       if (op === 'deliveries') return handleAuditDeliveries(req, res, caller);

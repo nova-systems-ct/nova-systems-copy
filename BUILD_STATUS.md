@@ -25,3 +25,7 @@ Updated 2026-11-14 against `Nova_Master_Build_Prompt.md`. Statuses: VERIFIED LIV
 | E | Voice for client businesses | NOT BUILT | Provider selected only | Write adapter after reading provider docs |
 | F | Apple, Google, Wallet, mobile | NOT BUILT this session | iOS branch not inspected | Inspect `codex/nova-owner-ios-20261113` |
 | G | Deployment verification | WAITING FOR ACCESS | — | Needs push access and the Vercel deployment |
+| Audit | Paid-tool detection on the page scan; customer-style tests saved as first-hand evidence; dollar range from tests plus three owner numbers | VERIFIED LOCALLY | `scripts/unit_revive_proof_test.mjs`; `/api/client?resource=audit&op=customer-test` | No screen yet: tests are entered through the API. Run three real tests on one business |
+| Revive | Overdue customers, quiet quotes (day 2, 7, 30), real open time and approved offer in the message, consent and opt-out enforced | VERIFIED LOCALLY | same test; `resource=journey&op=revive-preview` and `op=revive-run` | Apply `revive-proof-migration-standalone.sql`; nothing sends until a channel is connected |
+| Proof | Weekly scorecard from saved records, source of each customer, offers, Revive results, stuck items, plain-words summary | VERIFIED LOCALLY | same test; `resource=journey&op=scorecard` | Owner screen; send the summary once a channel is connected |
+| Packs | Ready service lists for seven trades, never priced | VERIFIED LOCALLY | same test; `op=packs`, `op=apply-pack` | Owner sets and approves prices |

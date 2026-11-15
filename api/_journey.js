@@ -14,6 +14,9 @@
 // against PostgREST in production (restDb) and an in-memory stand-in in tests.
 import crypto from 'node:crypto';
 import { normalizePhone } from './_wave1.js';
+import { findOverdue, findColdLeads, runRevive } from './_revive.js';
+import { scorecard, scorecardText } from './_proof.js';
+import { INDUSTRY_PACKS, applyPack } from './_industryPacks.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN_RE = /^[0-9a-f]{64}$/;
@@ -414,6 +417,16 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (!UUID_RE.test(orgId)) return res.status(400).json({ error: 'organization_id is required' });
       if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
       if (op === 'receivables') return res.status(200).json(await receivables(db, orgId));
+      if (op === 'scorecard') { // Nova Proof: default is the last 7 days
+        const to = req.query?.to ? new Date(req.query.to) : new Date();
+        const from = req.query?.from ? new Date(req.query.from) : new Date(to.getTime() - 7 * 86400000);
+        if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) return res.status(400).json({ error: 'from must be before to' });
+        const card = await scorecard(db, orgId, { from, to });
+        return res.status(200).json({ scorecard: card, text: scorecardText(card) });
+      }
+      // Nova Revive, read-only: who is overdue or has gone quiet. Writes nothing.
+      if (op === 'revive-preview') return res.status(200).json({ overdue: await findOverdue(db, orgId), cold_leads: await findColdLeads(db, orgId) });
+      if (op === 'packs') return res.status(200).json({ packs: Object.entries(INDUSTRY_PACKS).map(([key, p]) => ({ key, name: p.name, services: p.services.map((x) => x.name) })) });
       if (op === 'detail') {
         const jid = sanitize(req.query?.journey_id, 100);
         const j = UUID_RE.test(jid) ? await one(db, 'journeys', { id: jid, organization_id: orgId }) : null;
@@ -431,6 +444,10 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     // Prices, discounts, agreement wording and money: owner-level permission in that organization.
     if (!(await requireOrgAccess(req, res, orgId, op === 'complete' ? 'growth.view' : 'admin.view'))) return;
 
+    // Prepares come-back messages. No channel is connected yet, so canSend is empty and every
+    // message is saved as not sent with its reason. Sending is wired in when a channel is live.
+    if (op === 'revive-run') return res.status(200).json({ ok: true, ...(await runRevive(db, orgId, { canSend: {}, business: sanitize(b.business_name, 120) || 'us' })) });
+    if (op === 'apply-pack') return res.status(200).json({ ok: true, ...(await applyPack(db, orgId, sanitize(b.pack, 60))) });
     if (op === 'save-service') {
       const name = sanitize(b.name, 120);
       if (!name) return res.status(400).json({ error: 'name is required' });
@@ -438,7 +455,9 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       const price = cents(b.price_cents), deposit = cents(b.deposit_cents);
       if ((price !== null && (!Number.isInteger(price) || price <= 0)) || (deposit !== null && (!Number.isInteger(deposit) || deposit <= 0 || (price !== null && deposit > price)))) return res.status(400).json({ error: 'Prices are whole cents; a deposit cannot exceed the price.' });
       const terms = sanitize(b.terms_text, 8000) || null;
-      const row = { organization_id: orgId, name, description: sanitize(b.description, 1000) || null, keywords: Array.isArray(b.keywords) ? b.keywords.map((k) => sanitize(k, 40)).filter(Boolean).slice(0, 20) : [], price_cents: price, price_approved: b.price_approved === true && price !== null, deposit_cents: deposit, terms_text: terms, terms_approved: b.terms_approved === true && !!terms, active: b.active !== false, updated_at: new Date().toISOString() };
+      const returnDays = b.return_days == null || b.return_days === '' ? null : Number(b.return_days);
+      if (returnDays !== null && (!Number.isInteger(returnDays) || returnDays < 1 || returnDays > 1825)) return res.status(400).json({ error: 'return_days is a whole number of days between 1 and 1825, or empty.' });
+      const row = { organization_id: orgId, name, description: sanitize(b.description, 1000) || null, keywords: Array.isArray(b.keywords) ? b.keywords.map((k) => sanitize(k, 40)).filter(Boolean).slice(0, 20) : [], price_cents: price, price_approved: b.price_approved === true && price !== null, deposit_cents: deposit, return_days: returnDays, terms_text: terms, terms_approved: b.terms_approved === true && !!terms, active: b.active !== false, updated_at: new Date().toISOString() };
       const existing = await one(db, 'business_services', { organization_id: orgId, name });
       const saved = existing ? (await db.update('business_services', { id: existing.id, organization_id: orgId }, row))[0] : await db.insert('business_services', row);
       // Anything that was waiting on this decision moves on by itself.
