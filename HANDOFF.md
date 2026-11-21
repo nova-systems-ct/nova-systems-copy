@@ -127,6 +127,16 @@ prepared come-back email reaches a test inbox and the Results tab counts it as s
 - Served by the existing `api/client.js` (no new function) through the `/b/:slug` rewrite.
 - Tests: `scripts/unit_site_test.mjs` (16 checks). No migration.
 
+### Aura 0.1: the morning brief
+
+- `/dashboard/aura` ("Morning brief" in the menu, `src/pages/dashboard/Aura.jsx`) reads every
+  business the person belongs to through `op=brief` (`api/_brief.js`): new requests since
+  yesterday, today's jobs with times and addresses, what is waiting on the owner, customers to
+  call, card payments to check, money collected and owed, come-back messages ready. "Copy brief"
+  gives the same in plain words. Read-only. Calendar and email are not connected (needs Isaac's
+  sign-in to those apps); drafting replies with a model is not built ($0 policy).
+- Tests: `scripts/unit_brief_test.mjs` (10 checks). No migration.
+
 ## Where the work is
 
 - Branch: `claude/launch-recovery-20261114`, built on `codex/launch-recovery-20261113` (741aafa).

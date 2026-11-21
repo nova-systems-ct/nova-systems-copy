@@ -555,6 +555,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (op === 'card-payments') { const { paymentStatus } = await import('./_cardPayments.js'); return res.status(200).json({ payments: await paymentStatus(db, orgId) }); }
       if (op === 'team') { const { teamView } = await import('./_team.js'); return res.status(200).json(await teamView(db, orgId)); }
       if (op === 'feedback') { const { feedbackList } = await import('./_reviews.js'); return res.status(200).json({ feedback: await feedbackList(db, orgId) }); }
+      if (op === 'brief') { const { briefFor } = await import('./_brief.js'); return res.status(200).json({ brief: await briefFor(db, orgId, { timeZone: sanitize(req.query?.tz, 60) || 'America/New_York' }) }); }
       if (op === 'scorecard') { // Nova Proof: default is the last 7 days
         const to = req.query?.to ? new Date(req.query.to) : new Date();
         const from = req.query?.from ? new Date(req.query.from) : new Date(to.getTime() - 7 * 86400000);

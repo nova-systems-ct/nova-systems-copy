@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import {Outlet,useLocation,useNavigate,Link} from 'react-router-dom';
-import {Home,ClipboardList,Users,CalendarDays,Bot,MessagesSquare,BriefcaseBusiness,ChartNoAxesColumn,Settings,LogOut,Menu,X,Bell,Search,ArrowRight,Wallet,Network,Building2,GraduationCap,Plug,CheckSquare} from 'lucide-react';
+import {Home,ClipboardList,Users,CalendarDays,Bot,MessagesSquare,BriefcaseBusiness,ChartNoAxesColumn,Settings,LogOut,Menu,X,Bell,Search,ArrowRight,Wallet,Network,Building2,GraduationCap,Plug,CheckSquare,Sunrise} from 'lucide-react';
 import {supabase} from '../../lib/supabaseClient';
 import {useAuthGuard} from '../../hooks/useAuthGuard';
 import {useOrg} from '../../lib/OrgContext';
@@ -13,6 +13,7 @@ const NAV=[
  {to:'/dashboard/leads',label:'Leads',icon:Users,permission:'growth.view'},
  {to:'/dashboard/calendar',label:'Calendar',icon:CalendarDays,permission:'admin.view'},
  {to:'/dashboard/business',label:'Business desk',icon:BriefcaseBusiness,permission:'growth.view'},
+ {to:'/dashboard/aura',label:'Morning brief',icon:Sunrise,permission:'growth.view'},
  {to:'/dashboard/registrations',label:'New businesses',icon:Building2,permission:'admin.view'},
  {to:'/dashboard/workers',label:'Workers',icon:Bot,permission:'admin.view'},
  {to:'/dashboard/team-room',label:'Company HQ',icon:Network,permission:'admin.view',ownerOnly:true},

@@ -47,6 +47,7 @@ const MessagingWorkspace = lazy(() => import('./pages/dashboard/MessagingWorkspa
 const NovaCalendar = lazy(() => import('./pages/dashboard/NovaCalendar'));
 const Registrations = lazy(() => import('./pages/dashboard/Registrations'));
 const BusinessDesk = lazy(() => import('./pages/dashboard/BusinessDesk'));
+const Aura = lazy(() => import('./pages/dashboard/Aura'));
 const CompanyWorkers = lazy(() => import('./pages/dashboard/CompanyWorkers'));
 const ExecutiveTeam = lazy(() => import('./pages/dashboard/ExecutiveTeam'));
 const WalletPass = lazy(() => import('./pages/WalletPass'));
@@ -190,6 +191,7 @@ function App() {
               <Route path="calendar" element={<RequirePermission permission="admin.view"><NovaCalendar /></RequirePermission>} />
               <Route path="registrations" element={<RequirePermission permission="admin.view"><Registrations /></RequirePermission>} />
               <Route path="business" element={<RequirePermission permission="growth.view"><BusinessDesk /></RequirePermission>} />
+              <Route path="aura" element={<RequirePermission permission="growth.view"><Aura /></RequirePermission>} />
               <Route path="workers" element={<RequirePermission permission="admin.view"><CompanyWorkers /></RequirePermission>} />
               <Route path="team-room" element={<RequirePermission permission="admin.view"><ExecutiveTeam /></RequirePermission>} />
               <Route path="cfo" element={<RequirePermission permission="admin.view"><CfoDesk /></RequirePermission>} />
