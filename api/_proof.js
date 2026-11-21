@@ -84,3 +84,20 @@ export function scorecardText(card, business = 'Your business') {
   if (!card.enough_to_judge) lines.push('There is not enough activity yet to say whether things are improving.');
   return lines.join('\n');
 }
+
+// ---- sending (system 23) ------------------------------------------------------------------
+// The week's scorecard, emailed to the owner. Sent at most once per business per day (the
+// weekly schedule and a manual "email me this" share the same record), and recorded only after
+// the email provider accepted it.
+export async function sendScorecard(db, orgId, { to, business, send, now = new Date(), days = 7 }) {
+  const from = new Date(now.getTime() - days * DAY);
+  const periodStart = now.toISOString().slice(0, 10);
+  if ((await db.select('scorecard_sends', { organization_id: orgId, period_start: periodStart }, { limit: 1 })).length) return { sent: false, reason: 'already_sent_today' };
+  const card = await scorecard(db, orgId, { from, to: now, now });
+  const text = `${scorecardText(card, business)}\n\nThe last ${days} days, counted from your saved records. Payments you typed in are counted separately from payments confirmed by a payment provider.\n\nNova Systems`;
+  const r = await send({ to, subject: `${business}: your last ${days} days`, text, fromName: 'Nova Systems', idempotencyKey: `scorecard:${orgId}:${periodStart}` });
+  if (!r.ok || !r.id) return { sent: false, reason: 'not_accepted', error: r.error || 'not accepted' };
+  try { await db.insert('scorecard_sends', { organization_id: orgId, period_start: periodStart, period_end: now.toISOString(), sent_to: to, provider_reference: `email:${r.id}` }); }
+  catch (err) { if (err.status !== 409) throw err; }
+  return { sent: true, provider_reference: `email:${r.id}`, scorecard: card };
+}

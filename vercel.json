@@ -29,6 +29,10 @@
       "destination": "/register/index.html"
     },
     {
+      "source": "/cron/weekly-scorecards",
+      "destination": "/api/client?resource=journey&op=weekly-scorecards"
+    },
+    {
       "source": "/service-request",
       "destination": "/sms-program/index.html"
     },
@@ -116,5 +120,11 @@
     "api/stripe.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/cron/weekly-scorecards",
+      "schedule": "0 13 * * 1"
+    }
+  ]
 }

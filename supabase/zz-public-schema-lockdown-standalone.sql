@@ -96,6 +96,7 @@ DECLARE
     'revive_outreach',
     'business_registrations',
     'sales_activation_approvals',
+    'scorecard_sends',
     'sales_audit_log',
     'sales_commission_entries',
     'sales_commission_events',

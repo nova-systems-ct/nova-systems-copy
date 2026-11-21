@@ -9,7 +9,7 @@ import './BusinessDesk.css';
 
 const TABS = [['services', 'Services & prices', Briefcase], ['offers', 'Offers', Tag], ['customers', 'Customers', Users], ['money', 'Money owed', Wallet], ['revive', 'Come-back list', RefreshCw], ['results', 'Results', ChartNoAxesColumn], ['assistant', 'Assistant', Bot]];
 const EMPTY_OFFER = { code: '', percent_off: '', trigger_type: 'web_visit', description: '', expires_at: '', approved: false };
-const EMPTY_AGENT = { business_name: '', agent_name: '', industry: '', phone_number: '', greeting: '', services: '', service_area: '', booking_url: '', owner_alert_phone: '', handoff_instructions: '', never_say: '', tone: 'friendly', status: 'draft', sms_enabled: false };
+const EMPTY_AGENT = { business_name: '', agent_name: '', industry: '', phone_number: '', greeting: '', services: '', service_area: '', booking_url: '', owner_alert_phone: '', handoff_instructions: '', never_say: '', tone: 'friendly', status: 'draft', sms_enabled: false, email_enabled: false, reply_email: '', mailing_address: '' };
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 
 async function call(resource, op, { orgId, body, query = '' } = {}) {
@@ -38,7 +38,7 @@ export default function BusinessDesk() {
   useEffect(() => {
     if (!orgId) return;
     call('journey', 'packs', { orgId }).then((d) => setPacks(d.packs || [])).catch(() => {});
-    call('agents', 'get', { orgId }).then((d) => { setExtra((x) => ({ ...x, spending: d.spending_unlocked })); if (d.agent) setAgent({ ...EMPTY_AGENT, ...Object.fromEntries(Object.entries(d.agent).map(([k, v]) => [k, v ?? ''])), sms_enabled: d.agent.sms_enabled === true }); else setAgent({ ...EMPTY_AGENT, business_name: currentOrg?.name || '' }); }).catch(() => {});
+    call('agents', 'get', { orgId }).then((d) => { setExtra((x) => ({ ...x, spending: d.spending_unlocked })); if (d.agent) setAgent({ ...EMPTY_AGENT, ...Object.fromEntries(Object.entries(d.agent).map(([k, v]) => [k, v ?? ''])), sms_enabled: d.agent.sms_enabled === true, email_enabled: d.agent.email_enabled === true }); else setAgent({ ...EMPTY_AGENT, business_name: currentOrg?.name || '' }); }).catch(() => {});
   }, [orgId, currentOrg?.name]);
   useEffect(() => {
     if (!orgId) return;
@@ -235,8 +235,11 @@ export default function BusinessDesk() {
             {extra.revive.overdue.length ? <ul className="desk-list">{extra.revive.overdue.map((o, i) => <li key={i}>{o.service?.name || 'A past job'} · {o.days_overdue} days past the usual return time</li>)}</ul> : <p className="desk-note">Nobody yet. Set “customers usually come back every” on a service so Nova knows when someone is due.</p>}
             <h3>People who asked and went quiet ({extra.revive.cold_leads.length})</h3>
             {extra.revive.cold_leads.length ? <ul className="desk-list">{extra.revive.cold_leads.map((o, i) => <li key={i}>{serviceName(o.service_id)} · quiet for {o.days_since} days</li>)}</ul> : <p className="desk-note">Nobody has gone quiet.</p>}
-            <div className="luxe-actions"><button className="luxe-button" disabled={busy} onClick={() => act(() => call('journey', 'revive-run', { orgId, body: { business_name: currentOrg?.name || '' } }), (d) => `${d.prepared} message${d.prepared === 1 ? '' : 's'} prepared and saved. None were sent: no text or email channel is connected for this business yet.`)}>Prepare come-back messages</button></div>
-            <p className="desk-note">Only people who agreed to be contacted are included. Nothing is sent from here today.</p>
+            <div className="luxe-actions">
+              <button className="luxe-button" disabled={busy} onClick={() => act(() => call('journey', 'revive-run', { orgId, body: { business_name: currentOrg?.name || '' } }), (d) => `${d.prepared} message${d.prepared === 1 ? '' : 's'} prepared${d.reopened ? `, ${d.reopened} earlier one${d.reopened === 1 ? '' : 's'} now ready` : ''}. ${d.email_ready ? 'Messages for customers who agreed to email are ready to send.' : `Nothing can be emailed yet: ${d.email_note}`}`)}>Prepare come-back messages</button>
+              <button className="luxe-outline" disabled={busy} onClick={() => act(() => call('journey', 'revive-send', { orgId, body: {} }), (d) => `${d.sent} email${d.sent === 1 ? '' : 's'} sent${d.held ? `, ${d.held} held back (the customer opted out)` : ''}${d.failed ? `, ${d.failed} not accepted by the email provider (still ready to try again)` : ''}${d.waiting_for_tomorrow ? `, ${d.waiting_for_tomorrow} waiting for tomorrow's allowance` : ''}.`)}>Send ready emails</button>
+            </div>
+            <p className="desk-note">Only people who agreed to be contacted are included, and each email has an unsubscribe link. Texts wait until texting is approved for this business.</p>
           </>}
         </section>
       )}
@@ -248,6 +251,7 @@ export default function BusinessDesk() {
             <div className="luxe-metrics">{[['New requests', extra.results.scorecard.inquiries.total], ['Quotes accepted', extra.results.scorecard.quotes.accepted], ['Booked', extra.results.scorecard.appointments_booked], ['Jobs done', extra.results.scorecard.jobs_completed], ['Collected', dollars(extra.results.scorecard.money_collected.total_cents)], ['Still owed', dollars(extra.results.scorecard.money_owed_now.total_cents)]].map(([l, v]) => <div className="luxe-metric" key={l}><span>{l}</span><strong>{v}</strong></div>)}</div>
             <pre className="desk-report">{extra.results.text}</pre>
             <p className="desk-note">Every number comes from saved records. Payments you typed in are counted separately from payments confirmed by a payment provider.</p>
+            <div className="luxe-actions"><button className="luxe-outline" disabled={busy} onClick={() => act(() => call('journey', 'send-scorecard', { orgId, body: {} }), (d) => (d.sent ? `Report emailed to ${d.to}.` : 'This report was already emailed today.'))}>Email me this report</button></div>
           </>}
         </section>
       )}
@@ -264,6 +268,9 @@ export default function BusinessDesk() {
             <label>When to hand a customer to a person<textarea value={agent.handoff_instructions} maxLength={1000} onChange={(e) => setAgent({ ...agent, handoff_instructions: e.target.value })} /></label>
             <label>Things it must never say<textarea value={agent.never_say} maxLength={1000} onChange={(e) => setAgent({ ...agent, never_say: e.target.value })} /></label>
             <div className="desk-pair"><label>Business phone (optional)<input value={agent.phone_number} onChange={(e) => setAgent({ ...agent, phone_number: e.target.value })} placeholder="+18605551234" /></label><label>Your phone for alerts (optional)<input value={agent.owner_alert_phone} onChange={(e) => setAgent({ ...agent, owner_alert_phone: e.target.value })} /></label></div>
+            <h3>Email</h3>
+            <div className="desk-pair"><label>Email for customer replies and your weekly report<input type="email" value={agent.reply_email} maxLength={254} onChange={(e) => setAgent({ ...agent, reply_email: e.target.value })} /></label><label>Business mailing address (printed in marketing emails, as US law requires)<input value={agent.mailing_address} maxLength={300} onChange={(e) => setAgent({ ...agent, mailing_address: e.target.value })} placeholder="Street, town, state, ZIP" /></label></div>
+            <label className="desk-check"><input type="checkbox" checked={agent.email_enabled === true} onChange={(e) => setAgent({ ...agent, email_enabled: e.target.checked })} /> Send come-back emails to customers who agreed to email, and email me the weekly report</label>
             <button className="luxe-button" disabled={busy}>Save assistant details</button>
           </form>
         </section>

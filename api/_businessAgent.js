@@ -247,6 +247,16 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
     if (cap !== null && (!Number.isInteger(cap) || cap < 1)) return res.status(400).json({ error: 'The monthly cap must be a whole number of cents, or left empty for no spending.' });
     const status = ['draft', 'active', 'paused'].includes(b.status) ? b.status : 'draft';
     if (status === 'active' && !phone) return res.status(400).json({ error: 'An active agent needs a phone number.' });
+    // Email from this business (come-back emails and the weekly report). Saved only when the
+    // screen sends these fields, so an older screen cannot switch email off by leaving them out.
+    const email = {};
+    if ('email_enabled' in b || 'reply_email' in b || 'mailing_address' in b) {
+      const reply = sanitize(b.reply_email, 254).toLowerCase();
+      if (reply && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(reply)) return res.status(400).json({ error: 'Enter a valid email for replies and the weekly report.' });
+      const address = sanitize(b.mailing_address, 300);
+      if (b.email_enabled === true && (!address || !reply)) return res.status(400).json({ error: 'To turn on email, add the business mailing address and an email for replies.' });
+      Object.assign(email, { email_enabled: b.email_enabled === true, reply_email: reply || null, mailing_address: address || null });
+    }
 
     const record = {
       organization_id: orgId, business_name,
@@ -265,6 +275,7 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
       voice_enabled: b.voice_enabled === true,
       monthly_spend_cap_cents: cap,
       status,
+      ...email,
       updated_at: new Date().toISOString(),
     };
     const existing = await select(`business_agents?organization_id=eq.${q(orgId)}&select=id&limit=1`);

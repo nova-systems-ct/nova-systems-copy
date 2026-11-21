@@ -37,6 +37,32 @@ with a real provider. No money was spent.
 4. Done when: on staging, a business connects a test Stripe account, a customer pays a deposit with
    Stripe's test card, and the request moves to scheduling by itself.
 
+### Sending Revive and the weekly scorecard (systems 20 and 23), by email
+
+- `api/_email.js`: sends through Nova's Resend account from Nova's domain, with the business's name
+  as the sender and replies going to the business. Off until `NOVA_EMAIL_SENDING=on`.
+- Revive: a customer who agreed to email gets the come-back message by email (texting stays held
+  until carrier approval). Every email carries the business's mailing address and an unsubscribe
+  link (plus the one-click header); the link opts the customer out of every channel. Consent is
+  re-checked at the moment of sending, and a message is marked sent only with the provider's id.
+  Messages saved while email was off become ready once it is on.
+- Scorecard: "Email me this report" on the Results tab, and every Monday 13:00 UTC by the Vercel
+  schedule (`/cron/weekly-scorecards`, needs `CRON_SECRET`) for each business with email on. At most
+  one per business per day.
+- Business desk → Assistant: email switch, reply email, mailing address. Come-back list: "Send ready
+  emails".
+- Daily caps: 25 per business and 80 across Nova (`NOVA_EMAIL_DAILY_CAP_PER_BUSINESS`,
+  `NOVA_EMAIL_DAILY_CAP_TOTAL`), under the Resend free plan's 100 a day, where sending pauses
+  rather than charging.
+- Migration: `supabase/outbound-email-migration-standalone.sql` (three columns on
+  `business_agents`, `crm_contacts.unsubscribe_token`, table `scorecard_sends`). Run after
+  `business-agents-migration-standalone.sql`, then re-run the lockdown file.
+- Tests: `scripts/unit_outbound_email_test.mjs` (50 checks).
+
+**Owner steps:** Vercel: `NOVA_EMAIL_SENDING=on` and `CRON_SECRET` (any long random string). Then
+in the Business desk, fill in the email fields and tick the switch. Done when: on staging, one
+prepared come-back email reaches a test inbox and the Results tab counts it as sent.
+
 ## Where the work is
 
 - Branch: `claude/launch-recovery-20261114`, built on `codex/launch-recovery-20261113` (741aafa).

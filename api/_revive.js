@@ -17,11 +17,14 @@ const offerUsable = (o, now) => !!o && o.approved === true && o.active === true 
 const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || 'there';
 const friendlyTime = (iso, tz = 'America/New_York') => new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz }).format(new Date(iso));
 
-// Which channel may this customer be contacted on? '' means none.
-export function contactChannel(contact) {
+// Which channel may this customer be contacted on? '' means none. When `canSend` is given, a
+// channel the customer agreed to AND that can actually send right now is preferred.
+export function contactChannel(contact, canSend = null) {
   if (!contact || contact.do_not_contact) return '';
-  if (contact.sms_consent && contact.phone) return 'sms';
-  if (contact.email_consent && contact.email) return 'email';
+  const sms = !!(contact.sms_consent && contact.phone), email = !!(contact.email_consent && contact.email);
+  if (canSend) { if (sms && canSend.sms === true) return 'sms'; if (email && canSend.email === true) return 'email'; }
+  if (sms) return 'sms';
+  if (email) return 'email';
   return '';
 }
 
@@ -62,11 +65,14 @@ export async function findColdLeads(db, orgId, now = new Date()) {
   return out;
 }
 
-export function buildMessage({ kind, contact, business, service, slot, offer, link, timezone }) {
+// A text ends with how to stop; an email carries its unsubscribe link and the business's mailing
+// address in the footer instead (see emailFooter).
+const SMS_STOP = ' Reply STOP to opt out.';
+export function buildMessage({ kind, contact, business, service, slot, offer, link, timezone, channel = 'sms' }) {
   const hi = `Hi ${firstName(contact.name)}, it's ${business}.`;
   const time = slot ? ` I have an opening ${friendlyTime(slot.start_at, timezone)}.` : '';
   const deal = offer ? ` Use code ${offer.code} for ${offer.percent_off}% off.` : '';
-  const stop = ' Reply STOP to opt out.';
+  const stop = channel === 'email' ? '' : SMS_STOP;
   if (kind === 'cold_lead') return `${hi} Your quote for ${service?.name || 'your request'} is still open.${time}${deal} Pick up where you left off: ${link}${stop}`;
   return `${hi} It's been a while since your last ${service?.name || 'visit'}.${time}${deal} Book here: ${link}${stop}`;
 }
@@ -85,7 +91,7 @@ export async function runRevive(db, orgId, { now = new Date(), canSend = {}, bas
   for (const t of targets) {
     const contact = (await db.select('crm_contacts', { id: t.contact_id, organization_id: orgId }, { limit: 1 }))[0];
     if (!contact) continue;
-    const channel = contactChannel(contact);
+    const channel = contactChannel(contact, canSend);
     const service = t.service || (t.service_id ? (await db.select('business_services', { id: t.service_id, organization_id: orgId }, { limit: 1 }))[0] : null);
     // Offer each open time to one person at a time so two people are not promised the same slot.
     const slot = openSlots.length ? openSlots[slotIndex++ % openSlots.length] : null;
@@ -96,7 +102,7 @@ export async function runRevive(db, orgId, { now = new Date(), canSend = {}, bas
     const row = {
       organization_id: orgId, contact_id: contact.id, journey_id: t.journey_id || null, kind: t.kind, service_id: service?.id || null,
       offer_id: usedOffer?.id || null, slot_id: slot?.id || null, channel: channel || null, status, blocked_reason: reason,
-      message: buildMessage({ kind: t.kind, contact, business, service, slot, offer: usedOffer, link, timezone }),
+      message: buildMessage({ kind: t.kind, contact, business, service, slot, offer: usedOffer, link, timezone, channel: channel || 'sms' }),
       days_since: t.days_since, idempotency_key: `${orgId}:${t.step}`,
     };
     try { results.push(await db.insert('revive_outreach', row)); }
@@ -127,4 +133,80 @@ export async function recoveredCustomers(db, orgId, { from, to }) {
     if (when >= from && when <= to) out.push({ outreach_id: o.id, journey_id: hit.id, kind: o.kind });
   }
   return out;
+}
+
+// ---- sending (system 20) ------------------------------------------------------------------
+// The owner presses "Send" in the Business desk; that press is the approval for the batch.
+// Every message is checked again at the moment of sending (the customer may have opted out
+// since it was prepared) and is marked 'sent' only with the provider's own reference.
+
+const fail = (code, message, status = 409) => Object.assign(new Error(message), { code, status, expected: true });
+const sameDay = (iso, now) => !!iso && now - new Date(iso) < DAY;
+
+// Messages saved as "not sent" only because no channel was connected become ready once one is.
+export async function reopenBlocked(db, orgId, canSend) {
+  let reopened = 0;
+  for (const o of await db.select('revive_outreach', { organization_id: orgId, status: 'blocked', blocked_reason: 'channel_not_connected' })) {
+    const contact = (await db.select('crm_contacts', { id: o.contact_id, organization_id: orgId }, { limit: 1 }))[0];
+    const channel = contactChannel(contact, canSend);
+    if (!channel || canSend[channel] !== true) continue;
+    const base = o.message.endsWith(SMS_STOP) ? o.message.slice(0, -SMS_STOP.length) : o.message;
+    await db.update('revive_outreach', { id: o.id, organization_id: orgId, status: 'blocked' }, { status: 'ready', channel, blocked_reason: null, message: channel === 'sms' ? base + SMS_STOP : base });
+    reopened++;
+  }
+  return reopened;
+}
+
+// Each contact gets one random, unguessable token for the unsubscribe link in emails.
+async function unsubscribeLink(db, orgId, contact, appBase) {
+  let token = contact.unsubscribe_token;
+  if (!token) {
+    token = (await import('node:crypto')).randomBytes(24).toString('hex');
+    await db.update('crm_contacts', { id: contact.id, organization_id: orgId }, { unsubscribe_token: token });
+  }
+  return `${appBase}/api/client?resource=journey&op=unsubscribe&t=${token}`;
+}
+
+export function emailFooter({ business, mailingAddress, unsubscribeUrl }) {
+  return `\n\n--\n${business}\n${mailingAddress}\nYou are getting this because you are a customer of ${business}. To stop these emails: ${unsubscribeUrl}`;
+}
+
+// Sends the ready come-back messages for one business by email.
+//   agent:  the business's business_agents row (email_enabled, reply_email, mailing_address)
+//   send:   (message) => { ok, id } — the email provider
+//   caps:   { perBusiness, total } emails per day
+export async function sendReady(db, orgId, { agent, send, caps, appBase, now = new Date(), countSentToday }) {
+  if (!agent || agent.email_enabled !== true) throw fail('email_not_enabled', 'Turn on email for this business in the Assistant tab first.');
+  if (!String(agent.mailing_address || '').trim()) throw fail('mailing_address_required', 'Add the business mailing address in the Assistant tab. US law requires it in marketing emails.', 422);
+  const business = agent.business_name || 'Your local business';
+  const sentByUs = (await db.select('revive_outreach', { organization_id: orgId, status: 'sent' })).filter((o) => sameDay(o.sent_at, now)).length;
+  let room = Math.min(caps.perBusiness - sentByUs, caps.total - await countSentToday());
+  const out = { sent: 0, held: 0, failed: 0, waiting_for_tomorrow: 0, errors: [] };
+  for (const o of await db.select('revive_outreach', { organization_id: orgId, status: 'ready' }, { order: 'created_at.asc', limit: 200 })) {
+    if (o.channel !== 'email') continue; // texting waits on carrier approval; those stay ready
+    const contact = (await db.select('crm_contacts', { id: o.contact_id, organization_id: orgId }, { limit: 1 }))[0];
+    if (!contact || contact.do_not_contact || !contact.email_consent || !contact.email) {
+      await db.update('revive_outreach', { id: o.id, organization_id: orgId, status: 'ready' }, { status: 'blocked', blocked_reason: contact?.do_not_contact ? 'customer_opted_out' : 'no_contact_permission' });
+      out.held++; continue;
+    }
+    if (room <= 0) { out.waiting_for_tomorrow++; continue; }
+    const url = await unsubscribeLink(db, orgId, contact, appBase);
+    const subject = o.kind === 'cold_lead' ? `${business}: your quote is still open` : `${business}: time for your next visit`;
+    const r = await send({ to: contact.email, subject, text: o.message + emailFooter({ business, mailingAddress: agent.mailing_address.trim(), unsubscribeUrl: url }), fromName: business, replyTo: agent.reply_email, headers: { 'List-Unsubscribe': `<${url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }, idempotencyKey: `revive:${o.id}` });
+    if (r.ok && r.id) { await markSent(db, orgId, o.id, `email:${r.id}`); out.sent++; room--; }
+    else { out.failed++; out.errors.push({ outreach_id: o.id, error: r.error || 'not accepted' }); } // stays ready; try again later
+  }
+  return out;
+}
+
+// The customer pressed the unsubscribe link. Opt-out always wins, for every channel.
+export async function unsubscribe(db, token) {
+  if (!/^[0-9a-f]{48}$/.test(String(token || ''))) return false;
+  const contact = (await db.select('crm_contacts', { unsubscribe_token: token }, { limit: 1 }))[0];
+  if (!contact) return false;
+  await db.update('crm_contacts', { id: contact.id, organization_id: contact.organization_id }, { do_not_contact: true, email_consent: false });
+  for (const o of await db.select('revive_outreach', { organization_id: contact.organization_id, contact_id: contact.id, status: 'ready' })) {
+    await db.update('revive_outreach', { id: o.id, organization_id: contact.organization_id, status: 'ready' }, { status: 'blocked', blocked_reason: 'customer_opted_out' });
+  }
+  return true;
 }

@@ -14,8 +14,9 @@
 // against PostgREST in production (restDb) and an in-memory stand-in in tests.
 import crypto from 'node:crypto';
 import { normalizePhone } from './_wave1.js';
-import { findOverdue, findColdLeads, runRevive } from './_revive.js';
-import { scorecard, scorecardText } from './_proof.js';
+import { findOverdue, findColdLeads, runRevive, reopenBlocked, sendReady, unsubscribe } from './_revive.js';
+import { scorecard, scorecardText, sendScorecard } from './_proof.js';
+import { emailSwitch, emailCaps, sendEmail, validEmail } from './_email.js';
 import { INDUSTRY_PACKS, applyPack } from './_industryPacks.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -381,6 +382,31 @@ export async function receivables(db, orgId, now = new Date()) {
 //        | card-payments-connect | card-payments-refresh
 export const JOURNEY_CUSTOMER_OPS = new Set(['business', 'start', 'status', 'choose-service', 'accept', 'choose-time', 'cancel', 'pay']);
 
+const appBase = () => (process.env.APP_BASE_URL || 'https://nova-systems.app').replace(/\/$/, '');
+
+// Emails Nova sent in the last 24 hours, across every business (the email provider's daily limit
+// is for Nova's whole account). The daily caps are far below 200, so the newest 200 are enough.
+async function sentTodayAcrossNova(db, now = new Date()) {
+  const recent = (rows, col) => rows.filter((r) => r[col] && now - new Date(r[col]) < 86400000).length;
+  return recent(await db.select('revive_outreach', { status: 'sent' }, { order: 'sent_at.desc', limit: 200 }), 'sent_at')
+    + recent(await db.select('scorecard_sends', {}, { order: 'created_at.desc', limit: 200 }), 'created_at');
+}
+
+// The weekly scorecard for every business that turned email on (Vercel's scheduler calls this
+// with Nova's CRON_SECRET). Each business gets at most one a day, whatever retries happen.
+async function weeklyScorecards(db) {
+  if (!emailSwitch().on) return { sent: 0, reason: 'email_off', results: [] };
+  const caps = emailCaps(); const results = [];
+  for (const a of (await db.select('business_agents', { email_enabled: true })).filter((x) => validEmail(x.reply_email))) {
+    if (await sentTodayAcrossNova(db) >= caps.total) { results.push({ organization_id: a.organization_id, sent: false, reason: 'daily_limit' }); continue; }
+    const { scorecard: _card, ...out } = await sendScorecard(db, a.organization_id, { to: a.reply_email, business: a.business_name, send: (m) => sendEmail(m) });
+    results.push({ organization_id: a.organization_id, ...out });
+  }
+  return { sent: results.filter((r) => r.sent).length, results };
+}
+
+const PAGE = (title, text) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="font:16px/1.6 system-ui,sans-serif;max-width:560px;margin:60px auto;padding:0 20px"><h1 style="font-size:22px">${title}</h1><p>${text}</p></body></html>`;
+
 // When an invoice is waiting and the business takes cards, the customer is offered "Pay by card".
 async function withPayOption(db, orgId, next) {
   if (!next?.invoice) return next;
@@ -394,6 +420,21 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
   const b = req.body || {};
   try {
     const db = restDb();
+    // The unsubscribe link in a business's marketing email: opened from the email (GET) or the
+    // mail app's one-click button (POST). No login; the random token is the only key.
+    if (op === 'unsubscribe') {
+      if (!rateLimit(req, res, 30, 60_000)) return;
+      const ok = await unsubscribe(db, sanitize(String(req.query?.t || b.t || ''), 100));
+      if (req.method === 'POST') return res.status(ok ? 200 : 404).json({ ok });
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(ok ? 200 : 404).end(ok ? PAGE('You are unsubscribed', 'You will not get any more of these emails or texts from this business.') : PAGE('Link not recognized', 'This unsubscribe link is not valid. Reply to the email and ask the business to stop contacting you.'));
+    }
+    if (op === 'weekly-scorecards') {
+      const secret = process.env.CRON_SECRET || '';
+      const got = Buffer.from(String(req.headers?.authorization || '')), want = Buffer.from(`Bearer ${secret}`);
+      if (!secret || got.length !== want.length || !crypto.timingSafeEqual(got, want)) return res.status(401).json({ error: 'Not allowed' });
+      return res.status(200).json({ ok: true, ...(await weeklyScorecards(db)) });
+    }
     if (JOURNEY_CUSTOMER_OPS.has(op)) {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       if (!rateLimit(req, res, op === 'start' ? 8 : 40, 60_000)) return;
@@ -477,9 +518,36 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     // in that organization. Client owners hold it; admin.view stays Nova-only.
     if (!(await requireOrgAccess(req, res, orgId, op === 'complete' ? 'growth.view' : 'business.manage'))) return;
 
-    // Prepares come-back messages. No channel is connected yet, so canSend is empty and every
-    // message is saved as not sent with its reason. Sending is wired in when a channel is live.
-    if (op === 'revive-run') return res.status(200).json({ ok: true, ...(await runRevive(db, orgId, { canSend: {}, business: sanitize(b.business_name, 120) || 'us' })) });
+    // Nova Revive. Preparing saves one message per person per step; a message is "ready" only
+    // when the customer agreed to that channel and the business can send on it. Email is the
+    // only channel that can send today (texting waits on carrier approval). Sending is a
+    // separate press of the button by the owner.
+    if (op === 'revive-run' || op === 'revive-send') {
+      const agent = await one(db, 'business_agents', { organization_id: orgId });
+      const sw = emailSwitch();
+      const emailOk = sw.on && agent?.email_enabled === true && !!String(agent?.mailing_address || '').trim();
+      const why = !sw.on ? sw.reason : agent?.email_enabled !== true ? 'Email is off for this business. Turn it on in the Assistant tab.' : emailOk ? null : 'Add the business mailing address in the Assistant tab.';
+      if (op === 'revive-run') {
+        const out = await runRevive(db, orgId, { canSend: { email: emailOk }, baseUrl: appBase(), business: agent?.business_name || sanitize(b.business_name, 120) || 'us' });
+        const reopened = emailOk ? await reopenBlocked(db, orgId, { email: true }) : 0;
+        return res.status(200).json({ ok: true, ...out, reopened, email_ready: emailOk, email_note: why });
+      }
+      if (!emailOk) return res.status(409).json({ error: why });
+      const out = await sendReady(db, orgId, { agent, send: (m) => sendEmail(m), caps: emailCaps(), appBase: appBase(), countSentToday: () => sentTodayAcrossNova(db) });
+      return res.status(200).json({ ok: true, ...out });
+    }
+    // Nova Proof: email the last 7 days to the owner now (the weekly schedule does the same).
+    if (op === 'send-scorecard') {
+      const sw = emailSwitch();
+      if (!sw.on) return res.status(409).json({ error: sw.reason });
+      if (await sentTodayAcrossNova(db) >= emailCaps().total) return res.status(409).json({ error: 'Nova has used today\'s email allowance. Try again tomorrow.' });
+      const agent = await one(db, 'business_agents', { organization_id: orgId });
+      const to = validEmail(agent?.reply_email) ? agent.reply_email : caller.email;
+      if (!validEmail(to)) return res.status(422).json({ error: 'Add an email for the weekly report in the Assistant tab.' });
+      const out = await sendScorecard(db, orgId, { to, business: agent?.business_name || 'Your business', send: (m) => sendEmail(m) });
+      if (!out.sent && out.reason === 'not_accepted') return res.status(502).json({ error: `The email provider did not accept it: ${out.error}` });
+      return res.status(200).json({ ok: true, sent: out.sent, reason: out.reason || null, to });
+    }
     // Card payments: the owner connects the business's own Stripe account on Stripe's page.
     if (op === 'card-payments-connect' || op === 'card-payments-refresh') {
       const cp = await import('./_cardPayments.js');
