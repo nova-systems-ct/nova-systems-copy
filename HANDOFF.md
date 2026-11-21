@@ -7,6 +7,27 @@ Nov 21, each **locally verified only** (unit suites in `npm run verify:local`, m
 twice to a throwaway PostgreSQL 16). Nothing below is deployed, applied to a database, or tested
 with a real provider. No money was spent.
 
+### Order to run the migrations (staging first, each twice; never the two already in production)
+
+1. `business-agents-migration-standalone.sql`
+2. `business-registration-migration-standalone.sql`
+3. `customer-journey-migration-standalone.sql`
+4. `revive-proof-migration-standalone.sql`
+5. `card-payments-migration-standalone.sql` (new Nov 21)
+6. `outbound-email-migration-standalone.sql` (new Nov 21)
+7. `team-dispatch-migration-standalone.sql` (new Nov 21)
+8. `reviews-migration-standalone.sql` (new Nov 21)
+9. `zz-public-schema-lockdown-standalone.sql`, always last
+
+Each new file was applied twice to a throwaway PostgreSQL 16 on Nov 21 and its constraints were
+exercised there (with stub tables for what the real dependencies would provide).
+
+### Still not built
+
+Phone calls (system 11: needs an ElevenLabs account, Isaac's yes, and working Twilio keys), RCS
+(13: needs Twilio brand registration), Apple Messages (12) and Instagram/Facebook (15) wait on
+Isaac's sign-ups; job photos from the worker's phone need a private storage bucket.
+
 ### Card payments (system 17)
 
 - `api/_cardPayments.js`: each business connects its own Stripe account; customers pay deposit and
