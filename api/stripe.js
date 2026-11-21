@@ -226,6 +226,26 @@ async function handleWebhook(req, res, rawBody) {
   return res.status(200).json({ received: true });
 }
 
+// Events from client businesses' own Stripe accounts (Stripe Connect). A separate endpoint in
+// Stripe ("events on connected accounts") with its own signing secret. A card payment by one of
+// a business's customers is recorded on that customer's request only from a verified event.
+async function handleConnectWebhook(req, res, rawBody) {
+  const secret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Webhook verification is not configured.' });
+  if (!verifyStripeSignature(rawBody, req.headers['stripe-signature'], secret)) return res.status(400).json({ error: 'Invalid signature' });
+  let event;
+  try { event = JSON.parse(rawBody.toString('utf8')); } catch { return res.status(400).json({ error: 'Invalid JSON payload' }); }
+  try {
+    const [{ handleConnectEvent }, { restDb }] = await Promise.all([import('./_cardPayments.js'), import('./_journey.js')]);
+    const out = await handleConnectEvent(restDb(), event);
+    return res.status(200).json({ received: true, handled: out.handled, reason: out.reason || null });
+  } catch (err) {
+    // Answer 500 so Stripe retries; recording is idempotent per payment, so a retry cannot double-count.
+    console.error('[stripe connect webhook] processing failed:', err.message);
+    return res.status(500).json({ error: 'Processing failed; please retry.' });
+  }
+}
+
 // Redirect-style Stripe Checkout — used for invoice "PAY NOW" links emailed
 // to clients, and as a fallback checkout flow for the /onboard intake wizard.
 async function handleCheckoutSession(req, res, b) {
@@ -394,6 +414,7 @@ export default async function handler(req, res) {
   // route it to the webhook handler before anything else touches the body.
   if (req.headers['stripe-signature']) {
     const rawBody = await readRawBody(req);
+    if (req.query?.action === 'connect-webhook') return handleConnectWebhook(req, res, rawBody);
     return handleWebhook(req, res, rawBody);
   }
   // Resend delivery callbacks (Svix-signed): updates the Sales Team email delivery ledger. Shares this raw-body function so the

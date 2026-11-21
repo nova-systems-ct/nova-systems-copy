@@ -374,11 +374,20 @@ export async function receivables(db, orgId, now = new Date()) {
 // ---- HTTP: /api/client?resource=journey ----------------------------------------------------
 // Customer ops (no login; rate-limited; every op after `start` needs the private link token):
 //   POST op=business (what the public page shows: name, services, current public offer)
-//   POST op=start | status | choose-service | accept | choose-time | cancel
+//   POST op=start | status | choose-service | accept | choose-time | cancel | pay
 // Staff ops (staff session + permission in THAT organization):
-//   GET  op=list | detail | receivables
+//   GET  op=list | detail | receivables | card-payments
 //   POST op=save-service | save-offer | record-payment | complete | pause | resume
-export const JOURNEY_CUSTOMER_OPS = new Set(['business', 'start', 'status', 'choose-service', 'accept', 'choose-time', 'cancel']);
+//        | card-payments-connect | card-payments-refresh
+export const JOURNEY_CUSTOMER_OPS = new Set(['business', 'start', 'status', 'choose-service', 'accept', 'choose-time', 'cancel', 'pay']);
+
+// When an invoice is waiting and the business takes cards, the customer is offered "Pay by card".
+async function withPayOption(db, orgId, next) {
+  if (!next?.invoice) return next;
+  const { canPayOnline } = await import('./_cardPayments.js');
+  if (!(await canPayOnline(db, orgId))) return next;
+  return { ...next, can_pay_online: true, message: 'Your invoice is ready. Pay by card below, or the business will confirm other ways to pay.' };
+}
 
 export async function handleJourney(req, res, op, { requireStaff, requireOrgAccess, sanitize, sanitizeEmail, rateLimit }) {
   res.setHeader('Cache-Control', 'no-store');
@@ -409,19 +418,24 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
         // Only a business that has published at least one service takes requests here.
         if (!(await db.select('business_services', { organization_id: orgId, active: true }, { limit: 1 })).length) return res.status(404).json({ error: 'This business is not taking requests here yet.' });
         const out = await startJourney(db, { orgId, channel: 'web', eventId, name, email, phone, text: sanitize(b.message, 2000), offerCode: sanitize(b.offer_code, 40) || undefined });
-        return res.status(200).json({ ok: true, journey_id: out.journey.id, token: out.token, next: out.next });
+        return res.status(200).json({ ok: true, journey_id: out.journey.id, token: out.token, next: await withPayOption(db, orgId, out.next) });
       }
       const id = sanitize(b.journey_id, 100);
       const j = UUID_RE.test(id) ? await one(db, 'journeys', { id }) : null;
       if (!j || !tokenMatches(j, b.token)) return res.status(404).json({ error: 'This request could not be found.' });
       if (j.paused && op !== 'status') return res.status(409).json({ error: 'A team member is handling this request personally.' });
+      if (op === 'pay') { // Stripe's own page, for exactly what is still owed; the webhook records it
+        const { createPayLink } = await import('./_cardPayments.js');
+        const link = await createPayLink(db, j);
+        return res.status(200).json({ ok: true, url: link.url, amount_cents: link.amount_cents });
+      }
       let next;
       if (op === 'status') next = await advance(db, j);
       else if (op === 'choose-service') next = await chooseService(db, j, sanitize(b.service_id, 100));
       else if (op === 'accept') next = await acceptQuote(db, j, { quoteId: sanitize(b.quote_id, 100), typedName: sanitize(b.typed_name, 120) });
       else if (op === 'choose-time') next = await chooseSlot(db, j, sanitize(b.slot_id, 100));
       else next = await cancelJourney(db, j, 'customer');
-      return res.status(200).json({ ok: true, next });
+      return res.status(200).json({ ok: true, next: await withPayOption(db, j.organization_id, next) });
     }
 
     const caller = await requireStaff(req, res);
@@ -431,6 +445,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (!UUID_RE.test(orgId)) return res.status(400).json({ error: 'organization_id is required' });
       if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
       if (op === 'receivables') return res.status(200).json(await receivables(db, orgId));
+      if (op === 'card-payments') { const { paymentStatus } = await import('./_cardPayments.js'); return res.status(200).json({ payments: await paymentStatus(db, orgId) }); }
       if (op === 'scorecard') { // Nova Proof: default is the last 7 days
         const to = req.query?.to ? new Date(req.query.to) : new Date();
         const from = req.query?.from ? new Date(req.query.from) : new Date(to.getTime() - 7 * 86400000);
@@ -465,6 +480,15 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     // Prepares come-back messages. No channel is connected yet, so canSend is empty and every
     // message is saved as not sent with its reason. Sending is wired in when a channel is live.
     if (op === 'revive-run') return res.status(200).json({ ok: true, ...(await runRevive(db, orgId, { canSend: {}, business: sanitize(b.business_name, 120) || 'us' })) });
+    // Card payments: the owner connects the business's own Stripe account on Stripe's page.
+    if (op === 'card-payments-connect' || op === 'card-payments-refresh') {
+      const cp = await import('./_cardPayments.js');
+      if (op === 'card-payments-refresh') return res.status(200).json({ ok: true, payments: await cp.refreshAccount(db, { orgId }) });
+      const agent = await one(db, 'business_agents', { organization_id: orgId });
+      const org = agent?.business_name ? null : await one(db, 'organizations', { id: orgId });
+      const out = await cp.startOnboarding(db, { orgId, businessName: agent?.business_name || org?.name || '' });
+      return res.status(200).json({ ok: true, url: out.url, payments: out.status });
+    }
     if (op === 'apply-pack') return res.status(200).json({ ok: true, ...(await applyPack(db, orgId, sanitize(b.pack, 60))) });
     if (op === 'save-service') {
       const name = sanitize(b.name, 120);
@@ -494,8 +518,8 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     const j = UUID_RE.test(jid) ? await one(db, 'journeys', { id: jid, organization_id: orgId }) : null;
     if (!j) return res.status(404).json({ error: 'Not found' });
     let next;
-    // A person at the business entering a payment is always 'owner_recorded'. Only a verified
-    // provider webhook may record 'provider_verified', and that path is not built yet.
+    // A person at the business entering a payment is always 'owner_recorded'. Only Stripe's
+    // signed Connect webhook (api/_cardPayments.js) records 'provider_verified'.
     if (op === 'record-payment') next = await recordPayment(db, j, { amountCents: Number(b.amount_cents), source: 'owner_recorded', reference: sanitize(b.reference, 120) });
     else if (op === 'complete') next = await completeWork(db, j, { note: sanitize(b.note, 2000), by: caller.email || caller.id });
     else if (op === 'pause' || op === 'resume') next = await setPaused(db, j, op === 'pause', caller.email || caller.id);
@@ -503,6 +527,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     return res.status(200).json({ ok: true, next });
   } catch (err) {
     if (err.expected) return res.status(err.status).json({ error: err.message, code: err.code });
+    if (err.stripeError) return res.status(502).json({ error: `Stripe could not complete that: ${err.message}` });
     console.error('[journey]', err.message);
     return res.status(502).json({ error: 'That step could not be confirmed. Nothing further was changed.' });
   }

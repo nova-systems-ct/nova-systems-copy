@@ -21,7 +21,9 @@ function toFormParams(obj, prefix = '') {
 }
 
 // STRIPE_API_BASE lets local tests point at a stand-in server; production leaves it unset.
-export async function stripeRequest(secretKey, method, path, body, { idempotencyKey } = {}) {
+// `stripeAccount` makes the call on a client business's own connected account (a direct charge:
+// the money and the payment record live on that business's account, not Nova's).
+export async function stripeRequest(secretKey, method, path, body, { idempotencyKey, stripeAccount } = {}) {
   const url = `${(process.env.STRIPE_API_BASE || 'https://api.stripe.com/v1').replace(/\/$/, '')}/${path}`;
   const opts = {
     method,
@@ -29,6 +31,7 @@ export async function stripeRequest(secretKey, method, path, body, { idempotency
       Authorization: `Bearer ${secretKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',
       ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+      ...(stripeAccount ? { 'Stripe-Account': stripeAccount } : {}),
     },
   };
   if (body && method !== 'GET') {

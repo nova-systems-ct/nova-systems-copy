@@ -44,7 +44,16 @@ export default function BusinessDesk() {
     if (!orgId) return;
     const want = { money: ['receivables', 'receivables'], revive: ['revive-preview', 'revive'], results: ['scorecard', 'results'] }[tab];
     if (want) call('journey', want[0], { orgId }).then((d) => setExtra((x) => ({ ...x, [want[1]]: d }))).catch((e) => setError(e.message));
+    if (tab === 'money') call('journey', 'card-payments', { orgId }).then((d) => setExtra((x) => ({ ...x, payments: d.payments }))).catch(() => {});
   }, [tab, orgId, data]);
+  // Back from Stripe's sign-up page: open Money owed and read the account's status from Stripe.
+  useEffect(() => {
+    if (!orgId) return;
+    const back = new URLSearchParams(window.location.search).get('payments');
+    if (back !== 'return' && back !== 'refresh') return;
+    setTab('money');
+    call('journey', 'card-payments-refresh', { orgId, body: {} }).then((d) => setExtra((x) => ({ ...x, payments: d.payments }))).catch((e) => setError(e.message));
+  }, [orgId]);
 
   async function act(fn, done) {
     setBusy(true); setError(''); setNotice('');
@@ -197,7 +206,24 @@ export default function BusinessDesk() {
         <section className="luxe-panel">
           <div className="luxe-panel-title"><h2>Money owed to you</h2><span className="luxe-badge">{dollars(extra.receivables?.total_cents || 0)}</span></div>
           {!extra.receivables ? <p role="status">Loading…</p> : extra.receivables.rows.length ? <div className="luxe-table-wrap"><table className="luxe-table"><thead><tr><th>Customer</th><th>What</th><th>Amount</th><th>Days waiting</th></tr></thead><tbody>{extra.receivables.rows.map((r) => <tr key={r.journey_id + r.kind}><td>{journeys.find((j) => j.id === r.journey_id)?.customer_name || 'Customer'} · {serviceName(journeys.find((j) => j.id === r.journey_id)?.service_id)}</td><td>{r.kind === 'deposit_invoice' ? 'Deposit' : 'Balance'}</td><td>{dollars(r.amount_cents)}</td><td>{r.days_outstanding}</td></tr>)}</tbody></table></div> : <div className="luxe-empty">Nobody owes you anything right now.</div>}
-          <p className="desk-note">Online card payment is not connected for your customers yet. Record cash, check or transfer payments under Customers.</p>
+          <p className="desk-note">Record cash, check or transfer payments under Customers. Card payments made on Stripe's page are recorded by themselves.</p>
+        </section>
+      )}
+      {data && tab === 'money' && (
+        <section className="luxe-panel">
+          <div className="luxe-panel-title"><h2>Card payments</h2><span className="luxe-badge">{!extra.payments ? '…' : extra.payments.ready ? 'On' : extra.payments.connected ? 'Sign-up not finished' : 'Not connected'}</span></div>
+          {!extra.payments ? <p role="status">Loading…</p> : (
+            <>
+              <p>{extra.payments.note}</p>
+              <p className="desk-note">Customers pay deposits and balances on Stripe's own page, and the money goes to your own Stripe account. Stripe charges its card fee to you; Nova takes nothing from the payment.{extra.payments.mode === 'test' ? ' Test mode: only Stripe test cards work.' : ''}</p>
+              {extra.payments.switch_on && (
+                <div className="luxe-actions">
+                  {!extra.payments.ready && <button className="luxe-button" disabled={busy} onClick={() => act(() => call('journey', 'card-payments-connect', { orgId, body: {} })).then((d) => { if (d?.url) window.location.assign(d.url); })}>{extra.payments.connected ? 'Finish Stripe sign-up' : 'Connect Stripe'}</button>}
+                  {extra.payments.connected && <button className="luxe-outline" disabled={busy} onClick={() => act(() => call('journey', 'card-payments-refresh', { orgId, body: {} })).then((d) => d && setExtra((x) => ({ ...x, payments: d.payments })))}>Check status</button>}
+                </div>
+              )}
+            </>
+          )}
         </section>
       )}
 

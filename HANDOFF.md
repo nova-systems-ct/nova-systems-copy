@@ -1,4 +1,41 @@
-# Handoff — 2026-11-14
+# Handoff — 2026-11-14 (updated 2026-11-21)
+
+## Update — 2026-11-21
+
+The ten commits below were pushed to GitHub on Nov 14 and the Vercel preview built. Work added on
+Nov 21, each **locally verified only** (unit suites in `npm run verify:local`, migrations applied
+twice to a throwaway PostgreSQL 16). Nothing below is deployed, applied to a database, or tested
+with a real provider. No money was spent.
+
+### Card payments (system 17)
+
+- `api/_cardPayments.js`: each business connects its own Stripe account; customers pay deposit and
+  balance invoices on Stripe's page; the charge is made directly on the business's account
+  (`Stripe-Account` header), so Nova never holds the money and takes no fee. Stripe's signed
+  Connect event records the payment through `recordPayment` as `provider_verified`, once per
+  payment, and the journey moves on by itself. A late or odd payment is never dropped: it is
+  flagged to the owner (`card_payment_needs_review`).
+- Customer page `/start`: "Pay by card" appears only when the business's account can take payments.
+  Business desk → Money owed → Card payments: Connect Stripe / Check status.
+- Webhook: `POST /api/stripe?action=connect-webhook` (own signing secret).
+- Migration: `supabase/card-payments-migration-standalone.sql` (table `business_payment_accounts`).
+  Run after `customer-journey-migration-standalone.sql`, then re-run the lockdown file.
+- Tests: `scripts/unit_card_payments_test.mjs` (51 checks).
+- Account type defaults to **Standard**: per Stripe's Connect pricing page, when Stripe handles
+  pricing for connected accounts there is no platform fee. Express
+  (`NOVA_CONNECT_ACCOUNT_TYPE=express`) is listed at $2 per monthly active account plus 0.25% + 25¢
+  per payout, so it needs Isaac's yes first.
+
+**Owner steps to switch it on (test mode first):**
+1. Stripe Dashboard → Connect: complete the platform setup.
+2. Stripe → Webhooks → add an endpoint for **events on connected accounts**:
+   `https://<site>/api/stripe?action=connect-webhook`, events `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded`, `account.updated`. Put its signing secret in Vercel
+   as `STRIPE_CONNECT_WEBHOOK_SECRET`.
+3. Vercel: `NOVA_CARD_PAYMENTS=on`, and `APP_BASE_URL` set to the site the customer pages run on.
+   A live key also needs `NOVA_CARD_PAYMENTS_LIVE=yes`.
+4. Done when: on staging, a business connects a test Stripe account, a customer pays a deposit with
+   Stripe's test card, and the request moves to scheduling by itself.
 
 ## Where the work is
 

@@ -41,7 +41,15 @@ function render(next) {
     go.addEventListener('click', () => (input.value.trim().length < 2 ? showError('Type your full name to accept.') : act('accept', { quote_id: next.quote.id, typed_name: input.value })));
     box.append(label, input, go);
   }
-  if (next.invoice) box.append(el('pre', next.invoice.text), el('p', 'No payment is taken on this page.', 'note'));
+  if (next.invoice) {
+    box.append(el('pre', next.invoice.text));
+    if (next.can_pay_online) {
+      // Stripe's own page takes the card; this page never sees the card number.
+      const pay = el('button', `Pay ${dollars(next.invoice.amount_cents)} by card`); pay.type = 'button';
+      pay.addEventListener('click', async () => { const data = await send('pay', {}); if (data?.url) location.assign(data.url); });
+      box.append(pay, el('p', 'You pay on Stripe’s secure page. The money goes to the business.', 'note'));
+    } else box.append(el('p', 'No payment is taken on this page.', 'note'));
+  }
   if (next.reason === 'choose_time') for (const o of next.options) choice(when(o.start_at), null, () => act('choose-time', { slot_id: o.slot_id }));
   if (!['closed', 'cancelled'].includes(next.stage)) {
     const again = el('button', 'Check for updates', 'quiet'); again.type = 'button'; again.addEventListener('click', () => act('status', {})); box.append(again);
@@ -80,6 +88,20 @@ if (!UUID.test(org)) {
     if (data.token) { session = { journey_id: data.journey_id, token: data.token }; try { sessionStorage.setItem(key, JSON.stringify(session)); } catch { /* storage unavailable */ } }
     if (data.next) render(data.next);
   });
-  if (session?.journey_id && session.token) act('status', {}).then(() => { if ($('step').hidden) { session = null; $('start').hidden = false; } });
-  else $('start').hidden = false;
+  if (session?.journey_id && session.token) {
+    const paid = params.get('paid');
+    act('status', {}).then(() => { if ($('step').hidden) { session = null; $('start').hidden = false; } });
+    // Back from Stripe: the payment is confirmed by Stripe's message to the business, which can
+    // take a few seconds, so check a few times before asking the customer to wait.
+    if (paid === '1') {
+      let tries = 0;
+      const check = async () => {
+        const data = await send('status', {});
+        if (!data?.next) return;
+        render(data.next);
+        if (data.next.invoice && tries++ < 8) { $('step').prepend(el('p', 'Thank you. Confirming your payment with Stripe…', 'note')); setTimeout(check, 4000); }
+      };
+      setTimeout(check, 2500);
+    } else if (paid === '0') showError('The payment was not completed. You can try again when you are ready.');
+  } else $('start').hidden = false;
 }

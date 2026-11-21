@@ -53,6 +53,7 @@ DECLARE
     'business_agents',
     'business_locations',
     'business_offers',
+    'business_payment_accounts',
     'business_services',
     'businesses',
     'crm_activities',
