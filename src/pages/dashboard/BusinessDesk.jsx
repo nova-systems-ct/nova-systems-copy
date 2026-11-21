@@ -11,7 +11,7 @@ const TABS = [['services', 'Services & prices', Briefcase], ['offers', 'Offers',
 const EMPTY_WORKER = { name: '', phone: '', email: '', kind: 'contractor' };
 const DEFAULT_SHARES = [{ label: 'Worker', percent: '50', to_worker: true }, { label: 'Business', percent: '50', to_worker: false }];
 const EMPTY_OFFER = { code: '', percent_off: '', trigger_type: 'web_visit', description: '', expires_at: '', approved: false };
-const EMPTY_AGENT = { business_name: '', agent_name: '', industry: '', phone_number: '', greeting: '', services: '', service_area: '', booking_url: '', owner_alert_phone: '', handoff_instructions: '', never_say: '', tone: 'friendly', status: 'draft', sms_enabled: false, email_enabled: false, reply_email: '', mailing_address: '' };
+const EMPTY_AGENT = { business_name: '', agent_name: '', industry: '', phone_number: '', greeting: '', services: '', service_area: '', booking_url: '', owner_alert_phone: '', handoff_instructions: '', never_say: '', tone: 'friendly', status: 'draft', sms_enabled: false, email_enabled: false, reply_email: '', mailing_address: '', review_url: '' };
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 
 async function call(resource, op, { orgId, body, query = '' } = {}) {
@@ -47,6 +47,7 @@ export default function BusinessDesk() {
   useEffect(() => {
     if (!orgId) return;
     const want = { money: ['receivables', 'receivables'], revive: ['revive-preview', 'revive'], results: ['scorecard', 'results'] }[tab];
+    if (tab === 'results') call('journey', 'feedback', { orgId }).then((d) => setExtra((x) => ({ ...x, feedback: d.feedback }))).catch(() => {});
     if (want) call('journey', want[0], { orgId }).then((d) => setExtra((x) => ({ ...x, [want[1]]: d }))).catch((e) => setError(e.message));
     if (tab === 'money') call('journey', 'card-payments', { orgId }).then((d) => setExtra((x) => ({ ...x, payments: d.payments }))).catch(() => {});
     if (tab === 'team' || tab === 'customers') call('journey', 'team', { orgId }).then((d) => { setExtra((x) => ({ ...x, team: d })); if (tab === 'team' && d.rule) { setShares(d.rule.shares.map((r) => ({ label: r.label, percent: String(r.percent), to_worker: r.to_worker === true }))); setSplitOk(d.rule.approved === true); } }).catch((e) => setError(e.message));
@@ -274,6 +275,8 @@ export default function BusinessDesk() {
             <pre className="desk-report">{extra.results.text}</pre>
             <p className="desk-note">Every number comes from saved records. Payments you typed in are counted separately from payments confirmed by a payment provider.</p>
             <div className="luxe-actions"><button className="luxe-outline" disabled={busy} onClick={() => act(() => call('journey', 'send-scorecard', { orgId, body: {} }), (d) => (d.sent ? `Report emailed to ${d.to}.` : 'This report was already emailed today.'))}>Email me this report</button></div>
+            <h3>What customers said</h3>
+            {extra.feedback?.length ? <ul className="desk-list">{extra.feedback.slice(0, 30).map((f) => <li key={f.id}><strong>{f.rating} out of 5</strong> · {f.customer_name}{f.comment ? ` · “${f.comment}”` : ''}{f.follow_up === 'owner_to_call' && <> · <span className="luxe-badge">Call them</span> <button className="luxe-link" disabled={busy} onClick={() => act(() => call('journey', 'feedback-resolve', { orgId, body: { feedback_id: f.id } }), 'Marked as handled.').then(() => call('journey', 'feedback', { orgId }).then((d) => setExtra((x) => ({ ...x, feedback: d.feedback }))))}>Mark handled</button></>}</li>)}</ul> : <p className="desk-note">No ratings yet. After a paid job, customers are asked "How did we do, 1 to 5?" on their own page, and by email through the come-back list.</p>}
           </>}
         </section>
       )}
@@ -334,6 +337,7 @@ export default function BusinessDesk() {
             <div className="desk-pair"><label>Business phone (optional)<input value={agent.phone_number} onChange={(e) => setAgent({ ...agent, phone_number: e.target.value })} placeholder="+18605551234" /></label><label>Your phone for alerts (optional)<input value={agent.owner_alert_phone} onChange={(e) => setAgent({ ...agent, owner_alert_phone: e.target.value })} /></label></div>
             <h3>Email</h3>
             <div className="desk-pair"><label>Email for customer replies and your weekly report<input type="email" value={agent.reply_email} maxLength={254} onChange={(e) => setAgent({ ...agent, reply_email: e.target.value })} /></label><label>Business mailing address (printed in marketing emails, as US law requires)<input value={agent.mailing_address} maxLength={300} onChange={(e) => setAgent({ ...agent, mailing_address: e.target.value })} placeholder="Street, town, state, ZIP" /></label></div>
+            <label>Your review page link (for example your Google review link). Offered to every customer who rates a job, whatever the rating, as Google's rules require.<input value={agent.review_url} maxLength={500} placeholder="https://" onChange={(e) => setAgent({ ...agent, review_url: e.target.value })} /></label>
             <label className="desk-check"><input type="checkbox" checked={agent.email_enabled === true} onChange={(e) => setAgent({ ...agent, email_enabled: e.target.checked })} /> Send come-back emails to customers who agreed to email, and email me the weekly report</label>
             <button className="luxe-button" disabled={busy}>Save assistant details</button>
           </form>

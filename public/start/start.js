@@ -51,6 +51,16 @@ function render(next) {
     } else box.append(el('p', 'No payment is taken on this page.', 'note'));
   }
   if (next.reason === 'choose_time') for (const o of next.options) choice(when(o.start_at), null, () => act('choose-time', { slot_id: o.slot_id }));
+  if (next.ask_rating) {
+    box.append(el('p', 'How did we do? 1 means poor, 5 means excellent.'));
+    for (let n = 1; n <= 5; n++) choice(`${n} out of 5`, null, async () => {
+      const out = await send('rate', { rating: n });
+      if (!out) return;
+      box.replaceChildren(el('p', out.message));
+      if (out.review_url) { const a = el('a', 'Leave a review'); a.href = out.review_url; a.rel = 'noopener'; box.append(a); }
+    });
+    box.append(el('p', 'Your answer goes to the business only. Nobody writes or posts a review for you.', 'note'));
+  }
   if (!['closed', 'cancelled'].includes(next.stage)) {
     const again = el('button', 'Check for updates', 'quiet'); again.type = 'button'; again.addEventListener('click', () => act('status', {})); box.append(again);
     if (['inquiry', 'qualified', 'quoted', 'scheduling', 'scheduled'].includes(next.stage)) { const c = el('button', 'Cancel my request', 'quiet'); c.type = 'button'; c.style.marginLeft = '8px'; c.addEventListener('click', () => act('cancel', {})); box.append(c); }

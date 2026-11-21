@@ -402,7 +402,14 @@ export async function receivables(db, orgId, now = new Date()) {
 //   GET  op=list | detail | receivables | card-payments
 //   POST op=save-service | save-offer | record-payment | complete | pause | resume
 //        | card-payments-connect | card-payments-refresh
-export const JOURNEY_CUSTOMER_OPS = new Set(['business', 'start', 'status', 'choose-service', 'accept', 'choose-time', 'cancel', 'pay']);
+export const JOURNEY_CUSTOMER_OPS = new Set(['business', 'start', 'status', 'choose-service', 'accept', 'choose-time', 'cancel', 'pay', 'rate']);
+
+// A finished, paid job the customer has not rated yet: their page asks "How did we do, 1 to 5?".
+async function withRatingOption(db, j, next) {
+  if (!next || next.stage !== 'closed' || !(j.paid_cents > 0)) return next;
+  const { hasRated } = await import('./_reviews.js');
+  return (await hasRated(db, j)) ? next : { ...next, ask_rating: true };
+}
 
 const appBase = () => (process.env.APP_BASE_URL || 'https://nova-systems.app').replace(/\/$/, '');
 
@@ -457,6 +464,16 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (!secret || got.length !== want.length || !crypto.timingSafeEqual(got, want)) return res.status(401).json({ error: 'Not allowed' });
       return res.status(200).json({ ok: true, ...(await weeklyScorecards(db)) });
     }
+    // The private rating link sent by email or text after a paid job (no login; the link is the key).
+    if (op === 'rate-info' || op === 'rate-link') {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+      if (!rateLimit(req, res, 20, 60_000)) return;
+      const rv = await import('./_reviews.js');
+      const found = await rv.journeyForRatingLink(db, String(b.t || ''));
+      if (!found) return res.status(404).json({ error: 'This link is not valid. Thank you anyway.' });
+      if (op === 'rate-info') return res.status(200).json({ ok: true, ...(await rv.ratingInfo(db, found.j)) });
+      return res.status(200).json({ ok: true, ...(await rv.rate(db, found.j, { rating: b.rating, comment: sanitize(b.comment, 1000) })) });
+    }
     if (op === 'crew-jobs' || op === 'crew-done') {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       if (!rateLimit(req, res, 40, 60_000)) return;
@@ -496,7 +513,8 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       const id = sanitize(b.journey_id, 100);
       const j = UUID_RE.test(id) ? await one(db, 'journeys', { id }) : null;
       if (!j || !tokenMatches(j, b.token)) return res.status(404).json({ error: 'This request could not be found.' });
-      if (j.paused && op !== 'status') return res.status(409).json({ error: 'A team member is handling this request personally.' });
+      if (j.paused && op !== 'status' && op !== 'rate') return res.status(409).json({ error: 'A team member is handling this request personally.' });
+      if (op === 'rate') { const { rate } = await import('./_reviews.js'); return res.status(200).json({ ok: true, ...(await rate(db, j, { rating: b.rating, comment: sanitize(b.comment, 1000) })) }); }
       if (op === 'pay') { // Stripe's own page, for exactly what is still owed; the webhook records it
         const { createPayLink } = await import('./_cardPayments.js');
         const link = await createPayLink(db, j);
@@ -508,7 +526,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       else if (op === 'accept') next = await acceptQuote(db, j, { quoteId: sanitize(b.quote_id, 100), typedName: sanitize(b.typed_name, 120) });
       else if (op === 'choose-time') next = await chooseSlot(db, j, sanitize(b.slot_id, 100));
       else next = await cancelJourney(db, j, 'customer');
-      return res.status(200).json({ ok: true, next: await withPayOption(db, j.organization_id, next) });
+      return res.status(200).json({ ok: true, next: await withRatingOption(db, j, await withPayOption(db, j.organization_id, next)) });
     }
 
     const caller = await requireStaff(req, res);
@@ -526,6 +544,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (op === 'receivables') return res.status(200).json(await receivables(db, orgId));
       if (op === 'card-payments') { const { paymentStatus } = await import('./_cardPayments.js'); return res.status(200).json({ payments: await paymentStatus(db, orgId) }); }
       if (op === 'team') { const { teamView } = await import('./_team.js'); return res.status(200).json(await teamView(db, orgId)); }
+      if (op === 'feedback') { const { feedbackList } = await import('./_reviews.js'); return res.status(200).json({ feedback: await feedbackList(db, orgId) }); }
       if (op === 'scorecard') { // Nova Proof: default is the last 7 days
         const to = req.query?.to ? new Date(req.query.to) : new Date();
         const from = req.query?.from ? new Date(req.query.from) : new Date(to.getTime() - 7 * 86400000);
@@ -556,7 +575,8 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     if (!UUID_RE.test(orgId)) return res.status(400).json({ error: 'organization_id is required' });
     // Prices, discounts, agreement wording and money: the owner-level permission (business.manage)
     // in that organization. Client owners hold it; admin.view stays Nova-only.
-    if (!(await requireOrgAccess(req, res, orgId, ['complete', 'assign'].includes(op) ? 'growth.view' : 'business.manage'))) return;
+    if (!(await requireOrgAccess(req, res, orgId, ['complete', 'assign', 'feedback-resolve'].includes(op) ? 'growth.view' : 'business.manage'))) return;
+    if (op === 'feedback-resolve') { const { resolveFeedback } = await import('./_reviews.js'); return res.status(200).json({ ok: true, feedback: await resolveFeedback(db, orgId, sanitize(b.feedback_id, 100), caller.email || caller.id) }); }
     // Team and pay (systems 24 and 25).
     if (['save-worker', 'worker-link', 'assign', 'save-split', 'mark-paid-out'].includes(op)) {
       const team = await import('./_team.js');

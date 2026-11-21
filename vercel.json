@@ -33,6 +33,10 @@
       "destination": "/crew/index.html"
     },
     {
+      "source": "/rate",
+      "destination": "/rate/index.html"
+    },
+    {
       "source": "/cron/weekly-scorecards",
       "destination": "/api/client?resource=journey&op=weekly-scorecards"
     },

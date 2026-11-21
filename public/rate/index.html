@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>How did we do?</title><meta name="robots" content="noindex"><meta name="referrer" content="no-referrer">
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:#090909;color:#f3f0e8;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:520px;margin:0 auto;padding:56px 22px 80px}h1{font:400 clamp(30px,7vw,44px)/1.1 Georgia,serif;margin:8px 0 14px}.eyebrow{font-size:11px;font-weight:800;letter-spacing:.2em;color:#d5b96c;text-transform:uppercase;margin:0}
+.stars{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:22px 0}.stars button{font:800 22px/1 system-ui,sans-serif;padding:16px 0;border-radius:8px;border:1px solid #ffffff33;background:none;color:inherit;cursor:pointer}
+.stars button[aria-pressed="true"]{background:#d6b96a;color:#111;border-color:#d6b96a}label{display:block;font-size:13px;font-weight:700;margin:6px 0}textarea{width:100%;padding:12px;border-radius:7px;border:1px solid #ffffff33;background:#111;color:inherit;font:inherit;min-height:90px}
+.send{font:inherit;font-weight:800;padding:14px 18px;border-radius:7px;border:0;background:#d6b96a;color:#111;cursor:pointer;margin-top:14px;width:100%}button:disabled{opacity:.55}a.review{display:block;text-align:center;font-weight:800;padding:14px 18px;border-radius:7px;background:#d6b96a;color:#111;text-decoration:none;margin-top:16px}
+button:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid #d5b96c;outline-offset:2px}.note{font-size:14px;color:#aaa292}.error{color:#ff9d8a;font-weight:600}
+</style><script type="module" src="/rate/rate.js?v=20261121a"></script></head>
+<body><main><p class="eyebrow" id="biz">Your feedback</p><h1 id="q">How did we do?</h1>
+<section id="form" hidden><p id="what" class="note"></p><div class="stars" role="group" aria-label="Your rating from 1 to 5"></div>
+<label for="comment">Anything you want to tell the owner? (optional)</label><textarea id="comment" maxlength="1000"></textarea>
+<button class="send" id="send" type="button" disabled>Send my rating</button></section>
+<section id="done" aria-live="polite" hidden></section><p id="error" class="error" role="alert" hidden></p>
+<p class="note">Your answer goes to the business only. Nobody writes or posts a review for you.</p></main></body></html>

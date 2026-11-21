@@ -91,6 +91,23 @@ prepared come-back email reaches a test inbox and the Results tab counts it as s
   business's local month. Spreadsheet-formula cells are neutralised. Owner permission only.
 - Tests: `scripts/unit_bookkeeping_test.mjs` (14 checks). No migration.
 
+### Reviews (system 19)
+
+- `api/_reviews.js`: after a paid job the customer is asked "How did we do, 1 to 5?" on their own
+  request page, and by email through the come-back list (private link `/rate?t=…`, only its
+  SHA-256 stored, asked once, within 14 days, only of customers who agreed to email). 1 to 3 asks
+  the owner to call (Approval Inbox task + "Call them" in Results).
+- **Changed from the Master Build Prompt on purpose:** the owner's review page is offered to every
+  customer who rates, at any rating, not only to 4s and 5s. Showing it only to happy customers is
+  "review gating", which Google's review policy forbids ("selectively soliciting positive
+  reviews"); a business caught doing it risks its reviews and its profile. Nova never writes or
+  posts a review, and nothing is offered for a rating.
+- Business desk → Assistant: review page link; Results: ratings, average, "Mark handled".
+- Migration: `supabase/reviews-migration-standalone.sql` (`business_agents.review_url`,
+  `customer_feedback`, `revive_outreach.kind` gains `review_request`). Run after
+  `revive-proof-migration-standalone.sql`, then re-run the lockdown file.
+- Tests: `scripts/unit_reviews_test.mjs` (27 checks).
+
 ## Where the work is
 
 - Branch: `claude/launch-recovery-20261114`, built on `codex/launch-recovery-20261113` (741aafa).

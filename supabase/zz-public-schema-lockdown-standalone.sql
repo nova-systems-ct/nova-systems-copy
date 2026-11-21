@@ -59,6 +59,7 @@ DECLARE
     'businesses',
     'crm_activities',
     'crm_contacts',
+    'customer_feedback',
     'crm_deals',
     'crm_proposals',
     'crystal_completion_reviews',

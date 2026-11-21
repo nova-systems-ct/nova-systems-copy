@@ -74,7 +74,16 @@ export function buildMessage({ kind, contact, business, service, slot, offer, li
   const deal = offer ? ` Use code ${offer.code} for ${offer.percent_off}% off.` : '';
   const stop = channel === 'email' ? '' : SMS_STOP;
   if (kind === 'cold_lead') return `${hi} Your quote for ${service?.name || 'your request'} is still open.${time}${deal} Pick up where you left off: ${link}${stop}`;
+  if (kind === 'review_request') return `${hi} Thank you for choosing us for your ${service?.name || 'job'}. How did we do? Rate us from 1 to 5 here: ${link}${stop}`;
   return `${hi} It's been a while since your last ${service?.name || 'visit'}.${time}${deal} Book here: ${link}${stop}`;
+}
+
+// Finished, paid jobs from the last two weeks whose customer has not been asked how it went.
+export async function findReviewRequests(db, orgId, now = new Date()) {
+  const asked = new Set((await db.select('customer_feedback', { organization_id: orgId }, { limit: 5000 })).map((f) => f.journey_id));
+  return (await db.select('journeys', { organization_id: orgId }))
+    .filter((j) => j.stage === 'closed' && j.paid_cents > 0 && j.closed_at && !asked.has(j.id) && now - new Date(j.closed_at) <= 14 * DAY)
+    .map((j) => ({ kind: 'review_request', contact_id: j.contact_id, journey_id: j.id, service_id: j.service_id, days_since: Math.floor((now - new Date(j.closed_at)) / DAY), step: `review:${j.id}`, journey: j }));
 }
 
 // Runs the rules for one business and saves one outreach per person per step. Safe to run as
@@ -82,7 +91,7 @@ export function buildMessage({ kind, contact, business, service, slot, offer, li
 //   canSend: { sms: boolean, email: boolean } — true only for channels with a connected account.
 //   baseUrl: where the customer page lives, e.g. https://nova-systems.app
 export async function runRevive(db, orgId, { now = new Date(), canSend = {}, baseUrl = 'https://nova-systems.app', business = 'us', timezone } = {}) {
-  const targets = [...await findOverdue(db, orgId, now), ...await findColdLeads(db, orgId, now)];
+  const targets = [...await findOverdue(db, orgId, now), ...await findColdLeads(db, orgId, now), ...await findReviewRequests(db, orgId, now)];
   const openSlots = (await db.select('voice_calendar_slots', { organization_id: orgId, status: 'open' }, { order: 'start_at.asc', limit: 50 })).filter((s) => new Date(s.start_at) > now);
   const offers = (await db.select('business_offers', { organization_id: orgId, trigger_type: 'manual' })).filter((o) => offerUsable(o, now));
   const offer = offers[0] || null;
@@ -93,6 +102,17 @@ export async function runRevive(db, orgId, { now = new Date(), canSend = {}, bas
     if (!contact) continue;
     const channel = contactChannel(contact, canSend);
     const service = t.service || (t.service_id ? (await db.select('business_services', { id: t.service_id, organization_id: orgId }, { limit: 1 }))[0] : null);
+    if (t.kind === 'review_request') {
+      // Asked only of customers who agreed to be contacted; the private rating link is made once.
+      if (!channel) continue;
+      const { newRatingLink } = await import('./_reviews.js');
+      const token = await newRatingLink(db, t.journey);
+      if (!token) continue;
+      const status = canSend[channel] === true ? 'ready' : 'blocked';
+      const row = { organization_id: orgId, contact_id: contact.id, journey_id: t.journey_id, kind: 'review_request', service_id: service?.id || null, offer_id: null, slot_id: null, channel, status, blocked_reason: status === 'blocked' ? 'channel_not_connected' : null, message: buildMessage({ kind: 'review_request', contact, business, service, link: `${baseUrl}/rate?t=${token}`, channel }), days_since: t.days_since, idempotency_key: `${orgId}:${t.step}` };
+      try { results.push(await db.insert('revive_outreach', row)); } catch (err) { if (err.status !== 409) throw err; }
+      continue;
+    }
     // Offer each open time to one person at a time so two people are not promised the same slot.
     const slot = openSlots.length ? openSlots[slotIndex++ % openSlots.length] : null;
     const link = `${baseUrl}/start?org=${orgId}${offer && t.kind === 'overdue' ? `&code=${encodeURIComponent(offer.code)}` : ''}`;
@@ -191,7 +211,7 @@ export async function sendReady(db, orgId, { agent, send, caps, appBase, now = n
     }
     if (room <= 0) { out.waiting_for_tomorrow++; continue; }
     const url = await unsubscribeLink(db, orgId, contact, appBase);
-    const subject = o.kind === 'cold_lead' ? `${business}: your quote is still open` : `${business}: time for your next visit`;
+    const subject = o.kind === 'cold_lead' ? `${business}: your quote is still open` : o.kind === 'review_request' ? `${business}: how did we do?` : `${business}: time for your next visit`;
     const r = await send({ to: contact.email, subject, text: o.message + emailFooter({ business, mailingAddress: agent.mailing_address.trim(), unsubscribeUrl: url }), fromName: business, replyTo: agent.reply_email, headers: { 'List-Unsubscribe': `<${url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }, idempotencyKey: `revive:${o.id}` });
     if (r.ok && r.id) { await markSent(db, orgId, o.id, `email:${r.id}`); out.sent++; room--; }
     else { out.failed++; out.errors.push({ outreach_id: o.id, error: r.error || 'not accepted' }); } // stays ready; try again later

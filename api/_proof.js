@@ -18,6 +18,7 @@ export async function scorecard(db, orgId, { from, to, now = new Date() }) {
   const offers = await db.select('business_offers', { organization_id: orgId });
   const outreach = await db.select('revive_outreach', { organization_id: orgId });
   const slots = await db.select('voice_calendar_slots', { organization_id: orgId });
+  const feedback = (await db.select('customer_feedback', { organization_id: orgId }, { limit: 5000 })).filter((f) => f.rating);
   const byId = new Map(journeys.map((j) => [j.id, j]));
 
   const started = journeys.filter((j) => within(j.created_at, from, to));
@@ -61,6 +62,7 @@ export async function scorecard(db, orgId, { from, to, now = new Date() }) {
     offers: byOffer,
     revive: { prepared: windowOutreach.length, sent: windowOutreach.filter((o) => o.status === 'sent').length, ready_to_send: windowOutreach.filter((o) => o.status === 'ready').length, blocked: windowOutreach.filter((o) => o.status === 'blocked').length, blocked_reasons: count(windowOutreach.filter((o) => o.status === 'blocked'), (o) => o.blocked_reason), customers_who_came_back: recovered.length },
     waiting_now: count(journeys.filter((j) => !['closed', 'cancelled'].includes(j.stage) && j.waiting_on), (j) => j.waiting_on),
+    feedback: (() => { const rated = feedback.filter((f) => within(f.answered_at, from, to)); return { answered: rated.length, average: rated.length ? Math.round((rated.reduce((n, f) => n + f.rating, 0) / rated.length) * 10) / 10 : null, owner_to_call: feedback.filter((f) => f.follow_up === 'owner_to_call').length }; })(),
     leaks: leaks.sort((a, b) => b.days - a.days),
     // With very little activity the numbers are real but say nothing about a trend.
     enough_to_judge: started.length >= 5,
@@ -80,6 +82,8 @@ export function scorecardText(card, business = 'Your business') {
   if (channels) lines.push(`Where they came from: ${channels}.`);
   for (const o of card.offers) lines.push(`Offer ${o.code}: ${o.customers} ${o.customers === 1 ? 'customer' : 'customers'}, ${o.accepted} accepted a quote.`);
   if (card.revive.prepared) lines.push(`Revive prepared ${card.revive.prepared} come-back ${card.revive.prepared === 1 ? 'message' : 'messages'}: ${card.revive.sent} sent, ${card.revive.ready_to_send} ready to send, ${card.revive.blocked} held back. ${card.revive.customers_who_came_back} came back.`);
+  if (card.feedback?.answered) lines.push(`Customers rated ${card.feedback.answered} ${card.feedback.answered === 1 ? 'job' : 'jobs'}: ${card.feedback.average} out of 5 on average.`);
+  if (card.feedback?.owner_to_call) lines.push(`${card.feedback.owner_to_call} unhappy ${card.feedback.owner_to_call === 1 ? 'customer is' : 'customers are'} waiting for your call.`);
   if (card.leaks.length) lines.push(`Needs attention: ${card.leaks.slice(0, 5).map((l) => `${l.what.toLowerCase()} (${l.days} ${l.days === 1 ? 'day' : 'days'})`).join('; ')}.`);
   if (!card.enough_to_judge) lines.push('There is not enough activity yet to say whether things are improving.');
   return lines.join('\n');

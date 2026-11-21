@@ -257,6 +257,12 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
       if (b.email_enabled === true && (!address || !reply)) return res.status(400).json({ error: 'To turn on email, add the business mailing address and an email for replies.' });
       Object.assign(email, { email_enabled: b.email_enabled === true, reply_email: reply || null, mailing_address: address || null });
     }
+    // The owner's own review page, shown to customers who rate a job 4 or 5.
+    if ('review_url' in b) {
+      const review = sanitize(b.review_url, 500);
+      if (review && !/^https:\/\/[^\s]+$/.test(review)) return res.status(400).json({ error: 'The review link must start with https://' });
+      email.review_url = review || null;
+    }
 
     const record = {
       organization_id: orgId, business_name,
