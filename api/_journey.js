@@ -87,7 +87,7 @@ async function findOrCreateContact(db, orgId, { name, email, phone, channel }) {
   return { contact, conflict: ids.size > 1 };
 }
 
-export async function startJourney(db, { orgId, channel, eventId, name, email, phone, text, offerCode, now = new Date() }) {
+export async function startJourney(db, { orgId, channel, eventId, name, email, phone, text, offerCode, address, now = new Date() }) {
   const existing = await one(db, 'journeys', { organization_id: orgId, source_channel: channel, source_event_id: eventId });
   if (existing) return { journey: existing, token: null, next: await advance(db, existing, { now }), repeated: true };
 
@@ -99,7 +99,7 @@ export async function startJourney(db, { orgId, channel, eventId, name, email, p
   const token = crypto.randomBytes(32).toString('hex');
   let journey;
   try {
-    journey = await db.insert('journeys', { organization_id: orgId, contact_id: contact.id, deal_id: deal.id, offer_id: offerUsable(offer, now) ? offer.id : null, stage: 'inquiry', agent: 'front_desk', source_channel: channel, source_event_id: eventId, request_text: text || null, customer_token_hash: sha(token), discount_cents: 0, paid_cents: 0, paused: false });
+    journey = await db.insert('journeys', { organization_id: orgId, contact_id: contact.id, deal_id: deal.id, offer_id: offerUsable(offer, now) ? offer.id : null, stage: 'inquiry', agent: 'front_desk', source_channel: channel, source_event_id: eventId, request_text: text || null, customer_token_hash: sha(token), discount_cents: 0, paid_cents: 0, paused: false, ...(address ? { service_address: address } : {}) });
   } catch (err) {
     if (err.status !== 409) throw err; // two copies of the same first contact arrived together
     const winner = await one(db, 'journeys', { organization_id: orgId, source_channel: channel, source_event_id: eventId });
@@ -213,7 +213,8 @@ export async function advance(db, j, { now = new Date() } = {}) {
       continue;
     }
 
-    if (j.stage === 'paid') { // FINANCE: follow up and report to the owner
+    if (j.stage === 'paid') { // FINANCE: follow up, record each person's share, report to the owner
+      await recordSplit(db, j);
       const contact = await one(db, 'crm_contacts', { id: j.contact_id, organization_id: j.organization_id });
       const mayFollowUp = contact && !contact.do_not_contact && (contact.email_consent || contact.sms_consent);
       await record(db, j, { agent: 'finance', action: 'follow_up', status: mayFollowUp ? 'waiting_staff' : 'blocked', detail: mayFollowUp ? { note: 'Customer agreed to be contacted. Thank-you and review request are ready to send.' } : { reason: 'no_contact_permission', note: 'The customer has not agreed to follow-up messages, so none is prepared.' } });
@@ -231,6 +232,27 @@ export async function advance(db, j, { now = new Date() } = {}) {
     break;
   }
   return describeNext(db, j, now);
+}
+
+// FINANCE: each person's share of the money actually received, by the business's approved split
+// rule (system 25). A record only: paying anyone is done by a person. The last share takes any
+// leftover cent so the shares always add up to the money received. No rule, no record.
+async function recordSplit(db, j) {
+  try {
+    const rule = await one(db, 'pay_split_rules', { organization_id: j.organization_id });
+    if (!rule || rule.approved !== true || !Array.isArray(rule.shares) || !rule.shares.length || !(j.paid_cents > 0)) return;
+    const done = (await db.select('job_assignments', { journey_id: j.id, organization_id: j.organization_id })).filter((a) => a.status === 'done').pop();
+    let left = j.paid_cents;
+    const rows = rule.shares.map((s, i) => {
+      const amount = i === rule.shares.length - 1 ? left : Math.floor(j.paid_cents * Number(s.percent) / 100);
+      left -= amount;
+      return { organization_id: j.organization_id, journey_id: j.id, worker_id: s.to_worker ? done?.worker_id || null : null, label: s.label, percent: Number(s.percent), basis_cents: j.paid_cents, amount_cents: amount, rule_snapshot: rule.shares };
+    });
+    for (const row of rows) { try { await db.insert('pay_split_entries', row); } catch (err) { if (err.status !== 409) throw err; } }
+    await record(db, j, { agent: 'finance', action: 'pay_split_recorded', detail: { basis_cents: j.paid_cents, shares: rows.map((r) => ({ label: r.label, amount_cents: r.amount_cents, worker_id: r.worker_id })) } });
+  } catch {
+    await record(db, j, { agent: 'finance', handed_to: 'owner', action: 'pay_split_not_recorded', status: 'waiting_owner', detail: { reason: 'The pay split could not be recorded. Nothing was paid; record the shares by hand.' } }).catch(() => {});
+  }
 }
 
 // What the customer (or owner) sees next, in plain words.
@@ -435,6 +457,16 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (!secret || got.length !== want.length || !crypto.timingSafeEqual(got, want)) return res.status(401).json({ error: 'Not allowed' });
       return res.status(200).json({ ok: true, ...(await weeklyScorecards(db)) });
     }
+    if (op === 'crew-jobs' || op === 'crew-done') {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+      if (!rateLimit(req, res, 40, 60_000)) return;
+      const team = await import('./_team.js');
+      const worker = await team.workerByToken(db, String(b.t || ''));
+      if (!worker) return res.status(404).json({ error: 'This link is not active. Ask the business for a new one.' });
+      if (op === 'crew-jobs') return res.status(200).json({ ok: true, ...(await team.crewJobs(db, worker)) });
+      const out = await team.crewDone(db, worker, { assignmentId: sanitize(b.assignment_id, 100), note: sanitize(b.note, 2000) });
+      return res.status(200).json({ ok: true, ...out, ...(await team.crewJobs(db, worker)) });
+    }
     if (JOURNEY_CUSTOMER_OPS.has(op)) {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       if (!rateLimit(req, res, op === 'start' ? 8 : 40, 60_000)) return;
@@ -458,7 +490,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
         if (!name || (!email && !phone)) return res.status(422).json({ error: 'Enter your name and an email or phone number.' });
         // Only a business that has published at least one service takes requests here.
         if (!(await db.select('business_services', { organization_id: orgId, active: true }, { limit: 1 })).length) return res.status(404).json({ error: 'This business is not taking requests here yet.' });
-        const out = await startJourney(db, { orgId, channel: 'web', eventId, name, email, phone, text: sanitize(b.message, 2000), offerCode: sanitize(b.offer_code, 40) || undefined });
+        const out = await startJourney(db, { orgId, channel: 'web', eventId, name, email, phone, text: sanitize(b.message, 2000), offerCode: sanitize(b.offer_code, 40) || undefined, address: sanitize(b.address, 300) || undefined });
         return res.status(200).json({ ok: true, journey_id: out.journey.id, token: out.token, next: await withPayOption(db, orgId, out.next) });
       }
       const id = sanitize(b.journey_id, 100);
@@ -487,6 +519,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
       if (op === 'receivables') return res.status(200).json(await receivables(db, orgId));
       if (op === 'card-payments') { const { paymentStatus } = await import('./_cardPayments.js'); return res.status(200).json({ payments: await paymentStatus(db, orgId) }); }
+      if (op === 'team') { const { teamView } = await import('./_team.js'); return res.status(200).json(await teamView(db, orgId)); }
       if (op === 'scorecard') { // Nova Proof: default is the last 7 days
         const to = req.query?.to ? new Date(req.query.to) : new Date();
         const from = req.query?.from ? new Date(req.query.from) : new Date(to.getTime() - 7 * 86400000);
@@ -503,7 +536,8 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
         if (!j) return res.status(404).json({ error: 'Not found' });
         const { customer_token_hash: _hidden, ...safe } = j;
         const who = await one(db, 'crm_contacts', { id: j.contact_id, organization_id: orgId });
-        return res.status(200).json({ journey: safe, customer: who ? { name: who.name || null, email: who.email || null, phone: who.phone || null } : null, events: await db.select('journey_events', { journey_id: j.id }), documents: await db.select('journey_documents', { journey_id: j.id }) });
+        const live = (await db.select('job_assignments', { journey_id: j.id, organization_id: orgId, status: 'assigned' }))[0] || null;
+        return res.status(200).json({ journey: safe, customer: who ? { name: who.name || null, email: who.email || null, phone: who.phone || null } : null, events: await db.select('journey_events', { journey_id: j.id }), documents: await db.select('journey_documents', { journey_id: j.id }), assignment: live ? { id: live.id, worker_id: live.worker_id } : null });
       }
       // Names come only from this organization's own contacts, so one business never sees another's customers.
       const people = new Map((await db.select('crm_contacts', { organization_id: orgId }, { order: 'created_at.desc', limit: 1000 })).map((c) => [c.id, c.name || c.email || c.phone || 'Customer']));
@@ -516,7 +550,20 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     if (!UUID_RE.test(orgId)) return res.status(400).json({ error: 'organization_id is required' });
     // Prices, discounts, agreement wording and money: the owner-level permission (business.manage)
     // in that organization. Client owners hold it; admin.view stays Nova-only.
-    if (!(await requireOrgAccess(req, res, orgId, op === 'complete' ? 'growth.view' : 'business.manage'))) return;
+    if (!(await requireOrgAccess(req, res, orgId, ['complete', 'assign'].includes(op) ? 'growth.view' : 'business.manage'))) return;
+    // Team and pay (systems 24 and 25).
+    if (['save-worker', 'worker-link', 'assign', 'save-split', 'mark-paid-out'].includes(op)) {
+      const team = await import('./_team.js');
+      const by = caller.email || caller.id;
+      if (op === 'save-worker') {
+        const out = await team.saveWorker(db, orgId, { workerId: UUID_RE.test(sanitize(b.worker_id, 100)) ? sanitize(b.worker_id, 100) : null, name: sanitize(b.name, 100), phone: b.phone ? normalizePhone(b.phone) : null, email: sanitizeEmail(b.email) || null, kind: b.kind, active: b.active });
+        return res.status(200).json({ ok: true, worker: out.worker, link: out.token ? `${appBase()}/crew?t=${out.token}` : null });
+      }
+      if (op === 'worker-link') { const out = await team.newWorkerLink(db, orgId, sanitize(b.worker_id, 100)); return res.status(200).json({ ok: true, link: `${appBase()}/crew?t=${out.token}` }); }
+      if (op === 'assign') return res.status(200).json({ ok: true, ...(await team.assignJob(db, orgId, { journeyId: sanitize(b.journey_id, 100), workerId: sanitize(b.worker_id, 100), by })) });
+      if (op === 'save-split') return res.status(200).json({ ok: true, rule: await team.saveSplitRule(db, orgId, { shares: Array.isArray(b.shares) ? b.shares.slice(0, 7) : [], approved: b.approved === true, by }) });
+      return res.status(200).json({ ok: true, entry: await team.markPaidOut(db, orgId, sanitize(b.entry_id, 100), by) });
+    }
 
     // Nova Revive. Preparing saves one message per person per step; a message is "ready" only
     // when the customer agreed to that channel and the business can send on it. Email is the

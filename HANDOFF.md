@@ -63,6 +63,27 @@ with a real provider. No money was spent.
 in the Business desk, fill in the email fields and tick the switch. Done when: on staging, one
 prepared come-back email reaches a test inbox and the Results tab counts it as sent.
 
+### Team dispatch and pay split (systems 24 and 25)
+
+- `api/_team.js`: the owner adds workers (employee or independent pro) in Business desk → Team &
+  pay; each gets a private phone link (`/crew?t=…`, only its SHA-256 stored; a new link replaces
+  the old). A booked job is assigned from the job's detail under Customers. On the phone page the
+  worker sees the time, address, request and the customer's first name and phone, and presses
+  Done with a sentence of evidence; that runs the same `completeWork` step, so the balance is
+  invoiced at once.
+- Pay split: each business writes and approves its own split (up to six shares, exactly 100%, at
+  most one share to whoever did the job). When a job is fully paid, the finance step records each
+  share of the money actually received (`pay_split_entries`, last share takes the leftover cent).
+  A record only: a person pays people and presses "Mark paid out". No split is ever defaulted.
+- Customer page `/start` now asks for the job address (optional), saved on the request.
+- Migration: `supabase/team-dispatch-migration-standalone.sql` (`business_workers`,
+  `job_assignments`, `pay_split_rules`, `pay_split_entries`, `journeys.service_address`). Run after
+  `customer-journey-migration-standalone.sql`, then re-run the lockdown file.
+- Tests: `scripts/unit_team_pay_test.mjs` (46 checks). Not built: job photos from the worker's
+  phone (needs a private storage bucket).
+- Done when: on staging, a Crystal Clear test job is assigned, marked done from a phone, invoiced,
+  paid, and the Team & pay tab shows each share.
+
 ## Where the work is
 
 - Branch: `claude/launch-recovery-20261114`, built on `codex/launch-recovery-20261113` (741aafa).

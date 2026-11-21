@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase, Tag, Users, Wallet, RefreshCw, ChartNoAxesColumn, Bot, Copy, ShieldCheck } from 'lucide-react';
+import { Briefcase, Tag, Users, Wallet, RefreshCw, ChartNoAxesColumn, Bot, Copy, ShieldCheck, HardHat } from 'lucide-react';
 import { authedFetch } from '../../lib/apiAuth';
 import { useOrg } from '../../lib/OrgContext';
 import { dollars, toCents, STAGE_LABELS, waitingLabel, needsOwner, serviceRequest, serviceToForm, EMPTY_SERVICE, OFFER_TRIGGERS } from '../../lib/businessDesk';
 import '../../styles/NovaLuxe.css';
 import './BusinessDesk.css';
 
-const TABS = [['services', 'Services & prices', Briefcase], ['offers', 'Offers', Tag], ['customers', 'Customers', Users], ['money', 'Money owed', Wallet], ['revive', 'Come-back list', RefreshCw], ['results', 'Results', ChartNoAxesColumn], ['assistant', 'Assistant', Bot]];
+const TABS = [['services', 'Services & prices', Briefcase], ['offers', 'Offers', Tag], ['customers', 'Customers', Users], ['money', 'Money owed', Wallet], ['revive', 'Come-back list', RefreshCw], ['results', 'Results', ChartNoAxesColumn], ['team', 'Team & pay', HardHat], ['assistant', 'Assistant', Bot]];
+const EMPTY_WORKER = { name: '', phone: '', email: '', kind: 'contractor' };
+const DEFAULT_SHARES = [{ label: 'Worker', percent: '50', to_worker: true }, { label: 'Business', percent: '50', to_worker: false }];
 const EMPTY_OFFER = { code: '', percent_off: '', trigger_type: 'web_visit', description: '', expires_at: '', approved: false };
 const EMPTY_AGENT = { business_name: '', agent_name: '', industry: '', phone_number: '', greeting: '', services: '', service_area: '', booking_url: '', owner_alert_phone: '', handoff_instructions: '', never_say: '', tone: 'friendly', status: 'draft', sms_enabled: false, email_enabled: false, reply_email: '', mailing_address: '' };
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
@@ -28,6 +30,7 @@ export default function BusinessDesk() {
   const [svc, setSvc] = useState(EMPTY_SERVICE), [offer, setOffer] = useState(EMPTY_OFFER), [agent, setAgent] = useState(EMPTY_AGENT);
   const [packs, setPacks] = useState([]), [pack, setPack] = useState('');
   const [open, setOpen] = useState(null), [detail, setDetail] = useState(null), [pay, setPay] = useState({ amount: '', reference: '' }), [note, setNote] = useState('');
+  const [worker, setWorker] = useState(EMPTY_WORKER), [shares, setShares] = useState(DEFAULT_SHARES), [splitOk, setSplitOk] = useState(false), [crewLink, setCrewLink] = useState(''), [assignTo, setAssignTo] = useState('');
 
   const load = useCallback(async () => {
     if (!orgId) return;
@@ -45,6 +48,7 @@ export default function BusinessDesk() {
     const want = { money: ['receivables', 'receivables'], revive: ['revive-preview', 'revive'], results: ['scorecard', 'results'] }[tab];
     if (want) call('journey', want[0], { orgId }).then((d) => setExtra((x) => ({ ...x, [want[1]]: d }))).catch((e) => setError(e.message));
     if (tab === 'money') call('journey', 'card-payments', { orgId }).then((d) => setExtra((x) => ({ ...x, payments: d.payments }))).catch(() => {});
+    if (tab === 'team' || tab === 'customers') call('journey', 'team', { orgId }).then((d) => { setExtra((x) => ({ ...x, team: d })); if (tab === 'team' && d.rule) { setShares(d.rule.shares.map((r) => ({ label: r.label, percent: String(r.percent), to_worker: r.to_worker === true }))); setSplitOk(d.rule.approved === true); } }).catch((e) => setError(e.message));
   }, [tab, orgId, data]);
   // Back from Stripe's sign-up page: open Money owed and read the account's status from Stripe.
   useEffect(() => {
@@ -82,7 +86,7 @@ export default function BusinessDesk() {
   }
   async function toggle(j) {
     if (open === j.id) return setOpen(null);
-    setOpen(j.id); setDetail(null); setPay({ amount: '', reference: '' }); setNote('');
+    setOpen(j.id); setDetail(null); setPay({ amount: '', reference: '' }); setNote(''); setAssignTo('');
     try { setDetail(await call('journey', 'detail', { orgId, query: `&journey_id=${j.id}` })); } catch (e) { setError(e.message); }
   }
   function recordPayment(j) {
@@ -193,6 +197,14 @@ export default function BusinessDesk() {
                     {detail.documents.map((d) => <details key={d.id}><summary>{String(d.kind).replaceAll('_', ' ')}{d.amount_cents ? ` · ${dollars(d.amount_cents)}` : ''} · {d.status}</summary><pre>{d.body}</pre></details>)}
                   </>}
                   {['deposit_due', 'balance_due'].includes(j.stage) && <div className="desk-inline"><label>Amount received ($)<input inputMode="decimal" value={pay.amount} onChange={(e) => setPay({ ...pay, amount: e.target.value })} /></label><label>Note (cash, check number…)<input value={pay.reference} maxLength={120} onChange={(e) => setPay({ ...pay, reference: e.target.value })} /></label><button className="luxe-button" disabled={busy} onClick={() => recordPayment(j)}>Record payment</button></div>}
+                  {['scheduling', 'scheduled'].includes(j.stage) && (extra.team?.workers || []).some((w) => w.active) && (
+                    <div className="desk-inline">
+                      <label>Who does this job{detail?.assignment ? ` (now: ${(extra.team.workers.find((w) => w.id === detail.assignment.worker_id) || {}).name || 'someone'})` : ''}
+                        <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)}><option value="">Choose a worker</option>{extra.team.workers.filter((w) => w.active).map((w) => <option key={w.id} value={w.id}>{w.name}{w.kind === 'contractor' ? ' (pro)' : ''}</option>)}</select>
+                      </label>
+                      <button className="luxe-button" disabled={busy || !assignTo} onClick={() => act(() => call('journey', 'assign', { orgId, body: { journey_id: j.id, worker_id: assignTo } }), 'Assigned. It is on their phone page now.').then(() => setOpen(null))}>Assign</button>
+                    </div>
+                  )}
                   {j.stage === 'scheduled' && <div className="desk-inline"><label>Completion note (optional)<input value={note} maxLength={2000} onChange={(e) => setNote(e.target.value)} /></label><button className="luxe-button" disabled={busy} onClick={() => act(() => call('journey', 'complete', { orgId, body: { journey_id: j.id, note } }), 'Work marked done. Any balance has been invoiced.').then(() => setOpen(null))}>Mark work done</button></div>}
                   {!['closed', 'cancelled'].includes(j.stage) && <button className="luxe-outline" disabled={busy} onClick={() => act(() => call('journey', j.paused ? 'resume' : 'pause', { orgId, body: { journey_id: j.id } }), j.paused ? 'The workers have picked this customer back up.' : 'Paused. The workers will leave this customer to you.')}>{j.paused ? 'Hand back to the workers' : 'Take over myself'}</button>}
                 </div>
@@ -254,6 +266,48 @@ export default function BusinessDesk() {
             <div className="luxe-actions"><button className="luxe-outline" disabled={busy} onClick={() => act(() => call('journey', 'send-scorecard', { orgId, body: {} }), (d) => (d.sent ? `Report emailed to ${d.to}.` : 'This report was already emailed today.'))}>Email me this report</button></div>
           </>}
         </section>
+      )}
+
+      {data && tab === 'team' && (
+        <>
+          <section className="luxe-panel">
+            <div className="luxe-panel-title"><h2>Who does the jobs</h2><span className="luxe-badge">{(extra.team?.workers || []).filter((w) => w.active).length} active</span></div>
+            {crewLink && <div className="luxe-panel desk-link"><p>Send this private link to the worker. It opens their jobs on their phone. It is shown only once; make a new one if it is lost.</p><code>{crewLink}</code><button className="luxe-outline" onClick={() => navigator.clipboard?.writeText(crewLink).then(() => setNotice('Link copied.'))}><Copy size={14} />Copy link</button></div>}
+            {!extra.team ? <p role="status">Loading…</p> : extra.team.workers.length ? extra.team.workers.map((w) => (
+              <article className="desk-row" key={w.id}>
+                <div><strong>{w.name}{w.active ? '' : ' (off)'}</strong><p>{w.kind === 'contractor' ? 'Independent pro' : 'Employee'}{w.phone ? ` · ${w.phone}` : ''}{w.unpaid_cents ? ` · not yet paid out: ${dollars(w.unpaid_cents)}` : ''}</p></div>
+                <button className="luxe-outline" disabled={busy} onClick={() => act(() => call('journey', 'worker-link', { orgId, body: { worker_id: w.id } })).then((d) => d?.link && setCrewLink(d.link))}>New phone link</button>
+                <button className="luxe-link" disabled={busy} onClick={() => act(() => call('journey', 'save-worker', { orgId, body: { worker_id: w.id, name: w.name, phone: w.phone, email: w.email, kind: w.kind, active: !w.active } }), w.active ? 'Turned off. Their open jobs are unassigned and their link no longer shows jobs.' : 'Turned back on.')}>{w.active ? 'Turn off' : 'Turn on'}</button>
+              </article>
+            )) : <div className="luxe-empty">No workers yet. Add the first one below.</div>}
+            <form className="luxe-form" onSubmit={(e) => { e.preventDefault(); act(() => call('journey', 'save-worker', { orgId, body: worker }), 'Worker added.').then((d) => { if (d) { setWorker(EMPTY_WORKER); if (d.link) setCrewLink(d.link); } }); }}>
+              <div className="desk-pair"><label>Name<input value={worker.name} maxLength={100} required onChange={(e) => setWorker({ ...worker, name: e.target.value })} /></label><label>Mobile<input value={worker.phone} onChange={(e) => setWorker({ ...worker, phone: e.target.value })} /></label></div>
+              <div className="desk-pair"><label>Email (optional)<input type="email" value={worker.email} onChange={(e) => setWorker({ ...worker, email: e.target.value })} /></label><label>They are<select value={worker.kind} onChange={(e) => setWorker({ ...worker, kind: e.target.value })}><option value="contractor">An independent pro (own business, own equipment)</option><option value="employee">An employee</option></select></label></div>
+              <button className="luxe-button" disabled={busy}>Add worker</button>
+            </form>
+            <p className="desk-note">Whether someone is an employee or an independent pro is a legal question with tax and insurance consequences. Ask your accountant; this screen only records what you choose.</p>
+          </section>
+          <section className="luxe-panel">
+            <div className="luxe-panel-title"><h2>How money from a paid job is split</h2><span className="luxe-badge">{extra.team?.rule?.approved ? 'Approved' : 'Not approved'}</span></div>
+            <p className="desk-note">When a job is fully paid, each share of the money actually received is recorded below. Nothing is paid automatically; you pay people and mark it here. Card fees and costs are not taken out first.</p>
+            {shares.map((r, i) => (
+              <div className="desk-pair" key={i}>
+                <label>Share name<input value={r.label} maxLength={60} onChange={(e) => setShares(shares.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)))} /></label>
+                <label>Percent<input inputMode="decimal" value={r.percent} onChange={(e) => setShares(shares.map((x, k) => (k === i ? { ...x, percent: e.target.value } : x)))} /></label>
+                <label className="desk-check"><input type="checkbox" checked={r.to_worker} onChange={(e) => setShares(shares.map((x, k) => ({ ...x, to_worker: k === i ? e.target.checked : e.target.checked ? false : x.to_worker })))} />Goes to whoever did the job</label>
+                {shares.length > 1 && <button type="button" className="luxe-link" onClick={() => setShares(shares.filter((_, k) => k !== i))}>Remove</button>}
+              </div>
+            ))}
+            <p className="desk-note">Total: {shares.reduce((n, r) => n + (Number(r.percent) || 0), 0)}% (must be exactly 100%).</p>
+            {shares.length < 6 && <button type="button" className="luxe-link" onClick={() => setShares([...shares, { label: '', percent: '', to_worker: false }])}>Add a share</button>}
+            <label className="desk-check"><input type="checkbox" checked={splitOk} onChange={(e) => setSplitOk(e.target.checked)} />I approve this split for every paid job from now on.</label>
+            <div className="luxe-actions"><button className="luxe-button" disabled={busy} onClick={() => act(() => call('journey', 'save-split', { orgId, body: { shares: shares.map((r) => ({ ...r, percent: Number(r.percent) })), approved: splitOk } }), splitOk ? 'Split saved and approved.' : 'Split saved. It is not used until you approve it.')}>Save split</button></div>
+          </section>
+          <section className="luxe-panel">
+            <div className="luxe-panel-title"><h2>Shares from paid jobs</h2></div>
+            {!extra.team ? null : extra.team.entries.length ? <div className="luxe-table-wrap"><table className="luxe-table"><thead><tr><th>Job</th><th>Share</th><th>Amount</th><th>Paid out</th></tr></thead><tbody>{extra.team.entries.map((e) => { const j = journeys.find((x) => x.id === e.journey_id); const w = extra.team.workers.find((x) => x.id === e.worker_id); return <tr key={e.id}><td>{j?.customer_name || 'Customer'} · {serviceName(j?.service_id)}</td><td>{e.label}{w ? ` (${w.name})` : ''} · {Number(e.percent)}% of {dollars(e.basis_cents)}</td><td>{dollars(e.amount_cents)}</td><td>{e.paid_out_at ? new Date(e.paid_out_at).toLocaleDateString('en-US') : <button className="luxe-link" disabled={busy} onClick={() => act(() => call('journey', 'mark-paid-out', { orgId, body: { entry_id: e.id } }), 'Marked as paid out.')}>Mark paid out</button>}</td></tr>; })}</tbody></table></div> : <div className="luxe-empty">No paid jobs with an approved split yet.</div>}
+          </section>
+        </>
       )}
 
       {data && tab === 'assistant' && (

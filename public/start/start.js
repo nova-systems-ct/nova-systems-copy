@@ -83,7 +83,7 @@ if (!UUID.test(org)) {
     event.preventDefault();
     const f = new FormData($('start'));
     if (!String(f.get('email')).trim() && !String(f.get('phone')).trim()) return showError('Enter an email or a phone number.');
-    const data = await send('start', { organization_id: org, submission_id: submission, name: f.get('name'), email: f.get('email'), phone: f.get('phone'), message: f.get('message'), offer_code: f.get('offer_code'), website_url_confirm: f.get('website_url_confirm') });
+    const data = await send('start', { organization_id: org, submission_id: submission, name: f.get('name'), email: f.get('email'), phone: f.get('phone'), message: f.get('message'), address: f.get('address'), offer_code: f.get('offer_code'), website_url_confirm: f.get('website_url_confirm') });
     if (!data) return;
     if (data.token) { session = { journey_id: data.journey_id, token: data.token }; try { sessionStorage.setItem(key, JSON.stringify(session)); } catch { /* storage unavailable */ } }
     if (data.next) render(data.next);
