@@ -84,6 +84,13 @@ prepared come-back email reaches a test inbox and the Results tab counts it as s
 - Done when: on staging, a Crystal Clear test job is assigned, marked done from a phone, invoiced,
   paid, and the Team & pay tab shows each share.
 
+### Bookkeeping export (system 26)
+
+- `api/_bookkeeping.js`: Business desk → Money owed → "Download CSV" for any month: every invoice,
+  payment (with who confirmed it: the payment provider or a person) and pay-split share, in the
+  business's local month. Spreadsheet-formula cells are neutralised. Owner permission only.
+- Tests: `scripts/unit_bookkeeping_test.mjs` (14 checks). No migration.
+
 ## Where the work is
 
 - Branch: `claude/launch-recovery-20261114`, built on `codex/launch-recovery-20261113` (741aafa).

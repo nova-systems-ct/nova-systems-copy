@@ -31,6 +31,7 @@ export default function BusinessDesk() {
   const [packs, setPacks] = useState([]), [pack, setPack] = useState('');
   const [open, setOpen] = useState(null), [detail, setDetail] = useState(null), [pay, setPay] = useState({ amount: '', reference: '' }), [note, setNote] = useState('');
   const [worker, setWorker] = useState(EMPTY_WORKER), [shares, setShares] = useState(DEFAULT_SHARES), [splitOk, setSplitOk] = useState(false), [crewLink, setCrewLink] = useState(''), [assignTo, setAssignTo] = useState('');
+  const [exportMonth, setExportMonth] = useState(() => new Date().toISOString().slice(0, 7));
 
   const load = useCallback(async () => {
     if (!orgId) return;
@@ -219,6 +220,15 @@ export default function BusinessDesk() {
           <div className="luxe-panel-title"><h2>Money owed to you</h2><span className="luxe-badge">{dollars(extra.receivables?.total_cents || 0)}</span></div>
           {!extra.receivables ? <p role="status">Loading…</p> : extra.receivables.rows.length ? <div className="luxe-table-wrap"><table className="luxe-table"><thead><tr><th>Customer</th><th>What</th><th>Amount</th><th>Days waiting</th></tr></thead><tbody>{extra.receivables.rows.map((r) => <tr key={r.journey_id + r.kind}><td>{journeys.find((j) => j.id === r.journey_id)?.customer_name || 'Customer'} · {serviceName(journeys.find((j) => j.id === r.journey_id)?.service_id)}</td><td>{r.kind === 'deposit_invoice' ? 'Deposit' : 'Balance'}</td><td>{dollars(r.amount_cents)}</td><td>{r.days_outstanding}</td></tr>)}</tbody></table></div> : <div className="luxe-empty">Nobody owes you anything right now.</div>}
           <p className="desk-note">Record cash, check or transfer payments under Customers. Card payments made on Stripe's page are recorded by themselves.</p>
+          <div className="desk-inline">
+            <label>Month for your accountant<input type="month" value={exportMonth} onChange={(e) => setExportMonth(e.target.value)} /></label>
+            <button className="luxe-outline" disabled={busy || !exportMonth} onClick={() => act(() => call('journey', 'bookkeeping-export', { orgId, query: `&month=${exportMonth}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York')}` })).then((d) => {
+              if (!d) return;
+              const url = URL.createObjectURL(new Blob([d.csv], { type: 'text/csv;charset=utf-8' }));
+              const a = document.createElement('a'); a.href = url; a.download = d.filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+              setNotice(`Downloaded ${d.counts.invoices} invoice${d.counts.invoices === 1 ? '' : 's'}, ${d.counts.payments} payment${d.counts.payments === 1 ? '' : 's'} and ${d.counts.shares} pay share${d.counts.shares === 1 ? '' : 's'}.`);
+            })}>Download CSV</button>
+          </div>
         </section>
       )}
       {data && tab === 'money' && (

@@ -516,6 +516,12 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     if (req.method === 'GET') {
       const orgId = sanitize(req.query?.organization_id, 100);
       if (!UUID_RE.test(orgId)) return res.status(400).json({ error: 'organization_id is required' });
+      // The month's invoices, payments and shares for the accountant: money, so the owner-level permission.
+      if (op === 'bookkeeping-export') {
+        if (!(await requireOrgAccess(req, res, orgId, 'business.manage'))) return;
+        const { monthExport } = await import('./_bookkeeping.js');
+        return res.status(200).json(await monthExport(db, orgId, { month: sanitize(req.query?.month, 7), timeZone: sanitize(req.query?.tz, 60) || 'America/New_York' }));
+      }
       if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
       if (op === 'receivables') return res.status(200).json(await receivables(db, orgId));
       if (op === 'card-payments') { const { paymentStatus } = await import('./_cardPayments.js'); return res.status(200).json({ payments: await paymentStatus(db, orgId) }); }
