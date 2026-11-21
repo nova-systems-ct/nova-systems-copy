@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, PlayCircle, PauseCircle, FileText, Lightbulb, ListChecks, FileCheck2, Send, Plus, Loader2, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, PlayCircle, PauseCircle, FileText, Lightbulb, ListChecks, FileCheck2, Send, Plus, Loader2, AlertTriangle, PhoneCall } from 'lucide-react'
+import AuditCustomerTests from './AuditCustomerTests'
+import { testsFrom } from '../../lib/auditTests'
 import { authedFetch } from '../../lib/apiAuth'
 import { useOrg } from '../../lib/OrgContext'
 
@@ -134,13 +136,14 @@ export default function AuditCaseDetail() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.07)', overflowX: 'auto' }}>
-        {[['evidence', 'Evidence', FileText, evidence.length], ['findings', 'Findings', Lightbulb, findings.length], ['recommendations', 'Recommendations', ListChecks, recommendations.length], ['report', 'Report', FileCheck2, reports.length]].map(([key, label, Icon, count]) => (
+        {[['tests', 'Customer tests', PhoneCall, testsFrom(evidence).length], ['evidence', 'Evidence', FileText, evidence.length], ['findings', 'Findings', Lightbulb, findings.length], ['recommendations', 'Recommendations', ListChecks, recommendations.length], ['report', 'Report', FileCheck2, reports.length]].map(([key, label, Icon, count]) => (
           <button key={key} onClick={() => setTab(key)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', background: 'none', border: 'none', borderBottom: `2px solid ${tab === key ? GOLD : 'transparent'}`, color: tab === key ? GOLD : 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
             <Icon style={{ width: 13, height: 13 }} /> {label} {count > 0 && `(${count})`}
           </button>
         ))}
       </div>
 
+      {tab === 'tests' && <AuditCustomerTests caseId={id} orgId={currentOrg.id} evidence={evidence} businessName={data.business?.name || ''} onSaved={load} />}
       {tab === 'evidence' && <EvidenceTab caseId={id} orgId={currentOrg.id} items={evidence} onSaved={load} />}
       {tab === 'findings' && <FindingsTab caseId={id} orgId={currentOrg.id} items={findings} evidence={evidence} onSaved={load} />}
       {tab === 'recommendations' && <RecommendationsTab caseId={id} orgId={currentOrg.id} items={recommendations} findings={findings} onSaved={load} />}

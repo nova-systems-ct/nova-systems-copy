@@ -108,6 +108,15 @@ prepared come-back email reaches a test inbox and the Results tab counts it as s
   `revive-proof-migration-standalone.sql`, then re-run the lockdown file.
 - Tests: `scripts/unit_reviews_test.mjs` (27 checks).
 
+### Audit screen (system 22)
+
+- Audit case page → new "Customer tests" tab (`src/pages/dashboard/AuditCustomerTests.jsx`): staff
+  record each call, text, form or message they ran on a prospect (saved as first-hand evidence by
+  the existing `customer-test` op), enter the owner's three numbers to get the server's dollar
+  range with its assumptions, save it as an estimate finding linked to the tests, and print a
+  one-page Audit. Helpers in `src/lib/auditTests.js`; tests `scripts/unit_audit_screen_test.mjs`
+  (10 checks, including that the screen's test list matches the server's). No migration.
+
 ## Where the work is
 
 - Branch: `claude/launch-recovery-20261114`, built on `codex/launch-recovery-20261113` (741aafa).
