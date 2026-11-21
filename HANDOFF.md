@@ -117,6 +117,16 @@ prepared come-back email reaches a test inbox and the Results tab counts it as s
   one-page Audit. Helpers in `src/lib/auditTests.js`; tests `scripts/unit_audit_screen_test.mjs`
   (10 checks, including that the screen's test list matches the server's). No migration.
 
+### Client websites (system 5)
+
+- `api/_site.js`: every client business gets a one-page website at `/b/<organization slug>`,
+  built from its own records each time it is opened: name, its own words, active services, prices
+  only where approved, hours when set (days with no record are left out, never assumed open), the
+  approved website offer, phone, and "Request a quote" to its `/start` page. It works as soon as a
+  registered business switches on one service. Shown on the Business desk as "Your website".
+- Served by the existing `api/client.js` (no new function) through the `/b/:slug` rewrite.
+- Tests: `scripts/unit_site_test.mjs` (16 checks). No migration.
+
 ## Where the work is
 
 - Branch: `claude/launch-recovery-20261114`, built on `codex/launch-recovery-20261113` (741aafa).

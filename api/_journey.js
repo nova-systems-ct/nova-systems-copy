@@ -464,6 +464,16 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (!secret || got.length !== want.length || !crypto.timingSafeEqual(got, want)) return res.status(401).json({ error: 'Not allowed' });
       return res.status(200).json({ ok: true, ...(await weeklyScorecards(db)) });
     }
+    // The business's public one-page website at /b/<slug> (system 5), built from its own records.
+    if (op === 'site') {
+      if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+      if (!rateLimit(req, res, 120, 60_000)) return;
+      const { siteFor } = await import('./_site.js');
+      const out = await siteFor(db, sanitize(String(req.query?.slug || ''), 80).toLowerCase());
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', out.status === 200 ? 'public, max-age=300' : 'no-store');
+      return res.status(out.status).end(out.html);
+    }
     // The private rating link sent by email or text after a paid job (no login; the link is the key).
     if (op === 'rate-info' || op === 'rate-link') {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

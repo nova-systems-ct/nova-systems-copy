@@ -70,6 +70,7 @@ export default function BusinessDesk() {
   const todo = useMemo(() => needsOwner(services, journeys), [services, journeys]);
   const serviceName = (id) => services.find((s) => s.id === id)?.name || 'Not chosen yet';
   const leadLink = orgId ? `${window.location.origin}/start?org=${orgId}` : '';
+  const siteLink = currentOrg?.slug ? `${window.location.origin}/b/${currentOrg.slug}` : '';
 
   function saveService(e) {
     e.preventDefault();
@@ -112,6 +113,12 @@ export default function BusinessDesk() {
         <div><strong>Your request page</strong><p>Send customers here. It goes live once at least one service is switched on.</p><code>{leadLink}</code></div>
         <button className="luxe-outline" onClick={() => navigator.clipboard?.writeText(leadLink).then(() => setNotice('Link copied.'))}><Copy size={14} />Copy link</button>
       </section>
+      {siteLink && (
+        <section className="luxe-panel desk-link">
+          <div><strong>Your website</strong><p>A one-page site made from your services, prices you approved, hours and offer. It updates by itself when you change them here.</p><code>{siteLink}</code></div>
+          <button className="luxe-outline" onClick={() => navigator.clipboard?.writeText(siteLink).then(() => setNotice('Link copied.'))}><Copy size={14} />Copy link</button>
+        </section>
+      )}
 
       {data && todo.length > 0 && (
         <section className="luxe-panel luxe-attention desk-todo"><ShieldCheck />

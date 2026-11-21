@@ -37,6 +37,10 @@
       "destination": "/rate/index.html"
     },
     {
+      "source": "/b/:slug",
+      "destination": "/api/client?resource=journey&op=site&slug=:slug"
+    },
+    {
       "source": "/cron/weekly-scorecards",
       "destination": "/api/client?resource=journey&op=weekly-scorecards"
     },
