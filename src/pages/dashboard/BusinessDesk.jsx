@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase, Tag, Users, Wallet, RefreshCw, ChartNoAxesColumn, Bot, Copy, ShieldCheck, HardHat } from 'lucide-react';
+import { Briefcase, Tag, Users, Wallet, RefreshCw, ChartNoAxesColumn, Bot, Copy, ShieldCheck, HardHat, MessageSquare, Phone, Power } from 'lucide-react';
 import { authedFetch } from '../../lib/apiAuth';
 import { useOrg } from '../../lib/OrgContext';
 import { dollars, toCents, STAGE_LABELS, waitingLabel, needsOwner, serviceRequest, serviceToForm, EMPTY_SERVICE, OFFER_TRIGGERS } from '../../lib/businessDesk';
+import { MessagesTab, CallsTab, InstallTab } from './BusinessChannels';
 import '../../styles/NovaLuxe.css';
 import './BusinessDesk.css';
 
-const TABS = [['services', 'Services & prices', Briefcase], ['offers', 'Offers', Tag], ['customers', 'Customers', Users], ['money', 'Money owed', Wallet], ['revive', 'Come-back list', RefreshCw], ['results', 'Results', ChartNoAxesColumn], ['team', 'Team & pay', HardHat], ['assistant', 'Assistant', Bot]];
+const TABS = [['services', 'Services & prices', Briefcase], ['offers', 'Offers', Tag], ['customers', 'Customers', Users], ['messages', 'Messages', MessageSquare], ['calls', 'Calls', Phone], ['money', 'Money owed', Wallet], ['revive', 'Come-back list', RefreshCw], ['results', 'Results', ChartNoAxesColumn], ['team', 'Team & pay', HardHat], ['assistant', 'Assistant', Bot], ['install', 'Switch on', Power]];
 const EMPTY_WORKER = { name: '', phone: '', email: '', kind: 'contractor' };
 const DEFAULT_SHARES = [{ label: 'Worker', percent: '50', to_worker: true }, { label: 'Business', percent: '50', to_worker: false }];
 const EMPTY_OFFER = { code: '', percent_off: '', trigger_type: 'web_visit', description: '', expires_at: '', approved: false };
@@ -39,18 +40,19 @@ export default function BusinessDesk() {
   }, [orgId]);
 
   useEffect(() => { setData(null); setExtra({}); setOpen(null); load(); }, [load]);
+  const loadAgent = useCallback(() => (orgId ? call('agents', 'get', { orgId }).then((d) => { setExtra((x) => ({ ...x, spending: d.spending_unlocked })); if (d.agent) setAgent({ ...EMPTY_AGENT, ...Object.fromEntries(Object.entries(d.agent).map(([k, v]) => [k, v ?? ''])), sms_enabled: d.agent.sms_enabled === true, email_enabled: d.agent.email_enabled === true }); else setAgent({ ...EMPTY_AGENT, business_name: currentOrg?.name || '' }); }).catch(() => {}) : Promise.resolve()), [orgId, currentOrg?.name]);
   useEffect(() => {
     if (!orgId) return;
     call('journey', 'packs', { orgId }).then((d) => setPacks(d.packs || [])).catch(() => {});
-    call('agents', 'get', { orgId }).then((d) => { setExtra((x) => ({ ...x, spending: d.spending_unlocked })); if (d.agent) setAgent({ ...EMPTY_AGENT, ...Object.fromEntries(Object.entries(d.agent).map(([k, v]) => [k, v ?? ''])), sms_enabled: d.agent.sms_enabled === true, email_enabled: d.agent.email_enabled === true }); else setAgent({ ...EMPTY_AGENT, business_name: currentOrg?.name || '' }); }).catch(() => {});
-  }, [orgId, currentOrg?.name]);
+    loadAgent();
+  }, [orgId, loadAgent]);
   useEffect(() => {
     if (!orgId) return;
     const want = { money: ['receivables', 'receivables'], revive: ['revive-preview', 'revive'], results: ['scorecard', 'results'] }[tab];
     if (tab === 'results') call('journey', 'feedback', { orgId }).then((d) => setExtra((x) => ({ ...x, feedback: d.feedback }))).catch(() => {});
     if (want) call('journey', want[0], { orgId }).then((d) => setExtra((x) => ({ ...x, [want[1]]: d }))).catch((e) => setError(e.message));
-    if (tab === 'money') call('journey', 'card-payments', { orgId }).then((d) => setExtra((x) => ({ ...x, payments: d.payments }))).catch(() => {});
-    if (tab === 'team' || tab === 'customers') call('journey', 'team', { orgId }).then((d) => { setExtra((x) => ({ ...x, team: d })); if (tab === 'team' && d.rule) { setShares(d.rule.shares.map((r) => ({ label: r.label, percent: String(r.percent), to_worker: r.to_worker === true }))); setSplitOk(d.rule.approved === true); } }).catch((e) => setError(e.message));
+    if (tab === 'money' || tab === 'install') call('journey', 'card-payments', { orgId }).then((d) => setExtra((x) => ({ ...x, payments: d.payments }))).catch(() => {});
+    if (tab === 'team' || tab === 'customers' || tab === 'install') call('journey', 'team', { orgId }).then((d) => { setExtra((x) => ({ ...x, team: d })); if (tab === 'team' && d.rule) { setShares(d.rule.shares.map((r) => ({ label: r.label, percent: String(r.percent), to_worker: r.to_worker === true }))); setSplitOk(d.rule.approved === true); } }).catch((e) => setError(e.message));
   }, [tab, orgId, data]);
   // Back from Stripe's sign-up page: open Money owed and read the account's status from Stripe.
   useEffect(() => {
@@ -82,10 +84,12 @@ export default function BusinessDesk() {
     e.preventDefault();
     act(() => call('journey', 'save-offer', { orgId, body: { ...offer, percent_off: Number(offer.percent_off), expires_at: offer.expires_at ? new Date(offer.expires_at + 'T23:59:59').toISOString() : null } }), 'Offer saved.').then((d) => d && setOffer(EMPTY_OFFER));
   }
+  // The assistant's details, saved with whatever is switched on now (Switch on is where that changes),
+  // so editing a greeting never turns texting, calls or the spending cap off by accident.
+  const saveBase = (overrides = {}) => call('agents', 'save', { orgId, body: { ...agent, status: agent.status || 'draft', sms_enabled: agent.sms_enabled === true, voice_enabled: !!agent.call_mode && agent.call_mode !== 'off', monthly_spend_cap_cents: agent.monthly_spend_cap_cents === '' ? null : agent.monthly_spend_cap_cents, ...overrides } });
   function saveAgent(e) {
     e.preventDefault();
-    // Texting stays off from this screen until a number is approved for it; spending has no cap set here, so nothing can be charged.
-    act(() => call('agents', 'save', { orgId, body: { ...agent, sms_enabled: false, voice_enabled: false, monthly_spend_cap_cents: null, status: agent.status === 'active' ? 'draft' : agent.status } }), 'Assistant details saved as a draft.');
+    act(() => saveBase(), 'Assistant details saved.').then(() => loadAgent());
   }
   async function toggle(j) {
     if (open === j.id) return setOpen(null);
@@ -330,10 +334,14 @@ export default function BusinessDesk() {
         </>
       )}
 
+      {data && tab === 'messages' && <MessagesTab orgId={orgId} call={call} busy={busy} setBusy={setBusy} setError={setError} setNotice={setNotice} />}
+      {data && tab === 'calls' && <CallsTab orgId={orgId} call={call} setError={setError} />}
+      {data && tab === 'install' && <InstallTab orgId={orgId} call={call} busy={busy} setBusy={setBusy} setError={setError} setNotice={setNotice} agent={agent} saveBase={saveBase} services={services} extra={extra} slug={currentOrg?.slug || ''} reloadAgent={loadAgent} />}
+
       {data && tab === 'assistant' && (
         <section className="luxe-panel">
-          <div className="luxe-panel-title"><h2>What your assistant knows</h2><span className="luxe-badge">Draft · not answering customers</span></div>
-          <p className="desk-note">Fill this in now so it is ready. Texting and calls stay off until a phone number is approved for this business{extra.spending === false ? ' and spending is unlocked' : ''}. <Link className="luxe-link" to="/dashboard/integrations">Check connections</Link></p>
+          <div className="luxe-panel-title"><h2>What your assistant knows</h2><span className="luxe-badge">{agent.status === 'active' ? 'Live' : agent.status === 'paused' ? 'Paused' : 'Draft · not answering customers'}</span></div>
+          <p className="desk-note">Saving these details does not switch anything on or off; that is done under Switch on. Texting and calls need a phone number approved for this business{extra.spending === false ? ' and spending unlocked' : ''}. <Link className="luxe-link" to="/dashboard/integrations">Check connections</Link></p>
           <form className="luxe-form" onSubmit={saveAgent}>
             <div className="desk-pair"><label>Business name<input value={agent.business_name} maxLength={200} onChange={(e) => setAgent({ ...agent, business_name: e.target.value })} /></label><label>Assistant’s name<input value={agent.agent_name} maxLength={80} onChange={(e) => setAgent({ ...agent, agent_name: e.target.value })} placeholder="Mia" /></label></div>
             <div className="desk-pair"><label>Type of business<input value={agent.industry} maxLength={120} onChange={(e) => setAgent({ ...agent, industry: e.target.value })} /></label><label>Tone<select value={agent.tone} onChange={(e) => setAgent({ ...agent, tone: e.target.value })}>{['friendly', 'professional', 'casual'].map((t) => <option key={t}>{t}</option>)}</select></label></div>
