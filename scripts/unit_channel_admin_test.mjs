@@ -144,6 +144,28 @@ n = await routeMetaEvent(db, page([{ sender: { id: '55554444' }, recipient: { id
 check('Facebook: a Page that belongs to no business is ignored', n === 0);
 n = await routeMetaEvent(db, page([{ sender: { id: '11112222' }, recipient: { id: '17841400000000001' }, message: { mid: 'ig_1', text: 'hi' } }], 'instagram', '17841400000000001'), { env: {}, now: NOW, senderFor: fakeSender() });
 check('Instagram: a DM to the business\'s account is answered on Instagram', n === 1 && sent.at(-1).channel === 'instagram' && sent.at(-1).to.ref === '11112222');
+// A comment on the business's post: one private reply with the owner's approved comment offer.
+const comment = (id, from, text = 'Love this!', object = 'page', account = '1234567890') => (object === 'page'
+  ? { object, entry: [{ id: account, time: NOW.getTime(), changes: [{ field: 'feed', value: { item: 'comment', verb: 'add', comment_id: id, post_id: `${account}_1`, from: { id: from, name: 'Dana' }, message: text } }] }] }
+  : { object, entry: [{ id: account, time: NOW.getTime(), changes: [{ field: 'comments', value: { id, text, from: { id: from, username: 'dana.ig' } } }] }] });
+sent.length = 0;
+n = await routeMetaEvent(db, comment('1234567890_555', '44443333'), { env: {}, now: NOW, senderFor: fakeSender() });
+check('a comment with no approved comment offer is noted, and nothing is sent', n === 1 && sent.length === 0 && db.t.business_agent_messages.some((m) => m.provider_sid === 'facebook:comment:1234567890_555'));
+await db.insert('business_offers', { organization_id: ORG, trigger_type: 'social_comment', channel: null, code: 'COMMENT10', description: '10% off your first lawn mowing', percent_off: 10, approved: true, active: true, expires_at: null });
+await db.insert('business_offers', { organization_id: ORG, trigger_type: 'social_comment', channel: null, code: 'DRAFT50', description: 'not approved', percent_off: 50, approved: false, active: true, expires_at: null });
+n = await routeMetaEvent(db, comment('1234567890_556', '44445555'), { env: {}, now: NOW, senderFor: fakeSender() });
+const reply = sent.at(-1);
+check('a comment gets ONE private reply, to the comment, with only the approved offer', n === 1 && sent.length === 1 && reply.channel === 'facebook' && reply.to.commentId === '1234567890_556' && /10% off your first lawn mowing\. Use code COMMENT10/.test(reply.text) && !/DRAFT50/.test(reply.text));
+const offerJourney = db.t.journeys.find((j) => j.source_event_id === 'conv:facebook:44445555:comment-1234567890_556');
+check('a request opens for the commenter with the offer attached', offerJourney && offerJourney.offer_id === db.t.business_offers.find((o) => o.code === 'COMMENT10').id);
+await routeMetaEvent(db, comment('1234567890_556', '44445555'), { env: {}, now: NOW, senderFor: fakeSender() });
+check('the same comment delivered again gets no second reply', sent.length === 1);
+await routeMetaEvent(db, page([{ sender: { id: '44445555' }, recipient: { id: '1234567890' }, message: { mid: 'm_dm_1', text: 'Yes! I need my lawn mowed' } }]), { env: {}, now: NOW, senderFor: fakeSender() });
+check('their reply continues the same request, with the offer', db.t.journeys.filter((j) => String(j.source_event_id).startsWith('conv:facebook:44445555:')).length === 1 && sent.length === 2);
+n = await routeMetaEvent(db, comment('1234567890_557', '1234567890', 'Thanks everyone!'), { env: {}, now: NOW, senderFor: fakeSender() });
+check('the business\'s own comments are ignored', n === 0 && sent.length === 2);
+n = await routeMetaEvent(db, comment('17900000000000001', '55556666', 'nice', 'instagram', '17841400000000001'), { env: {}, now: NOW, senderFor: fakeSender() });
+check('Instagram comments get the same single private reply on Instagram', n === 1 && sent.at(-1).channel === 'instagram' && sent.at(-1).to.commentId === '17900000000000001');
 const raw = Buffer.from(JSON.stringify({ object: 'page' }));
 const sig = 'sha256=' + crypto.createHmac('sha256', 'app-secret').update(raw).digest('hex');
 check('Meta signature: the right signature passes, anything else fails', metaSignatureOk(raw, sig, 'app-secret') && !metaSignatureOk(raw, sig, 'other-secret') && !metaSignatureOk(raw, 'sha256=00', 'app-secret') && !metaSignatureOk(raw, sig, ''));

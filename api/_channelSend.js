@@ -45,7 +45,8 @@ export function senderFor(channel, agent, to, env = process.env) {
     if (!token || !agent.meta_page_id) return { ok: false, error: 'meta_not_connected' };
     // Replies only inside Meta's answering window: messaging_type RESPONSE to someone who wrote first.
     return viaJson(`${GRAPH(env)}/${encodeURIComponent(agent.meta_page_id)}/messages`, { Authorization: `Bearer ${token}` },
-      { recipient: { id: to.ref }, messaging_type: 'RESPONSE', message: { text: text.slice(0, 1000) } }, (d) => d.message_id || null);
+      // A private reply to a comment goes to the comment; anything else to the person who wrote first.
+      { recipient: to.commentId ? { comment_id: to.commentId } : { id: to.ref }, messaging_type: 'RESPONSE', message: { text: text.slice(0, 1000) } }, (d) => d.message_id || null);
   };
   return async () => ({ ok: false, error: 'unknown_channel' });
 }

@@ -1,0 +1,32 @@
+{
+  "business": "Crystal Clear",
+  "about": "Mobile car detailing, outside window cleaning and junk removal in Fairfield County, Connecticut, run on Nova as a client business. Register it at /register first, approve it, then run: node scripts/install_business.mjs installs/crystal-clear.json --org <its organization id>",
+  "approvals": "Isaac Nova approved the five prices below on November 21, 2026 (\"Approve as written\"). He has not approved a lawn price, a deposit, agreement wording or the pay split.",
+  "services": [
+    { "name": "Full detail, sedan", "description": "Full interior and exterior detail, done in your driveway.", "keywords": ["sedan", "coupe", "hatchback"], "price_cents": 19900, "price_approved": true, "approved_by": "Isaac Nova, 2026-11-21", "return_days": 90 },
+    { "name": "Full detail, SUV or truck", "description": "Full interior and exterior detail, done in your driveway.", "keywords": ["suv", "truck", "pickup", "minivan", "van", "jeep"], "price_cents": 24900, "price_approved": true, "approved_by": "Isaac Nova, 2026-11-21", "return_days": 90 },
+    { "name": "Outside window cleaning, up to 20 windows", "description": "The outside of up to 20 house windows.", "keywords": ["window", "windows"], "price_cents": 19900, "price_approved": true, "approved_by": "Isaac Nova, 2026-11-21", "return_days": 180 },
+    { "name": "Junk removal, quarter truck load", "description": "A quarter of a truck load of junk hauled away.", "keywords": ["junk", "haul", "hauling", "removal", "clean out", "cleanout", "trash", "debris"], "price_cents": 17500, "price_approved": true, "approved_by": "Isaac Nova, 2026-11-21", "return_days": null },
+    { "name": "Holiday Ready (book by Dec 15): sedan full detail plus outside windows", "description": "A sedan full detail plus outside window cleaning (up to 20 windows) for one price. Book by December 15, 2026. Switch this service off on December 16.", "keywords": ["holiday", "holiday ready", "black friday"], "price_cents": 29900, "price_approved": true, "approved_by": "Isaac Nova, 2026-11-21", "return_days": null },
+    { "name": "Lawn mowing, up to a quarter acre", "description": "Mowing from April to October. Switched off until spring; no price approved yet.", "keywords": ["lawn", "mow", "mowing", "grass"], "price_cents": null, "price_approved": false, "return_days": 14, "active": false }
+  ],
+  "switch_off_unlisted_services": true,
+  "assistant": {
+    "business_name": "Crystal Clear",
+    "industry": "Car detailing, window cleaning and junk removal",
+    "service_area": "Fairfield County, Connecticut",
+    "greeting": "Thanks for contacting Crystal Clear. Tell us what you need: a car detail, outside windows or junk removal.",
+    "services": "Crystal Clear is a mobile car detailing and exterior cleaning service for homes across Fairfield County, Connecticut. We come to your driveway for full interior and exterior car details, clean the outside of your house windows, and haul away junk in small loads. Lawn mowing returns in April.",
+    "tone": "friendly",
+    "handoff_instructions": "Pass to Isaac: complaints, damage, jobs bigger than the listed sizes, and any price that is not on the list.",
+    "never_say": "Never promise a time, a discount or a price that is not on the list.",
+    "web_chat_enabled": true
+  },
+  "split_proposal": {
+    "note": "Proposal only (subcontract plan): the pro who does the job gets half of the money received. Isaac approves or changes it in Team & pay. The earlier plan was 50% worker, 25% Isaac, 25% company.",
+    "shares": [
+      { "label": "Pro who did the job", "percent": 50, "to_worker": true },
+      { "label": "Crystal Clear", "percent": 50, "to_worker": false }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "business": "Flare",
+  "about": "Relationship marketing (mystery boxes, street polls, events). On hold until there is money for the first boxes, so every service is switched off. Register Flare at /register, approve it, then run: node scripts/install_business.mjs installs/flare.json --org <its organization id>",
+  "approvals": "No Flare price, deposit or agreement wording has been approved yet.",
+  "services": [
+    { "name": "Mystery box campaign", "description": "Personal packages delivered to the business owners you want to meet, with follow-up.", "keywords": ["mystery box", "boxes", "gifts", "gifting"], "price_cents": null, "price_approved": false, "return_days": null, "active": false },
+    { "name": "Street poll", "description": "Short interviews with people on the street about your business, filmed only with each person's signed consent.", "keywords": ["street poll", "poll", "street interviews", "interviews"], "price_cents": null, "price_approved": false, "return_days": null, "active": false },
+    { "name": "Event", "description": "Planning and running a customer or owner event.", "keywords": ["event", "grand opening", "pop-up", "pop up"], "price_cents": null, "price_approved": false, "return_days": null, "active": false },
+    { "name": "Content day", "description": "One day of filming at your business and on the street, turned into a month of posts.", "keywords": ["content day", "filming", "video"], "price_cents": null, "price_approved": false, "return_days": 30, "active": false }
+  ],
+  "switch_off_unlisted_services": true,
+  "assistant": {
+    "business_name": "Flare",
+    "industry": "Relationship marketing",
+    "service_area": "Connecticut",
+    "services": "Flare creates moments people remember: a personal package delivered to the owner you want to meet, street polls on camera with signed consent, and events where owners meet.",
+    "tone": "professional",
+    "handoff_instructions": "Pass every request to Isaac; Flare does not quote by message yet.",
+    "never_say": "Never quote a price or promise a date.",
+    "web_chat_enabled": false
+  }
+}

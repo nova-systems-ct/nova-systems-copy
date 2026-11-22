@@ -10,7 +10,7 @@ const UNLOCKED = { NOVA_SPENDING_LOCK: 'disabled', NOVA_BILLABLE_DISPATCH_ENABLE
 
 let db, outbound;
 function reset() {
-  db = { business_agents: [], business_agent_threads: [], business_agent_messages: [], voice_knowledge_base: [], voice_configurations: [], journeys: [], journey_events: [], journey_documents: [], business_services: [], business_offers: [], crm_contacts: [], crm_deals: [], voice_calendar_slots: [] };
+  db = { business_agents: [], business_agent_threads: [], business_agent_messages: [], voice_knowledge_base: [], voice_configurations: [], journeys: [], journey_events: [], journey_documents: [], business_services: [], business_offers: [], crm_contacts: [], crm_deals: [], voice_calendar_slots: [], business_calls: [] };
   outbound = [];
 }
 const match = (row, params) => [...params].every(([k, v]) => {

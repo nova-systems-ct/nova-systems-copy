@@ -3,8 +3,9 @@
 // Messages ID, then answered through api/_businessChannels.js under the same rules as every channel.
 // Nova's own Instagram and Apple accounts keep their existing paths in api/_channelWorkspace.js.
 import crypto from 'node:crypto';
-import { receiveAndReply } from './_businessChannels.js';
+import { receiveAndReply, blockedReason } from './_businessChannels.js';
 import { senderFor as realSenderFor } from './_channelSend.js';
+import { handleChannelTrigger } from './_journey.js';
 
 const one = async (db, table, filter) => (await db.select(table, filter, { limit: 1 }))[0] || null;
 
@@ -31,8 +32,40 @@ export async function routeMetaEvent(db, event, { env = process.env, now = new D
       await receiveAndReply(db, { agent, channel, customerRef: from, messageId: String(m.message.mid).slice(0, 200), text: m.message.text, env, now, send: senderFor(channel, agent, { ref: from }, env) });
       handled++;
     }
+    for (const c of (Array.isArray(entry.changes) ? entry.changes : []).slice(0, 20)) if (await commentOffer(db, agent, channel, account, c, { env, now, senderFor })) handled++;
   }
   return handled;
+}
+
+// A comment on the business's post (system 15). When the owner has approved an offer for comments,
+// the commenter gets ONE private reply with it (Meta allows one per comment) and a request opens
+// with the offer attached, so their reply carries on in the same conversation. Without an approved
+// offer nothing is sent. Likes never trigger a message.
+async function commentOffer(db, agent, channel, account, change, { env, now, senderFor }) {
+  const v = change?.value || {};
+  const fb = channel === 'facebook' && change?.field === 'feed' && v.item === 'comment' && v.verb === 'add';
+  const ig = channel === 'instagram' && change?.field === 'comments';
+  const commentId = String((fb ? v.comment_id : v.id) || ''), from = String(v.from?.id || ''), text = fb ? v.message : v.text;
+  if ((!fb && !ig) || !/^[\d_]{5,80}$/.test(commentId) || !/^\d{5,40}$/.test(from) || from === account || typeof text !== 'string') return false;
+  if (await one(db, 'business_agent_messages', { provider_sid: `${channel}:comment:${commentId}` })) return false; // already handled
+  if (await blockedReason(db, agent, channel, null, { env, now })) return false;
+  let thread = await one(db, 'business_agent_threads', { agent_id: agent.id, channel, customer_ref: from });
+  if (!thread) {
+    try { thread = await db.insert('business_agent_threads', { organization_id: agent.organization_id, agent_id: agent.id, channel, customer_ref: from, customer_name: String(v.from?.username || v.from?.name || '').slice(0, 80) || null }); }
+    catch (err) { if (err.status !== 409) throw err; thread = await one(db, 'business_agent_threads', { agent_id: agent.id, channel, customer_ref: from }); }
+  }
+  try { await db.insert('business_agent_messages', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'inbound', body: `(comment) ${text.slice(0, 5900)}`, provider_sid: `${channel}:comment:${commentId}`, state: 'received' }); }
+  catch (err) { if (err.status === 409) return false; throw err; }
+  if (thread.opted_out) return true;
+  // The request is keyed like a conversation with this person, so their reply continues it.
+  const out = await handleChannelTrigger(db, { orgId: agent.organization_id, channel, type: 'social_comment', eventId: `conv:${channel}:${from}:comment-${commentId}`, handle: String(v.from?.username || v.from?.name || 'Commenter').slice(0, 100), canSend: true, now });
+  if (!out.started || !out.send) return true;
+  const message = `Thanks for the comment! ${String(out.offer.description).replace(/\.$/, '')}. Use code ${out.offer.code}, or reply here and we will help you book.`;
+  let sent;
+  try { sent = await senderFor(channel, agent, { ref: from, commentId }, env)(message); } catch { sent = null; }
+  await db.insert('business_agent_messages', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'outbound', body: message, provider_sid: sent?.ok && sent.id ? `${channel}:${sent.id}` : null, state: sent?.ok ? 'sent' : 'failed', held_reason: sent?.ok ? null : 'provider_did_not_accept', model: 'offer', estimate_cents: 0 });
+  if (sent?.ok) await db.update('business_agent_threads', { id: thread.id, organization_id: agent.organization_id }, { last_outbound_at: now.toISOString() });
+  return true;
 }
 
 // GET: Meta's subscription check. POST: signed message events.

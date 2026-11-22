@@ -17,16 +17,92 @@ with a real provider. No money was spent.
 6. `outbound-email-migration-standalone.sql` (new Nov 21)
 7. `team-dispatch-migration-standalone.sql` (new Nov 21)
 8. `reviews-migration-standalone.sql` (new Nov 21)
-9. `zz-public-schema-lockdown-standalone.sql`, always last
+9. `business-channels-migration-standalone.sql` (new Nov 21, evening: calls and every message channel)
+10. `zz-public-schema-lockdown-standalone.sql`, always last
 
 Each new file was applied twice to a throwaway PostgreSQL 16 on Nov 21 and its constraints were
 exercised there (with stub tables for what the real dependencies would provide).
 
 ### Still not built
 
-Phone calls (system 11: needs an ElevenLabs account, Isaac's yes, and working Twilio keys), RCS
-(13: needs Twilio brand registration), Apple Messages (12) and Instagram/Facebook (15) wait on
-Isaac's sign-ups; job photos from the worker's phone need a private storage bucket.
+Job photos from the worker's phone (needs a private storage bucket); Wallet passes (18) beyond the
+one Apple test pass; tax lines on quotes (Crystal Clear is not registered for sales tax yet);
+Aura reading Isaac's calendar and email (needs his sign-in to those apps). Everything else in the
+26 systems is built and tested locally; what each one still waits on is listed below.
+
+### Calls and messages for client businesses (systems 10 to 15, and website chat)
+
+Built Nov 21 (evening), **locally verified only**: 199 new checks across
+`unit_business_channels_test`, `unit_business_calls_test`, `unit_channel_admin_test`,
+`unit_channel_setup_test` and `unit_install_test`; the chat widget and the new desk tabs were also
+run in Chrome with stand-in data. The migration was applied twice to a throwaway PostgreSQL 16.
+
+- **One rule for every channel** (`api/_businessChannels.js`): a reply goes out only if the
+  business is live, the channel is on, the customer has not opted out, and, for anything that costs
+  money, spending is switched on for all businesses AND this month's planned spend (texts, paid
+  messages and calls together) stays under the business's cap. Otherwise the message is saved and
+  a person is flagged. Replies come from the journey rules: free, exact, never a price that is not
+  approved. Texts now count against the same budget (they used to count separately).
+- **Calls** (system 11, `api/_businessCalls.js`): per business, "off" (busy tone, $0), ring the
+  owner only, ring the owner then the assistant, or the assistant first. The assistant says it is
+  automated and that it writes down what the caller says, gives only approved prices, and texts a
+  private link to the caller's quote and booking page (`/start?org=…#j=…&k=…`); anything else is
+  marked "call back" and the owner gets one alert text. A missed caller gets at most one text a
+  day. Under the $0 lock every call gets a busy tone (Twilio does not charge for rejected calls)
+  and is still logged. Planned costs: forwarded call 5¢, assistant call 15¢, premium voice 40¢,
+  text 2¢ (planning numbers only).
+- **Premium voice** (ElevenLabs): register-call hand-off per business, falling back to the
+  standard assistant; the agent can act only through four tools at
+  `/webhooks/voice-tools/<services|open_times|send_link|hand_to_person>`, secured by a voice key
+  per business (shown once, stored as a hash).
+- **Website chat**: `/chat?b=<slug>` in a frame; one script line for any website
+  (`<script src="https://nova-systems.app/chat/embed.js" data-business="<slug>" async></script>`),
+  and automatic on `/b/<slug>` when chat is on. Free. A team reply shows in the visitor's chat.
+  `vercel.json` lets only `/chat` and `/chat/*` be framed (CSP `frame-ancestors *`).
+- **WhatsApp, RCS** (Twilio), **Apple Messages** (CM.com relay) and **Facebook/Instagram** (Meta
+  webhook at `/webhooks/meta-business`, signed with `META_APP_SECRET`): each message is answered as
+  the business that owns that sender, Page or account. A comment on a business's post gets one
+  private reply with the owner's approved comment offer, and the commenter's reply continues the
+  same request. WhatsApp, Facebook and Instagram replies only within 24 hours of the customer's
+  last message.
+- **Business desk**: new tabs Messages (every channel in one inbox; reply; mark handled), Calls
+  (the log in plain words) and Switch on (what is on, waiting or missing; go live, texting and the
+  monthly cap; call answering; channel IDs; Page token; voice key; the addresses to paste into each
+  provider). Saving the assistant's details no longer switches texting or the cap off.
+
+What each one still needs before it works for real (all owner or provider steps; nothing here is
+bought or signed by Claude):
+
+| System | Needs |
+| --- | --- |
+| Calls (11) | Twilio credentials that work; a Twilio number per business with "A call comes in" set to `https://nova-systems.app/webhooks/business-call` and "Call status changes" to `…/business-call?step=status`; spending switched on and a cap set (NEEDS MONEY: Twilio minutes and speech) |
+| Premium voice | `ELEVENLABS_API_KEY` (Nova's account), an ElevenLabs agent per business with the four tools and the voice key header |
+| Texts and missed-call text (10) | The carriers' approval of the texting campaign (do not resubmit; read the status) |
+| WhatsApp (14) | An approved WhatsApp sender per business in Twilio, webhook `…/webhooks/twilio-message` |
+| RCS (13) | Twilio RCS brand approval and a Messaging Service per business, inbound to `…/webhooks/twilio-message` |
+| Apple Messages (12) | Apple Business Register approval per business; CM.com (paid) relay with `CM_INBOUND_SECRET` and `NOVA_CM_RELAY_VERIFIED=true`; `CM_PRODUCT_TOKEN` to reply |
+| Facebook/Instagram (15) | A Meta app with business verification and app review (pages_messaging, instagram_manage_messages, comments); `META_APP_SECRET`, `META_VERIFY_TOKEN`; each business's Page token pasted in Switch on |
+
+### Crystal Clear and Flare: ready to install
+
+- `installs/crystal-clear.json`: the five prices Isaac approved on Nov 21 ("Approve as written"):
+  sedan full detail $199, SUV or truck $249, outside windows up to 20 $199, quarter-load junk
+  removal $175, Holiday Ready (sedan detail plus outside windows) $299 booked by Dec 15. Lawn
+  mowing is kept with no price and switched off until spring. No deposit and no agreement wording
+  (not decided). Assistant: Fairfield County, website chat on. Pay split saved as a PROPOSAL only
+  (pro 50% / Crystal Clear 50%, the subcontract plan); Isaac approves or changes it in Team & pay.
+- `installs/flare.json`: mystery box campaign, street poll, event, content day; no prices; all
+  switched off while Flare is on hold.
+- Run after registering and approving each business (staging first):
+  `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/install_business.mjs installs/crystal-clear.json --org <id>`
+  shows the changes; add `--apply` to make them. It refuses Nova's own organization, refuses the
+  production database without `--production`, never switches anything live and never sets a cap.
+- **Switch Holiday Ready off on December 16** (Business desk → Services). The company website
+  hides it by itself after December 15; the booking system does not.
+- Company websites (`company-sites.zip`, outside this repository): Crystal Clear now shows the
+  approved prices, Fairfield County, the Holiday Ready offer (hidden automatically after Dec 15)
+  and "Prices are before any sales tax." `site.json` gains `chat` (the business page name) to add
+  the chat button.
 
 ### Card payments (system 17)
 
@@ -161,8 +237,7 @@ prepared come-back email reaches a test inbox and the Results tab counts it as s
 ## Where the work is
 
 - Branch: `claude/launch-recovery-20261114`, built on `codex/launch-recovery-20261113` (741aafa).
-- **Not pushed.** This workspace has no push access to the repository. The commits exist only here and in the patch file given to Isaac: `nova-on-recovery-branch.patch`.
-- To apply: `git checkout codex/launch-recovery-20261113 && git checkout -b claude/launch-recovery-20261114 && git am nova-on-recovery-branch.patch`
+- Pushed to GitHub (Nov 21) on branch `claude/launch-recovery-20261114` of nova-systems-ct/nova-systems-copy. Not merged to main, not deployed to production.
 - Nothing was deployed. Nothing was applied to any database. No money was spent.
 
 ## Commits on top of the recovery checkpoint

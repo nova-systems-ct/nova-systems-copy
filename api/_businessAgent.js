@@ -14,14 +14,16 @@
 // sent. A saved message is never reported as an answered one.
 import { normalizePhone, classifyInboundKeyword } from './_wave1.js';
 import { safeAgent, staffReply, markHandled, saveChannels, connectMeta, issueVoiceKey, callLog } from './_channelAdmin.js';
+import { CHANNELS, spendBlocked } from './_businessChannels.js';
 import { billableDispatchEnabled } from './_spendingPolicy.js';
 import { twilioRequest } from './_twilio.js';
 import { restDb } from './_journey.js';
 import { converse } from './_conversation.js';
 
 // Planning estimate for one answered text (carrier segment + model call). Used only to stop a
-// business from running past its cap; it is not a bill. Revisit once real invoices exist.
-export const SMS_REPLY_ESTIMATE_CENTS = 2;
+// business from running past its cap; it is not a bill. Revisit once real invoices exist. Texts,
+// every other channel and calls share one monthly budget (api/_businessChannels.js).
+export const SMS_REPLY_ESTIMATE_CENTS = CHANNELS.sms.estimate;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DAYS = [['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'], ['fri', 'Friday'], ['sat', 'Saturday'], ['sun', 'Sunday']];
 
@@ -108,12 +110,8 @@ export async function findAgentByNumber(rawNumber) {
 export async function replyBlockedReason(agent, thread, env = process.env, now = new Date()) {
   if (thread.opted_out) return 'customer_opted_out';
   if (agent.status !== 'active' || !agent.sms_enabled) return 'agent_not_active';
-  if (!billableDispatchEnabled(env)) return 'spending_locked';
-  if (!Number.isInteger(agent.monthly_spend_cap_cents) || agent.monthly_spend_cap_cents < 1) return 'no_budget_set';
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-  const sent = await select(`business_agent_messages?organization_id=eq.${q(agent.organization_id)}&direction=eq.outbound&state=eq.sent&created_at=gte.${q(monthStart)}&select=id`);
-  if ((sent.length + 1) * SMS_REPLY_ESTIMATE_CENTS > agent.monthly_spend_cap_cents) return 'monthly_budget_reached';
-  return '';
+  // The planned cost of every reply, call and text this month, against the one monthly cap.
+  return spendBlocked(restDb(), agent, SMS_REPLY_ESTIMATE_CENTS, { env, now });
 }
 
 async function generateReply({ agent, knowledge, config, history, env }) {
@@ -200,7 +198,7 @@ export async function handleBusinessSms(req, res, p, env, agent) {
   try {
     const sent = await twilioRequest(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN, 'POST', 'Messages.json', { From: agent.phone_number, To: from, Body: text });
     const failed = ['failed', 'undelivered'].includes(sent.status);
-    await write('business_agent_messages', 'POST', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'outbound', body: text, provider_sid: sent.sid || null, state: failed ? 'failed' : 'sent', model });
+    await write('business_agent_messages', 'POST', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'outbound', body: text, provider_sid: sent.sid || null, state: failed ? 'failed' : 'sent', model, estimate_cents: failed ? 0 : SMS_REPLY_ESTIMATE_CENTS });
     if (!failed) await write(`business_agent_threads?id=eq.${q(thread.id)}`, 'PATCH', { last_outbound_at: new Date().toISOString(), ...(model === 'journey_rules' ? {} : { needs_human: false }) });
     else await write(`business_agent_threads?id=eq.${q(thread.id)}`, 'PATCH', { needs_human: true });
   } catch {
@@ -228,10 +226,7 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
         const messages = ids.length ? await select(`business_agent_messages?thread_id=in.(${ids.map(q).join(',')})&order=created_at.asc&limit=1000`) : [];
         return res.status(200).json({ agent: safeAgent(agent), threads, messages });
       }
-      if (op === 'calls') {
-        const { restDb } = await import('./_journey.js');
-        return res.status(200).json({ calls: await callLog(restDb(), orgId) });
-      }
+      if (op === 'calls') return res.status(200).json({ calls: await callLog(restDb(), orgId) });
       return res.status(200).json({ agent: safeAgent(agent), spending_unlocked: billableDispatchEnabled(process.env) });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -243,7 +238,6 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
     // (growth.view); switching channels, connecting accounts and keys is the owner's (business.manage).
     if (['thread-reply', 'thread-done', 'channels', 'meta-connect', 'voice-key'].includes(op)) {
       if (!(await requireOrgAccess(req, res, orgId, ['thread-reply', 'thread-done'].includes(op) ? 'growth.view' : 'business.manage'))) return;
-      const { restDb } = await import('./_journey.js');
       const { runtimeProviderEnv } = await import('./_providerVault.js');
       const db = restDb();
       const threadId = sanitize(b.thread_id, 100);
