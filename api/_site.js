@@ -71,6 +71,8 @@ export async function siteFor(db, slug, { now = new Date() } = {}) {
     hours.length ? `<h2>Hours</h2><table>${hours.map(([d, t]) => `<tr><td>${esc(d)}</td><td>${esc(t)}</td></tr>`).join('')}</table>` : '',
     `<h2>Get started</h2><p>Tell us what you need. You get a clear quote before any work starts.</p><a class="cta" href="${esc(start)}">Request a quote</a>`,
     `<footer>© ${now.getFullYear()} ${esc(name)}${agent?.service_area ? ` · ${esc(agent.service_area)}` : ''}</footer>`,
+    // The website chat button, when the business has switched website chat on (api/_webChat.js).
+    agent?.status === 'active' && agent?.web_chat_enabled === true ? `<script src="/chat/embed.js?v=20261121a" data-business="${esc(slug)}" async></script>` : '',
   ].join('\n');
   return { status: 200, html: page({ title: `${name}${agent?.industry ? ` | ${agent.industry}` : ''}`, description: lead, body, indexable: true }) };
 }

@@ -8,6 +8,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const key = `nova_journey_${org}`;
 let session = null;
 let busy = false;
+// A private link sent by text or chat: /start?org=…#j=<request>&k=<key>. The part after '#' never
+// leaves the browser; it is kept for this tab only and then removed from the address bar.
+const linked = new URLSearchParams(location.hash.slice(1));
+const fromLink = UUID.test(linked.get('j') || '') && /^[0-9a-f]{64}$/.test(linked.get('k') || '') ? { journey_id: linked.get('j'), token: linked.get('k') } : null;
+if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 
 const el = (tag, text, cls) => { const n = document.createElement(tag); if (text != null) n.textContent = text; if (cls) n.className = cls; return n; };
 const showError = (text) => { $('error').textContent = text; $('error').hidden = !text; };
@@ -71,6 +76,7 @@ if (!UUID.test(org)) {
   showError('This link is missing the business it belongs to. Ask the business for their link.');
 } else {
   try { session = JSON.parse(sessionStorage.getItem(key) || 'null'); } catch { session = null; }
+  if (fromLink) { session = fromLink; try { sessionStorage.setItem(key, JSON.stringify(session)); } catch { /* storage unavailable */ } }
   // Who the customer is dealing with, what they offer, and any offer the owner made public.
   fetch('/api/client?resource=journey&op=business', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ organization_id: org }) })
     .then((r) => r.json().then((d) => ({ ok: r.ok, d })))

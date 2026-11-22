@@ -13,6 +13,7 @@
 // Otherwise the customer's message is saved, the thread is flagged for a human, and nothing is
 // sent. A saved message is never reported as an answered one.
 import { normalizePhone, classifyInboundKeyword } from './_wave1.js';
+import { safeAgent, staffReply, markHandled, saveChannels, connectMeta, issueVoiceKey, callLog } from './_channelAdmin.js';
 import { billableDispatchEnabled } from './_spendingPolicy.js';
 import { twilioRequest } from './_twilio.js';
 import { restDb } from './_journey.js';
@@ -225,15 +226,35 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
         const threads = await select(`business_agent_threads?organization_id=eq.${q(orgId)}&order=last_inbound_at.desc.nullslast&limit=50`);
         const ids = threads.map((t) => t.id);
         const messages = ids.length ? await select(`business_agent_messages?thread_id=in.(${ids.map(q).join(',')})&order=created_at.asc&limit=1000`) : [];
-        return res.status(200).json({ agent, threads, messages });
+        return res.status(200).json({ agent: safeAgent(agent), threads, messages });
       }
-      return res.status(200).json({ agent, spending_unlocked: billableDispatchEnabled(process.env) });
+      if (op === 'calls') {
+        const { restDb } = await import('./_journey.js');
+        return res.status(200).json({ calls: await callLog(restDb(), orgId) });
+      }
+      return res.status(200).json({ agent: safeAgent(agent), spending_unlocked: billableDispatchEnabled(process.env) });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     if (!rateLimit(req, res, 20, 60_000)) return;
     const b = req.body || {};
     const orgId = sanitize(b.organization_id, 100);
     if (!UUID_RE.test(orgId)) return res.status(400).json({ error: 'organization_id is required' });
+    // Replies and channel settings (api/_channelAdmin.js). Answering a customer is front-desk work
+    // (growth.view); switching channels, connecting accounts and keys is the owner's (business.manage).
+    if (['thread-reply', 'thread-done', 'channels', 'meta-connect', 'voice-key'].includes(op)) {
+      if (!(await requireOrgAccess(req, res, orgId, ['thread-reply', 'thread-done'].includes(op) ? 'growth.view' : 'business.manage'))) return;
+      const { restDb } = await import('./_journey.js');
+      const { runtimeProviderEnv } = await import('./_providerVault.js');
+      const db = restDb();
+      const threadId = sanitize(b.thread_id, 100);
+      if (['thread-reply', 'thread-done'].includes(op) && !UUID_RE.test(threadId)) return res.status(400).json({ error: 'thread_id is required' });
+      const out = op === 'thread-reply' ? await staffReply(db, orgId, { threadId, text: sanitize(typeof b.text === 'string' ? b.text : '', 1000), env: await runtimeProviderEnv() })
+        : op === 'thread-done' ? await markHandled(db, orgId, threadId)
+          : op === 'channels' ? await saveChannels(db, orgId, b)
+            : op === 'meta-connect' ? await connectMeta(db, orgId, b)
+              : await issueVoiceKey(db, orgId);
+      return res.status(out.status).json(out.body);
+    }
     // Consequential: turns on a customer-facing agent and sets a spending cap.
     if (!(await requireOrgAccess(req, res, orgId, 'business.manage'))) return;
 
@@ -248,7 +269,13 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
     const cap = b.monthly_spend_cap_cents == null || b.monthly_spend_cap_cents === '' ? null : Number(b.monthly_spend_cap_cents);
     if (cap !== null && (!Number.isInteger(cap) || cap < 1)) return res.status(400).json({ error: 'The monthly cap must be a whole number of cents, or left empty for no spending.' });
     const status = ['draft', 'active', 'paused'].includes(b.status) ? b.status : 'draft';
-    if (status === 'active' && !phone) return res.status(400).json({ error: 'An active agent needs a phone number.' });
+    if (status === 'active' && !phone) {
+      // A business can run on website chat or another message channel alone, without a phone number.
+      const flags = ['web_chat_enabled', 'whatsapp_enabled', 'rcs_enabled', 'apple_enabled', 'facebook_enabled', 'instagram_enabled'];
+      let cur = null;
+      try { cur = (await select(`business_agents?organization_id=eq.${q(orgId)}&select=${flags.join(',')}&limit=1`))[0]; } catch { cur = null; }
+      if (!cur || !flags.some((k) => cur[k] === true)) return res.status(400).json({ error: 'An active assistant needs a phone number or at least one message channel switched on.' });
+    }
     // Email from this business (come-back emails and the weekly report). Saved only when the
     // screen sends these fields, so an older screen cannot switch email off by leaving them out.
     const email = {};
@@ -291,7 +318,7 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
       const rows = existing.length
         ? await write(`business_agents?organization_id=eq.${q(orgId)}`, 'PATCH', record)
         : await write('business_agents', 'POST', record);
-      return res.status(200).json({ ok: true, agent: rows[0] });
+      return res.status(200).json({ ok: true, agent: safeAgent(rows[0]) });
     } catch (e) {
       if (e.status === 409) return res.status(409).json({ error: 'That phone number already belongs to another business.' });
       throw e;

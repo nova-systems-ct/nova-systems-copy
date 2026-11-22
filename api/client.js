@@ -4358,8 +4358,19 @@ export default async function handler(req, res) {
     }
 
     case 'company':
-      if(['twilio-message','twilio-status','voice-agent'].includes(op)){
+      if(['twilio-message','twilio-status','voice-agent','business-call'].includes(op)){
         try{return await handleUnifiedTwilio(req,res,op)}catch{return res.status(502).json({error:'The phone or message action could not be confirmed. Contact the owner.'})}
+      }
+      // The premium voice agent's tools (api/_businessCalls.js). The business's voice key is the only credential.
+      if(op==='voice-tools'){
+        res.setHeader('Cache-Control','no-store');
+        if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
+        if(!rateLimit(req,res,60,60_000))return;
+        try{
+          const [{voiceTool},{restDb},{runtimeProviderEnv}]=await Promise.all([import('./_businessCalls.js'),import('./_journey.js'),import('./_providerVault.js')]);
+          const out=await voiceTool(restDb(),{key:String(req.headers['x-nova-voice-key']||''),tool:sanitize(req.query?.tool,40),body:req.body&&typeof req.body==='object'?req.body:{},env:await runtimeProviderEnv()});
+          return res.status(out.status).json(out.body);
+        }catch(err){console.error('[voice-tools]',err.message);return res.status(500).json({error:'The tool could not run.',say:'Sorry, I could not do that just now. I will pass your call to the team.'})}
       }
       return handleCompanyAdmin(req,res);
 

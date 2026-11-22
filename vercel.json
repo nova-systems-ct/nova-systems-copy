@@ -13,12 +13,24 @@
       "destination": "/api/client?resource=company&op=voice-agent"
     },
     {
+      "source": "/webhooks/business-call",
+      "destination": "/api/client?resource=company&op=business-call"
+    },
+    {
+      "source": "/webhooks/voice-tools/:tool",
+      "destination": "/api/client?resource=company&op=voice-tools&tool=:tool"
+    },
+    {
       "source": "/webhooks/apple-messages",
       "destination": "/api/stripe?action=channel-webhook&channel=apple_messages"
     },
     {
       "source": "/webhooks/instagram",
       "destination": "/api/stripe?action=channel-webhook&channel=instagram"
+    },
+    {
+      "source": "/webhooks/meta-business",
+      "destination": "/api/stripe?action=channel-webhook&channel=meta_business"
     },
     {
       "source": "/start",
@@ -35,6 +47,10 @@
     {
       "source": "/rate",
       "destination": "/rate/index.html"
+    },
+    {
+      "source": "/chat",
+      "destination": "/chat/index.html"
     },
     {
       "source": "/b/:slug",
@@ -121,6 +137,40 @@
         {
           "key": "Cross-Origin-Resource-Policy",
           "value": "same-origin"
+        }
+      ]
+    },
+    {
+      "source": "/chat",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors *; base-uri 'none'; form-action 'self'; object-src 'none'"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "ALLOWALL"
+        },
+        {
+          "key": "Cross-Origin-Resource-Policy",
+          "value": "cross-origin"
+        }
+      ]
+    },
+    {
+      "source": "/chat/:file",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors *; base-uri 'none'; form-action 'self'; object-src 'none'"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "ALLOWALL"
+        },
+        {
+          "key": "Cross-Origin-Resource-Policy",
+          "value": "cross-origin"
         }
       ]
     }

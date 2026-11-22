@@ -275,6 +275,15 @@ async function describeNext(db, j, now) {
 
 // ---- customer actions ----------------------------------------------------------------------
 
+// A fresh private link to this journey's request page, for a customer who started by phone, chat or
+// message. Only the hash is stored, so issuing a new link retires the previous one. The key is in
+// the part of the address after '#', which browsers never send to any server.
+export async function customerLink(db, j, base = appBase()) {
+  const token = crypto.randomBytes(32).toString('hex');
+  await db.update('journeys', { id: j.id, organization_id: j.organization_id }, { customer_token_hash: sha(token) });
+  return `${base}/start?org=${j.organization_id}#j=${j.id}&k=${token}`;
+}
+
 export function tokenMatches(j, token) {
   if (!TOKEN_RE.test(token || '')) return false;
   const a = Buffer.from(sha(token)), b = Buffer.from(j.customer_token_hash || '');
@@ -484,6 +493,18 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (!found) return res.status(404).json({ error: 'This link is not valid. Thank you anyway.' });
       if (op === 'rate-info') return res.status(200).json({ ok: true, ...(await rv.ratingInfo(db, found.j)) });
       return res.status(200).json({ ok: true, ...(await rv.rate(db, found.j, { rating: b.rating, comment: sanitize(b.comment, 1000) })) });
+    }
+    // Website chat (system 10): the chat box on a business's website and on /b/<slug>. No login; a
+    // random key kept in the visitor's browser identifies their conversation.
+    if (op === 'chat-open' || op === 'chat' || op === 'chat-history') {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+      if (!rateLimit(req, res, op === 'chat' ? 15 : 60, 60_000)) return;
+      const wc = await import('./_webChat.js');
+      const slug = sanitize(String(b.b || ''), 80).toLowerCase(), key = String(b.k || '').slice(0, 64);
+      const out = op === 'chat-open' ? await wc.chatOpen(db, slug)
+        : op === 'chat' ? await wc.chatSend(db, { slug, key, messageId: String(b.id || '').slice(0, 36), text: sanitize(typeof b.text === 'string' ? b.text : '', 1000), name: sanitize(b.name, 80) })
+          : await wc.chatHistory(db, { slug, key });
+      return res.status(out.status).json(out.body);
     }
     if (op === 'crew-jobs' || op === 'crew-done') {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

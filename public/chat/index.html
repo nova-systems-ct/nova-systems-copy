@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Chat</title>
+<style>
+:root{--ink:#1b2430;--muted:#5b6b7c;--line:#e3ded3;--bg:#f7f5f0}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:var(--bg);display:flex;flex-direction:column}
+header{padding:12px 14px;border-bottom:1px solid var(--line);background:#fff}
+header strong{display:block;font-size:16px}header small{color:var(--muted);font-size:12px}
+#log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:85%;padding:9px 12px;border-radius:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.you{align-self:flex-end;background:var(--ink);color:#fff;border-bottom-right-radius:4px}
+.them{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px}
+.who{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:2px}
+.note{align-self:center;color:var(--muted);font-size:13px;text-align:center;max-width:90%}
+form{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);background:#fff}
+textarea{flex:1;resize:none;font:inherit;padding:9px 10px;border:1px solid #c9c3b6;border-radius:10px;min-height:40px;max-height:120px}
+button{font:inherit;font-weight:700;background:var(--ink);color:#fff;border:0;border-radius:10px;padding:0 16px;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:focus-visible{outline:3px solid #1f7fc4;outline-offset:2px}
+</style>
+<script type="module" src="/chat/chat.js?v=20261121a"></script></head>
+<body>
+<header><strong id="name">Chat</strong><small>Automatic replies from this business's records. Type "person" any time to reach the team.</small></header>
+<main id="log" aria-live="polite" aria-label="Conversation"></main>
+<form id="form" hidden><label for="text" class="sr">Message</label><textarea id="text" rows="1" maxlength="1000" placeholder="Type a message" autocomplete="off"></textarea><button id="send" type="submit">Send</button></form>
+</body></html>

@@ -50,6 +50,8 @@ export function validMetaSignature(raw,signature,secret){
 export async function handleChannelWebhook(req,res,raw){
  const channel=req.query?.channel;
  if(channel==='apple_messages')return handleAppleRelay(req,res,raw);
+ // Facebook and Instagram messages for client businesses' own Pages (api/_businessInbound.js).
+ if(channel==='meta_business'){const [{handleMetaBusiness},{restDb}]=await Promise.all([import('./_businessInbound.js'),import('./_journey.js')]);return handleMetaBusiness(req,res,raw,{db:restDb(),env:await runtimeProviderEnv()});}
  if(channel!=='instagram')return res.status(503).json({error:'Use provider-authorized inbox synchronization for this channel.'});
  const env=await runtimeProviderEnv();
  if(req.method==='GET'){
@@ -87,11 +89,17 @@ export async function handleChannelWebhook(req,res,raw){
 async function handleAppleRelay(req,res,raw){
  if(req.method!=='POST')return res.status(405).end();
  const env=await runtimeProviderEnv(),secret=env.CM_INBOUND_SECRET;
- if(!secret||env.NOVA_CM_RELAY_VERIFIED!=='true'||!env.APPLE_BUSINESS_ACCOUNT_ID)return res.status(503).json({error:'An authenticated Apple messaging relay is not configured.'});
+ if(!secret||env.NOVA_CM_RELAY_VERIFIED!=='true')return res.status(503).json({error:'An authenticated Apple messaging relay is not configured.'});
  const given=String(req.headers.authorization||''),expected='Bearer '+secret;
  if(!timingSafeEqual(createHash('sha256').update(given).digest(),createHash('sha256').update(expected).digest()))return res.status(403).json({error:'Invalid relay authorization.'});
  let event;try{event=JSON.parse(raw.toString('utf8'));}catch{return res.status(400).json({error:'Invalid JSON.'});}
- if(event.channel!=='Apple Messages for Business'||String(event.to?.number)!==env.APPLE_BUSINESS_ACCOUNT_ID)return res.status(400).json({error:'Wrong business channel.'});
+ if(event.channel!=='Apple Messages for Business')return res.status(400).json({error:'Wrong business channel.'});
+ // A client business's Apple Messages ID (api/_businessInbound.js); Nova's own ID continues below.
+ if(!env.APPLE_BUSINESS_ACCOUNT_ID||String(event.to?.number)!==env.APPLE_BUSINESS_ACCOUNT_ID){
+  try{const [{routeAppleBusiness},{restDb}]=await Promise.all([import('./_businessInbound.js'),import('./_journey.js')]);if(await routeAppleBusiness(restDb(),event,{env}))return res.status(200).json({received:true});}
+  catch{return res.status(500).json({error:'Message storage could not be confirmed; retry later.'});}
+  return res.status(400).json({error:'Wrong business channel.'});
+ }
  if(typeof event.message?.text!=='string'||!event.message.text.trim())return res.status(200).json({received:true,unsupported_media:true});
  if(!event.from?.number||typeof event.timeUtc!=='string')return res.status(400).json({error:'Missing message identity.'});
  const time=event.timeUtc.match(/(?:Z|[+-]\d\d:\d\d)$/)?event.timeUtc:event.timeUtc+'Z';

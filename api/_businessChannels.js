@@ -19,6 +19,7 @@ import { converse } from './_conversation.js';
 // Planned cost of one reply, in cents. Used only to keep a business under its cap; not a bill.
 // Revisit once real provider invoices exist.
 export const CHANNELS = {
+  sms:            { name: 'Text message',     field: 'sms_enabled',       paid: true,  estimate: 2 },
   web_chat:       { name: 'Website chat',     field: 'web_chat_enabled',  paid: false, estimate: 0 },
   rcs:            { name: 'RCS / text',       field: 'rcs_enabled',       paid: true,  estimate: 2 },
   whatsapp:       { name: 'WhatsApp',         field: 'whatsapp_enabled',  paid: true,  estimate: 2 },
@@ -43,17 +44,21 @@ export async function monthSpendCents(db, orgId, now = new Date()) {
   return msgs.reduce((n, m) => n + (m.estimate_cents || 0), 0) + calls.reduce((n, c) => n + (c.estimate_cents || 0), 0);
 }
 
+// Why this business may not spend `cents` more right now; '' when it may.
+export async function spendBlocked(db, agent, cents, { env = process.env, now = new Date() } = {}) {
+  if (!billableDispatchEnabled(env)) return 'spending_locked';
+  if (!Number.isInteger(agent.monthly_spend_cap_cents) || agent.monthly_spend_cap_cents < 1) return 'no_budget_set';
+  if ((await monthSpendCents(db, agent.organization_id, now)) + cents > agent.monthly_spend_cap_cents) return 'monthly_budget_reached';
+  return '';
+}
+
 // Why the business may not reply on this channel right now; '' when it may.
 export async function blockedReason(db, agent, channel, thread, { env = process.env, now = new Date(), extraCents = 0 } = {}) {
   const ch = CHANNELS[channel];
   if (!ch) return 'unknown_channel';
   if (thread?.opted_out) return 'customer_opted_out';
   if (agent.status !== 'active' || agent[ch.field] !== true) return 'channel_not_on';
-  if (ch.paid || extraCents > 0) {
-    if (!billableDispatchEnabled(env)) return 'spending_locked';
-    if (!Number.isInteger(agent.monthly_spend_cap_cents) || agent.monthly_spend_cap_cents < 1) return 'no_budget_set';
-    if ((await monthSpendCents(db, agent.organization_id, now)) + ch.estimate + extraCents > agent.monthly_spend_cap_cents) return 'monthly_budget_reached';
-  }
+  if (ch.paid || extraCents > 0) return spendBlocked(db, agent, ch.estimate + extraCents, { env, now });
   return '';
 }
 

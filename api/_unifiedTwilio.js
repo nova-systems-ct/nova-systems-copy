@@ -7,15 +7,21 @@ import {findAgentByNumber,handleBusinessSms} from './_businessAgent.js';
 import {routeTwilioBusinessMessage} from './_businessChannels.js';
 import {senderFor} from './_channelSend.js';
 import {restDb} from './_journey.js';
+import {businessCallTwiml,callUrl,CALL_STEPS} from './_businessCalls.js';
 const base='https://nova-systems.app';
+// The exact address Twilio signed for a call to a client business; null for anything we never hand out.
+function businessCallPath(q={}){const step=q.step==null?'':String(q.step),turn=q.turn==null?null:Number(q.turn);if(step&&!CALL_STEPS.has(step))return null;if(q.turn!=null&&!(step==='assistant'&&Number.isInteger(turn)&&turn>=1&&turn<=12))return null;return callUrl(step,turn).slice(base.length)}
 const escape=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
 const xml=(res,inside)=>{res.setHeader('Content-Type','text/xml');return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response>'+inside+'</Response>')};
 export function buildVoiceTurn(reply,turn){const action=base+'/webhooks/voice-agent?turn='+turn;return '<Gather input="speech" action="'+escape(action)+'" method="POST" timeout="5" speechTimeout="auto" language="en-US" actionOnEmptyResult="true"><Say>'+escape(reply)+'</Say></Gather><Say>Thank you for calling Nova Systems. Your request has been saved for the team.</Say><Hangup/>'}
 export async function handleUnifiedTwilio(req,res,op){
- res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({error:'Method not allowed.'});const env=await runtimeProviderEnv(),p=req.body||{},turn=Number(req.query?.turn||0),path=op==='voice-agent'?'/webhooks/voice-agent'+(req.query?.turn!=null?'?turn='+String(req.query.turn):''):op==='twilio-status'?'/webhooks/twilio-status':'/webhooks/twilio-message';
+ res.setHeader('Cache-Control','no-store');if(req.method!=='POST')return res.status(405).json({error:'Method not allowed.'});const env=await runtimeProviderEnv(),p=req.body||{},turn=Number(req.query?.turn||0),path=op==='voice-agent'?'/webhooks/voice-agent'+(req.query?.turn!=null?'?turn='+String(req.query.turn):''):op==='business-call'?businessCallPath(req.query||{}):op==='twilio-status'?'/webhooks/twilio-status':'/webhooks/twilio-message';
  if(!env.TWILIO_AUTH_TOKEN||!env.TWILIO_ACCOUNT_SID)return res.status(503).json({error:'The business phone account is not configured.'});
+ if(!path)return res.status(403).json({error:'Invalid phone route.'});
  if(p.AccountSid!==env.TWILIO_ACCOUNT_SID||!verifyTwilioSignature({url:base+path,params:p,signature:req.headers['x-twilio-signature'],authToken:env.TWILIO_AUTH_TOKEN}))return res.status(403).json({error:'Invalid provider signature.'});
  if(op==='voice-agent')return voice(req,res,p,turn,env);
+ // A call to a client business's number (api/_businessCalls.js). A number that belongs to no business is refused.
+ if(op==='business-call'){let inner;try{inner=await businessCallTwiml(restDb(),{p,step:String(req.query?.step||''),turn:req.query?.turn!=null?Number(req.query.turn):null,env})}catch(err){console.error('[business-call]',err.message);inner='<Say>Sorry, something went wrong. Please call again later.</Say><Hangup/>'}return xml(res,inner===null?'<Reject/>':inner)}
  // A text to a client business's number is answered as that business (api/_businessAgent.js). The signature and account were
  // verified above. Nova's own number never takes this branch, and a number that belongs to no business falls through to the
  // sender check below and is refused as before.
