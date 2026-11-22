@@ -51,6 +51,7 @@ DECLARE
     'business_agent_messages',
     'business_agent_threads',
     'business_agents',
+    'business_calls',
     'business_locations',
     'business_offers',
     'business_payment_accounts',

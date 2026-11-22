@@ -30,7 +30,8 @@ export function restDb() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error('storage_unavailable');
   const headers = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Prefer: 'return=representation' };
-  const qs = (filter, extra = '') => Object.entries(filter).map(([k, v]) => `${k}=${v === null ? 'is.null' : 'eq.' + encodeURIComponent(v)}`).join('&') + extra;
+  // A filter value is matched exactly; null means "is empty"; { gte: x } means "at least x".
+  const qs = (filter, extra = '') => Object.entries(filter).map(([k, v]) => `${k}=${v === null ? 'is.null' : v && typeof v === 'object' && 'gte' in v ? 'gte.' + encodeURIComponent(v.gte) : 'eq.' + encodeURIComponent(v)}`).join('&') + extra;
   const call = async (path, init) => {
     const r = await fetch(`${url}/rest/v1/${path}`, { ...init, headers });
     if (!r.ok) throw Object.assign(new Error('storage_unavailable'), { status: r.status });

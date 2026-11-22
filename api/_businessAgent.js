@@ -109,7 +109,6 @@ export async function replyBlockedReason(agent, thread, env = process.env, now =
   if (agent.status !== 'active' || !agent.sms_enabled) return 'agent_not_active';
   if (!billableDispatchEnabled(env)) return 'spending_locked';
   if (!Number.isInteger(agent.monthly_spend_cap_cents) || agent.monthly_spend_cap_cents < 1) return 'no_budget_set';
-  if (!env.ANTHROPIC_API_KEY || !/^claude-[a-z0-9.-]+$/.test(env.NOVA_AUTOMATION_MODEL || '')) return 'model_not_configured';
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const sent = await select(`business_agent_messages?organization_id=eq.${q(agent.organization_id)}&direction=eq.outbound&state=eq.sent&created_at=gte.${q(monthStart)}&select=id`);
   if ((sent.length + 1) * SMS_REPLY_ESTIMATE_CENTS > agent.monthly_spend_cap_cents) return 'monthly_budget_reached';
@@ -183,6 +182,9 @@ export async function handleBusinessSms(req, res, p, env, agent) {
   } catch {
     return hold('reply_could_not_be_written');
   }
+  // Only a business with no published services falls back to a model reply, and only when a model
+  // is configured; rules-only replies above never need one.
+  if (!text && (!env.ANTHROPIC_API_KEY || !/^claude-[a-z0-9.-]+$/.test(env.NOVA_AUTOMATION_MODEL || ''))) return hold('model_not_configured');
   if (!text) try {
     const [knowledge, configs, history] = await Promise.all([
       select(`voice_knowledge_base?organization_id=eq.${q(agent.organization_id)}&status=eq.approved&select=question,answer,status&limit=60`),

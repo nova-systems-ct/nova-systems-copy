@@ -4,6 +4,9 @@ import {launchRpc} from './_launchWorker.js';
 import {billableDispatchEnabled} from './_spendingPolicy.js';
 import {scheduleInboundSalesWorker,generateSalesReply,requireCostBudget} from './_autonomousSales.js';
 import {findAgentByNumber,handleBusinessSms} from './_businessAgent.js';
+import {routeTwilioBusinessMessage} from './_businessChannels.js';
+import {senderFor} from './_channelSend.js';
+import {restDb} from './_journey.js';
 const base='https://nova-systems.app';
 const escape=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&apos;');
 const xml=(res,inside)=>{res.setHeader('Content-Type','text/xml');return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response>'+inside+'</Response>')};
@@ -17,6 +20,8 @@ export async function handleUnifiedTwilio(req,res,op){
  // verified above. Nova's own number never takes this branch, and a number that belongs to no business falls through to the
  // sender check below and is refused as before.
  if(op==='twilio-message'&&typeof p.To==='string'&&!p.To.startsWith('whatsapp:')&&p.To!==env.TWILIO_PHONE_NUMBER){const agent=await findAgentByNumber(p.To);if(agent)return handleBusinessSms(req,res,p,env,agent)}
+ // WhatsApp and RCS to a client business (api/_businessChannels.js). Nova's own WhatsApp sender keeps its path below.
+ if(op==='twilio-message'&&await routeTwilioBusinessMessage(restDb(),p,env,{normalizePhone,senderFor}))return xml(res,'');
  const channel=String(op==='twilio-status'?p.From:p.To).startsWith('whatsapp:')?'whatsapp':'sms',account=channel==='whatsapp'?env.TWILIO_WHATSAPP_FROM:env.TWILIO_PHONE_NUMBER;
  if(String(op==='twilio-status'?p.From:p.To)!==account)return res.status(403).json({error:'The business sender does not match.'});
  if(op==='twilio-status'){
