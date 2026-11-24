@@ -18,7 +18,7 @@ with a real provider. No money was spent.
 7. `team-dispatch-migration-standalone.sql` (new Nov 21)
 8. `reviews-migration-standalone.sql` (new Nov 21)
 9. `business-channels-migration-standalone.sql` (new Nov 21, evening: calls and every message channel)
-10. `job-photos-migration-standalone.sql` (new Nov 24: job photos table and the private bucket)
+10. `job-photos-migration-standalone.sql` (new Nov 24: job photos table and the private `job-photos` and `nova-intake-files` buckets)
 11. `zz-public-schema-lockdown-standalone.sql`, always last
 
 The same eleven, in this order, are in one file to paste into the Supabase SQL editor:
@@ -27,6 +27,22 @@ fails if it falls out of date).
 
 Each new file was applied twice to a throwaway PostgreSQL 16 on Nov 21 and its constraints were
 exercised there (with stub tables for what the real dependencies would provide).
+
+**Staging: done Nov 24 (TESTED ON STAGING, schema only).** The bundle was run from the SQL editor of
+nova-staging (`ubjnddxmdaxnbpzcmxnc`): twice at commit `0bff1c1`, then once more at `cb41fd1` after the
+intake bucket was added, each time fetched from GitHub and checked against the pushed file's SHA-256
+before running. Before the run, staging already had the first four migrations. Checked afterwards:
+all 19 tables present; every column the same as a fresh install (identical fingerprint of names,
+types and nullability); row-level security on all 19; no access for `anon` and no writes for
+`authenticated`; `job-photos` (2.5 MB, 3 image types) and `nova-intake-files` (4 MB, 9 types) both
+private; the AI columns and their limits; the `business.manage` permission. Staging has no
+businesses or requests yet. **Production: not run.** The browser code on `main` and on this branch
+reads none of the tables the lockdown closes (checked Nov 24), so the lockdown is safe for the live
+site; run production together with the merge, once the preview has been tested on staging.
+
+**Vercel (Nov 24, 10:20):** signed in, but the `nova-systems1` team asks Isaac to verify his
+identity ("Log in to Isaac's projects"); the preview builds are behind the same check, so nothing
+can be tested in a browser on staging until he does.
 
 ### Still not built
 
@@ -325,7 +341,7 @@ prepared come-back email reaches a test inbox and the Results tab counts it as s
 
 1. GitHub: install the Claude GitHub App on `nova-systems-ct`, or apply the patch by hand.
 2. Twilio: sign in so the credentials and campaign status can be checked. Do not resubmit the campaign.
-3. Supabase: the `nova-intake-files` bucket does not exist in staging or production (checked 2026-11-14), so intake uploads currently fail. Create it as a PRIVATE bucket. The code now stores files under unguessable paths and opens them only through the staff-only `business-intake?action=file-url` link, which expires after five minutes.
+3. Supabase: the `nova-intake-files` bucket did not exist in staging or production (checked 2026-11-14), so intake uploads failed. It is now made PRIVATE by `job-photos-migration-standalone.sql` (in the bundle); it exists on staging since Nov 24, and production gets it with the bundle. The code now stores files under unguessable paths and opens them only through the staff-only `business-intake?action=file-url` link, which expires after five minutes.
 4. Vercel plan is Hobby (confirmed 2026-11-14). Vercel limits Hobby to non-commercial use; moving to a paid plan is an owner decision and a cost.
 
 ## First next action
