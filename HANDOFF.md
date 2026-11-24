@@ -1,4 +1,4 @@
-# Handoff — 2026-11-14 (updated 2026-11-21)
+# Handoff — 2026-11-14 (updated 2026-11-24)
 
 ## Update — 2026-11-21
 
@@ -54,6 +54,36 @@ Vercel (both showed their sign-in pages on Nov 24).
   `GOOGLE_WALLET_SERVICE_EMAIL` and `GOOGLE_WALLET_PRIVATE_KEY` (the Google Wallet console needs
   a working Google account; the Nov 8 attempt was refused). A button shows only when its keys are set.
 
+### Update — 2026-11-24 (later): AI answers on every channel (Claude, GPT or Gemini)
+
+`api/_aiReply.js`, **locally verified only**: 67 checks in `unit_ai_reply_test` with all three
+providers stubbed, plus 6 in `unit_business_agent_test`, 4 in `unit_channel_setup_test` and 1 in
+`unit_install_test`. The three new columns were applied twice to the throwaway PostgreSQL 16 and
+their limits exercised; the desk section was rendered in Chrome with stand-in data. No model was
+called and nothing was spent.
+
+- **Where:** website chat, texts, WhatsApp, RCS, Apple Messages, Facebook, Instagram and phone
+  calls. A customer's question that the rules cannot answer ("Are you insured?", "Do you work
+  Saturdays?") gets an AI answer. Services, quotes, ACCEPT, numbered choices, cancel and asking
+  for a person stay with the rules. A conversation a person has taken over is never answered by AI.
+- **Which AI:** Claude (Anthropic), GPT (OpenAI) or Gemini (Google), chosen per business in
+  Switch on → AI answers; the others are fallbacks when their keys are set. Defaults
+  `claude-haiku-5-5`, `gpt-6-luna`, `gemini-3.5-flash-lite` (each provider's high-volume model as
+  of Nov 2026), replaceable with `NOVA_AI_MODEL_ANTHROPIC`, `NOVA_AI_MODEL_OPENAI`,
+  `NOVA_AI_MODEL_GOOGLE` without a code change.
+- **What it knows:** only that business's facts, approved answers, approved prices and the owner's
+  own answers (new box, up to 4,000 characters; install files may carry it as `assistant.faq`).
+- **Checked before sending:** a dollar amount must be an approved price; no discounts; a link must
+  be the business's request page or booking link; a phone number must be the business's own; at
+  most 600 characters; never an answer cut off at the length limit. If the AI does not know (it
+  answers HANDOFF) or an answer fails a check, the rules or a person answer instead. On calls the
+  answer is spoken and never contains a link.
+- **Cost:** planned 1¢ an answer, counted in the same monthly budget as texts and calls. Nothing is
+  called unless `NOVA_AI_REPLIES=on`, the business switched AI answers on, spending is on and the
+  cap has room. Switching AI on is a desk action; an install file cannot do it.
+- **Migration:** `ai_enabled` (off by default), `ai_provider` and `faq` were added to
+  `business-channels-migration-standalone.sql` and the bundle; nothing else to run.
+
 ### Calls and messages for client businesses (systems 10 to 15, and website chat)
 
 Built Nov 21 (evening), **locally verified only**: 199 new checks across
@@ -106,6 +136,8 @@ bought or signed by Claude):
 | RCS (13) | Twilio RCS brand approval and a Messaging Service per business, inbound to `…/webhooks/twilio-message` |
 | Apple Messages (12) | Apple Business Register approval per business; CM.com (paid) relay with `CM_INBOUND_SECRET` and `NOVA_CM_RELAY_VERIFIED=true`; `CM_PRODUCT_TOKEN` to reply |
 | Facebook/Instagram (15) | A Meta app with business verification and app review (pages_messaging, instagram_manage_messages, comments); `META_APP_SECRET`, `META_VERIFY_TOKEN`; each business's Page token pasted in Switch on |
+| AI answers (every channel) | `NOVA_AI_REPLIES=on` and at least one of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` (NEEDS MONEY: model usage on each provider's paid API); spending on and a cap; per business, AI switched on and the owner's answers written |
+| Google Business Profile chat | Cannot be built: Google ended Business Profile chat and Business Messages on July 31, 2024. Calls from the profile reach the business number (call answering above) |
 
 ### Crystal Clear and Flare: ready to install
 

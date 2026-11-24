@@ -495,7 +495,7 @@ ALTER TABLE customer_feedback ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS members_read_customer_feedback ON customer_feedback;
 CREATE POLICY members_read_customer_feedback ON customer_feedback FOR SELECT TO authenticated USING (is_org_member(organization_id));
 
--- ===== supabase/business-channels-migration-standalone.sql (sha256 7085ba8de332) =====
+-- ===== supabase/business-channels-migration-standalone.sql (sha256 95559f9b2689) =====
 -- Calls and messages for client businesses on every channel (Nova systems 10 to 15).
 --
 --   * business_agent_threads: one conversation per customer per channel (texts, WhatsApp, RCS,
@@ -543,6 +543,15 @@ ALTER TABLE business_agents ADD COLUMN IF NOT EXISTS ring_seconds INTEGER NOT NU
 ALTER TABLE business_agents DROP CONSTRAINT IF EXISTS business_agents_ring_seconds_check;
 ALTER TABLE business_agents ADD CONSTRAINT business_agents_ring_seconds_check CHECK (ring_seconds BETWEEN 5 AND 60);
 ALTER TABLE business_agents ADD COLUMN IF NOT EXISTS missed_call_text BOOLEAN NOT NULL DEFAULT false;
+-- AI answers (api/_aiReply.js): off until switched on; which model provider; the owner's own answers.
+ALTER TABLE business_agents ADD COLUMN IF NOT EXISTS ai_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE business_agents ADD COLUMN IF NOT EXISTS ai_provider TEXT;
+ALTER TABLE business_agents DROP CONSTRAINT IF EXISTS business_agents_ai_provider_check;
+ALTER TABLE business_agents ADD CONSTRAINT business_agents_ai_provider_check CHECK (ai_provider IS NULL OR ai_provider IN ('anthropic', 'openai', 'google'));
+ALTER TABLE business_agents ADD COLUMN IF NOT EXISTS faq TEXT;
+ALTER TABLE business_agents DROP CONSTRAINT IF EXISTS business_agents_faq_check;
+ALTER TABLE business_agents ADD CONSTRAINT business_agents_faq_check CHECK (faq IS NULL OR char_length(faq) <= 4000);
+
 -- A second private link key per request, for links sent by text, chat or email (api/_journey.js
 -- customerLink), so sending one never ends the customer's own browser session.
 ALTER TABLE journeys ADD COLUMN IF NOT EXISTS customer_link_hash TEXT;

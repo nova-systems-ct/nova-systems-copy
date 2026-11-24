@@ -29,6 +29,13 @@ r = readiness({ agent: {}, services, payments: { ready: true, note: 'Customers c
 check('card payments and the team split read from their own records', state(r, 'card_payments') === 'ready' && state(r, 'team') === 'ready');
 check('every checklist item has a state label', r.every((i) => STATE_LABELS[i.state]));
 check('paid systems are marked as costing money; chat is not', r.find((i) => i.key === 'calls').costs === true && r.find((i) => i.key === 'web_chat').costs === false);
+check('AI answers are off by default', state(r, 'ai') === 'off');
+r = readiness({ agent: { status: 'active', ai_enabled: true, monthly_spend_cap_cents: 2500 }, services, spending: true, aiReady: false });
+check('AI answers wait until Nova switches AI on and a model key is set, and say why', state(r, 'ai') === 'waiting' && /AI switch or model key/.test(r.find((i) => i.key === 'ai').detail));
+r = readiness({ agent: { status: 'active', ai_enabled: true, monthly_spend_cap_cents: 2500 }, services, spending: false, aiReady: true });
+check('AI answers wait while spending is off, like every paid system', state(r, 'ai') === 'waiting' && /spending is switched off/.test(r.find((i) => i.key === 'ai').detail));
+r = readiness({ agent: { status: 'active', ai_enabled: true, monthly_spend_cap_cents: 2500 }, services, spending: true, aiReady: true });
+check('AI answers are on once AI, spending and a cap are all set, and are marked as costing money', state(r, 'ai') === 'ready' && r.find((i) => i.key === 'ai').costs === true);
 
 const threads = [
   { id: 't1', channel: 'sms', customer_phone: '+12035550199', customer_ref: '+12035550199', needs_human: false, last_inbound_at: '2026-11-16T15:00:00Z' },

@@ -65,14 +65,15 @@ export function CallsTab({ orgId, call, setError }) {
 
 const pick = (a, keys) => Object.fromEntries(keys.map((k) => [k, a[k] ?? '']));
 const CALL_KEYS = ['call_mode', 'forward_phone', 'ring_seconds', 'missed_call_text', 'voice_provider', 'voice_provider_agent_id'];
+const AI_KEYS = ['ai_enabled', 'ai_provider', 'faq'];
 const CHANNEL_KEYS = ['web_chat_enabled', 'whatsapp_enabled', 'whatsapp_number', 'rcs_enabled', 'messaging_service_sid', 'apple_enabled', 'apple_business_id', 'facebook_enabled', 'instagram_enabled', 'meta_page_id', 'instagram_account_id'];
 
 export function InstallTab({ orgId, call, busy, setBusy, setError, setNotice, agent, saveBase, services, extra, slug, reloadAgent }) {
   const [calls, setCalls] = useState(() => pick(agent, CALL_KEYS)), [chans, setChans] = useState(() => pick(agent, CHANNEL_KEYS));
   const [live, setLive] = useState({ status: agent.status || 'draft', sms_enabled: agent.sms_enabled === true, cap: agent.monthly_spend_cap_cents ? String(Number(agent.monthly_spend_cap_cents) / 100) : '' });
-  const [token, setToken] = useState(''), [voiceKey, setVoiceKey] = useState(null);
-  useEffect(() => { setCalls(pick(agent, CALL_KEYS)); setChans(pick(agent, CHANNEL_KEYS)); setLive({ status: agent.status || 'draft', sms_enabled: agent.sms_enabled === true, cap: agent.monthly_spend_cap_cents ? String(Number(agent.monthly_spend_cap_cents) / 100) : '' }); }, [agent]);
-  const checklist = readiness({ agent, services, payments: extra.payments, spending: extra.spending === true, team: extra.team, slug });
+  const [token, setToken] = useState(''), [voiceKey, setVoiceKey] = useState(null), [ai, setAi] = useState(() => pick(agent, AI_KEYS));
+  useEffect(() => { setAi(pick(agent, AI_KEYS)); setCalls(pick(agent, CALL_KEYS)); setChans(pick(agent, CHANNEL_KEYS)); setLive({ status: agent.status || 'draft', sms_enabled: agent.sms_enabled === true, cap: agent.monthly_spend_cap_cents ? String(Number(agent.monthly_spend_cap_cents) / 100) : '' }); }, [agent]);
+  const checklist = readiness({ agent, services, payments: extra.payments, spending: extra.spending === true, team: extra.team, slug, aiReady: extra.ai_ready === true });
   async function run(fn, done) {
     setBusy(true); setError(''); setNotice('');
     try { const d = await fn(); setNotice(done); await reloadAgent(); return d; } catch (e) { setError(e.message); return null; } finally { setBusy(false); }
@@ -102,6 +103,17 @@ export function InstallTab({ orgId, call, busy, setBusy, setError, setNotice, ag
           <button className="luxe-button" disabled={busy}>Save</button>
         </form>
         <p className="desk-note">The cap is checked before every call, text and paid message using planned costs (text 2¢, forwarded call 5¢, assistant call 15¢, premium voice 40¢). It is a safety limit, not a bill.</p>
+      </section>
+
+      <section className="luxe-panel">
+        <div className="luxe-panel-title"><h2>AI answers</h2><span className="luxe-badge">{extra.ai_ready ? 'AI available' : 'AI not switched on by Nova yet'}</span></div>
+        <form className="luxe-form" onSubmit={(e) => { e.preventDefault(); saveChannels({ ai_enabled: bool(ai.ai_enabled), ai_provider: ai.ai_provider || null, faq: ai.faq || '' }, 'AI answers saved.'); }}>
+          <label className="desk-check"><input type="checkbox" checked={bool(ai.ai_enabled)} onChange={(e) => setAi({ ...ai, ai_enabled: e.target.checked })} />Let AI answer customers' questions in chat, texts, every message app and on calls (planned 1¢ an answer)</label>
+          <label>Which AI<select value={ai.ai_provider || ''} onChange={(e) => setAi({ ...ai, ai_provider: e.target.value })}><option value="">Nova's choice</option><option value="anthropic">Claude (Anthropic)</option><option value="openai">GPT (OpenAI)</option><option value="google">Gemini (Google)</option></select></label>
+          <label>Your answers to common questions (hours, insurance, what to expect…). The AI uses only these and your services.<textarea rows={6} maxLength={4000} value={ai.faq || ''} onChange={(e) => setAi({ ...ai, faq: e.target.value })} /></label>
+          <button className="luxe-button" disabled={busy}>Save AI answers</button>
+        </form>
+        <p className="desk-note">Every AI answer is checked before it goes out: a price must be one you approved, and a link or phone number must be the business's own. If the AI does not know, it passes the customer to the rules or to a person.</p>
       </section>
 
       <section className="luxe-panel">

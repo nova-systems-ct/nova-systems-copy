@@ -104,6 +104,20 @@ export async function receiveAndReply(db, { agent, channel, customerRef, message
   if (blocked) return hold(blocked);
 
   let out;
+  // A question the rules cannot answer goes to the business's AI first, when it is switched on
+  // (api/_aiReply.js); any answer that fails its checks falls through to the rules below.
+  if (agent.ai_enabled === true) {
+    let ai = null;
+    try { const { aiFirst } = await import('./_aiReply.js'); ai = await aiFirst(db, agent, { text: body, channel, customerKey: `${channel}:${ref}`, env, now, extraCents: CHANNELS[channel].paid ? CHANNELS[channel].estimate : 0 }); } catch { ai = null; }
+    if (ai?.reply) {
+      let sent;
+      try { sent = await send(ai.reply); } catch { sent = { ok: false }; }
+      const ok = !!sent?.ok;
+      await db.insert('business_agent_messages', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'outbound', body: ai.reply, provider_sid: ok && sent.id ? `${channel}:${sent.id}` : null, state: ok ? 'sent' : 'failed', held_reason: ok ? null : 'provider_did_not_accept', model: `ai:${ai.provider}`, estimate_cents: ok ? CHANNELS[channel].estimate + ai.estimate_cents : 0 });
+      await db.update('business_agent_threads', { id: thread.id, organization_id: agent.organization_id }, ok ? { last_outbound_at: now.toISOString() } : { needs_human: true });
+      return ok ? { reply: ai.reply, state: 'sent', ai: ai.provider, thread_id: thread.id } : { reply: null, state: 'failed', held_reason: 'provider_did_not_accept', thread_id: thread.id };
+    }
+  }
   try { out = await converse(db, { orgId: agent.organization_id, channel, customerKey: `${channel}:${ref}`, phone, email, name, messageId: providerId, text: body, timezone: agent.timezone || 'America/New_York', now }); }
   catch { return hold('reply_could_not_be_written'); }
   if (!out.journey_id) return hold('no_services_published');

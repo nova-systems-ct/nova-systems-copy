@@ -169,9 +169,13 @@ export async function handleBusinessSms(req, res, p, env, agent) {
   if (blocked) return hold(blocked);
 
   let text, model = env.NOVA_AUTOMATION_MODEL;
+  // A question the rules cannot answer goes to the business's AI first, when it is on (api/_aiReply.js).
+  if (agent.ai_enabled === true) {
+    try { const { aiFirst } = await import('./_aiReply.js'); const ai = await aiFirst(restDb(), agent, { text: body, channel: 'sms', customerKey: from, env, extraCents: SMS_REPLY_ESTIMATE_CENTS }); if (ai?.reply) { text = ai.reply; model = `ai:${ai.provider}`; } } catch { /* the rules answer instead */ }
+  }
   // A business that has published services is answered by the journey workers: fixed rules, no
   // model call, so the reply can only state prices, times and terms that are on file.
-  try {
+  if (!text) try {
     const out = await converse(restDb(), { orgId: agent.organization_id, channel: 'sms', customerKey: from, phone: from, messageId: sid, text: body, timezone: agent.timezone || 'America/New_York' });
     if (out.journey_id) {
       if (out.handed_to_person) await write(`business_agent_threads?id=eq.${q(thread.id)}`, 'PATCH', { needs_human: true });
@@ -198,7 +202,7 @@ export async function handleBusinessSms(req, res, p, env, agent) {
   try {
     const sent = await twilioRequest(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN, 'POST', 'Messages.json', { From: agent.phone_number, To: from, Body: text });
     const failed = ['failed', 'undelivered'].includes(sent.status);
-    await write('business_agent_messages', 'POST', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'outbound', body: text, provider_sid: sent.sid || null, state: failed ? 'failed' : 'sent', model, estimate_cents: failed ? 0 : SMS_REPLY_ESTIMATE_CENTS });
+    await write('business_agent_messages', 'POST', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'outbound', body: text, provider_sid: sent.sid || null, state: failed ? 'failed' : 'sent', model, estimate_cents: failed ? 0 : SMS_REPLY_ESTIMATE_CENTS + (String(model).startsWith('ai:') ? 1 : 0) });
     if (!failed) await write(`business_agent_threads?id=eq.${q(thread.id)}`, 'PATCH', { last_outbound_at: new Date().toISOString(), ...(model === 'journey_rules' ? {} : { needs_human: false }) });
     else await write(`business_agent_threads?id=eq.${q(thread.id)}`, 'PATCH', { needs_human: true });
   } catch {
@@ -227,7 +231,8 @@ export async function handleAgentAdmin(req, res, op, { requireOrgAccess, sanitiz
         return res.status(200).json({ agent: safeAgent(agent), threads, messages });
       }
       if (op === 'calls') return res.status(200).json({ calls: await callLog(restDb(), orgId) });
-      return res.status(200).json({ agent: safeAgent(agent), spending_unlocked: billableDispatchEnabled(process.env) });
+      const { providersReady } = await import('./_aiReply.js');
+      return res.status(200).json({ agent: safeAgent(agent), spending_unlocked: billableDispatchEnabled(process.env), ai_ready: process.env.NOVA_AI_REPLIES === 'on' && providersReady(process.env).length > 0 });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     if (!rateLimit(req, res, 20, 60_000)) return;

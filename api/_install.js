@@ -7,7 +7,8 @@
 // approve anything the file does not say the owner approved. A pay split is always saved as a
 // proposal (not approved). Going live stays in the Business desk under "Switch on".
 const one = async (db, table, filter) => (await db.select(table, filter, { limit: 1 }))[0] || null;
-const ASSISTANT_FIELDS = ['business_name', 'agent_name', 'industry', 'greeting', 'services', 'service_area', 'tone', 'handoff_instructions', 'never_say', 'review_url', 'web_chat_enabled'];
+// faq and ai_provider prepare AI answers; switching AI answers on (ai_enabled) costs money, so it stays in the desk.
+const ASSISTANT_FIELDS = ['business_name', 'agent_name', 'industry', 'greeting', 'services', 'service_area', 'tone', 'handoff_instructions', 'never_say', 'review_url', 'web_chat_enabled', 'faq', 'ai_provider'];
 
 // Checks an install file. Returns a list of problems (empty when it is good).
 export function checkInstallFile(spec) {
@@ -32,6 +33,8 @@ export function checkInstallFile(spec) {
     if (typeof a !== 'object') problems.push('assistant must be an object.');
     else for (const k of Object.keys(a)) if (!ASSISTANT_FIELDS.includes(k)) problems.push(`assistant.${k} cannot be set from an install file (going live, texting, calls and spending are switched on in the Business desk).`);
     if (a?.review_url && !/^https:\/\/\S+$/.test(a.review_url)) problems.push('assistant.review_url must start with https://');
+    if (a?.faq != null && (typeof a.faq !== 'string' || a.faq.trim().length > 4000)) problems.push('assistant.faq is the owner\'s own answers, as text of at most 4,000 characters.');
+    if (a?.ai_provider != null && !['anthropic', 'openai', 'google'].includes(a.ai_provider)) problems.push('assistant.ai_provider is anthropic, openai or google.');
   }
   const sp = spec.split_proposal;
   if (sp != null) {

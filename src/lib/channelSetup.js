@@ -71,7 +71,7 @@ export const PROVIDER_ADDRESSES = [
 export const embedSnippet = (slug) => (slug ? `<script src="https://nova-systems.app/chat/embed.js" data-business="${slug}" async></script>` : '');
 
 // What is switched on for this business, what is missing, and what costs money.
-export function readiness({ agent = {}, services = [], payments = null, spending = false, team = null, slug = '' } = {}) {
+export function readiness({ agent = {}, services = [], payments = null, spending = false, team = null, slug = '', aiReady = false } = {}) {
   const live = agent.status === 'active';
   const active = services.filter((s) => s.active);
   const priced = active.filter((s) => s.price_approved === true && Number.isInteger(s.price_cents));
@@ -88,6 +88,7 @@ export function readiness({ agent = {}, services = [], payments = null, spending
     item('texts', 'Text messages', paid(agent.sms_enabled === true, !agent.phone_number), agent.sms_enabled ? (money || (agent.phone_number ? `Answering texts to ${pretty(agent.phone_number)}.` : 'Add the business number.')) : 'Off. Needs a business number approved by the carriers for texting.', true),
     item('calls', 'Phone calls', paid(!!agent.call_mode && agent.call_mode !== 'off', !agent.phone_number), agent.call_mode && agent.call_mode !== 'off' ? (money || (CALL_MODES.find(([k]) => k === agent.call_mode)?.[1] || '')) : 'Off: callers hear busy.', true),
     item('missed_text', 'Text back after a missed call', paid(agent.missed_call_text === true, agent.sms_enabled !== true), agent.missed_call_text ? (agent.sms_enabled ? money || 'One text per caller per day.' : 'Needs text messages on.') : 'Off.', true),
+    item('ai', 'AI answers (Claude, GPT or Gemini)', agent.ai_enabled ? (!aiReady ? 'waiting' : paid(true, false)) : 'off', agent.ai_enabled ? (!aiReady ? 'Waiting: Nova\'s AI switch or model key is not set.' : money || 'Answers customers\' questions on every channel and on calls; checked before sending.') : 'Off: the rules answer, and a person takes anything else.', true),
     item('premium_voice', 'Premium voice', agent.voice_provider === 'elevenlabs' ? (agent.voice_provider_agent_id && agent.voice_key_set ? paid(true, false) : 'needs') : 'off', agent.voice_provider === 'elevenlabs' ? (agent.voice_key_set ? money || 'Answers with the business\'s premium voice agent.' : 'Make the voice key and add the tools to the voice agent.') : 'Off: the standard assistant answers.', true),
     item('whatsapp', 'WhatsApp', paid(agent.whatsapp_enabled === true, !agent.whatsapp_number), agent.whatsapp_enabled ? money || `Answering on ${pretty(agent.whatsapp_number)}.` : 'Off.', true),
     item('rcs', 'RCS (rich texts on Android)', paid(agent.rcs_enabled === true, !agent.messaging_service_sid), agent.rcs_enabled ? money || 'Answering through the business\'s Messaging Service.' : 'Off.', true),

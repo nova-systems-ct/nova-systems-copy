@@ -173,6 +173,11 @@ async function assistantTurn(db, agent, call, p, turn, ctx) {
   if (!call.service_id) {
     const services = await db.select('business_services', { organization_id: agent.organization_id, active: true }, { limit: 50 });
     const svc = said ? matchService(said, services) : null;
+    if (!svc && said && agent.ai_enabled === true) { // a question: the business's AI answers it, then asks again
+      let ai = null;
+      try { const { aiFirst } = await import('./_aiReply.js'); ai = await aiFirst(db, agent, { text: said, channel: 'voice', env: ctx.env, now: ctx.now, fetchImpl: ctx.fetchImpl }); } catch { ai = null; }
+      if (ai?.reply) { await setCall(db, call, { estimate_cents: (call.estimate_cents || 0) + ai.estimate_cents }); return ask(`${ai.reply} Is there a service I can help you with today?`, turn + 1); }
+    }
     if (!svc) {
       if (turn >= 3) return toPerson(db, agent, call, { ...ctx, reason: 'service_not_understood' });
       return ask(`${said ? 'Sorry, I did not catch which service you need.' : 'Sorry, I did not hear you.'} We do ${listText(services.slice(0, 4).map((s) => s.name))}. Which one do you need?`, turn + 1);

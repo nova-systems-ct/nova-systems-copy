@@ -9,6 +9,8 @@ const NUM_A = '+18605550101', NUM_B = '+18605550102', NOVA = '+18609626160', CUS
 const UNLOCKED = { NOVA_SPENDING_LOCK: 'disabled', NOVA_BILLABLE_DISPATCH_ENABLED: 'true', ANTHROPIC_API_KEY: 'k', NOVA_AUTOMATION_MODEL: 'claude-test-1', TWILIO_ACCOUNT_SID: 'AC' + 'a'.repeat(32), TWILIO_AUTH_TOKEN: 'token-token-token-1', TWILIO_PHONE_NUMBER: NOVA };
 
 let db, outbound;
+const DEFAULT_MODEL_TEXT = 'Thanks for reaching out. What day works for you?';
+let modelText = DEFAULT_MODEL_TEXT;
 function reset() {
   db = { business_agents: [], business_agent_threads: [], business_agent_messages: [], voice_knowledge_base: [], voice_configurations: [], journeys: [], journey_events: [], journey_documents: [], business_services: [], business_offers: [], crm_contacts: [], crm_deals: [], voice_calendar_slots: [], business_calls: [] };
   outbound = [];
@@ -23,7 +25,7 @@ const match = (row, params) => [...params].every(([k, v]) => {
 globalThis.fetch = async (url, opts = {}) => {
   const u = new URL(String(url)), method = opts.method || 'GET';
   const json = (status, data) => ({ ok: status < 400, status, json: async () => data, text: async () => JSON.stringify(data) });
-  if (u.host === 'api.anthropic.com') { outbound.push({ to: 'model', body: JSON.parse(opts.body) }); return json(200, { content: [{ type: 'text', text: 'Thanks for reaching out. What day works for you?' }] }); }
+  if (u.host === 'api.anthropic.com') { outbound.push({ to: 'model', body: JSON.parse(opts.body) }); return json(200, { content: [{ type: 'text', text: modelText }] }); }
   if (u.host === 'api.twilio.com') { const b = Object.fromEntries(new URLSearchParams(opts.body)); outbound.push({ to: 'carrier', body: b }); return json(201, { sid: 'SM' + crypto.randomBytes(16).toString('hex'), status: 'queued' }); }
   if (u.pathname.startsWith('/rest/v1/rpc/')) return json(200, []);
   const table = u.pathname.replace('/rest/v1/', '');
@@ -186,6 +188,25 @@ seed();
 delete db.journeys;
 r = await text(NUM_A, 'hello');
 check('if the journey records cannot be read, nothing is sent and a person is flagged', carrier().length === 0 && model().length === 0 && db.business_agent_threads[0].needs_human === true && msgs((m) => m.state === 'held').length === 1);
+
+// ---- AI answers on plain texts (api/_aiReply.js): questions the rules cannot answer
+seed();
+db.business_services.push({ id: crypto.randomUUID(), organization_id: ORG_A, name: 'Drain cleaning', keywords: ['drain', 'clog'], price_cents: 12000, price_approved: true, deposit_cents: null, terms_text: null, terms_approved: false, active: true, created_at: '2026-11-01T00:00:00Z' });
+Object.assign(db.business_agents[0], { ai_enabled: true, faq: 'We are licensed and insured in Connecticut.' });
+const AI_ON = { ...UNLOCKED, NOVA_AI_REPLIES: 'on' };
+r = await text(NUM_A, 'Are you licensed and insured?', AI_ON);
+check('AI on: a text question the rules cannot answer gets the AI\'s answer, from the business number', carrier().length === 1 && carrier()[0].body.From === NUM_A && carrier()[0].body.Body === DEFAULT_MODEL_TEXT && model().length === 1);
+const aiOut = msgs((m) => m.direction === 'outbound')[0];
+check('the AI answer is logged with its model and planned cost (text 2¢ + answer 1¢)', aiOut.model === 'ai:anthropic' && aiOut.estimate_cents === 3);
+check('the model was given the approved price and the owner\'s answers', model()[0].body.system.includes('Drain cleaning: $120.00') && model()[0].body.system.includes('licensed and insured in Connecticut'));
+r = await text(NUM_A, 'my drain is clogged', AI_ON);
+check('AI on: a service request still gets the approved quote from the rules, with no model call', carrier().length === 2 && /\$120\.00/.test(carrier()[1].body.Body) && model().length === 1);
+modelText = 'Yes, and it is $60 this week.';
+r = await text(NUM_A, 'Do you have any specials?', AI_ON);
+check('AI on: an answer with an unapproved price is never texted; the rules pass it to a person', carrier().length === 3 && !carrier()[2].body.Body.includes('$60') && model().length === 2 && db.business_agent_threads[0].needs_human === true);
+modelText = DEFAULT_MODEL_TEXT;
+r = await text(NUM_A, 'Do you work weekends?', UNLOCKED);
+check('Nova\'s AI switch off: no model is called; the rules answer', model().length === 2 && carrier().length === 4);
 
 console.log(`\n${pass}/${pass + fail} business agent checks passed (in-memory stand-in — no database, model or carrier contacted, nothing sent)`);
 process.exit(fail ? 1 : 0);

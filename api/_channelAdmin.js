@@ -72,6 +72,9 @@ export function channelPatch(b, existing = {}) {
   if (has('messaging_service_sid')) { const v = String(b.messaging_service_sid || '').trim(); if (v && !/^MG[0-9a-fA-F]{32}$/.test(v)) return { error: 'The Messaging Service SID starts with MG followed by 32 letters and numbers.' }; patch.messaging_service_sid = v || null; }
   if (has('apple_business_id')) { const v = String(b.apple_business_id || '').trim(); if (v && !/^[A-Za-z0-9._:-]{3,100}$/.test(v)) return { error: 'Enter the Apple Messages for Business ID exactly as given.' }; patch.apple_business_id = v || null; }
   for (const k of ['meta_page_id', 'instagram_account_id']) if (has(k)) { const v = String(b[k] || '').trim(); if (v && !/^\d{5,30}$/.test(v)) return { error: k === 'meta_page_id' ? 'The Facebook Page ID is a number.' : 'The Instagram account ID is a number.' }; patch[k] = v || null; }
+  if (has('ai_enabled')) patch.ai_enabled = bool(b.ai_enabled);
+  if (has('ai_provider')) { if (![null, '', 'anthropic', 'openai', 'google'].includes(b.ai_provider ?? null)) return { error: 'Choose Claude, GPT or Gemini.' }; patch.ai_provider = b.ai_provider || null; }
+  if (has('faq')) { const v = String(b.faq || '').trim(); if (v.length > 4000) return { error: 'Keep your answers under 4,000 characters.' }; patch.faq = v || null; }
   if (has('voice_provider')) { if (![null, '', 'elevenlabs'].includes(b.voice_provider ?? null)) return { error: 'Choose the standard assistant or premium voice.' }; patch.voice_provider = b.voice_provider || null; }
   if (has('voice_provider_agent_id')) { const v = String(b.voice_provider_agent_id || '').trim(); if (v && !/^[A-Za-z0-9_-]{8,100}$/.test(v)) return { error: 'Enter the premium voice agent ID exactly as given.' }; patch.voice_provider_agent_id = v || null; }
 

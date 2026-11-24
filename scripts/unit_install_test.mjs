@@ -75,5 +75,9 @@ check('Flare: four services, none priced, all off; a draft assistant with chat o
 r = await converse(db, { orgId: FL, channel: 'sms', customerKey: '+12035550199', phone: '+12035550199', messageId: 'f1', text: 'How much is a mystery box?', now: NOW });
 check('Flare quotes nothing while it is on hold; a person answers instead', r.reply === null && r.handed_to_person === true);
 
+check('an install file can prepare AI answers (the owner\'s answers and the AI) but never switch them on', checkInstallFile({ services: [{ name: 'A' }], assistant: { faq: 'We are insured.', ai_provider: 'google' } }).length === 0
+  && checkInstallFile({ services: [{ name: 'A' }], assistant: { ai_enabled: true } }).some((p) => /ai_enabled cannot be set/.test(p))
+  && checkInstallFile({ services: [{ name: 'A' }], assistant: { ai_provider: 'llama', faq: 'x'.repeat(4001) } }).length === 2);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

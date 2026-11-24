@@ -50,7 +50,7 @@ export default function BusinessDesk() {
   }, [orgId]);
 
   useEffect(() => { setData(null); setExtra({}); setOpen(null); load(); }, [load]);
-  const loadAgent = useCallback(() => (orgId ? call('agents', 'get', { orgId }).then((d) => { setExtra((x) => ({ ...x, spending: d.spending_unlocked })); if (d.agent) setAgent({ ...EMPTY_AGENT, ...Object.fromEntries(Object.entries(d.agent).map(([k, v]) => [k, v ?? ''])), sms_enabled: d.agent.sms_enabled === true, email_enabled: d.agent.email_enabled === true }); else setAgent({ ...EMPTY_AGENT, business_name: currentOrg?.name || '' }); }).catch(() => {}) : Promise.resolve()), [orgId, currentOrg?.name]);
+  const loadAgent = useCallback(() => (orgId ? call('agents', 'get', { orgId }).then((d) => { setExtra((x) => ({ ...x, spending: d.spending_unlocked, ai_ready: d.ai_ready === true })); if (d.agent) setAgent({ ...EMPTY_AGENT, ...Object.fromEntries(Object.entries(d.agent).map(([k, v]) => [k, v ?? ''])), sms_enabled: d.agent.sms_enabled === true, email_enabled: d.agent.email_enabled === true }); else setAgent({ ...EMPTY_AGENT, business_name: currentOrg?.name || '' }); }).catch(() => {}) : Promise.resolve()), [orgId, currentOrg?.name]);
   useEffect(() => {
     if (!orgId) return;
     call('journey', 'packs', { orgId }).then((d) => setPacks(d.packs || [])).catch(() => {});

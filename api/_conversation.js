@@ -12,7 +12,7 @@ import { startJourney, advance, chooseService, acceptQuote, chooseSlot, cancelJo
 
 const OPEN = (j) => !['closed', 'cancelled'].includes(j.stage);
 const money = (c) => '$' + (c / 100).toFixed(2);
-const WANTS_PERSON = /\b(person|human|someone|somebody|representative|manager|owner|call me|speak to|talk to)\b/i;
+export const WANTS_PERSON = /\b(person|human|someone|somebody|representative|manager|owner|call me|speak to|talk to)\b/i;
 
 function slotLabel(iso, timezone) {
   return new Date(iso).toLocaleString('en-US', { timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
