@@ -1,7 +1,8 @@
 -- Job photos (Nova system 24): before and after photos from the worker's phone page.
 -- Run after team-dispatch-migration-standalone.sql and before zz-public-schema-lockdown-standalone.sql.
 -- Safe to run twice. The photos themselves live in the PRIVATE storage bucket 'job-photos' (no public
--- address); the server reads them with the service role and gives the owner one-hour links.
+-- address); the server reads them with the service role and gives the owner one-hour links. Also makes
+-- the PRIVATE 'nova-intake-files' bucket for the intake form's uploads.
 -- Depends on: team-dispatch-migration-standalone.sql (business_workers, job_assignments).
 
 CREATE TABLE IF NOT EXISTS job_photos (
@@ -29,6 +30,13 @@ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'storage' AND table_name = 'buckets') THEN
     INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
     VALUES ('job-photos', 'job-photos', false, 2500000, ARRAY['image/jpeg', 'image/png', 'image/webp'])
+    ON CONFLICT (id) DO UPDATE SET public = false, file_size_limit = EXCLUDED.file_size_limit, allowed_mime_types = EXCLUDED.allowed_mime_types;
+    -- The intake form's document uploads (api/business-intake.js): PRIVATE, 4 MB, the same file
+    -- types the server accepts; staff open them through a five-minute link. Intake uploads fail
+    -- until this bucket exists (it existed in neither staging nor production on 2026-11-14).
+    INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    VALUES ('nova-intake-files', 'nova-intake-files', false, 4194304, ARRAY['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv', 'text/plain'])
     ON CONFLICT (id) DO UPDATE SET public = false, file_size_limit = EXCLUDED.file_size_limit, allowed_mime_types = EXCLUDED.allowed_mime_types;
   END IF;
 END $$;
