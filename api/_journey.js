@@ -522,13 +522,18 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
           : await wc.chatHistory(db, { slug, key });
       return res.status(out.status).json(out.body);
     }
-    if (op === 'crew-jobs' || op === 'crew-done') {
+    if (op === 'crew-jobs' || op === 'crew-done' || op === 'crew-photo') {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-      if (!rateLimit(req, res, 40, 60_000)) return;
+      if (!rateLimit(req, res, op === 'crew-photo' ? 20 : 40, 60_000)) return;
       const team = await import('./_team.js');
       const worker = await team.workerByToken(db, String(b.t || ''));
       if (!worker) return res.status(404).json({ error: 'This link is not active. Ask the business for a new one.' });
       if (op === 'crew-jobs') return res.status(200).json({ ok: true, ...(await team.crewJobs(db, worker)) });
+      if (op === 'crew-photo') { // before/after photos, into the private bucket (api/_jobPhotos.js)
+        const { savePhoto } = await import('./_jobPhotos.js');
+        await savePhoto(db, worker, { assignmentId: sanitize(b.assignment_id, 100), kind: sanitize(b.kind, 10), image: typeof b.image === 'string' ? b.image : '' });
+        return res.status(200).json({ ok: true, ...(await team.crewJobs(db, worker)) });
+      }
       const out = await team.crewDone(db, worker, { assignmentId: sanitize(b.assignment_id, 100), note: sanitize(b.note, 2000) });
       return res.status(200).json({ ok: true, ...out, ...(await team.crewJobs(db, worker)) });
     }
@@ -594,6 +599,12 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       if (op === 'receivables') return res.status(200).json(await receivables(db, orgId));
       if (op === 'card-payments') { const { paymentStatus } = await import('./_cardPayments.js'); return res.status(200).json({ payments: await paymentStatus(db, orgId) }); }
       if (op === 'team') { const { teamView } = await import('./_team.js'); return res.status(200).json(await teamView(db, orgId)); }
+      if (op === 'job-photos') { // one job's before/after photos, as one-hour links (api/_jobPhotos.js)
+        const jid = sanitize(req.query?.journey_id, 100);
+        if (!UUID_RE.test(jid)) return res.status(400).json({ error: 'journey_id is required' });
+        const { photosFor } = await import('./_jobPhotos.js');
+        return res.status(200).json({ photos: await photosFor(db, orgId, jid) });
+      }
       if (op === 'feedback') { const { feedbackList } = await import('./_reviews.js'); return res.status(200).json({ feedback: await feedbackList(db, orgId) }); }
       if (op === 'brief') { const { briefFor } = await import('./_brief.js'); return res.status(200).json({ brief: await briefFor(db, orgId, { timeZone: sanitize(req.query?.tz, 60) || 'America/New_York' }) }); }
       if (op === 'scorecard') { // Nova Proof: default is the last 7 days

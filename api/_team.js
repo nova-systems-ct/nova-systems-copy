@@ -85,6 +85,7 @@ export async function crewJobs(db, worker, now = new Date()) {
     ]);
     jobs.push({
       assignment_id: a.id, status: a.status, done_at: a.done_at || null,
+      photos: (await db.select('job_photos', { organization_id: worker.organization_id, assignment_id: a.id }, { limit: 13 })).length,
       service: svc?.name || 'Job', start_at: slot?.start_at || null, end_at: slot?.end_at || null,
       customer: firstName(contact?.name), customer_phone: contact?.phone || null,
       request: j.request_text || null, address: j.service_address || null,

@@ -8,6 +8,18 @@ const when = (iso) => (iso ? new Intl.DateTimeFormat('en-US', { weekday: 'short'
 const phone = (p) => (/^\+1\d{10}$/.test(p) ? `(${p.slice(2, 5)}) ${p.slice(5, 8)}-${p.slice(8)}` : p);
 let busy = false;
 
+// A phone photo made small enough to send (about 1600 pixels on the long side, JPEG).
+async function shrink(file) {
+  try {
+    const img = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    for (const q of [0.82, 0.7, 0.55]) { const url = c.toDataURL('image/jpeg', q); if (url.length * 0.75 < 2_400_000) return url; }
+    return null;
+  } catch { return null; }
+}
+
 async function send(op, body = {}) {
   if (busy) return null;
   busy = true; showError(''); document.querySelectorAll('button').forEach((b) => { b.disabled = true; });
@@ -32,6 +44,23 @@ function render(data) {
     card.append(who);
     if (job.address) { const p = el('p'); const a = el('a', job.address); a.href = `https://maps.apple.com/?q=${encodeURIComponent(job.address)}`; a.rel = 'noopener'; p.append(a); card.append(p); }
     if (job.request) card.append(el('p', `“${job.request}”`, 'muted'));
+    // Before and after photos go to the business privately; at most 12 a job.
+    const photos = el('div', null, 'photos');
+    for (const kind of ['before', 'after']) {
+      const pick = el('label', kind === 'before' ? 'Before photo' : 'After photo', 'photo-btn');
+      const input = el('input'); input.type = 'file'; input.accept = 'image/*'; input.setAttribute('capture', 'environment'); input.hidden = true;
+      input.addEventListener('change', async () => {
+        const file = input.files && input.files[0]; input.value = '';
+        if (!file) return;
+        const image = await shrink(file);
+        if (!image) return showError('That photo could not be read. Try another one.');
+        const out = await send('crew-photo', { assignment_id: job.assignment_id, kind, image });
+        if (out) render(out);
+      });
+      pick.append(input); photos.append(pick);
+    }
+    photos.append(el('span', `${job.photos || 0} photo${job.photos === 1 ? '' : 's'} saved`, 'muted'));
+    card.append(photos);
     if (job.status === 'done') card.append(el('span', 'Done', 'badge'));
     else if (job.can_mark_done) {
       const id = `note-${job.assignment_id}`;

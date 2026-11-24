@@ -15,6 +15,16 @@ const EMPTY_OFFER = { code: '', percent_off: '', trigger_type: 'web_visit', desc
 const EMPTY_AGENT = { business_name: '', agent_name: '', industry: '', phone_number: '', greeting: '', services: '', service_area: '', booking_url: '', owner_alert_phone: '', handoff_instructions: '', never_say: '', tone: 'friendly', status: 'draft', sms_enabled: false, email_enabled: false, reply_email: '', mailing_address: '', review_url: '' };
 const when = (iso) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 
+// A job's before and after photos from the worker's phone (private; the links last an hour).
+function JobPhotos({ orgId, journeyId }) {
+  const [photos, setPhotos] = useState(null), [err, setErr] = useState('');
+  const load = () => call('journey', 'job-photos', { orgId, query: `&journey_id=${journeyId}` }).then((d) => setPhotos(d.photos || [])).catch((e) => setErr(e.message));
+  if (err) return <p className="desk-note">{err}</p>;
+  if (!photos) return <button type="button" className="luxe-outline" onClick={load}>Show job photos</button>;
+  if (!photos.length) return <p className="desk-note">No photos from the worker yet.</p>;
+  return <div className="desk-photos">{photos.map((p) => (p.url ? <a key={p.id} href={p.url} target="_blank" rel="noreferrer"><img src={p.url} alt={`${p.kind} photo`} loading="lazy" /><span>{p.kind}</span></a> : <span key={p.id} className="desk-note">{p.kind} photo (link not available)</span>))}</div>;
+}
+
 async function call(resource, op, { orgId, body, query = '' } = {}) {
   const url = `/api/client?resource=${resource}&op=${op}` + (body ? '' : `&organization_id=${orgId}${query}`);
   const r = await authedFetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ organization_id: orgId, ...body }) } : undefined);
@@ -208,6 +218,7 @@ export default function BusinessDesk() {
                     {detail.customer && <p className="desk-note">{[detail.customer.name, detail.customer.phone, detail.customer.email].filter(Boolean).join(' · ')}</p>}
                     <ol className="desk-events">{detail.events.map((ev) => <li key={ev.id}><strong>{String(ev.action || '').replaceAll('_', ' ')}</strong> <span>{String(ev.agent || '').replaceAll('_', ' ')} · {when(ev.created_at)}</span></li>)}</ol>
                     {detail.documents.map((d) => <details key={d.id}><summary>{String(d.kind).replaceAll('_', ' ')}{d.amount_cents ? ` · ${dollars(d.amount_cents)}` : ''} · {d.status}</summary><pre>{d.body}</pre></details>)}
+                    {detail.assignment && <JobPhotos orgId={orgId} journeyId={j.id} />}
                   </>}
                   {['deposit_due', 'balance_due'].includes(j.stage) && <div className="desk-inline"><label>Amount received ($)<input inputMode="decimal" value={pay.amount} onChange={(e) => setPay({ ...pay, amount: e.target.value })} /></label><label>Note (cash, check number…)<input value={pay.reference} maxLength={120} onChange={(e) => setPay({ ...pay, reference: e.target.value })} /></label><button className="luxe-button" disabled={busy} onClick={() => recordPayment(j)}>Record payment</button></div>}
                   {['scheduling', 'scheduled'].includes(j.stage) && (extra.team?.workers || []).some((w) => w.active) && (

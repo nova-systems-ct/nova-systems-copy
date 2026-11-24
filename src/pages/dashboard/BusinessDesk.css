@@ -28,3 +28,7 @@
 .desk input:focus-visible,.desk select:focus-visible,.desk textarea:focus-visible{outline:2px solid #c9a961;outline-offset:1px}
 .desk-pair label,.desk-inline label{min-width:0}
 .desk-inline label{flex:1;min-width:160px}
+
+.desk-photos { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.desk-photos a { display: flex; flex-direction: column; align-items: center; gap: 4px; color: inherit; text-decoration: none; font-size: 12px; text-transform: capitalize; }
+.desk-photos img { width: 120px; height: 120px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,.15); }
