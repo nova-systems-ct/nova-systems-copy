@@ -18,17 +18,41 @@ with a real provider. No money was spent.
 7. `team-dispatch-migration-standalone.sql` (new Nov 21)
 8. `reviews-migration-standalone.sql` (new Nov 21)
 9. `business-channels-migration-standalone.sql` (new Nov 21, evening: calls and every message channel)
-10. `zz-public-schema-lockdown-standalone.sql`, always last
+10. `job-photos-migration-standalone.sql` (new Nov 24: job photos table and the private bucket)
+11. `zz-public-schema-lockdown-standalone.sql`, always last
+
+The same eleven, in this order, are in one file to paste into the Supabase SQL editor:
+`supabase/nova-install-bundle.sql` (rebuilt by `node scripts/build_install_bundle.mjs`; a check
+fails if it falls out of date).
 
 Each new file was applied twice to a throwaway PostgreSQL 16 on Nov 21 and its constraints were
 exercised there (with stub tables for what the real dependencies would provide).
 
 ### Still not built
 
-Job photos from the worker's phone (needs a private storage bucket); Wallet passes (18) beyond the
-one Apple test pass; tax lines on quotes (Crystal Clear is not registered for sales tax yet);
-Aura reading Isaac's calendar and email (needs his sign-in to those apps). Everything else in the
-26 systems is built and tested locally; what each one still waits on is listed below.
+Tax lines on quotes (Crystal Clear is not registered for sales tax yet; the rate is a tax
+question for an accountant) and Aura reading Isaac's calendar and email (needs his sign-in to
+those apps). Every one of the 28 systems is built and tested locally; what each still waits on to
+work for real is listed below. Nothing is deployed: that needs Isaac signed in to Supabase and
+Vercel (both showed their sign-in pages on Nov 24).
+
+### Update — 2026-11-24: email, job photos, Wallet passes
+
+- **Email (16)**, `api/_journeyEmail.js`: the quote, each invoice and a reminder the day before
+  the appointment, from the business's name. Needs `RESEND_API_KEY`, `NOVA_EMAIL_SENDING=on`,
+  `NOVA_FROM_EMAIL` on a domain verified in Resend (free plan: 100 a day), `CRON_SECRET` for the
+  daily 9 a.m. run (`/cron/daily-emails`), and per business: email on, a reply address and a
+  mailing address. Links sent by email, text or chat now use their own key
+  (`journeys.customer_link_hash`), so they never end the customer's browser session.
+- **Job photos (24)**, `api/_jobPhotos.js`: before/after photos on the worker's phone page, into
+  the private `job-photos` bucket (made by the migration); the owner sees one-hour links in the
+  customer's record. Needs nothing else.
+- **Wallet passes (18)**, `api/_walletPass.js`: "Add to Apple Wallet" and "Add to Google Wallet"
+  on the request page once a time is booked. Apple needs `APPLE_PASS_TYPE_ID`, `APPLE_TEAM_ID`,
+  `APPLE_PASS_CERT_PEM`, `APPLE_PASS_KEY_PEM` and `APPLE_WWDR_PEM` (from the Apple Developer
+  account that signed the Nov 7 test pass). Google needs `GOOGLE_WALLET_ISSUER_ID`,
+  `GOOGLE_WALLET_SERVICE_EMAIL` and `GOOGLE_WALLET_PRIVATE_KEY` (the Google Wallet console needs
+  a working Google account; the Nov 8 attempt was refused). A button shows only when its keys are set.
 
 ### Calls and messages for client businesses (systems 10 to 15, and website chat)
 
