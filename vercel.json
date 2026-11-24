@@ -61,6 +61,10 @@
       "destination": "/api/client?resource=journey&op=weekly-scorecards"
     },
     {
+      "source": "/cron/daily-emails",
+      "destination": "/api/client?resource=journey&op=daily-emails"
+    },
+    {
       "source": "/service-request",
       "destination": "/sms-program/index.html"
     },
@@ -187,6 +191,10 @@
     {
       "path": "/cron/weekly-scorecards",
       "schedule": "0 13 * * 1"
+    },
+    {
+      "path": "/cron/daily-emails",
+      "schedule": "0 14 * * *"
     }
   ]
 }

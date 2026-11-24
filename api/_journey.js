@@ -280,14 +280,23 @@ async function describeNext(db, j, now) {
 // the part of the address after '#', which browsers never send to any server.
 export async function customerLink(db, j, base = appBase()) {
   const token = crypto.randomBytes(32).toString('hex');
-  await db.update('journeys', { id: j.id, organization_id: j.organization_id }, { customer_token_hash: sha(token) });
+  // A separate key from the customer's own browser session, so sending a link never logs them out.
+  await db.update('journeys', { id: j.id, organization_id: j.organization_id }, { customer_link_hash: sha(token) });
+  j.customer_link_hash = sha(token);
   return `${base}/start?org=${j.organization_id}#j=${j.id}&k=${token}`;
+}
+
+// Emails the customer whatever the request is now due (quote, invoice, reminder; api/_journeyEmail.js).
+// Best effort: a problem with email never fails the customer's or the owner's action.
+async function emailAfter(db, j) {
+  try { const { sendJourneyEmails } = await import('./_journeyEmail.js'); await sendJourneyEmails(db, j); }
+  catch (err) { console.error('[journey-email]', err.message); }
 }
 
 export function tokenMatches(j, token) {
   if (!TOKEN_RE.test(token || '')) return false;
-  const a = Buffer.from(sha(token)), b = Buffer.from(j.customer_token_hash || '');
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const a = Buffer.from(sha(token));
+  return [j.customer_token_hash, j.customer_link_hash].some((h) => { const b = Buffer.from(h || ''); return a.length === b.length && crypto.timingSafeEqual(a, b); });
 }
 
 export async function chooseService(db, j, serviceId, opts) {
@@ -468,6 +477,13 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(ok ? 200 : 404).end(ok ? PAGE('You are unsubscribed', 'You will not get any more of these emails or texts from this business.') : PAGE('Link not recognized', 'This unsubscribe link is not valid. Reply to the email and ask the business to stop contacting you.'));
     }
+    if (op === 'daily-emails') { // reminders for tomorrow's appointments, and quote or invoice emails that could not go out
+      const secret = process.env.CRON_SECRET || '';
+      const got = Buffer.from(String(req.headers?.authorization || '')), want = Buffer.from(`Bearer ${secret}`);
+      if (!secret || got.length !== want.length || !crypto.timingSafeEqual(got, want)) return res.status(401).json({ error: 'Not allowed' });
+      const { dailyJourneyEmails } = await import('./_journeyEmail.js');
+      return res.status(200).json({ ok: true, ...(await dailyJourneyEmails(db)) });
+    }
     if (op === 'weekly-scorecards') {
       const secret = process.env.CRON_SECRET || '';
       const got = Buffer.from(String(req.headers?.authorization || '')), want = Buffer.from(`Bearer ${secret}`);
@@ -540,6 +556,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
         // Only a business that has published at least one service takes requests here.
         if (!(await db.select('business_services', { organization_id: orgId, active: true }, { limit: 1 })).length) return res.status(404).json({ error: 'This business is not taking requests here yet.' });
         const out = await startJourney(db, { orgId, channel: 'web', eventId, name, email, phone, text: sanitize(b.message, 2000), offerCode: sanitize(b.offer_code, 40) || undefined, address: sanitize(b.address, 300) || undefined });
+        await emailAfter(db, out.journey);
         return res.status(200).json({ ok: true, journey_id: out.journey.id, token: out.token, next: await withPayOption(db, orgId, out.next) });
       }
       const id = sanitize(b.journey_id, 100);
@@ -558,6 +575,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       else if (op === 'accept') next = await acceptQuote(db, j, { quoteId: sanitize(b.quote_id, 100), typedName: sanitize(b.typed_name, 120) });
       else if (op === 'choose-time') next = await chooseSlot(db, j, sanitize(b.slot_id, 100));
       else next = await cancelJourney(db, j, 'customer');
+      await emailAfter(db, j);
       return res.status(200).json({ ok: true, next: await withRatingOption(db, j, await withPayOption(db, j.organization_id, next)) });
     }
 
@@ -698,6 +716,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     else if (op === 'complete') next = await completeWork(db, j, { note: sanitize(b.note, 2000), by: caller.email || caller.id });
     else if (op === 'pause' || op === 'resume') next = await setPaused(db, j, op === 'pause', caller.email || caller.id);
     else return res.status(400).json({ error: 'Unknown action' });
+    await emailAfter(db, j);
     return res.status(200).json({ ok: true, next });
   } catch (err) {
     if (err.expected) return res.status(err.status).json({ error: err.message, code: err.code });

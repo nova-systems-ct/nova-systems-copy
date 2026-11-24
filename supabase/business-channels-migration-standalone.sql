@@ -45,6 +45,10 @@ ALTER TABLE business_agents ADD COLUMN IF NOT EXISTS ring_seconds INTEGER NOT NU
 ALTER TABLE business_agents DROP CONSTRAINT IF EXISTS business_agents_ring_seconds_check;
 ALTER TABLE business_agents ADD CONSTRAINT business_agents_ring_seconds_check CHECK (ring_seconds BETWEEN 5 AND 60);
 ALTER TABLE business_agents ADD COLUMN IF NOT EXISTS missed_call_text BOOLEAN NOT NULL DEFAULT false;
+-- A second private link key per request, for links sent by text, chat or email (api/_journey.js
+-- customerLink), so sending one never ends the customer's own browser session.
+ALTER TABLE journeys ADD COLUMN IF NOT EXISTS customer_link_hash TEXT;
+
 -- Premium voice reuses business_agents.voice_provider ('elevenlabs'; NULL = Nova's own assistant)
 -- and voice_provider_agent_id from business-agents-migration-standalone.sql.
 ALTER TABLE business_agents ADD COLUMN IF NOT EXISTS voice_tool_secret_hash TEXT;  -- SHA-256 of the premium voice tools key
