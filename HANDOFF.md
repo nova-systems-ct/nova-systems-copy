@@ -9,19 +9,21 @@ with a real provider. No money was spent.
 
 ### Order to run the migrations (staging first, each twice; never the two already in production)
 
-1. `business-agents-migration-standalone.sql`
-2. `business-registration-migration-standalone.sql`
-3. `customer-journey-migration-standalone.sql`
-4. `revive-proof-migration-standalone.sql`
-5. `card-payments-migration-standalone.sql` (new Nov 21)
-6. `outbound-email-migration-standalone.sql` (new Nov 21)
-7. `team-dispatch-migration-standalone.sql` (new Nov 21)
-8. `reviews-migration-standalone.sql` (new Nov 21)
-9. `business-channels-migration-standalone.sql` (new Nov 21, evening: calls and every message channel)
-10. `job-photos-migration-standalone.sql` (new Nov 24: job photos table and the private `job-photos` and `nova-intake-files` buckets)
-11. `zz-public-schema-lockdown-standalone.sql`, always last
+1. `voice-agent-migration-standalone.sql` (added to the bundle Nov 24: production never had it, and journeys need its open-times table; staging already had it)
+2. `business-agents-migration-standalone.sql`
+3. `business-registration-migration-standalone.sql`
+4. `customer-journey-migration-standalone.sql`
+5. `revive-proof-migration-standalone.sql`
+6. `card-payments-migration-standalone.sql` (new Nov 21)
+7. `outbound-email-migration-standalone.sql` (new Nov 21)
+8. `team-dispatch-migration-standalone.sql` (new Nov 21)
+9. `reviews-migration-standalone.sql` (new Nov 21)
+10. `business-channels-migration-standalone.sql` (new Nov 21, evening: calls and every message channel)
+11. `job-photos-migration-standalone.sql` (new Nov 24: job photos table and the private `job-photos` and `nova-intake-files` buckets)
+12. `zz-public-schema-lockdown-standalone.sql`, always last
 
-The same eleven, in this order, are in one file to paste into the Supabase SQL editor:
+All of them need `crm-order-audit-migration-standalone.sql` first, which staging and production
+both already have. The same twelve, in this order, are in one file to paste into the Supabase SQL editor:
 `supabase/nova-install-bundle.sql` (rebuilt by `node scripts/build_install_bundle.mjs`; a check
 fails if it falls out of date).
 
