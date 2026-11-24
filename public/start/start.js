@@ -56,6 +56,14 @@ function render(next) {
     } else box.append(el('p', 'No payment is taken on this page.', 'note'));
   }
   if (next.reason === 'choose_time') for (const o of next.options) choice(when(o.start_at), null, () => act('choose-time', { slot_id: o.slot_id }));
+  if (next.stage === 'scheduled' && next.wallet) { // the appointment on the phone's wallet
+    for (const [kind, label] of [['apple', 'Add to Apple Wallet'], ['google', 'Add to Google Wallet']]) {
+      if (!next.wallet[kind]) continue;
+      const b = el('button', label, 'quiet'); b.type = 'button'; b.style.marginRight = '8px';
+      b.addEventListener('click', async () => { const data = await send('wallet-link', { kind }); if (data?.url) location.assign(data.url); });
+      box.append(b);
+    }
+  }
   if (next.ask_rating) {
     box.append(el('p', 'How did we do? 1 means poor, 5 means excellent.'));
     for (let n = 1; n <= 5; n++) choice(`${n} out of 5`, null, async () => {

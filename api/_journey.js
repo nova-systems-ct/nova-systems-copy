@@ -421,7 +421,7 @@ export async function receivables(db, orgId, now = new Date()) {
 //   GET  op=list | detail | receivables | card-payments
 //   POST op=save-service | save-offer | record-payment | complete | pause | resume
 //        | card-payments-connect | card-payments-refresh
-export const JOURNEY_CUSTOMER_OPS = new Set(['business', 'start', 'status', 'choose-service', 'accept', 'choose-time', 'cancel', 'pay', 'rate']);
+export const JOURNEY_CUSTOMER_OPS = new Set(['business', 'start', 'status', 'choose-service', 'accept', 'choose-time', 'cancel', 'pay', 'rate', 'wallet-link']);
 
 // A finished, paid job the customer has not rated yet: their page asks "How did we do, 1 to 5?".
 async function withRatingOption(db, j, next) {
@@ -457,6 +457,11 @@ const PAGE = (title, text) => `<!doctype html><html lang="en"><head><meta charse
 
 // When an invoice is waiting and the business takes cards, the customer is offered "Pay by card".
 async function withPayOption(db, orgId, next) {
+  if (next?.stage === 'scheduled') { // Apple/Google Wallet buttons, when Nova's wallet keys are set (api/_walletPass.js)
+    const { walletOptions } = await import('./_walletPass.js');
+    const w = walletOptions();
+    if (w.apple || w.google) next = { ...next, wallet: w };
+  }
   if (!next?.invoice) return next;
   const { canPayOnline } = await import('./_cardPayments.js');
   if (!(await canPayOnline(db, orgId))) return next;
@@ -522,6 +527,19 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
           : await wc.chatHistory(db, { slug, key });
       return res.status(out.status).json(out.body);
     }
+    if (op === 'wallet-pass') { // the signed Apple Wallet file, from the 10-minute address that wallet-link gave
+      if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+      if (!rateLimit(req, res, 20, 60_000)) return;
+      const w = await import('./_walletPass.js');
+      const q = req.query || {};
+      if (!w.walletOptions().apple || !w.appleDownloadOk({ j: q.j, exp: q.exp, sig: q.sig }, process.env.CLIENT_SESSION_SECRET)) return res.status(404).json({ error: 'This pass link has expired. Open your request page and try again.' });
+      const j = await one(db, 'journeys', { id: String(q.j) });
+      const pass = j ? await w.passFor(db, j, { link: null }) : null;
+      if (!pass) return res.status(404).json({ error: 'This appointment is no longer booked.' });
+      res.setHeader('Content-Type', 'application/vnd.apple.pkpass');
+      res.setHeader('Content-Disposition', 'attachment; filename="appointment.pkpass"');
+      return res.status(200).send(w.applePkpass(pass));
+    }
     if (op === 'crew-jobs' || op === 'crew-done' || op === 'crew-photo') {
       if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
       if (!rateLimit(req, res, op === 'crew-photo' ? 20 : 40, 60_000)) return;
@@ -568,6 +586,16 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       const j = UUID_RE.test(id) ? await one(db, 'journeys', { id }) : null;
       if (!j || !tokenMatches(j, b.token)) return res.status(404).json({ error: 'This request could not be found.' });
       if (j.paused && op !== 'status' && op !== 'rate') return res.status(409).json({ error: 'A team member is handling this request personally.' });
+      if (op === 'wallet-link') { // the appointment pass: a Google save link, or a 10-minute Apple download address
+        const w = await import('./_walletPass.js');
+        const kind = sanitize(b.kind, 10), opts = w.walletOptions();
+        if (!['apple', 'google'].includes(kind) || !opts[kind]) return res.status(404).json({ error: 'This wallet is not available.' });
+        const pass = await w.passFor(db, j, { link: null });
+        if (!pass) return res.status(409).json({ error: 'A pass is ready once your appointment is booked.' });
+        if (kind === 'google') return res.status(200).json({ ok: true, url: w.googleSaveUrl(pass) });
+        if (!process.env.CLIENT_SESSION_SECRET) return res.status(503).json({ error: 'This wallet is not available.' });
+        return res.status(200).json({ ok: true, url: w.appleDownloadPath(j.id, process.env.CLIENT_SESSION_SECRET) });
+      }
       if (op === 'rate') { const { rate } = await import('./_reviews.js'); return res.status(200).json({ ok: true, ...(await rate(db, j, { rating: b.rating, comment: sanitize(b.comment, 1000) })) }); }
       if (op === 'pay') { // Stripe's own page, for exactly what is still owed; the webhook records it
         const { createPayLink } = await import('./_cardPayments.js');
