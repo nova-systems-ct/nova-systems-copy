@@ -1,4 +1,29 @@
-# Handoff — 2026-11-14 (updated 2026-11-24)
+# Handoff — 2026-11-14 (updated 2026-11-27)
+
+## Update — 2026-11-27: live verified on nova-systems.app
+
+Deployed to production from `main` (commits b7627c5, 02309d9, abd282d; Vercel Production success)
+and tested in a real browser against the production database. No money was spent.
+
+**Live verified, website chat only (free channel), on the demo business "Nova Demo Detailing"**
+(org `b678abe6-3a14-486a-91a7-283b51478b2b`, slug `nova-demo`; five approved demo prices; owners
+are the two Nova super-admin staff users):
+
+- Business site `/b/nova-demo` and chat `/chat?b=nova-demo` answer from the business's records.
+- A price question gets a quote at the approved price; `ACCEPT <name>` records the acceptance. The
+  evidence names the channel and message id, and a stand-in contact name takes the typed name.
+- Owners add bookable times in the new **Open times** tab (76 added: Mon–Fri 9–5, 2 hours, 4 weeks,
+  New York time). A customer waiting for times is moved on automatically when times are added.
+- "What times do you have?" lists the open times; a number books that exact time; the reply
+  states the booked time; the time shows Booked in Open times and on the desk customer card.
+- "cancel" in website chat cancels the request and frees the time (it no longer opts the visitor
+  out; carrier keywords still apply on text, RCS and WhatsApp).
+
+Left in place on purpose: one booked demo job ("Demo Tester", Full detail, sedan, Mon Nov 30
+11:00 AM) so the desk has a real example to show. Remove it by typing "cancel" in that chat, in the same browser that booked it.
+
+Not live verified: text, calls, WhatsApp, RCS, Apple Messages, Instagram, Facebook (each waits on a
+provider account or approval), payments, deposits, crew dispatch and photos on a real job.
 
 ## Update — 2026-11-21
 
