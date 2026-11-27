@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase, Tag, Users, Wallet, RefreshCw, ChartNoAxesColumn, Bot, Copy, ShieldCheck, HardHat, MessageSquare, Phone, Power } from 'lucide-react';
+import { Briefcase, Tag, Users, Wallet, RefreshCw, ChartNoAxesColumn, Bot, Copy, ShieldCheck, HardHat, MessageSquare, Phone, Power, CalendarClock } from 'lucide-react';
 import { authedFetch } from '../../lib/apiAuth';
 import { useOrg } from '../../lib/OrgContext';
 import { dollars, toCents, STAGE_LABELS, waitingLabel, needsOwner, serviceRequest, serviceToForm, EMPTY_SERVICE, OFFER_TRIGGERS } from '../../lib/businessDesk';
 import { MessagesTab, CallsTab, InstallTab } from './BusinessChannels';
+import OpenTimes from './OpenTimes';
 import '../../styles/NovaLuxe.css';
 import './BusinessDesk.css';
 
-const TABS = [['services', 'Services & prices', Briefcase], ['offers', 'Offers', Tag], ['customers', 'Customers', Users], ['messages', 'Messages', MessageSquare], ['calls', 'Calls', Phone], ['money', 'Money owed', Wallet], ['revive', 'Come-back list', RefreshCw], ['results', 'Results', ChartNoAxesColumn], ['team', 'Team & pay', HardHat], ['assistant', 'Assistant', Bot], ['install', 'Switch on', Power]];
+const TABS = [['services', 'Services & prices', Briefcase], ['times', 'Open times', CalendarClock], ['offers', 'Offers', Tag], ['customers', 'Customers', Users], ['messages', 'Messages', MessageSquare], ['calls', 'Calls', Phone], ['money', 'Money owed', Wallet], ['revive', 'Come-back list', RefreshCw], ['results', 'Results', ChartNoAxesColumn], ['team', 'Team & pay', HardHat], ['assistant', 'Assistant', Bot], ['install', 'Switch on', Power]];
 const EMPTY_WORKER = { name: '', phone: '', email: '', kind: 'contractor' };
 const DEFAULT_SHARES = [{ label: 'Worker', percent: '50', to_worker: true }, { label: 'Business', percent: '50', to_worker: false }];
 const EMPTY_OFFER = { code: '', percent_off: '', trigger_type: 'web_visit', description: '', expires_at: '', approved: false };
@@ -347,6 +348,7 @@ export default function BusinessDesk() {
 
       {data && tab === 'messages' && <MessagesTab orgId={orgId} call={call} busy={busy} setBusy={setBusy} setError={setError} setNotice={setNotice} />}
       {data && tab === 'calls' && <CallsTab orgId={orgId} call={call} setError={setError} />}
+      {data && tab === 'times' && <OpenTimes orgId={orgId} call={call} busy={busy} setBusy={setBusy} setError={setError} setNotice={setNotice} />}
       {data && tab === 'install' && <InstallTab orgId={orgId} call={call} busy={busy} setBusy={setBusy} setError={setError} setNotice={setNotice} agent={agent} saveBase={saveBase} services={services} extra={extra} slug={currentOrg?.slug || ''} reloadAgent={loadAgent} />}
 
       {data && tab === 'assistant' && (

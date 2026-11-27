@@ -624,6 +624,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
         return res.status(200).json(await monthExport(db, orgId, { month: sanitize(req.query?.month, 7), timeZone: sanitize(req.query?.tz, 60) || 'America/New_York' }));
       }
       if (!(await requireOrgAccess(req, res, orgId, 'growth.view'))) return;
+      if (op === 'open-times') { const { listOpenTimes } = await import('./_openTimes.js'); return res.status(200).json({ times: await listOpenTimes(db, orgId) }); }
       if (op === 'receivables') return res.status(200).json(await receivables(db, orgId));
       if (op === 'card-payments') { const { paymentStatus } = await import('./_cardPayments.js'); return res.status(200).json({ payments: await paymentStatus(db, orgId) }); }
       if (op === 'team') { const { teamView } = await import('./_team.js'); return res.status(200).json(await teamView(db, orgId)); }
@@ -721,6 +722,19 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       return res.status(200).json({ ok: true, url: out.url, payments: out.status });
     }
     if (op === 'apply-pack') return res.status(200).json({ ok: true, ...(await applyPack(db, orgId, sanitize(b.pack, 60))) });
+    // Open times (api/_openTimes.js): what the scheduling worker can offer customers.
+    if (op === 'add-open-times' || op === 'remove-open-time') {
+      const ot = await import('./_openTimes.js');
+      if (op === 'remove-open-time') { const out = await ot.removeOpenTime(db, orgId, sanitize(b.slot_id, 100)); return out.ok ? res.status(200).json({ ok: true }) : res.status(out.status).json({ error: out.error }); }
+      const timeZone = sanitize(b.timezone, 60) || 'America/New_York';
+      const made = b.start_at ? ot.oneSlot({ start_at: sanitize(b.start_at, 40), end_at: sanitize(b.end_at, 40) })
+        : ot.weeklySlots({ days: Array.isArray(b.days) ? b.days.slice(0, 7) : [], start: sanitize(b.start, 5), end: sanitize(b.end, 5), minutes: Number(b.minutes), weeks: Number(b.weeks || 4), timeZone });
+      if (made.error) return res.status(400).json({ error: made.error });
+      const out = await ot.addOpenTimes(db, orgId, made.slots, { serviceName: sanitize(b.service_name, 120) || 'Any service' });
+      // Requests that were waiting for a time can now be offered one.
+      if (out.added) for (const j of (await db.select('journeys', { organization_id: orgId, waiting_reason: 'arrange_time' }, { limit: 200 }))) { try { await advance(db, j); } catch { /* the next customer action retries */ } }
+      return res.status(200).json({ ok: true, added: out.added, skipped: out.skipped, times: await ot.listOpenTimes(db, orgId) });
+    }
     if (op === 'save-service') {
       const name = sanitize(b.name, 120);
       if (!name) return res.status(400).json({ error: 'name is required' });

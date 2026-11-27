@@ -32,3 +32,10 @@
 .desk-photos { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
 .desk-photos a { display: flex; flex-direction: column; align-items: center; gap: 4px; color: inherit; text-decoration: none; font-size: 12px; text-transform: capitalize; }
 .desk-photos img { width: 120px; height: 120px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,.15); }
+
+/* Open times */
+.desk-days { display: flex; flex-wrap: wrap; gap: 12px; border: 0; padding: 0; margin: 0 0 12px; }
+.desk-days legend { margin-bottom: 8px; }
+.desk-day h3 { margin: 16px 0 8px; font-size: 14px; }
+.desk-times { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.desk-times li { display: flex; align-items: center; gap: 12px; }
