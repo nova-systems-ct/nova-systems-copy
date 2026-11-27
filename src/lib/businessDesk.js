@@ -33,11 +33,22 @@ const WAITING_REASONS = {
   complete_work: 'Booked: mark the work done afterwards',
 };
 
-export function waitingLabel(j) {
+// "Mon, Nov 30, 9:00 AM" in the given time zone (the viewer's own when none is given).
+export function appointmentLabel(iso, timeZone) {
+  const opts = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+  try { return new Date(iso).toLocaleString('en-US', timeZone ? { ...opts, timeZone } : opts); } catch { return new Date(iso).toLocaleString('en-US', opts); }
+}
+
+export function waitingLabel(j, timeZone) {
   if (j.paused) return 'Paused: a person is handling it';
   if (['closed', 'cancelled'].includes(j.stage)) return '';
+  if (j.waiting_reason === 'complete_work' && j.appointment_at) return `Booked for ${appointmentLabel(j.appointment_at, timeZone)}: mark the work done afterwards`;
   return WAITING_REASONS[j.waiting_reason] || (j.waiting_on ? `Waiting on ${j.waiting_on}` : '');
 }
+
+// How a customer reached the business, in the words that follow "came in by".
+const CAME_IN_BY = { web: 'the request page', web_chat: 'website chat', sms: 'text', voice: 'phone', whatsapp: 'WhatsApp', rcs: 'RCS text', apple_messages: 'Apple Messages', instagram: 'Instagram', facebook: 'Facebook' };
+export const channelWords = (key) => CAME_IN_BY[key] || String(key || 'unknown').replaceAll('_', ' ');
 
 // What the owner must decide before the workers can carry on. One entry per blocked service,
 // with how many customers are stuck behind it.

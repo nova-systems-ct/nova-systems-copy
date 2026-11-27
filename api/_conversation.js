@@ -13,6 +13,11 @@ import { startJourney, advance, chooseService, acceptQuote, chooseSlot, cancelJo
 const OPEN = (j) => !['closed', 'cancelled'].includes(j.stage);
 const money = (c) => '$' + (c / 100).toFixed(2);
 export const WANTS_PERSON = /\b(person|human|someone|somebody|representative|manager|owner|call me|speak to|talk to)\b/i;
+// "What times do you have?", "any openings Tuesday?": while the customer is choosing a time, these
+// are answered with the real open times instead of being passed to a person.
+export const ASKS_TIMES = /\b(times?|when|available|availability|openings?|slots?|schedule|appointments?|book|soonest|earliest|dates?|days?)\b/i;
+// How each channel is named in acceptance evidence.
+const CHANNEL_WORDS = { sms: 'text message', web_chat: 'website chat', whatsapp: 'WhatsApp', rcs: 'RCS message', voice: 'phone', apple_messages: 'Apple Messages', instagram: 'Instagram message', facebook: 'Facebook Messenger' };
 
 function slotLabel(iso, timezone) {
   return new Date(iso).toLocaleString('en-US', { timeZone: timezone, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -27,6 +32,7 @@ export function replyFor(next, { timezone = 'America/New_York' } = {}) {
     case 'accept_quote': return `${next.quote.text}\n\nTo accept, reply ACCEPT and your full name. Example: ACCEPT Dana Reyes`;
     case 'pay_deposit': case 'pay_balance': return `${next.reason === 'pay_deposit' ? 'A deposit' : 'The balance'} of ${money(next.invoice.amount_cents)} is due. The business will confirm how to pay.`;
     case 'choose_time': return next.options.length ? `Choose a time. Reply with a number:\n${next.options.slice(0, 6).map((o, i) => `${i + 1}. ${slotLabel(o.start_at, timezone)}`).join('\n')}` : 'No open times are published right now. The team will contact you to arrange one.';
+    case 'complete_work': return next.appointment ? `You are booked for ${slotLabel(next.appointment.start_at, timezone)}. See you then.` : next.message;
     default: return next.message || 'Thanks. The team will be in touch.';
   }
 }
@@ -72,13 +78,23 @@ export async function converse(db, { orgId, channel, customerKey, messageId, tex
     }
     if (next.reason === 'accept_quote') {
       const m = body.match(/^(?:i\s+)?accept[,:]?\s+(.{2,120})$/i);
-      if (m) return say(await acceptQuote(db, j, { quoteId: next.quote.id, typedName: m[1].trim() }, { now }), 'Thank you. Your acceptance is recorded.');
+      if (m) {
+        const typed = m[1].trim();
+        const after = await acceptQuote(db, j, { quoteId: next.quote.id, typedName: typed }, { now, via: `${CHANNEL_WORDS[channel] || channel} (message ${String(messageId).slice(0, 100)})` });
+        // A contact first saved under a stand-in ("Website visitor", a phone number, a handle) takes
+        // the name the customer typed. Only that exact stand-in is replaced; a real name on file stays.
+        const standIn = name || customerKey;
+        if (j.contact_id && typed !== standIn) await db.update('crm_contacts', { id: j.contact_id, organization_id: orgId, name: standIn }, { name: typed }).catch(() => {});
+        return say(after, 'Thank you. Your acceptance is recorded.');
+      }
       if (/^(yes|yep|ok|okay|accept|i accept|sounds good|deal)\W*$/i.test(body)) return { reply: 'To accept, reply ACCEPT and your full name. Example: ACCEPT Dana Reyes', journey_id: j.id };
       return toPerson(next);
     }
     if (next.reason === 'choose_time') {
       const slot = pick(next.options.slice(0, 6));
-      return slot ? say(await chooseSlot(db, j, slot.slot_id, { now })) : (body.includes('?') ? toPerson(next) : say(next, 'Sorry, I did not catch which time.'));
+      if (slot) return say(await chooseSlot(db, j, slot.slot_id, { now }));
+      if (ASKS_TIMES.test(body)) return say(next); // asking which times are open: the list is the answer
+      return body.includes('?') ? toPerson(next) : say(next, 'Sorry, I did not catch which time.');
     }
     // Waiting on the business, on a payment, or already booked: nothing the customer types can
     // move it, so a person sees the message.

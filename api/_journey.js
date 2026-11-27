@@ -268,7 +268,11 @@ async function describeNext(db, j, now) {
     case 'pay_deposit': case 'pay_balance': { const kind = j.waiting_reason === 'pay_deposit' ? 'deposit_invoice' : 'balance_invoice'; const inv = (await db.select('journey_documents', { journey_id: j.id, kind })).pop(); return { ...base, message: 'Your invoice is ready. The business will confirm how to pay.', invoice: { id: inv.id, text: inv.body, amount_cents: inv.amount_cents } }; }
     case 'choose_time': return { ...base, message: 'Choose a time that works for you.', options: (await db.select('voice_calendar_slots', { organization_id: j.organization_id, status: 'open' }, { order: 'start_at.asc', limit: 20 })).filter((s) => new Date(s.start_at) > now).map((s) => ({ slot_id: s.id, start_at: s.start_at, end_at: s.end_at })) };
     case 'arrange_time': return { ...base, message: 'No open times are published right now. The team will contact you to arrange one.' };
-    case 'complete_work': return { ...base, message: 'You are booked. See you then.' };
+    case 'complete_work': {
+      // The booked time comes from the slot record itself, so the customer is told the exact time on file.
+      const slot = j.slot_id ? await one(db, 'voice_calendar_slots', { id: j.slot_id, organization_id: j.organization_id }) : null;
+      return { ...base, message: 'You are booked. See you then.', ...(slot ? { appointment: { start_at: slot.start_at, end_at: slot.end_at } } : {}) };
+    }
     default: return { ...base, message: j.stage === 'closed' ? 'All done. Thank you.' : j.stage === 'cancelled' ? 'This request was cancelled.' : 'Your request is being handled.' };
   }
 }
@@ -325,7 +329,10 @@ export async function acceptQuote(db, j, { quoteId, typedName }, opts = {}) {
     }
     return describeNext(db, j, now);
   }
-  const evidence = `Accepted by "${name}" at ${now.toISOString()} via private customer link`;
+  // The evidence names the way the customer actually accepted (the request page link by default;
+  // the conversation worker passes the channel and message it came in on).
+  const via = String(opts.via || 'private customer link').slice(0, 160);
+  const evidence = `Accepted by "${name}" at ${now.toISOString()} via ${via}`;
   await db.update('journey_documents', { id: quote.id, journey_id: j.id }, { status: 'accepted', accepted_at: now.toISOString(), acceptance_evidence: evidence });
   if (svc.terms_text) await addDocument(db, j, { kind: 'agreement', body: `Agreement for ${svc.name}\n\n${svc.terms_text}\n\nTotal: ${money(j.total_cents)}`, amount_cents: j.total_cents, status: 'accepted', accepted_at: now.toISOString(), acceptance_evidence: evidence });
   await setJourney(db, j, { stage: 'agreed', agent: 'accounting', waiting_on: null, waiting_reason: null });
@@ -657,7 +664,9 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
       }
       // Names come only from this organization's own contacts, so one business never sees another's customers.
       const people = new Map((await db.select('crm_contacts', { organization_id: orgId }, { order: 'created_at.desc', limit: 1000 })).map((c) => [c.id, c.name || c.email || c.phone || 'Customer']));
-      const journeys = (await db.select('journeys', { organization_id: orgId }, { order: 'updated_at.desc', limit: 200 })).map(({ customer_token_hash: _hidden, ...safe }) => ({ ...safe, customer_name: people.get(safe.contact_id) || 'Customer' }));
+      // Booked times, also from this organization only, so each card can say when the job is.
+      const booked = new Map((await db.select('voice_calendar_slots', { organization_id: orgId, status: 'booked' }, { order: 'start_at.asc', limit: 1000 })).map((s) => [s.id, s.start_at]));
+      const journeys = (await db.select('journeys', { organization_id: orgId }, { order: 'updated_at.desc', limit: 200 })).map(({ customer_token_hash: _hidden, ...safe }) => ({ ...safe, customer_name: people.get(safe.contact_id) || 'Customer', appointment_at: (safe.slot_id && booked.get(safe.slot_id)) || null }));
       return res.status(200).json({ journeys, services: await db.select('business_services', { organization_id: orgId }), offers: await db.select('business_offers', { organization_id: orgId }) });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

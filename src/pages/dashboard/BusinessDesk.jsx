@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Briefcase, Tag, Users, Wallet, RefreshCw, ChartNoAxesColumn, Bot, Copy, ShieldCheck, HardHat, MessageSquare, Phone, Power, CalendarClock } from 'lucide-react';
 import { authedFetch } from '../../lib/apiAuth';
 import { useOrg } from '../../lib/OrgContext';
-import { dollars, toCents, STAGE_LABELS, waitingLabel, needsOwner, serviceRequest, serviceToForm, EMPTY_SERVICE, OFFER_TRIGGERS } from '../../lib/businessDesk';
+import { dollars, toCents, STAGE_LABELS, waitingLabel, channelWords, needsOwner, serviceRequest, serviceToForm, EMPTY_SERVICE, OFFER_TRIGGERS } from '../../lib/businessDesk';
 import { MessagesTab, CallsTab, InstallTab } from './BusinessChannels';
 import OpenTimes from './OpenTimes';
 import '../../styles/NovaLuxe.css';
@@ -209,7 +209,7 @@ export default function BusinessDesk() {
           {journeys.length ? journeys.map((j) => (
             <article className="desk-journey" key={j.id}>
               <button className="desk-row desk-row-button" aria-expanded={open === j.id} onClick={() => toggle(j)}>
-                <div><strong>{j.customer_name || 'Customer'} · {serviceName(j.service_id)}</strong><p>{waitingLabel(j) || 'Nothing waiting'} · came in by {j.source_channel} · {when(j.updated_at)}</p></div>
+                <div><strong>{j.customer_name || 'Customer'} · {serviceName(j.service_id)}</strong><p>{waitingLabel(j) || 'Nothing waiting'} · came in by {channelWords(j.source_channel)} · {when(j.updated_at)}</p></div>
                 <span>{j.total_cents ? `${dollars(j.paid_cents)} of ${dollars(j.total_cents)}` : ''}</span><span className="luxe-badge">{STAGE_LABELS[j.stage] || j.stage}</span>
               </button>
               {open === j.id && (

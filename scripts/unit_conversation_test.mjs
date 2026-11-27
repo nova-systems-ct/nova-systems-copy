@@ -46,13 +46,19 @@ check('the worker does not negotiate: the price is unchanged', journey(jid).tota
 r = await sms('ACCEPT Dana Reyes');
 const accepted = db.t.journey_documents.find((d) => d.journey_id === jid && d.kind === 'quote');
 check('ACCEPT with a name records the acceptance under that name', journey(jid).stage === 'deposit_due' && JSON.stringify(accepted).includes('Dana Reyes') && /\$10\.00/.test(r.reply));
+check('the acceptance evidence names the channel and message it came in on', /via text message \(message m\d+\)$/.test(accepted.acceptance_evidence) && !/customer link/.test(accepted.acceptance_evidence));
+check('a contact saved under a phone number takes the name typed at acceptance', db.t.crm_contacts.find((c) => c.id === journey(jid).contact_id).name === 'Dana Reyes');
 r = await sms('paid it!');
 check('the customer saying "paid" does not mark anything paid', journey(jid).stage === 'deposit_due' && journey(jid).paid_cents === 0 && r.handed_to_person);
 await recordPayment(db, journey(jid), { amountCents: 1000, source: 'owner_recorded', reference: 'cash' });
 r = await sms('ok what now');
 check('after the business records the deposit, the customer is offered real open times', /1\. .*Nov 18/.test(r.reply) && /2\. .*Nov 19/.test(r.reply) && !/Nov 17/.test(r.reply));
+const asksBefore = db.t.journey_events.filter((e) => e.action === 'question_for_a_person').length;
+r = await sms('what times do you have?');
+check('asking which times are open lists them, without passing the customer to a person', /1\. .*Nov 18/.test(r.reply) && !/passed your message/.test(r.reply) && !r.handed_to_person && db.t.journey_events.filter((e) => e.action === 'question_for_a_person').length === asksBefore);
 r = await sms('2');
 check('choosing a time books that exact slot', journey(jid).slot_id === slotB.id && db.t.voice_calendar_slots.find((s) => s.id === slotB.id).status === 'booked' && /booked/i.test(r.reply));
+check('the booking reply states the booked time from the slot record', /You are booked for Thu, Nov 19, 10:00\sAM\. See you then\./.test(r.reply));
 
 const before = JSON.stringify([db.t.journeys.length, db.t.journey_events.length]);
 r = await sms('2', '+18605550101', { id: `m${n}` });
@@ -83,6 +89,11 @@ r = await converse(db, { orgId: ORG, channel: 'instagram', customerKey: 'ig_991'
 check('the same worker runs a direct message on another channel', /\$40\.00/.test(r.reply) && db.t.journeys.find((j) => j.id === r.journey_id).source_channel === 'instagram');
 r = await sms('   ');
 check('an empty message does nothing', r.reply === null && r.journey_id === null);
+
+const known = await db.insert('crm_contacts', { organization_id: ORG, name: 'Jordan Lee', phone: '+18605550404', email: null });
+r = await sms('mow my lawn', '+18605550404');
+r = await sms('ACCEPT J Lee', '+18605550404');
+check('a real name already on file is never overwritten by the typed name', db.t.crm_contacts.find((c) => c.id === known.id).name === 'Jordan Lee' && db.t.journeys.find((j) => j.id === r.journey_id).contact_id === known.id);
 
 console.log(`\n${pass}/${pass + fail} conversation checks passed (rules only — no model, carrier or database contacted)`);
 process.exit(fail ? 1 : 0);

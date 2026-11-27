@@ -1,6 +1,6 @@
 // Business desk form rules: what the owner types becomes exactly what the server is asked to save.
 import assert from 'node:assert/strict';
-import { toCents, dollars, needsOwner, serviceRequest, serviceToForm, waitingLabel } from '../src/lib/businessDesk.js';
+import { toCents, dollars, needsOwner, serviceRequest, serviceToForm, waitingLabel, channelWords } from '../src/lib/businessDesk.js';
 let n = 0; const t = (name, fn) => { fn(); n++; console.log('  ok', name); };
 
 t('dollars typed become whole cents', () => { assert.equal(toCents('120'), 12000); assert.equal(toCents('$1,250.5'), 125050); assert.equal(toCents('0.07'), 7); assert.equal(toCents(' 49.99 '), 4999); });
@@ -21,5 +21,7 @@ t('owner to-do lists what blocks customers, most-blocked first', () => {
   assert.deepEqual(list.map((x) => [x.service, x.kind, x.waiting, x.what]), [['Windows', 'price', 2, 'Approve the price'], ['Detail', 'price', 1, 'Set a price'], ['Detail', 'terms', 0, 'Add the agreement wording']]);
 });
 t('a ready service asks nothing of the owner', () => assert.equal(needsOwner([{ id: 'a', name: 'Mow', price_cents: 1, price_approved: true, terms_text: 'T', terms_approved: true }], []).length, 0));
+t('a booked job shows its time, in the owner\'s time zone', () => { assert.match(waitingLabel({ stage: 'scheduled', waiting_on: 'staff', waiting_reason: 'complete_work', appointment_at: '2026-11-30T14:00:00Z' }, 'America/New_York'), /^Booked for Mon, Nov 30, 9:00\sAM: mark the work done afterwards$/); assert.equal(waitingLabel({ stage: 'scheduled', waiting_reason: 'complete_work' }), 'Booked: mark the work done afterwards'); });
+t('channels read as words, not keys', () => { assert.equal(channelWords('web_chat'), 'website chat'); assert.equal(channelWords('web'), 'the request page'); assert.equal(channelWords('sms'), 'text'); assert.equal(channelWords('new_thing'), 'new thing'); });
 t('plain-language status', () => { assert.match(waitingLabel({ stage: 'quoted', waiting_on: 'owner', waiting_reason: 'price_needs_approval' }), /approve a price/); assert.match(waitingLabel({ stage: 'quoted', paused: true }), /Paused/); assert.equal(waitingLabel({ stage: 'closed', waiting_reason: 'x' }), ''); });
 console.log(`business desk: ${n} checks passed`);
