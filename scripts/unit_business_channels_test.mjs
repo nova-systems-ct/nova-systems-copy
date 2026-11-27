@@ -2,7 +2,7 @@
 // website chat, WhatsApp, RCS, Apple Messages, Instagram and Facebook. In-memory store and stubbed
 // providers; no carrier, Meta, CM.com or database is contacted and nothing is spent.
 import crypto from 'node:crypto';
-import { receiveAndReply, blockedReason, monthSpendCents, routeTwilioBusinessMessage, CHAT_STOPPED, CHAT_RESTARTED } from '../api/_businessChannels.js';
+import { receiveAndReply, blockedReason, monthSpendCents, routeTwilioBusinessMessage, CHAT_STOPPED, CHAT_RESTARTED, keywordFor } from '../api/_businessChannels.js';
 import { senderFor } from '../api/_channelSend.js';
 import { encryptProviderCredentials } from '../api/_providerVault.js';
 import { normalizePhone } from '../api/_wave1.js';
@@ -60,6 +60,10 @@ r = await chat('hello again');
 check('website chat: after STOP nothing is answered, and a person is flagged', r.reply === null && r.held_reason === 'customer_opted_out' && thread('web_chat', 'v_visitor1').needs_human === true);
 r = await chat('start');
 check('website chat: START turns the chat back on', r.reply === CHAT_RESTARTED && thread('web_chat', 'v_visitor1').opted_out === false);
+r = await chat('cancel');
+check('website chat: "cancel" cancels the request; it does not switch the chat off', r.state === 'sent' && /cancelled/.test(r.reply) && thread('web_chat', 'v_visitor1').opted_out === false && db.t.journeys.some((j) => j.source_channel === 'web_chat' && j.stage === 'cancelled'));
+check('carrier keyword rules stay on phone channels: CANCEL by text or WhatsApp is still an opt-out', keywordFor('sms', 'CANCEL') === 'opt_out' && keywordFor('whatsapp', 'cancel') === 'opt_out' && keywordFor('rcs', 'quit') === 'opt_out');
+check('in app messaging only an explicit stop word opts out', keywordFor('instagram', 'cancel') === 'message' && keywordFor('apple_messages', 'END') === 'message' && keywordFor('facebook', 'Stop!') === 'opt_out' && keywordFor('web_chat', 'unsubscribe') === 'opt_out');
 r = await chat('hi', 'v_visitor2', { agent: { ...agent, web_chat_enabled: false } });
 check('website chat switched off: the message is saved for a person, nothing is answered', r.reply === null && r.held_reason === 'channel_not_on' && msgs(thread('web_chat', 'v_visitor2')).some((m) => m.direction === 'inbound'));
 r = await chat('hi', 'v_visitor3', { agent: { ...agent, status: 'paused' } });

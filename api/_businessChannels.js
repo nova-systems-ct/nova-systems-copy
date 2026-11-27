@@ -31,6 +31,18 @@ const one = async (db, table, filter) => (await db.select(table, filter, { limit
 // On phone channels the carrier/Twilio answers STOP, START and HELP; the assistant stays silent.
 // Elsewhere HELP is just a question, and STOP/START get a short confirmation in website chat.
 const PHONE_CHANNELS = new Set(['rcs', 'whatsapp']);
+// The full carrier opt-out list (STOP, CANCEL, END, QUIT...) belongs to phone-number channels. In
+// website chat and app messaging a customer typing "cancel" means "cancel my booking", so only
+// an explicit stop word turns replies off there; CANCEL, END and QUIT reach the booking worker.
+const CARRIER_CHANNELS = new Set(['sms', ...PHONE_CHANNELS]);
+const EXPLICIT_STOP = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE']);
+export function keywordFor(channel, body) {
+  const raw = classifyInboundKeyword(body);
+  if (CARRIER_CHANNELS.has(channel)) return raw;
+  if (raw === 'help') return 'message'; // elsewhere HELP is just a question
+  if (raw === 'opt_out' && !EXPLICIT_STOP.has(String(body || '').trim().toUpperCase().replace(/[^A-Z]/g, ''))) return 'message';
+  return raw;
+}
 export const CHAT_STOPPED = 'Okay. This chat will not send you any more messages. Type START if you want to chat again.';
 export const CHAT_RESTARTED = 'You are back on. What can we help you with?';
 
@@ -80,8 +92,7 @@ export async function receiveAndReply(db, { agent, channel, customerRef, message
   if (await one(db, 'business_agent_messages', { provider_sid: providerId })) return { reply: null, state: 'repeated', repeated: true };
 
   let thread = await ensureThread(db, agent, channel, ref, { phone, name });
-  const raw = classifyInboundKeyword(body);
-  const keyword = raw === 'help' && !PHONE_CHANNELS.has(channel) ? 'message' : raw;
+  const keyword = keywordFor(channel, body);
   const patch = { last_inbound_at: now.toISOString(), ...(keyword === 'opt_out' ? { opted_out: true } : keyword === 'opt_in' ? { opted_out: false } : {}) };
   thread = (await db.update('business_agent_threads', { id: thread.id, organization_id: agent.organization_id }, patch))[0] || { ...thread, ...patch };
   try { await db.insert('business_agent_messages', { organization_id: agent.organization_id, thread_id: thread.id, direction: 'inbound', body, provider_sid: providerId, state: 'received' }); }
