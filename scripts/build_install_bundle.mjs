@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 // and production both already have.
 export const ORDER = [
   'voice-agent', 'business-agents', 'business-registration', 'customer-journey', 'revive-proof', 'card-payments',
-  'outbound-email', 'team-dispatch', 'reviews', 'business-channels', 'job-photos',
+  'outbound-email', 'team-dispatch', 'reviews', 'business-channels', 'job-photos', 'journey-payment-ledger',
 ].map((n) => `supabase/${n}-migration-standalone.sql`).concat('supabase/zz-public-schema-lockdown-standalone.sql');
 
 export function bundle() {

@@ -4,6 +4,8 @@
 // The rules live on the server (api/_auditTests.js); this screen only collects and shows.
 import { useState } from 'react'
 import { authedFetch } from '../../lib/apiAuth'
+import AuditRecordWindows from './AuditRecordWindows'
+import { exportFrom } from '../../lib/auditRecords'
 import { TESTS, testsFrom, printableAudit, usd } from '../../lib/auditTests'
 
 const GOLD = '#C9A84C'
@@ -23,6 +25,7 @@ async function post(op, body) {
 
 export default function AuditCustomerTests({ caseId, orgId, evidence, businessName, onSaved }) {
   const tests = testsFrom(evidence)
+  const records = evidence.map(exportFrom).filter(Boolean)
   const [form, setForm] = useState({ kind: 'phone_open_hours', performed_at: localNow(), performed_by: '', target: '', responded: 'no', response_time: '', notes: '' })
   const [owner, setOwner] = useState({ per_week: '', avg_job: '', close: '' })
   const [estimate, setEstimate] = useState(null)
@@ -56,13 +59,14 @@ export default function AuditCustomerTests({ caseId, orgId, evidence, businessNa
   const print = () => {
     const w = window.open('', '_blank')
     if (!w) return setMsg({ ok: false, text: 'Allow pop-ups for this site to print.' })
-    w.document.write(printableAudit({ business: name.trim() || 'Your business', tests, estimate }))
+    w.document.write(printableAudit({ business: name.trim() || 'Your business', tests, estimate, records }))
     w.document.close(); w.focus(); w.print()
   }
   const field = (key, label, extra = {}) => <div><label style={lbl}>{label}</label><input style={inp} value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} {...extra} /></div>
 
   return (
     <div>
+      <AuditRecordWindows caseId={caseId} orgId={orgId} records={records} onSaved={onSaved} />
       <div style={CARD}>
         <p style={{ color: GOLD, fontSize: 10, fontWeight: 700, letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 10 }}>Add a test you ran</p>
         <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 1.6, marginBottom: 14 }}>Contact the business the way a customer would, then record exactly what happened. Each test is saved as first-hand evidence with who ran it and when.</p>
@@ -96,7 +100,7 @@ export default function AuditCustomerTests({ caseId, orgId, evidence, businessNa
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
           <button style={btn} disabled={busy} onClick={calculate}>Calculate the range</button>
           {estimate && <button style={quiet} disabled={busy} onClick={saveFinding}>Save as an estimate finding</button>}
-          <button style={quiet} disabled={!tests.length} onClick={print}>Print one-page Audit</button>
+          <button style={quiet} disabled={!tests.length && !records.length} onClick={print}>Print one-page Audit</button>
         </div>
         {estimate && <div style={{ marginTop: 16 }}><p style={{ fontSize: 24, fontWeight: 800, color: '#fff' }}>{usd(estimate.estimate_low)} to {usd(estimate.estimate_high)} a month</p><p style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.6 }}>{estimate.estimate_assumptions}</p></div>}
       </div>

@@ -122,7 +122,7 @@ async function shop() {
 
   // The customer comes back through the link.
   clock = days(32);
-  const back = await startJourney(db, { orgId: ORG, channel: 'web', eventId: crypto.randomUUID(), name: 'ana', email: 'ana@example.invalid', text: 'haircut please', offerCode: 'BACK5', now: days(32) });
+  const back = await startJourney(db, { orgId: ORG, channel: 'web', eventId: crypto.randomUUID(), name: 'ana', email: 'ana@example.invalid', text: 'haircut please', offerCode: 'BACK5', recoveryRef: by('ana@example.invalid').id, now: days(32) });
   check('she returns as the same customer with the discount on her quote', back.journey.contact_id === by('ana@example.invalid').contact_id && back.next.quote.total_cents === 2850);
   check('a customer with a visit in progress is no longer overdue', !(await findOverdue(db, ORG, days(33))).some((o) => o.contact_id === back.journey.contact_id));
 

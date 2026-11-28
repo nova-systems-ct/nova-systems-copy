@@ -82,8 +82,14 @@ export async function resolveFeedback(db, orgId, id, by) {
   return rows[0];
 }
 
+export function feedbackReply(rating) {
+  if (![1, 2, 3, 4, 5].includes(rating)) return null;
+  if (rating <= 3) return 'Thank you for raising this. We would like to hear what happened and discuss it with you privately. Please contact our team directly.';
+  return 'Thank you for taking the time to share your experience. Our team appreciates your feedback.';
+}
+
 export async function feedbackList(db, orgId) {
   const rows = (await db.select('customer_feedback', { organization_id: orgId }, { order: 'created_at.desc', limit: 200 })).filter((f) => f.rating);
   const contacts = new Map((await db.select('crm_contacts', { organization_id: orgId }, { limit: 5000 })).map((c) => [c.id, c.name || 'Customer']));
-  return rows.map(({ token_hash: _t, ...f }) => ({ ...f, customer_name: contacts.get(f.contact_id) || 'Customer' }));
+  return rows.map(({ token_hash: _t, ...f }) => ({ ...f, reply_draft: feedbackReply(f.rating), customer_name: contacts.get(f.contact_id) || 'Customer' }));
 }

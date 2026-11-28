@@ -15,7 +15,7 @@
 // platform. 'express' (NOVA_CONNECT_ACCOUNT_TYPE=express) gives a simpler dashboard, but the
 // platform pays Stripe per active account and per payout, so it needs Isaac's yes on that cost.
 import { stripeRequest } from './_stripe.js';
-import { recordPayment, recordStep } from './_journey.js';
+import { recordPayment, recordStep, signedDeposit } from './_journey.js';
 
 const fail = (code, message, status = 409) => Object.assign(new Error(message), { code, status, expected: true });
 const one = async (db, table, filter) => (await db.select(table, filter, { limit: 1 }))[0] || null;
@@ -97,7 +97,7 @@ export async function amountDue(db, j) {
   if (j.stage === 'balance_due') return j.total_cents - j.paid_cents;
   if (j.stage !== 'deposit_due') return 0;
   const svc = await one(db, 'business_services', { id: j.service_id, organization_id: j.organization_id });
-  return Math.min(svc?.deposit_cents || 0, j.total_cents) - j.paid_cents;
+  return Math.max(0, await signedDeposit(db, j, svc) - j.paid_cents);
 }
 
 async function openInvoice(db, j) {
@@ -169,6 +169,7 @@ export async function handleConnectEvent(db, event, { now = new Date() } = {}) {
   } catch (err) {
     // The invoice was already settled (for example, the owner recorded a cash payment first).
     // The money is real, so it is never dropped: the owner is asked to check it and refund.
+    if (['excess_payment','reference_conflict','reconcile_legacy_payment'].includes(err.code)) return flag('Payment needs reconciliation against the current invoice and provider reference.');
     if (err.code === 'wrong_stage') return flag('A card payment arrived after this invoice was already settled. Check it in Stripe and refund it if the customer paid twice.');
     throw err;
   }

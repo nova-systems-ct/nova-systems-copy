@@ -2,6 +2,7 @@
 // stubbed email provider: nothing is sent and no database is contacted.
 import crypto from 'node:crypto';
 import { startJourney, acceptQuote, recordPayment, chooseSlot, tokenMatches } from '../api/_journey.js';
+import { allowReminder } from '../api/_balanceReminders.js';
 import { sendJourneyEmails, dailyJourneyEmails } from '../api/_journeyEmail.js';
 
 const ORG = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -88,6 +89,31 @@ await sendJourneyEmails(db, j, { env: { ...ENV, NOVA_EMAIL_DAILY_CAP_PER_BUSINES
 count = sent.length;
 r = await sendJourneyEmails(db, second.journey, { env: { ...ENV, NOVA_EMAIL_DAILY_CAP_PER_BUSINESS: '1' }, now: NOW });
 check('the daily cap per business stops further emails', r.skipped === 'daily_cap' && sent.length === count);
+
+// An owner approves a single reminder for a balance. Re-read both payment and consent before delivery.
+({ db, j } = await setup());
+await db.update('crm_contacts', { id: j.contact_id }, { email_consent: true });
+Object.assign(j, { stage: 'balance_due', total_cents: 19900, paid_cents: 15000, paused: false });
+await db.update('journeys', { id: j.id }, j);
+const oldInvoice = await db.insert('journey_documents', { organization_id: ORG, journey_id: j.id, kind: 'balance_invoice', amount_cents: 14900, status: 'issued', seq: 1, body: 'Initial invoice', created_at: '2026-11-01T12:00:00Z' });
+await db.insert('journey_events', { idempotency_key: `${j.id}:email:balance_invoice:${oldInvoice.id}`, action:'email_sent', organization_id: ORG });
+check('an old invoice alone never starts a reminder', !(await sendJourneyEmails(db, j, {env:ENV, now:NOW})).sent.length);
+let foreignDenied = false;
+try { await allowReminder(db, 'foreign', j.id, oldInvoice.id, 'owner', NOW); } catch (err) { foreignDenied = err.status === 404; }
+check('a different tenant cannot approve this reminder', foreignDenied);
+await allowReminder(db, ORG, j.id, oldInvoice.id, 'owner', NOW);
+check('approving twice persists a single approval', (await allowReminder(db, ORG, j.id, oldInvoice.id, 'owner', NOW)).repeated);
+await db.update('crm_contacts', {id:j.contact_id}, {do_not_contact:true});
+check('an opt-out after approval blocks the reminder', !(await sendJourneyEmails(db,j,{env:ENV,now:NOW})).sent.length);
+await db.update('crm_contacts', {id:j.contact_id}, {do_not_contact:false});
+await db.update('journeys',{id:j.id},{paused:true});
+check('a human pause or dispute stops an approved reminder', !(await sendJourneyEmails(db,j,{env:ENV,now:NOW})).sent.length);
+await db.update('journeys',{id:j.id},{paused:false,paid_cents:19900});
+check('a payment after approval stops the reminder', !(await sendJourneyEmails(db,j,{env:ENV,now:NOW})).sent.length);
+await db.update('journeys',{id:j.id},{paid_cents:15000});
+const attempts = await Promise.all([sendJourneyEmails(db,j,{env:ENV,now:NOW}),sendJourneyEmails(db,j,{env:ENV,now:NOW})]);
+check('concurrent workers send only the actual remaining balance once', attempts.flatMap(x=>x.sent).length === 1 && sent.at(-1).body.text.includes('$49.00') && !sent.at(-1).body.text.includes('$149.00'));
+check('a second scheduled run cannot repeat the reminder', !(await sendJourneyEmails(db,j,{env:ENV,now:NOW})).sent.length);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

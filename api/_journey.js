@@ -13,8 +13,10 @@
 // Storage goes through a small `db` object ({select, insert, update}) so the same rules run
 // against PostgREST in production (restDb) and an in-memory stand-in in tests.
 import crypto from 'node:crypto';
+import { allowReminder, reminderBalance, reminderKey } from './_balanceReminders.js';
+import { latestQuote, prepareQuote } from './_issuedQuote.js';
 import { normalizePhone } from './_wave1.js';
-import { findOverdue, findColdLeads, runRevive, reopenBlocked, sendReady, unsubscribe } from './_revive.js';
+import { attributeReturn, findOverdue, findColdLeads, runRevive, reopenBlocked, sendReady, unsubscribe } from './_revive.js';
 import { scorecard, scorecardText, sendScorecard } from './_proof.js';
 import { emailSwitch, emailCaps, sendEmail, validEmail } from './_email.js';
 import { INDUSTRY_PACKS, applyPack } from './_industryPacks.js';
@@ -40,6 +42,7 @@ export function restDb() {
   return {
     select: (table, filter = {}, { order = 'created_at.asc', limit = 500 } = {}) => call(`${table}?${qs(filter, `&order=${order}&limit=${limit}`)}`, {}),
     insert: async (table, row) => (await call(table, { method: 'POST', body: JSON.stringify(row) }))[0],
+    postPayment: (j, amount, source, reference) => call('rpc/nova_post_journey_payment', { method: 'POST', body: JSON.stringify({ p_org: j.organization_id, p_journey: j.id, p_amount: amount, p_source: source, p_reference: reference }) }),
     update: (table, filter, patch) => call(`${table}?${qs(filter)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   };
 }
@@ -61,8 +64,9 @@ async function setJourney(db, j, patch) {
 }
 async function addDocument(db, j, doc) {
   const existing = await db.select('journey_documents', { journey_id: j.id, kind: doc.kind });
+  if (doc.kind !== 'receipt' && existing.length) return existing[existing.length - 1];
   try { return await db.insert('journey_documents', { organization_id: j.organization_id, journey_id: j.id, seq: existing.length + 1, status: 'issued', ...doc }); }
-  catch (err) { if (err.status === 409) return existing[existing.length - 1]; throw err; }
+  catch (err) { if (err.status === 409 && doc.kind !== 'receipt') return one(db, 'journey_documents', { journey_id: j.id, kind: doc.kind }); throw err; }
 }
 const one = async (db, table, filter) => (await db.select(table, filter, { limit: 1 }))[0] || null;
 
@@ -88,7 +92,7 @@ async function findOrCreateContact(db, orgId, { name, email, phone, channel }) {
   return { contact, conflict: ids.size > 1 };
 }
 
-export async function startJourney(db, { orgId, channel, eventId, name, email, phone, text, offerCode, address, now = new Date() }) {
+export async function startJourney(db, { orgId, channel, eventId, name, email, phone, text, offerCode, address, recoveryRef, now = new Date() }) {
   const existing = await one(db, 'journeys', { organization_id: orgId, source_channel: channel, source_event_id: eventId });
   if (existing) return { journey: existing, token: null, next: await advance(db, existing, { now }), repeated: true };
 
@@ -107,6 +111,7 @@ export async function startJourney(db, { orgId, channel, eventId, name, email, p
     return { journey: winner, token: null, next: await advance(db, winner, { now }), repeated: true };
   }
   await record(db, journey, { agent: 'front_desk', action: 'inquiry_received', detail: { channel, contact_id: contact.id, deal_id: deal.id } });
+  if (recoveryRef && !conflict) await attributeReturn(db, journey, recoveryRef, now);
   if (conflict) await record(db, journey, { agent: 'front_desk', handed_to: 'owner', action: 'possible_duplicate_contact', status: 'waiting_owner', detail: { reason: 'Email and phone match two different existing contacts. A new contact was created; nothing was merged.' } });
   if (offerCode && !journey.offer_id) await record(db, journey, { agent: 'front_desk', action: 'offer_not_applied', detail: { code: offerCode, reason: 'Offer is unknown, unapproved, inactive or expired.' } });
   return { journey, token, next: await advance(db, journey, { now }) };
@@ -145,7 +150,7 @@ export async function advance(db, j, { now = new Date() } = {}) {
       continue;
     }
 
-    if (j.stage === 'qualified') { // CONTRACTS: quote from an approved price only
+    if (j.stage === 'qualified' || j.stage === 'quoted') { // CONTRACTS: quote from an approved price only
       if (!svc || !svc.price_approved || !Number.isInteger(svc.price_cents)) {
         await setJourney(db, j, { waiting_on: 'owner', waiting_reason: 'price_needs_approval' });
         if (await record(db, j, { agent: 'contracts', handed_to: 'owner', action: 'price_needs_approval', status: 'waiting_owner', detail: { service: svc?.name } })) {
@@ -153,21 +158,24 @@ export async function advance(db, j, { now = new Date() } = {}) {
         }
         break;
       }
+      if (svc.terms_text && !svc.terms_approved) {
+        await setJourney(db, j, { waiting_on: 'owner', waiting_reason: 'terms_need_approval' });
+        if (await record(db, j, { agent: 'contracts', handed_to: 'owner', action: 'terms_need_approval', status: 'waiting_owner' })) {
+          await db.insert('approval_requests', { organization_id: j.organization_id, item_type: 'content', item_ref: `journey:${j.id}`, action_summary: `Approve the agreement wording for "${svc.name}".`, status: 'pending' });
+        }
+        break;
+      }
       const offer = j.offer_id ? await one(db, 'business_offers', { id: j.offer_id, organization_id: j.organization_id }) : null;
-      const discount = offerUsable(offer, now) ? Math.floor(svc.price_cents * offer.percent_off / 100) : 0;
-      const total = svc.price_cents - discount;
-      const body = [`Quote for ${svc.name}`, svc.description || '', `Price: ${money(svc.price_cents)}`, discount ? `Discount (${offer.code}, ${offer.percent_off}% off): -${money(discount)}` : '', `Total: ${money(total)}`, svc.deposit_cents ? `Deposit to book: ${money(Math.min(svc.deposit_cents, total))}` : ''].filter(Boolean).join('\n');
-      await addDocument(db, j, { kind: 'quote', body, amount_cents: total });
+      const { q, total, discount } = await prepareQuote(db, j, svc, offer, { now, record });
+      if (j.stage === 'quoted' && j.total_cents === total && j.waiting_reason === 'accept_quote') break;
       await setJourney(db, j, { quote_cents: svc.price_cents, discount_cents: discount, total_cents: total, stage: 'quoted', waiting_on: 'customer', waiting_reason: 'accept_quote' });
       if (j.deal_id) await db.update('crm_deals', { id: j.deal_id, organization_id: j.organization_id }, { stage: 'proposal', value_cents: total, next_action: 'Customer to accept quote' });
-      await record(db, j, { agent: 'contracts', handed_to: 'customer', action: 'quote_issued', status: 'waiting_customer', detail: { total_cents: total, discount_cents: discount } });
+      await record(db, j, { agent: 'contracts', handed_to: 'customer', action: 'quote_issued', status: 'waiting_customer', detail: { quote_id: q.id, total_cents: total, discount_cents: discount } });
       break;
     }
 
-    if (j.stage === 'quoted') break; // waiting for the customer to accept
-
     if (j.stage === 'agreed') { // ACCOUNTING: deposit, if the service has one
-      const deposit = svc?.deposit_cents ? Math.min(svc.deposit_cents, j.total_cents) : 0;
+      const deposit = await signedDeposit(db, j, svc);
       if (deposit > j.paid_cents) {
         await addDocument(db, j, { kind: 'deposit_invoice', body: `Deposit invoice for ${svc.name}\nAmount due: ${money(deposit - j.paid_cents)}`, amount_cents: deposit - j.paid_cents });
         await setJourney(db, j, { stage: 'deposit_due', agent: 'accounting', waiting_on: 'customer', waiting_reason: 'pay_deposit' });
@@ -179,7 +187,7 @@ export async function advance(db, j, { now = new Date() } = {}) {
     }
 
     if (j.stage === 'deposit_due') {
-      const deposit = Math.min(svc?.deposit_cents || 0, j.total_cents);
+      const deposit = await signedDeposit(db, j, svc);
       if (j.paid_cents < deposit) break;
       await setJourney(db, j, { stage: 'scheduling', agent: 'front_desk', waiting_on: null, waiting_reason: null });
       continue;
@@ -263,9 +271,12 @@ async function describeNext(db, j, now) {
   switch (j.waiting_reason) {
     case 'choose_service': return { ...base, message: 'Which service do you need?', options: (await db.select('business_services', { organization_id: j.organization_id, active: true })).map((s) => ({ service_id: s.id, name: s.name, description: s.description })) };
     case 'price_needs_approval': return { ...base, message: 'Thanks. The team is preparing your quote and will send it shortly.' };
-    case 'accept_quote': { const q = (await db.select('journey_documents', { journey_id: j.id, kind: 'quote' })).pop(); return { ...base, message: 'Here is your quote. Accept it to continue.', quote: { id: q.id, text: q.body, total_cents: q.amount_cents } }; }
-    case 'terms_need_approval': return { ...base, message: 'Thanks for accepting. The team is finalizing your agreement and will send it shortly.' };
-    case 'pay_deposit': case 'pay_balance': { const kind = j.waiting_reason === 'pay_deposit' ? 'deposit_invoice' : 'balance_invoice'; const inv = (await db.select('journey_documents', { journey_id: j.id, kind })).pop(); return { ...base, message: 'Your invoice is ready. The business will confirm how to pay.', invoice: { id: inv.id, text: inv.body, amount_cents: inv.amount_cents } }; }
+    case 'accept_quote': { const q = await latestQuote(db, j); return { ...base, message: 'Here is your quote. Accept it to continue.', quote: { id: q.id, text: q.body, total_cents: q.amount_cents } }; }
+    case 'terms_need_approval': return { ...base, message: 'The team is finalizing your agreement. You can review the full wording before you accept.' };
+    case 'pay_deposit': case 'pay_balance': { const kind = j.waiting_reason === 'pay_deposit' ? 'deposit_invoice' : 'balance_invoice'; const inv = (await db.select('journey_documents', { journey_id: j.id, kind })).pop();
+      const balance = kind === 'balance_invoice' ? j.total_cents - j.paid_cents : await signedDeposit(db, j, null) - j.paid_cents;
+      const due = Math.max(0, Math.min(inv.amount_cents, balance));
+      return { ...base, message: 'Your invoice is ready. The business will confirm how to pay.', invoice: { id: inv.id, text: due === inv.amount_cents ? inv.body : inv.body + '\nRemaining now: ' + money(due), amount_cents: due } }; }
     case 'choose_time': return { ...base, message: 'Choose a time that works for you.', options: (await db.select('voice_calendar_slots', { organization_id: j.organization_id, status: 'open' }, { order: 'start_at.asc', limit: 20 })).filter((s) => new Date(s.start_at) > now).map((s) => ({ slot_id: s.id, start_at: s.start_at, end_at: s.end_at })) };
     case 'arrange_time': return { ...base, message: 'No open times are published right now. The team will contact you to arrange one.' };
     case 'complete_work': {
@@ -312,6 +323,14 @@ export async function chooseService(db, j, serviceId, opts) {
   return advance(db, j, opts);
 }
 
+export async function signedDeposit(db, j, service) {
+  const accepted = await one(db, 'journey_events', { idempotency_key: `${j.id}:quote_accepted` });
+  if (Number.isInteger(accepted?.detail?.deposit_cents)) return accepted.detail.deposit_cents;
+  // For agreements signed before this release, prefer their original invoice.
+  const invoice = await one(db, 'journey_documents', { journey_id: j.id, kind: 'deposit_invoice' });
+  return invoice?.amount_cents ?? Math.min(service?.deposit_cents || 0, j.total_cents);
+}
+
 // The customer accepts the exact quote they were shown. If the service needs an agreement, the
 // owner-approved wording is recorded with the customer's typed name as evidence.
 export async function acceptQuote(db, j, { quoteId, typedName }, opts = {}) {
@@ -319,26 +338,28 @@ export async function acceptQuote(db, j, { quoteId, typedName }, opts = {}) {
   if (j.stage !== 'quoted') throw fail('wrong_stage', 'There is no quote waiting for acceptance.');
   const name = String(typedName || '').trim();
   if (name.length < 2) throw fail('name_required', 'Type your full name to accept.', 422);
-  const quote = (await db.select('journey_documents', { journey_id: j.id, kind: 'quote' })).pop();
+  let quote = await latestQuote(db, j);
   if (!quote || quote.id !== quoteId || quote.amount_cents !== j.total_cents) throw fail('quote_changed', 'This quote has changed. Review the current quote before accepting.');
-  const svc = await one(db, 'business_services', { id: j.service_id, organization_id: j.organization_id });
-  if (svc.terms_text && !svc.terms_approved) {
-    await setJourney(db, j, { waiting_on: 'owner', waiting_reason: 'terms_need_approval' });
-    if (await record(db, j, { agent: 'contracts', handed_to: 'owner', action: 'terms_need_approval', status: 'waiting_owner', detail: { service: svc.name } })) {
-      await db.insert('approval_requests', { organization_id: j.organization_id, item_type: 'content', item_ref: `journey:${j.id}`, action_summary: `Approve the agreement wording for "${svc.name}".`, status: 'pending' });
-    }
-    return describeNext(db, j, now);
+  // Once accepted, replay the saved document to finish any interrupted downstream work.
+  if (quote.status !== 'accepted') {
+    const next = await advance(db, j, { now });
+    if (next.reason !== 'accept_quote' || next.quote.id !== quoteId) return { ...next, accepted: false };
   }
-  // The evidence names the way the customer actually accepted (the request page link by default;
-  // the conversation worker passes the channel and message it came in on).
+  const basis = await one(db, 'journey_events', { idempotency_key: `${j.id}:basis:${quoteId}` });
+  if (!basis) throw fail('quote_changed', 'The team must reissue this quote before acceptance.');
   const via = String(opts.via || 'private customer link').slice(0, 160);
-  const evidence = `Accepted by "${name}" at ${now.toISOString()} via ${via}`;
-  await db.update('journey_documents', { id: quote.id, journey_id: j.id }, { status: 'accepted', accepted_at: now.toISOString(), acceptance_evidence: evidence });
-  if (svc.terms_text) await addDocument(db, j, { kind: 'agreement', body: `Agreement for ${svc.name}\n\n${svc.terms_text}\n\nTotal: ${money(j.total_cents)}`, amount_cents: j.total_cents, status: 'accepted', accepted_at: now.toISOString(), acceptance_evidence: evidence });
+  const evidence = `Accepted by "${name}" at ${now.toISOString()} via ${via}. Quote ${quote.id}, SHA-256 ${sha(quote.body)}`;
+  const updated = await db.update('journey_documents', { id: quoteId, organization_id: j.organization_id, journey_id: j.id, status: 'issued' }, { status: 'accepted', accepted_at: now.toISOString(), acceptance_evidence: evidence });
+  quote = updated[0] || await latestQuote(db, j);
+  if (quote.id !== quoteId || quote.status !== 'accepted') throw fail('quote_changed', 'The quote changed. Review the current quote.');
+  if (basis.detail.has_terms) {
+    const agreed = { organization_id: j.organization_id, journey_id: j.id, kind: 'agreement', seq: quote.seq, body: quote.body, amount_cents: quote.amount_cents, status: 'accepted', accepted_at: quote.accepted_at, acceptance_evidence: quote.acceptance_evidence };
+    try { await db.insert('journey_documents', agreed); } catch (err) { if (err.status !== 409) throw err; }
+  }
+  await record(db, j, { agent: 'customer', handed_to: 'accounting', action: 'quote_accepted', detail: { quote_id: quote.id, agreement: basis.detail.has_terms, deposit_cents: basis.detail.deposit_cents } });
   await setJourney(db, j, { stage: 'agreed', agent: 'accounting', waiting_on: null, waiting_reason: null });
   if (j.deal_id) await db.update('crm_deals', { id: j.deal_id, organization_id: j.organization_id }, { stage: 'accepted', next_action: 'Schedule the work' });
-  await record(db, j, { agent: 'customer', handed_to: 'accounting', action: 'quote_accepted', detail: { agreement: !!svc.terms_text } });
-  return advance(db, j, opts);
+  return { ...await advance(db, j, opts), accepted: true };
 }
 
 // Reserves a time exactly once: the update only succeeds while the slot is still open. Used for
@@ -374,10 +395,24 @@ export async function cancelJourney(db, j, by = 'customer') {
 // and stays labelled that way on the receipt and in the owner report. The reference makes a
 // repeated call a no-op.
 export async function recordPayment(db, j, { amountCents, source, reference }, opts) {
-  if (!['deposit_due', 'balance_due'].includes(j.stage)) throw fail('wrong_stage', 'No invoice is waiting for payment on this request.');
+
   if (!Number.isInteger(amountCents) || amountCents <= 0) throw fail('bad_amount', 'Enter the amount received.', 422);
   if (!['provider_verified', 'owner_recorded'].includes(source)) throw fail('bad_source', 'Say how the payment was confirmed.', 422);
   if (!reference || String(reference).length > 120) throw fail('reference_required', 'Enter a payment reference.', 422);
+  if (db.postPayment) {
+    const posted = await db.postPayment(j, amountCents, source, String(reference));
+    const messages = {
+      wrong_stage: 'This invoice is no longer waiting for payment.',
+      excess_payment: 'This amount exceeds the remaining balance. Review the payment before recording it.',
+      reconcile_legacy_payment: 'An older payment record needs reconciliation against its receipt.',
+      reference_conflict: 'This reference is already attached to a different payment.',
+      not_found: 'Request not found.', invalid_payment: 'Check the amount, source and payment reference.',
+    };
+    if (posted.error || !posted.journey) throw fail(posted.error || 'payment_unconfirmed', messages[posted.error] || 'The payment could not be confirmed.');
+    Object.assign(j, posted.journey);
+    return advance(db, j, opts);
+  }
+  if (!['deposit_due', 'balance_due'].includes(j.stage)) throw fail('wrong_stage', 'No invoice is waiting for payment on this request.');
   const fresh = await record(db, j, { agent: 'accounting', action: 'payment_recorded', key: `payment:${reference}`, detail: { amount_cents: amountCents, source, reference } });
   if (!fresh) return advance(db, j, opts);
   const current = await one(db, 'journeys', { id: j.id, organization_id: j.organization_id });
@@ -415,7 +450,12 @@ export async function receivables(db, orgId, now = new Date()) {
   for (const j of open) {
     const kind = j.stage === 'deposit_due' ? 'deposit_invoice' : 'balance_invoice';
     const inv = (await db.select('journey_documents', { journey_id: j.id, kind })).pop();
-    if (inv && inv.status === 'issued') rows.push({ journey_id: j.id, kind, amount_cents: inv.amount_cents, days_outstanding: Math.floor((now - new Date(inv.created_at)) / 86400000) });
+    if (inv && inv.status === 'issued') {
+      const balance = kind === 'balance_invoice' ? Math.max(0, Math.min(inv.amount_cents, j.total_cents - j.paid_cents)) : Math.max(0, Math.min(inv.amount_cents, await signedDeposit(db, j, null) - j.paid_cents));
+      if (!balance) continue;
+      const approval = kind === 'balance_invoice' && await one(db, 'journey_events', { idempotency_key: `${j.id}:${reminderKey(inv)}:approved` });
+      rows.push({ journey_id: j.id, document_id: inv.id, kind, amount_cents: balance, reminder_approved: !!approval, can_request_reminder: reminderBalance(j, inv) > 0, days_outstanding: Math.floor((now - new Date(inv.created_at)) / 86400000) });
+    }
   }
   return { rows: rows.sort((a, b) => b.days_outstanding - a.days_outstanding), total_cents: rows.reduce((n, r) => n + r.amount_cents, 0) };
 }
@@ -437,7 +477,7 @@ async function withRatingOption(db, j, next) {
   return (await hasRated(db, j)) ? next : { ...next, ask_rating: true };
 }
 
-const appBase = () => (process.env.APP_BASE_URL || 'https://nova-systems.app').replace(/\/$/, '');
+const appBase = () => process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.APP_BASE_URL || 'https://nova-systems.app').replace(/\/$/, '');
 
 // Emails Nova sent in the last 24 hours, across every business (the email provider's daily limit
 // is for Nova's whole account). The daily caps are far below 200, so the newest 200 are enough.
@@ -585,7 +625,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
         if (!name || (!email && !phone)) return res.status(422).json({ error: 'Enter your name and an email or phone number.' });
         // Only a business that has published at least one service takes requests here.
         if (!(await db.select('business_services', { organization_id: orgId, active: true }, { limit: 1 })).length) return res.status(404).json({ error: 'This business is not taking requests here yet.' });
-        const out = await startJourney(db, { orgId, channel: 'web', eventId, name, email, phone, text: sanitize(b.message, 2000), offerCode: sanitize(b.offer_code, 40) || undefined, address: sanitize(b.address, 300) || undefined });
+        const out = await startJourney(db, { orgId, channel: 'web', eventId, name, email, phone, text: sanitize(b.message, 2000), offerCode: sanitize(b.offer_code, 40) || undefined, recoveryRef: sanitize(b.recovery_ref, 40), address: sanitize(b.address, 300) || undefined });
         await emailAfter(db, out.journey);
         return res.status(200).json({ ok: true, journey_id: out.journey.id, token: out.token, next: await withPayOption(db, orgId, out.next) });
       }
@@ -610,7 +650,10 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
         return res.status(200).json({ ok: true, url: link.url, amount_cents: link.amount_cents });
       }
       let next;
-      if (op === 'status') next = await advance(db, j);
+      if (op === 'status') {
+        if (j.stage === 'quoted' && b.recovery_ref) await attributeReturn(db, j, sanitize(b.recovery_ref, 40));
+        next = await advance(db, j);
+      }
       else if (op === 'choose-service') next = await chooseService(db, j, sanitize(b.service_id, 100));
       else if (op === 'accept') next = await acceptQuote(db, j, { quoteId: sanitize(b.quote_id, 100), typedName: sanitize(b.typed_name, 120) });
       else if (op === 'choose-time') next = await chooseSlot(db, j, sanitize(b.slot_id, 100));
@@ -676,6 +719,7 @@ export async function handleJourney(req, res, op, { requireStaff, requireOrgAcce
     // Prices, discounts, agreement wording and money: the owner-level permission (business.manage)
     // in that organization. Client owners hold it; admin.view stays Nova-only.
     if (!(await requireOrgAccess(req, res, orgId, ['complete', 'assign', 'feedback-resolve'].includes(op) ? 'growth.view' : 'business.manage'))) return;
+    if (op === 'approve-balance-reminder') return res.status(200).json(await allowReminder(db, orgId, sanitize(b.journey_id, 100), sanitize(b.document_id, 100), caller.id));
     if (op === 'feedback-resolve') { const { resolveFeedback } = await import('./_reviews.js'); return res.status(200).json({ ok: true, feedback: await resolveFeedback(db, orgId, sanitize(b.feedback_id, 100), caller.email || caller.id) }); }
     // Team and pay (systems 24 and 25).
     if (['save-worker', 'worker-link', 'assign', 'save-split', 'mark-paid-out'].includes(op)) {

@@ -45,6 +45,7 @@ with a real provider. No money was spent.
 9. `reviews-migration-standalone.sql` (new Nov 21)
 10. `business-channels-migration-standalone.sql` (new Nov 21, evening: calls and every message channel)
 11. `job-photos-migration-standalone.sql` (new Nov 24: job photos table and the private `job-photos` and `nova-intake-files` buckets)
+   - `journey-payment-ledger-migration-standalone.sql` — atomically record the receipt, payment reference and remaining balance.
 12. `zz-public-schema-lockdown-standalone.sql`, always last
 
 All of them need `crm-order-audit-migration-standalone.sql` first, which staging and production

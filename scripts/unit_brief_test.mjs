@@ -30,7 +30,7 @@ const slotToday = await db.insert('voice_calendar_slots', { organization_id: CC,
 const slotTomorrow = await db.insert('voice_calendar_slots', { organization_id: CC, start_at: '2026-11-25T15:00:00Z', end_at: '2026-11-25T17:00:00Z', status: 'booked' });
 await db.insert('journeys', { organization_id: CC, contact_id: fay.id, service_id: svc.id, stage: 'scheduled', slot_id: slotToday.id, service_address: '12 Shore Rd, Westport', created_at: ago(72) });
 await db.insert('journeys', { organization_id: CC, contact_id: gus.id, service_id: svc.id, stage: 'scheduled', slot_id: slotTomorrow.id, created_at: ago(72) });
-const owed = await db.insert('journeys', { organization_id: CC, contact_id: gus.id, service_id: svc.id, stage: 'balance_due', created_at: ago(200) });
+const owed = await db.insert('journeys', { organization_id: CC, contact_id: gus.id, service_id: svc.id, stage: 'balance_due', total_cents: 19900, paid_cents: 5000, created_at: ago(200) });
 await db.insert('journey_documents', { organization_id: CC, journey_id: owed.id, kind: 'balance_invoice', amount_cents: 14900, status: 'issued', created_at: ago(24 * 9) });
 await db.insert('journey_documents', { organization_id: CC, journey_id: owed.id, kind: 'receipt', amount_cents: 5000, created_at: ago(5) });
 await db.insert('customer_feedback', { organization_id: CC, journey_id: crypto.randomUUID(), contact_id: eli.id, rating: 2, comment: 'Missed a spot', follow_up: 'owner_to_call' });

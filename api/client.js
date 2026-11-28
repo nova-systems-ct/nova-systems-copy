@@ -18,6 +18,8 @@ import { normalizePhone } from './_wave1.js';
 import { computeCaseClockStatus } from './_auditClock.js';
 import { validateFinding, validateReportForApproval, contentHash, checkStatusTransition } from './_auditRules.js';
 import { fetchPublicPage, extractPublicSignals, signalsToEvidence } from './_auditResearch.js';
+import { importAuditRecords } from './_auditRecords.js';
+import { RECORD_METHOD } from '../src/lib/auditRecords.js';
 import { detectPaidTools, paidToolsEvidence, customerTestToEvidence, leakEstimate } from './_auditTests.js';
 import * as liAdapter from './_socialAdapters/linkedin.js';
 import * as ytAdapter from './_socialAdapters/youtube.js';
@@ -1968,6 +1970,7 @@ async function handleAuditEvidence(req, res, caller) {
   const caseId = sanitize(b.case_id, 100);
   if (!caseId || !(await loadAuditCase(caseId, orgId))) return res.status(404).json({ error: 'Case not found' });
 
+  if (sanitize(b.method, 200) === RECORD_METHOD) return res.status(400).json({ error: 'Use the record import for measured evidence.' });
   const record = {
     case_id: caseId,
     source: sanitize(b.source, 300),
@@ -4274,6 +4277,7 @@ export default async function handler(req, res) {
       if (op === 'evidence') return handleAuditEvidence(req, res, caller);
       if (op === 'findings') return handleAuditFindings(req, res, caller);
       if (op === 'research') return handleAuditResearch(req, res, caller);
+      if (op === 'record-window') return importAuditRecords(req, res, caller, { rateLimit, requireOrgAccess, loadAuditCase, sbWrite, sbSelect });
       if (op === 'customer-test') return handleAuditCustomerTest(req, res, caller);
       if (op === 'recommendations') return handleAuditRecommendations(req, res);
       if (op === 'reports') return handleAuditReports(req, res, caller);

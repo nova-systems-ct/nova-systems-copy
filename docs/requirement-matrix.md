@@ -66,3 +66,15 @@ caused any wasted rebuild effort.
 ## Update 2026-09-24 — pilot execution order
 
 R10 (Audit) hardened and R11 (Wave One) largely implemented as **code + simulation tests only** — see `docs/NOVA_PILOT_REQUIREMENTS.md` for the per-requirement location / verification / result / remaining-dependency table and `docs/NOVA_PILOT_ACCEPTANCE_RESULTS.md` for journeys A–J. Status for all of it: *in development / locally tested*; **none is installed, staging verified or live verified.** New migration #14 (Wave One) and the final lockdown migration were added to the manifest. R02 (Isaac's own account) remains *waiting on owner*.
+
+
+### Four-pillar acceptance • November 27, 2026
+
+| Requirement | Dependency | Acceptance evidence | Current result |
+|---|---|---|---|
+| Tell and Prove — owner export to matched retest | Authorized audit case and dated source | Three CSV formats, preserved baseline, explicit numerators and denominators; two synthetic staging windows | Local rules and staging persistence verified |
+| Fix — present and accept the exact agreement, resolve partial payments | Approved business service, open time, payment ledger migration | One signed and completed synthetic staging job; independent concurrent payment test | Staging records verified via operator transport; hosted client acceptance pending |
+| Recover — balance reminders and tracked returns | Owner approval, consent, active invoice, connected sender | Partial balance, suppression, duplicate attempt, source link and receipt checks | Locally verified; recipient-side delivery pending |
+| Sales and operations — qualify an inbound lead without paid inference | Enabled Nova sales inbox and open customer thread | Routed need, saved working draft and human handoff | Deterministic route tested; customer acquisition and paid-model operation unverified |
+
+[Evidence and staging record IDs](FOUR_PILLAR_ACCEPTANCE.md)

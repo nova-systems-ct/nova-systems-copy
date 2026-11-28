@@ -4,6 +4,7 @@ import {billableDispatchEnabled} from './_spendingPolicy.js';
 import {createChannelRequest,sendChannelReply} from './_channelProviders.js';
 import {runtimeProviderEnv} from './_providerVault.js';
 import {protectDraft} from '../public/sms-program/draft-policy.js';
+import {salesIntakeDraft} from './_salesIntakeDraft.js';
 import {PLAYBOOKS} from '../src/lib/localAIPlaybooks.js';
 import {waitUntil} from '@vercel/functions';
 
@@ -30,6 +31,16 @@ export async function runInboundSalesWorker(threadId){
  const thread=context.thread,messages=context.messages||[],last=messages.filter(m=>m.direction==='inbound').at(-1);if(!last||!context.actor)return {skipped:'no_customer_message'};
  if(messages.some(m=>m.direction==='outbound'&&['accepted','dispatching','unknown'].includes(m.state)&&Date.parse(m.created_at)>=Date.parse(last.created_at)))return {skipped:'already_answered_or_uncertain'};
  const key='inbound:'+threadId+':'+last.id,env=await runtimeProviderEnv(),reply_id=replyId(key),dispatchThread={...thread,reply_id};let modelInvoked=false;
+ const plan = salesIntakeDraft(last.body || last.text);
+ if (plan.state === 'suppressed') return { skipped: 'customer_declined' };
+ if (plan.state === 'handoff' || !billableDispatchEnabled(env) || !env.ANTHROPIC_API_KEY || !env.NOVA_AUTOMATION_MODEL) {
+  const saved = await launchRpc('nova_automation_record', {
+   p_thread: threadId, p_key: key + ':prepared', p_state: plan.state === 'handoff' ? 'action_required' : 'draft',
+   p_summary: [plan.system, plan.reply || plan.next].join(' · '),
+   p_body: { ...plan, model_invoked: false, output_mode: 'workflow', inbound_message_id: last.id, external_delivery_verified: false }
+  });
+  return { prepared: saved.ok === true, state: plan.state, dispatched: false };
+ }
  try{
   // Validate account, channel and spending switches before reserving paid inference.
   createChannelRequest(thread.channel,dispatchThread,'Connection preflight',env);

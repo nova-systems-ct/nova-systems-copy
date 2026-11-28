@@ -45,6 +45,9 @@ export async function scorecard(db, orgId, { from, to, now = new Date() }) {
 
   const owed = await receivables(db, orgId, now);
   const recovered = await recoveredCustomers(db, orgId, { from, to });
+  const linked = await db.select('journey_events', { organization_id: orgId, action: 'recovery_link_used' });
+  const byReturn = new Map(linked.map(e => [e.journey_id, Date.parse(e.created_at)]));
+  const fromRecovery = receipts.filter(r => Date.parse(r.created_at) >= byReturn.get(r.journey_id));
   const windowOutreach = outreach.filter((o) => within(o.created_at, from, to));
 
   return {
@@ -60,7 +63,7 @@ export async function scorecard(db, orgId, { from, to, now = new Date() }) {
     },
     money_owed_now: { total_cents: owed.total_cents, invoices: owed.rows.length },
     offers: byOffer,
-    revive: { prepared: windowOutreach.length, sent: windowOutreach.filter((o) => o.status === 'sent').length, ready_to_send: windowOutreach.filter((o) => o.status === 'ready').length, blocked: windowOutreach.filter((o) => o.status === 'blocked').length, blocked_reasons: count(windowOutreach.filter((o) => o.status === 'blocked'), (o) => o.blocked_reason), customers_who_came_back: recovered.length },
+    revive: { prepared: windowOutreach.length, sent: windowOutreach.filter((o) => o.status === 'sent').length, ready_to_send: windowOutreach.filter((o) => o.status === 'ready').length, blocked: windowOutreach.filter((o) => o.status === 'blocked').length, blocked_reasons: count(windowOutreach.filter((o) => o.status === 'blocked'), (o) => o.blocked_reason), customers_who_came_back: new Set(recovered.map(r => r.contact_id)).size, linked_provider_cents: sum(fromRecovery.filter(r => r.payment_source === 'provider_verified')), linked_owner_cents: sum(fromRecovery.filter(r => r.payment_source === 'owner_recorded')) },
     waiting_now: count(journeys.filter((j) => !['closed', 'cancelled'].includes(j.stage) && j.waiting_on), (j) => j.waiting_on),
     feedback: (() => { const rated = feedback.filter((f) => within(f.answered_at, from, to)); return { answered: rated.length, average: rated.length ? Math.round((rated.reduce((n, f) => n + f.rating, 0) / rated.length) * 10) / 10 : null, owner_to_call: feedback.filter((f) => f.follow_up === 'owner_to_call').length }; })(),
     leaks: leaks.sort((a, b) => b.days - a.days),
@@ -81,7 +84,8 @@ export function scorecardText(card, business = 'Your business') {
   const channels = Object.entries(card.inquiries.by_channel).sort((a, b) => b[1] - a[1]).map(([c, n]) => `${c} ${n}`).join(', ');
   if (channels) lines.push(`Where they came from: ${channels}.`);
   for (const o of card.offers) lines.push(`Offer ${o.code}: ${o.customers} ${o.customers === 1 ? 'customer' : 'customers'}, ${o.accepted} accepted a quote.`);
-  if (card.revive.prepared) lines.push(`Revive prepared ${card.revive.prepared} come-back ${card.revive.prepared === 1 ? 'message' : 'messages'}: ${card.revive.sent} sent, ${card.revive.ready_to_send} ready to send, ${card.revive.blocked} held back. ${card.revive.customers_who_came_back} came back.`);
+  if (card.revive.prepared) lines.push(`Revive prepared ${card.revive.prepared} come-back ${card.revive.prepared === 1 ? 'message' : 'messages'}: ${card.revive.sent} sent, ${card.revive.ready_to_send} ready to send, ${card.revive.blocked} held back. ${card.revive.customers_who_came_back} came back through a tracked link.`);
+  if (card.revive.linked_provider_cents || card.revive.linked_owner_cents) lines.push(`Receipts on linked requests: ${dollars(card.revive.linked_provider_cents)} provider-confirmed and ${dollars(card.revive.linked_owner_cents)} owner-recorded.`);
   if (card.feedback?.answered) lines.push(`Customers rated ${card.feedback.answered} ${card.feedback.answered === 1 ? 'job' : 'jobs'}: ${card.feedback.average} out of 5 on average.`);
   if (card.feedback?.owner_to_call) lines.push(`${card.feedback.owner_to_call} unhappy ${card.feedback.owner_to_call === 1 ? 'customer is' : 'customers are'} waiting for your call.`);
   if (card.leaks.length) lines.push(`Needs attention: ${card.leaks.slice(0, 5).map((l) => `${l.what.toLowerCase()} (${l.days} ${l.days === 1 ? 'day' : 'days'})`).join('; ')}.`);

@@ -11,6 +11,8 @@
 //   - the customer must have agreed to that kind of contact and not opted out,
 //   - `canSend` must be true for that channel (a connected, permitted account).
 // Otherwise the outreach is saved as "blocked" with the reason. Nothing in this file sends.
+import { randomUUID } from 'node:crypto';
+
 const DAY = 86400000;
 export const COLD_LEAD_DAYS = [2, 7, 30];
 const offerUsable = (o, now) => !!o && o.approved === true && o.active === true && (!o.expires_at || new Date(o.expires_at) > now);
@@ -115,12 +117,13 @@ export async function runRevive(db, orgId, { now = new Date(), canSend = {}, bas
     }
     // Offer each open time to one person at a time so two people are not promised the same slot.
     const slot = openSlots.length ? openSlots[slotIndex++ % openSlots.length] : null;
-    const link = `${baseUrl}/start?org=${orgId}${offer && t.kind === 'overdue' ? `&code=${encodeURIComponent(offer.code)}` : ''}`;
+    const outreachId = randomUUID();
+    const link = `${baseUrl}/start?org=${orgId}&via=${outreachId}${offer && t.kind === 'overdue' ? `&code=${encodeURIComponent(offer.code)}` : ''}`;
     const usedOffer = t.kind === 'overdue' ? offer : null; // a cold lead already has a quote; no new discount is invented for it
     const status = !channel ? 'blocked' : canSend[channel] === true ? 'ready' : 'blocked';
     const reason = !channel ? (contact.do_not_contact ? 'customer_opted_out' : 'no_contact_permission') : status === 'blocked' ? 'channel_not_connected' : null;
     const row = {
-      organization_id: orgId, contact_id: contact.id, journey_id: t.journey_id || null, kind: t.kind, service_id: service?.id || null,
+      id: outreachId, organization_id: orgId, contact_id: contact.id, journey_id: t.journey_id || null, kind: t.kind, service_id: service?.id || null,
       offer_id: usedOffer?.id || null, slot_id: slot?.id || null, channel: channel || null, status, blocked_reason: reason,
       message: buildMessage({ kind: t.kind, contact, business, service, slot, offer: usedOffer, link, timezone, channel: channel || 'sms' }),
       days_since: t.days_since, idempotency_key: `${orgId}:${t.step}`,
@@ -140,19 +143,21 @@ export async function markSent(db, orgId, outreachId, providerReference) {
 // Customers who came back AFTER an outreach that was really sent. An outreach that was blocked
 // never reached anyone, so it is never credited with a return.
 export async function recoveredCustomers(db, orgId, { from, to }) {
-  const sent = (await db.select('revive_outreach', { organization_id: orgId, status: 'sent' }));
-  const journeys = await db.select('journeys', { organization_id: orgId });
-  const out = [];
-  for (const o of sent) {
-    const after = new Date(o.sent_at || o.created_at);
-    const hit = o.kind === 'cold_lead'
-      ? journeys.find((j) => j.id === o.journey_id && !['inquiry', 'qualified', 'quoted', 'cancelled'].includes(j.stage) && new Date(j.updated_at || j.created_at) > after)
-      : journeys.find((j) => j.contact_id === o.contact_id && new Date(j.created_at) > after);
-    if (!hit) continue;
-    const when = new Date(o.kind === 'cold_lead' ? (hit.updated_at || hit.created_at) : hit.created_at);
-    if (when >= from && when <= to) out.push({ outreach_id: o.id, journey_id: hit.id, kind: o.kind });
-  }
-  return out;
+  const links = await db.select('journey_events', { organization_id: orgId, action: 'recovery_link_used' });
+  return links.filter(e => new Date(e.created_at) >= from && new Date(e.created_at) <= to)
+    .map(e => ({ outreach_id: e.detail.outreach_id, contact_id: e.detail.contact_id, journey_id: e.journey_id, used_at: e.created_at }));
+}
+
+// A tracking reference alone grants no access. Only count a submission matching the actual
+// recipient in this tenant and an outreach accepted by a provider. A visit alone earns nothing.
+export async function attributeReturn(db, j, via, now = new Date()) {
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(via || '')) return;
+  const [o] = await db.select('revive_outreach', { id: via, organization_id: j.organization_id, contact_id: j.contact_id, status: 'sent' }, { limit: 1 });
+  if (!o?.provider_reference || !o.sent_at || new Date(o.sent_at) > now || !['overdue','empty_slot','cold_lead'].includes(o.kind)) return;
+  if (o.kind === 'cold_lead' && o.journey_id !== j.id) return;
+  try {
+    await db.insert('journey_events', { organization_id: j.organization_id, journey_id: j.id, agent: 'finance', action: 'recovery_link_used', status: 'done', idempotency_key: j.id + ':recovery_link_used', detail: { outreach_id: o.id, contact_id: j.contact_id, kind: o.kind } });
+  } catch (err) { if (err.status !== 409) throw err; }
 }
 
 // ---- sending (system 20) ------------------------------------------------------------------
@@ -212,7 +217,16 @@ export async function sendReady(db, orgId, { agent, send, caps, appBase, now = n
     if (room <= 0) { out.waiting_for_tomorrow++; continue; }
     const url = await unsubscribeLink(db, orgId, contact, appBase);
     const subject = o.kind === 'cold_lead' ? `${business}: your quote is still open` : o.kind === 'review_request' ? `${business}: how did we do?` : `${business}: time for your next visit`;
-    const r = await send({ to: contact.email, subject, text: o.message + emailFooter({ business, mailingAddress: agent.mailing_address.trim(), unsubscribeUrl: url }), fromName: business, replyTo: agent.reply_email, headers: { 'List-Unsubscribe': `<${url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }, idempotencyKey: `revive:${o.id}` });
+    let message = o.message;
+    if (o.kind === 'cold_lead') {
+      const [j] = await db.select('journeys', { id: o.journey_id, organization_id: orgId, contact_id: o.contact_id, stage: 'quoted' }, { limit: 1 });
+      if (!j || j.paused) { out.held++; continue; }
+      const { customerLink } = await import('./_journey.js');
+      const next = new URL(await customerLink(db, j, appBase));
+      next.searchParams.set('via', o.id);
+      message = message.replace(/https?:\/\/[^\s]+/, () => next.toString());
+    }
+    const r = await send({ to: contact.email, subject, text: message + emailFooter({ business, mailingAddress: agent.mailing_address.trim(), unsubscribeUrl: url }), fromName: business, replyTo: agent.reply_email, headers: { 'List-Unsubscribe': `<${url}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }, idempotencyKey: `revive:${o.id}` });
     if (r.ok && r.id) { await markSent(db, orgId, o.id, `email:${r.id}`); out.sent++; room--; }
     else { out.failed++; out.errors.push({ outreach_id: o.id, error: r.error || 'not accepted' }); } // stays ready; try again later
   }

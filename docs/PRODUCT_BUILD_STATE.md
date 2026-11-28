@@ -350,3 +350,8 @@ Status of everything below: **locally verified only**. Nothing is pushed, deploy
 **Exact next task:** read the ElevenLabs Agents API documentation, then write the voice adapter and its booking tools on top of the existing `voice_calendar_slots` hold/confirm flow.
 
 **Owner actions added:** connect the Claude GitHub App to `nova-systems-ct` (or apply the patch by hand); run `supabase/business-agents-migration-standalone.sql` after `voice-agent-migration-standalone.sql`; repair the Twilio credentials; make `nova-intake-files` private.
+
+
+### November 27, 2026 — Tell, Fix, Recover, Prove
+
+The recovery branch includes measured audit imports and retests, version-bound customer agreements, balance reminders, tracked recovery outcomes, atomic receipt posting and zero-cost inbound qualification drafts. The isolated staging walkthrough closed one synthetic job. The remaining first-sale gate is the hosted owner/customer walkthrough with the staging server credential and approved pilot service. [Build and sales sequence](NOVA_FOUR_PILLARS.md) · [Verification record](FOUR_PILLAR_ACCEPTANCE.md)

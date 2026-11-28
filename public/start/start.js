@@ -75,7 +75,7 @@ function render(next) {
     box.append(el('p', 'Your answer goes to the business only. Nobody writes or posts a review for you.', 'note'));
   }
   if (!['closed', 'cancelled'].includes(next.stage)) {
-    const again = el('button', 'Check for updates', 'quiet'); again.type = 'button'; again.addEventListener('click', () => act('status', {})); box.append(again);
+    const again = el('button', 'Check for updates', 'quiet'); again.type = 'button'; again.addEventListener('click', () => act('status', { recovery_ref: params.get('via') })); box.append(again);
     if (['inquiry', 'qualified', 'quoted', 'scheduling', 'scheduled'].includes(next.stage)) { const c = el('button', 'Cancel my request', 'quiet'); c.type = 'button'; c.style.marginLeft = '8px'; c.addEventListener('click', () => act('cancel', {})); box.append(c); }
   } else { try { sessionStorage.removeItem(key); } catch { /* storage unavailable */ } }
 }
@@ -107,20 +107,20 @@ if (!UUID.test(org)) {
     event.preventDefault();
     const f = new FormData($('start'));
     if (!String(f.get('email')).trim() && !String(f.get('phone')).trim()) return showError('Enter an email or a phone number.');
-    const data = await send('start', { organization_id: org, submission_id: submission, name: f.get('name'), email: f.get('email'), phone: f.get('phone'), message: f.get('message'), address: f.get('address'), offer_code: f.get('offer_code'), website_url_confirm: f.get('website_url_confirm') });
+    const data = await send('start', { organization_id: org, submission_id: submission, name: f.get('name'), email: f.get('email'), phone: f.get('phone'), message: f.get('message'), address: f.get('address'), offer_code: f.get('offer_code'), recovery_ref: params.get('via'), website_url_confirm: f.get('website_url_confirm') });
     if (!data) return;
     if (data.token) { session = { journey_id: data.journey_id, token: data.token }; try { sessionStorage.setItem(key, JSON.stringify(session)); } catch { /* storage unavailable */ } }
     if (data.next) render(data.next);
   });
   if (session?.journey_id && session.token) {
     const paid = params.get('paid');
-    act('status', {}).then(() => { if ($('step').hidden) { session = null; $('start').hidden = false; } });
+    act('status', { recovery_ref: params.get('via') }).then(() => { if ($('step').hidden) { session = null; $('start').hidden = false; } });
     // Back from Stripe: the payment is confirmed by Stripe's message to the business, which can
     // take a few seconds, so check a few times before asking the customer to wait.
     if (paid === '1') {
       let tries = 0;
       const check = async () => {
-        const data = await send('status', {});
+        const data = await send('status', { recovery_ref: params.get('via') });
         if (!data?.next) return;
         render(data.next);
         if (data.next.invoice && tries++ < 8) { $('step').prepend(el('p', 'Thank you. Confirming your payment with Stripe…', 'note')); setTimeout(check, 4000); }

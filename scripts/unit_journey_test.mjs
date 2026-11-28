@@ -79,14 +79,14 @@ const check = (name, ok) => { ok ? pass++ : fail++; console.log(`${ok ? 'ok  ' :
   check('a part payment does not close the job', n.stage === 'balance_due' && (await fresh(db, id)).paid_cents === 30000);
   await recordPayment(db, await fresh(db, id), { amountCents: 20000, source: 'owner_recorded', reference: 'card-1' }, opts);
   check('repeating the same payment while the invoice is still open counts it once', (await fresh(db, id)).paid_cents === 30000 && (await docs(db, id, 'receipt')).length === 2);
-  check('FINANCE lists what is still owed', (await receivables(db, NOVA, NOW)).total_cents === 30000 && (await receivables(db, OTHER, NOW)).rows.length === 0);
+  check('FINANCE subtracts the part payment from the balance owed', (await receivables(db, NOVA, NOW)).total_cents === 10000 && (await receivables(db, OTHER, NOW)).rows.length === 0);
   n = await recordPayment(db, await fresh(db, id), { amountCents: 10000, source: 'provider_verified', reference: 'pi_test_123' }, opts);
   const j = await fresh(db, id);
   check('the final payment closes the job', n.stage === 'closed' && j.paid_cents === 40000 && j.closed_at);
   const report = (await docs(db, id, 'owner_report'))[0];
   check('FINANCE wrote the owner report, separating provider-confirmed money from hand-entered money', report.body.includes('$100.00 confirmed by the payment provider') && report.body.includes('$300.00 entered by a person'));
   check('no follow-up is prepared because the customer never agreed to be contacted', db.t.journey_events.find((e) => e.action === 'follow_up').status === 'blocked');
-  check('every handoff is on the record, in order', JSON.stringify(await events(db, id)) === JSON.stringify(['inquiry_received', 'service_identified', 'quote_issued', 'quote_accepted', 'deposit_invoiced', 'payment_recorded', 'offered_times', 'appointment_booked', 'appointment_moved', 'work_completed', 'balance_invoiced', 'payment_recorded', 'payment_recorded', 'follow_up', 'owner_report_written']));
+  check('every handoff is on the record, in order', JSON.stringify(await events(db, id)) === JSON.stringify(['inquiry_received', 'service_identified', 'quote_basis', 'quote_issued', 'quote_accepted', 'deposit_invoiced', 'payment_recorded', 'offered_times', 'appointment_booked', 'appointment_moved', 'work_completed', 'balance_invoiced', 'payment_recorded', 'payment_recorded', 'follow_up', 'owner_report_written']));
   check('the documents exist: quote, agreement, two invoices, three receipts, completion, report', ['quote', 'agreement', 'deposit_invoice', 'balance_invoice', 'completion', 'owner_report'].every((k) => db.t.journey_documents.some((d) => d.kind === k)) && db.t.journey_documents.filter((d) => d.kind === 'receipt').length === 3);
   check('the sales record followed along', db.t.crm_deals[0].stage === 'payment_condition_satisfied' && db.t.crm_deals[0].value_cents === 40000);
 }
@@ -115,11 +115,18 @@ const check = (name, ok) => { ok ? pass++ : fail++; console.log(`${ok ? 'ok  ' :
   check('asking again does not raise a second owner request', db.t.approval_requests.length === 1);
   await db.update('business_services', { id: sched.id }, { price_cents: 25000, price_approved: true, terms_text: 'Draft wording', terms_approved: false });
   let n = await advance(db, await fresh(db, s.journey.id), opts);
-  check('once the owner approves a price, the quote goes out by itself', n.stage === 'quoted' && n.quote.total_cents === 25000);
-  n = await acceptQuote(db, await fresh(db, s.journey.id), { quoteId: n.quote.id, typedName: 'Dee Park' }, opts);
-  check('unapproved agreement wording is never shown to a customer as an agreement', n.waiting_on === 'owner' && (await docs(db, s.journey.id, 'agreement')).length === 0 && (await fresh(db, s.journey.id)).stage === 'quoted');
-  const q = (await docs(db, s.journey.id, 'quote'))[0];
-  check('a stale quote cannot be accepted', await expectFail(acceptQuote(db, { ...(await fresh(db, s.journey.id)), total_cents: 99 }, { quoteId: q.id, typedName: 'Dee Park' }, opts), 'quote_changed'));
+  check('draft agreement wording holds the quote for the owner', n.reason === 'terms_need_approval' && !n.quote && !(await docs(db, s.journey.id, 'agreement')).length);
+  await db.update('business_services', { id: sched.id }, { terms_text: 'Approved wording one.', terms_approved: true });
+  n = await advance(db, await fresh(db, s.journey.id), opts);
+  const firstQuote = n.quote;
+  check('approved price and agreement are presented together', n.stage === 'quoted' && firstQuote.total_cents === 25000 && firstQuote.text.includes('Approved wording one.'));
+  await db.update('business_services', { id: sched.id }, { terms_text: 'Approved wording two.' });
+  n = await acceptQuote(db, await fresh(db, s.journey.id), { quoteId: firstQuote.id, typedName: 'Dee Park' }, opts);
+  check('edited terms return a new quote without signing anything', n.accepted === false && n.quote.id !== firstQuote.id && n.quote.text.includes('Approved wording two.') && !(await docs(db,s.journey.id,'agreement')).length);
+  check('a stale quote cannot be accepted', await expectFail(acceptQuote(db, await fresh(db, s.journey.id), { quoteId: firstQuote.id, typedName: 'Dee Park' }, opts), 'quote_changed'));
+  await acceptQuote(db, await fresh(db, s.journey.id), { quoteId: n.quote.id, typedName: 'Dee Park' }, opts);
+  const signed = (await docs(db,s.journey.id,'agreement'))[0];
+  check('the signed copy matches the presented document character for character', signed.body === n.quote.text && signed.acceptance_evidence.includes(n.quote.id));
 
   await db.insert('business_services', { organization_id: NOVA, name: 'Marketing', keywords: ['videos'], price_cents: 90000, price_approved: false, active: true });
   const draftPrice = await startJourney(db, { orgId: NOVA, channel: 'web', eventId: crypto.randomUUID(), name: 'Rae', email: 'rae@example.invalid', text: 'we want videos', now: NOW });
@@ -177,6 +184,13 @@ const check = (name, ok) => { ok ? pass++ : fail++; console.log(`${ok ? 'ok  ' :
     for (const [k, v] of u.searchParams) if (!['order', 'limit'].includes(k)) f[k] = v === 'is.null' ? null : (v.slice(3) === 'true' ? true : v.slice(3) === 'false' ? false : v.slice(3));
     const json = (status, data) => ({ ok: status < 400, status, json: async () => data });
     try {
+      if (init.method === 'POST' && table === 'rpc/nova_post_journey_payment') {
+        const a = JSON.parse(init.body);
+        const [job] = await db.select('journeys', { id: a.p_journey, organization_id: a.p_org });
+        if (!job) return json(200, { error: 'not_found' });
+        await recordPayment(db, job, { amountCents: a.p_amount, source: a.p_source, reference: a.p_reference }, opts);
+        return json(200, { journey: job });
+      }
       if (!init.method) return json(200, await db.select(table, f, { order: u.searchParams.get('order') || 'created_at.asc', limit: Number(u.searchParams.get('limit')) || 500 }));
       if (init.method === 'POST') return json(201, [await db.insert(table, JSON.parse(init.body))]);
       return json(200, await db.update(table, f, JSON.parse(init.body)));
